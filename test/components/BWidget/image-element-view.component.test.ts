@@ -10,7 +10,7 @@ import { defineComponent, h, ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import ImageElementView from '@/components/BWidget/elements/Image/index.vue';
-import { provideRenderContext } from '@/components/BWidget/hooks/useRenderContext';
+import { provideRenderContext, type WidgetRenderContextOptions } from '@/components/BWidget/hooks/useRenderContext';
 import type { WidgetShapeElement } from '@/components/BWidget/types';
 import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
@@ -43,14 +43,15 @@ function createImageElement(overrides: { src?: string; fit?: string; alt?: strin
  * 挂载图片元素视图。
  * @param element - 图片元素
  * @param renderContext - Widget 渲染上下文
+ * @param renderOptions - Widget 渲染选项
  * @returns 组件包装器
  */
-function mountImageElementView(element: WidgetShapeElement, renderContext?: WidgetRenderContext): VueWrapper {
+function mountImageElementView(element: WidgetShapeElement, renderContext?: WidgetRenderContext, renderOptions?: WidgetRenderContextOptions): VueWrapper {
   const contextRef = ref<WidgetRenderContext | undefined>(renderContext);
   const Provider = defineComponent({
     name: 'ImageElementViewProvider',
     setup(): () => VNode {
-      provideRenderContext(contextRef);
+      provideRenderContext(contextRef, renderOptions);
 
       return (): VNode => h(ImageElementView, { element });
     }
@@ -69,27 +70,50 @@ describe('ImageElementView', (): void => {
 
   it('resolves variable interpolation in src from render context', (): void => {
     const element = createImageElement({ src: '{{ avatar }}' });
-    const wrapper = mountImageElementView(element, {
-      input: {},
+    const wrapper = mountImageElementView(
+      element,
+      {
+        input: {},
         output: undefined,
-      data: {
-        avatar: 'https://cdn.example.com/avatar.png'
-      }
-    });
+        data: {
+          avatar: 'https://cdn.example.com/avatar.png'
+        }
+      },
+      { mode: 'runtime' }
+    );
 
     expect(wrapper.find('img').attributes('src')).toBe('https://cdn.example.com/avatar.png');
     wrapper.unmount();
   });
 
-  it('resolves variable interpolation in alt from render context', (): void => {
-    const element = createImageElement({ alt: '{{ label }}' });
+  it('shows the empty-src placeholder for variable-only src outside runtime mode', (): void => {
+    const element = createImageElement({ src: '{{ avatar }}' });
     const wrapper = mountImageElementView(element, {
       input: {},
-        output: undefined,
+      output: undefined,
       data: {
-        label: '示意图'
+        avatar: 'https://cdn.example.com/avatar.png'
       }
     });
+
+    expect(wrapper.find('img').exists()).toBe(false);
+    expect(wrapper.text()).toContain('未设置图片地址');
+    wrapper.unmount();
+  });
+
+  it('resolves variable interpolation in alt from render context', (): void => {
+    const element = createImageElement({ alt: '{{ label }}' });
+    const wrapper = mountImageElementView(
+      element,
+      {
+        input: {},
+        output: undefined,
+        data: {
+          label: '示意图'
+        }
+      },
+      { mode: 'runtime' }
+    );
 
     expect(wrapper.find('img').attributes('alt')).toBe('示意图');
     wrapper.unmount();

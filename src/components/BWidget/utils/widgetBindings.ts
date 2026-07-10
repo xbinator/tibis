@@ -595,6 +595,15 @@ export function resolveWidgetTemplateValue(template: string, context: WidgetRend
 }
 
 /**
+ * 移除模板文本中的绑定占位。
+ * @param template - 字段模板文本
+ * @returns 只保留静态片段后的展示文本
+ */
+export function removeWidgetTemplateBindings(template: string): string {
+  return template.replace(WIDGET_BINDING_PATTERN, '');
+}
+
+/**
  * 解析元素元数据字段为展示文本。
  * @param metadata - 元素元数据
  * @param fieldName - 字段名称

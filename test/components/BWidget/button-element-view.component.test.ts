@@ -11,7 +11,7 @@ import { defineComponent, h, ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import ButtonElementView from '@/components/BWidget/elements/Button/index.vue';
-import { provideRenderContext } from '@/components/BWidget/hooks/useRenderContext';
+import { provideRenderContext, type WidgetRenderContextOptions } from '@/components/BWidget/hooks/useRenderContext';
 import { provideWidgetRuntime, type WidgetRuntimeController } from '@/components/BWidget/hooks/useWidgetRuntime';
 import type { WidgetShapeElement } from '@/components/BWidget/types';
 import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
@@ -50,15 +50,21 @@ function createButtonElement(text = '确认'): WidgetShapeElement {
  * @param element - 按钮元素
  * @param renderContext - Widget 渲染上下文
  * @param runtime - Widget 运行态控制器
+ * @param renderOptions - Widget 渲染选项
  * @returns 组件包装器
  */
-function mountButtonElementView(element: WidgetShapeElement, renderContext?: WidgetRenderContext, runtime?: WidgetRuntimeController): VueWrapper {
+function mountButtonElementView(
+  element: WidgetShapeElement,
+  renderContext?: WidgetRenderContext,
+  runtime?: WidgetRuntimeController,
+  renderOptions?: WidgetRenderContextOptions
+): VueWrapper {
   const contextRef = ref<WidgetRenderContext | undefined>(renderContext);
   const runtimeRef = ref<WidgetRuntimeController | undefined>(runtime);
   const Provider = defineComponent({
     name: 'ButtonElementViewProvider',
     setup(): () => VNode {
-      provideRenderContext(contextRef);
+      provideRenderContext(contextRef, renderOptions);
       provideWidgetRuntime(runtimeRef);
 
       return (): VNode => h(ButtonElementView, { element });
@@ -91,6 +97,24 @@ describe('ButtonElementView', (): void => {
   });
 
   it('resolves variable interpolation in button text from render context', (): void => {
+    const wrapper = mountButtonElementView(
+      createButtonElement('确认 {{ $input.orderId }}'),
+      {
+        input: {
+          orderId: 'A-1024'
+        },
+        output: undefined,
+        data: {}
+      },
+      undefined,
+      { mode: 'runtime' }
+    );
+
+    expect(wrapper.find('button').text()).toBe('确认 A-1024');
+    wrapper.unmount();
+  });
+
+  it('hides variable placeholders in button text outside runtime mode', (): void => {
     const wrapper = mountButtonElementView(createButtonElement('确认 {{ $input.orderId }}'), {
       input: {
         orderId: 'A-1024'
@@ -99,7 +123,7 @@ describe('ButtonElementView', (): void => {
       data: {}
     });
 
-    expect(wrapper.find('button').text()).toBe('确认 A-1024');
+    expect(wrapper.find('button').text()).toBe('确认');
     wrapper.unmount();
   });
 
@@ -134,14 +158,19 @@ describe('ButtonElementView', (): void => {
     element.metadata.disabled = '{{ disabled }}';
     element.metadata.loading = '{{ loading }}';
 
-    const wrapper = mountButtonElementView(element, {
-      input: {},
-      output: undefined,
-      data: {
-        disabled: true,
-        loading: true
-      }
-    });
+    const wrapper = mountButtonElementView(
+      element,
+      {
+        input: {},
+        output: undefined,
+        data: {
+          disabled: true,
+          loading: true
+        }
+      },
+      undefined,
+      { mode: 'runtime' }
+    );
     const button = wrapper.find('button');
 
     expect(button.attributes('disabled')).toBeUndefined();

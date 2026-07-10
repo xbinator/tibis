@@ -16,7 +16,7 @@ import type { WidgetImageElementMetadata } from '@/components/BWidget/elements/I
 import type { WidgetTextElementMetadata } from '@/components/BWidget/elements/Text/schema';
 import { useElementValue } from '@/components/BWidget/hooks/useElementValue';
 import type { UseElementValueTransform, WidgetElementValue } from '@/components/BWidget/hooks/useElementValue';
-import { provideRenderContext } from '@/components/BWidget/hooks/useRenderContext';
+import { provideRenderContext, type WidgetRenderContextOptions } from '@/components/BWidget/hooks/useRenderContext';
 import type { WidgetMetadata, WidgetShapeElement } from '@/components/BWidget/types';
 import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 import type { MethodAction } from '@/components/BWidget/utils/widgetMethods';
@@ -85,13 +85,15 @@ function createDisplayElement(content?: string): WidgetShapeElement<DisplayEleme
  * @param fieldName - 元数据字段名称
  * @param renderContext - Widget 渲染上下文
  * @param options - 元素值解析选项
+ * @param renderOptions - Widget 渲染选项
  * @returns 组件包装器
  */
 function mountDisplayValue<TField extends keyof DisplayElementMetadata & string>(
   element: WidgetShapeElement<DisplayElementMetadata>,
   fieldName: TField,
   renderContext?: WidgetRenderContext,
-  options?: DisplayValueOptions
+  options?: DisplayValueOptions,
+  renderOptions?: WidgetRenderContextOptions
 ): VueWrapper {
   const elementRef = ref<WidgetShapeElement<DisplayElementMetadata> | undefined>(element);
   const contextRef = ref<WidgetRenderContext | undefined>(renderContext);
@@ -106,7 +108,7 @@ function mountDisplayValue<TField extends keyof DisplayElementMetadata & string>
   const Provider = defineComponent({
     name: 'ElementValueProvider',
     setup(): () => VNode {
-      provideRenderContext(contextRef);
+      provideRenderContext(contextRef, renderOptions);
 
       return (): VNode => h(Consumer);
     }
@@ -133,7 +135,7 @@ describe('useElementValue', (): void => {
     expectTypeOf<UseElementValueReturn<WidgetImageElementMetadata, 'fit'>>().toEqualTypeOf<ComputedRef<WidgetImageElementMetadata['fit'] | undefined>>();
   });
 
-  it('reads a template field and resolves it from the widget render context', (): void => {
+  it('hides template variables in design mode even when a render context exists', (): void => {
     const wrapper = mountDisplayValue(createDisplayElement('{{ $input.city }} 天气'), 'content', {
       input: {
         city: '上海'
@@ -142,21 +144,46 @@ describe('useElementValue', (): void => {
       data: {}
     });
 
+    expect(wrapper.text()).toBe('天气');
+    wrapper.unmount();
+  });
+
+  it('reads a template field and resolves it from the widget render context in runtime mode', (): void => {
+    const wrapper = mountDisplayValue(
+      createDisplayElement('{{ $input.city }} 天气'),
+      'content',
+      {
+        input: {
+          city: '上海'
+        },
+        output: undefined,
+        data: {}
+      },
+      undefined,
+      { mode: 'runtime' }
+    );
+
     expect(wrapper.text()).toBe('上海 天气');
     wrapper.unmount();
   });
 
   it('returns a complex whole-binding value without stringifying it in the hook', (): void => {
-    const wrapper = mountDisplayValue(createDisplayElement('{{ weather }}'), 'content', {
-      input: {},
-      output: undefined,
-      data: {
-        weather: {
-          condition: '晴',
-          temperature: 28
+    const wrapper = mountDisplayValue(
+      createDisplayElement('{{ weather }}'),
+      'content',
+      {
+        input: {},
+        output: undefined,
+        data: {
+          weather: {
+            condition: '晴',
+            temperature: 28
+          }
         }
-      }
-    });
+      },
+      undefined,
+      { mode: 'runtime' }
+    );
 
     expect(wrapper.text()).toBe('{"condition":"晴","temperature":28}');
     expect(wrapper.text()).not.toBe('[object Object]');
@@ -177,7 +204,8 @@ describe('useElementValue', (): void => {
           }
         }
       },
-      { transform: 'text' }
+      { transform: 'text' },
+      { mode: 'runtime' }
     );
 
     expect(wrapper.text()).toBe('{\n  "condition": "晴",\n  "temperature": 28\n}');
@@ -229,13 +257,19 @@ describe('useElementValue', (): void => {
   });
 
   it('supports an explicit field name for secondary template content', (): void => {
-    const wrapper = mountDisplayValue(createDisplayElement('正文'), 'subtitle', {
-      input: {
-        city: '上海'
+    const wrapper = mountDisplayValue(
+      createDisplayElement('正文'),
+      'subtitle',
+      {
+        input: {
+          city: '上海'
+        },
+        output: undefined,
+        data: {}
       },
-      output: undefined,
-      data: {}
-    });
+      undefined,
+      { mode: 'runtime' }
+    );
 
     expect(wrapper.text()).toBe('副标题：上海');
     wrapper.unmount();

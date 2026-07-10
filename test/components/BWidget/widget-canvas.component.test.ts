@@ -70,17 +70,20 @@ class ResizeObserverMock {
    * @param size - 目标尺寸
    */
   public static trigger(target: Element, size: { width: number; height: number }): void {
-    ResizeObserverMock.latestCallback?.([
-      {
-        target,
-        contentRect: DOMRect.fromRect({
-          height: size.height,
-          width: size.width,
-          x: 0,
-          y: 0
-        })
-      } as ResizeObserverEntry
-    ], {} as ResizeObserver);
+    ResizeObserverMock.latestCallback?.(
+      [
+        {
+          target,
+          contentRect: DOMRect.fromRect({
+            height: size.height,
+            width: size.width,
+            x: 0,
+            y: 0
+          })
+        } as ResizeObserverEntry
+      ],
+      {} as ResizeObserver
+    );
   }
 }
 
@@ -629,14 +632,14 @@ describe('BWidget canvas component', (): void => {
     wrapper.unmount();
   });
 
-  it('provides render context to registered text element views', (): void => {
+  it('hides variable placeholders in registered text element views outside runtime', (): void => {
     const data = createDefaultWidgetData();
     data.metadata = {
       previewContext: {
         input: {
-            city: '上海'
-          },
-          output: undefined,
+          city: '上海'
+        },
+        output: undefined,
         data: {
           weather: {
             temperature: 28
@@ -668,7 +671,11 @@ describe('BWidget canvas component', (): void => {
       attachTo: document.body
     });
 
-    expect(findNodeById(wrapper, 'text-context-node').text()).toContain('上海 当前 28°C');
+    const textNodeContent = findNodeById(wrapper, 'text-context-node').text();
+
+    expect(textNodeContent).toContain('当前 °C');
+    expect(textNodeContent).not.toContain('上海');
+    expect(textNodeContent).not.toContain('28');
     wrapper.unmount();
   });
 
@@ -677,7 +684,7 @@ describe('BWidget canvas component', (): void => {
     data.metadata = {
       previewContext: {
         input: {},
-          output: undefined,
+        output: undefined,
         data: {
           longText: ['第一行', '第二行', '第三行', '第四行', '第五行', '第六行'].join('\n')
         }
@@ -717,7 +724,7 @@ describe('BWidget canvas component', (): void => {
     data.metadata = {
       previewContext: {
         input: {},
-          output: undefined,
+        output: undefined,
         data: {
           shortText: 'abcdef'
         }

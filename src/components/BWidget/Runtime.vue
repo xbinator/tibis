@@ -137,7 +137,7 @@ const runtimeState = computed<WidgetRuntimeState>(() => patchPreviewRuntimeState
 /** 运行态渲染上下文响应式包装。 */
 const providedRenderContext = computed<WidgetRenderContext | undefined>(() => runtimeState.value.renderContext);
 
-provideRenderContext(providedRenderContext);
+provideRenderContext(providedRenderContext, { mode: 'runtime' });
 
 /** 当前运行态是否允许继续渲染节点。 */
 const shouldRenderRuntimeElements = computed<boolean>(() => !runtimeFailed.value);

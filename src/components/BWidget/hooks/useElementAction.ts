@@ -57,10 +57,10 @@ export function useElementAction<TMetadata extends WidgetMetadata, TField extend
   fieldName: TField
 ): ElementActionRunner {
   const actions = useElementValue(element, fieldName, { transform: 'method' });
-  const renderContext = useRenderContext();
+  const renderState = useRenderContext();
   const runtime = useWidgetRuntime();
 
   return (): void => {
-    actions.value.forEach((action: MethodAction): void => runElementAction(action, renderContext.value, runtime.value));
+    actions.value.forEach((action: MethodAction): void => runElementAction(action, renderState.renderContext.value, runtime.value));
   };
 }

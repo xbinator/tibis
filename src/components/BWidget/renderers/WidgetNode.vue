@@ -59,11 +59,11 @@ const emit = defineEmits<{
 }>();
 
 /** 上层Widget渲染上下文。 */
-const parentRenderContext = useRenderContext();
+const renderState = useRenderContext();
 /** 当前节点根元素引用，用于注册内部 DOM 到元素 ID 的映射。 */
 const nodeRef = ref<HTMLElement | null>(null);
 /** 当前节点有效渲染上下文。 */
-const nodeRenderContext = computed<WidgetRenderContext | undefined>(() => props.nodeRenderContext ?? parentRenderContext.value);
+const nodeRenderContext = computed<WidgetRenderContext | undefined>(() => props.nodeRenderContext ?? renderState.renderContext.value);
 
 provideRenderContext(nodeRenderContext);
 

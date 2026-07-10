@@ -211,7 +211,7 @@ const emit = defineEmits<{
   'resize-preview': [changes: WidgetGeometryChange[]];
 }>();
 /** 当前Widget渲染上下文，用于文本绑定内容的尺寸测量。 */
-const renderContext = useRenderContext();
+const renderState = useRenderContext();
 
 /**
  * Moveable 组件公开实例。
@@ -367,7 +367,7 @@ function normalizeResizeSize(element: WidgetElement, size: WidgetSize): WidgetSi
       ...element,
       size
     },
-    renderContext.value
+    renderState.renderContext.value
   );
 }
 
@@ -613,7 +613,7 @@ function syncTargetRenderSize(event: MoveableTargetEvent): void {
     return;
   }
 
-  updateNodePreviewSize(event.target, getWidgetShapeRenderSize(element, renderContext.value));
+  updateNodePreviewSize(event.target, getWidgetShapeRenderSize(element, renderState.renderContext.value));
 }
 
 /**
@@ -627,7 +627,7 @@ function setResizeStartSize(event: MoveableResizeStartEvent): void {
     return;
   }
 
-  const renderSize = getWidgetShapeRenderSize(element, renderContext.value);
+  const renderSize = getWidgetShapeRenderSize(element, renderState.renderContext.value);
   event.set([renderSize.width, renderSize.height]);
 }
 

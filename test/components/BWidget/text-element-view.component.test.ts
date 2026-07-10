@@ -10,7 +10,7 @@ import { defineComponent, h, ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import TextElementView from '@/components/BWidget/elements/Text/index.vue';
-import { provideRenderContext } from '@/components/BWidget/hooks/useRenderContext';
+import { provideRenderContext, type WidgetRenderContextOptions } from '@/components/BWidget/hooks/useRenderContext';
 import type { WidgetShapeElement } from '@/components/BWidget/types';
 import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
@@ -40,14 +40,15 @@ function createTextElement(): WidgetShapeElement {
  * 挂载文本元素视图。
  * @param element - 文本元素
  * @param renderContext - Widget 渲染上下文
+ * @param renderOptions - Widget 渲染选项
  * @returns 组件包装器
  */
-function mountTextElementView(element: WidgetShapeElement, renderContext?: WidgetRenderContext): VueWrapper {
+function mountTextElementView(element: WidgetShapeElement, renderContext?: WidgetRenderContext, renderOptions?: WidgetRenderContextOptions): VueWrapper {
   const contextRef = ref<WidgetRenderContext | undefined>(renderContext);
   const Provider = defineComponent({
     name: 'TextElementViewProvider',
     setup(): () => VNode {
-      provideRenderContext(contextRef);
+      provideRenderContext(contextRef, renderOptions);
 
       return (): VNode => h(TextElementView, { element });
     }
@@ -76,15 +77,19 @@ describe('TextElementView', (): void => {
   it('renders content binding from widget render context', (): void => {
     const element = createTextElement();
     element.metadata.content = '{{ $input.city }} 当前 {{ weather.temperature }}°C';
-    const wrapper = mountTextElementView(element, {
-      input: { city: '上海' },
+    const wrapper = mountTextElementView(
+      element,
+      {
+        input: { city: '上海' },
         output: undefined,
-      data: {
-        weather: {
-          temperature: 28
+        data: {
+          weather: {
+            temperature: 28
+          }
         }
-      }
-    });
+      },
+      { mode: 'runtime' }
+    );
 
     expect(wrapper.text()).toBe('上海 当前 28°C');
     wrapper.unmount();
@@ -93,17 +98,21 @@ describe('TextElementView', (): void => {
   it('renders bracket binding paths produced for non-identifier field names', (): void => {
     const element = createTextElement();
     element.metadata.content = '{{ $input["wind-speed"] }} / {{ ["weather-data"]["feels.like"] }}';
-    const wrapper = mountTextElementView(element, {
-      input: {
+    const wrapper = mountTextElementView(
+      element,
+      {
+        input: {
           'wind-speed': 12
         },
         output: undefined,
-      data: {
-        'weather-data': {
-          'feels.like': 31
+        data: {
+          'weather-data': {
+            'feels.like': 31
+          }
         }
-      }
-    });
+      },
+      { mode: 'runtime' }
+    );
 
     expect(wrapper.text()).toBe('12 / 31');
     wrapper.unmount();
@@ -112,11 +121,15 @@ describe('TextElementView', (): void => {
   it('falls back to static content when binding path cannot be resolved', (): void => {
     const element = createTextElement();
     element.metadata.content = '{{ weather.temperature }}°C';
-    const wrapper = mountTextElementView(element, {
-      input: {},
+    const wrapper = mountTextElementView(
+      element,
+      {
+        input: {},
         output: undefined,
-      data: {}
-    });
+        data: {}
+      },
+      { mode: 'runtime' }
+    );
 
     expect(wrapper.text()).toBe('{{ weather.temperature }}°C');
     wrapper.unmount();
@@ -125,17 +138,36 @@ describe('TextElementView', (): void => {
   it('does not execute filter-like binding expressions', (): void => {
     const element = createTextElement();
     element.metadata.content = '{{ weather.temperature | default("未知") }}';
+    const wrapper = mountTextElementView(
+      element,
+      {
+        input: {},
+        output: undefined,
+        data: {
+          weather: {
+            temperature: 28
+          }
+        }
+      },
+      { mode: 'runtime' }
+    );
+
+    expect(wrapper.text()).toBe('{{ weather.temperature | default("未知") }}');
+    wrapper.unmount();
+  });
+
+  it('hides content binding placeholders outside runtime mode', (): void => {
+    const element = createTextElement();
+    element.metadata.content = '你好{{ message }}';
     const wrapper = mountTextElementView(element, {
       input: {},
-        output: undefined,
+      output: undefined,
       data: {
-        weather: {
-          temperature: 28
-        }
+        message: '世界'
       }
     });
 
-    expect(wrapper.text()).toBe('{{ weather.temperature | default("未知") }}');
+    expect(wrapper.text()).toBe('你好');
     wrapper.unmount();
   });
 
