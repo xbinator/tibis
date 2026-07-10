@@ -383,12 +383,18 @@ describe('BTextMethod', (): void => {
 
     await wrapper.find('.b-text-method__trigger').trigger('click');
 
+    // 参数头部不再使用 section-meta 与 footer-actions 模式
     expect(wrapper.find('.b-text-method__section-meta').exists()).toBe(false);
     expect(wrapper.find('.b-text-method__footer-actions').exists()).toBe(false);
 
+    // 「添加参数」按钮仅在已选中函数时渲染，因此先选择函数
+    await wrapper.find('[data-method-value="submitOrder"]').trigger('click');
+    expect(wrapper.findAll('.b-text-method-test-input')).toHaveLength(2);
+
+    // 参数头部 action 新增一行参数
     await findButtonByText(wrapper, '添加参数').trigger('click');
 
-    expect(wrapper.findAll('.b-text-method-test-input')).toHaveLength(1);
+    expect(wrapper.findAll('.b-text-method-test-input')).toHaveLength(3);
     wrapper.unmount();
   });
 

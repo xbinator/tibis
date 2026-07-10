@@ -262,7 +262,7 @@ describe('SidebarLayer selection', (): void => {
 
     await layerItems[1].trigger('click');
 
-    expect(wrapper.emitted('select-element')?.[0]).toEqual([expect.objectContaining({ id: 'node-1' })]);
+    expect(wrapper.emitted('select-elements')?.[0]).toEqual([[expect.objectContaining({ id: 'node-1' })]]);
     wrapper.unmount();
   });
 
@@ -277,7 +277,7 @@ describe('SidebarLayer selection', (): void => {
 
     await wrapper.find('.sidebar-panel__layer-row.is-group').trigger('click');
 
-    expect(wrapper.emitted('select-element')?.[0]).toEqual([expect.objectContaining({ id: 'group-1' })]);
+    expect(wrapper.emitted('select-elements')?.[0]).toEqual([[expect.objectContaining({ id: 'group-1' })]]);
     wrapper.unmount();
   });
 
@@ -306,8 +306,8 @@ describe('SidebarLayer selection', (): void => {
     await nodeActionButtons[0]?.trigger('click');
     await nodeActionButtons[1]?.trigger('click');
 
-    expect(wrapper.emitted('copy-element')?.[0]).toEqual([expect.objectContaining({ id: 'node-4' })]);
-    expect(wrapper.emitted('delete-element')?.[0]).toEqual([expect.objectContaining({ id: 'node-4' })]);
+    expect(wrapper.emitted('copy-elements')?.[0]).toEqual([[expect.objectContaining({ id: 'node-4' })]]);
+    expect(wrapper.emitted('delete-elements')?.[0]).toEqual([[expect.objectContaining({ id: 'node-4' })]]);
     wrapper.unmount();
   });
 
@@ -406,7 +406,7 @@ describe('SidebarLayer selection', (): void => {
       nextList: []
     });
 
-    expect(wrapper.emitted('move-element')?.[0]).toEqual(['node-3', 'group-1', 'inside']);
+    expect(wrapper.emitted('move-elements')?.[0]).toEqual([['node-3'], ['group-1'], 'inside']);
     wrapper.unmount();
   });
 
@@ -442,7 +442,7 @@ describe('SidebarLayer selection', (): void => {
       nextList: []
     });
 
-    expect(wrapper.emitted('move-element')?.[0]).toEqual(['node-3', 'group-1', 'after']);
+    expect(wrapper.emitted('move-elements')?.[0]).toEqual([['node-3'], ['group-1'], 'after']);
     wrapper.unmount();
   });
 
@@ -477,7 +477,7 @@ describe('SidebarLayer selection', (): void => {
       nextList: []
     });
 
-    expect(wrapper.emitted('move-element')?.[0]).toEqual(['node-3', 'group-1', 'inside']);
+    expect(wrapper.emitted('move-elements')?.[0]).toEqual([['node-3'], ['group-1'], 'inside']);
     wrapper.unmount();
   });
 
@@ -512,7 +512,7 @@ describe('SidebarLayer selection', (): void => {
       nextList: []
     });
 
-    expect(wrapper.emitted('move-element')?.[0]).toEqual(['node-2', 'group-1', 'after']);
+    expect(wrapper.emitted('move-elements')?.[0]).toEqual([['node-2'], ['group-1'], 'after']);
     wrapper.unmount();
   });
 
@@ -547,7 +547,7 @@ describe('SidebarLayer selection', (): void => {
       nextList: []
     });
 
-    expect(wrapper.emitted('move-element')?.[0]).toEqual(['node-3', 'node-1', 'after']);
+    expect(wrapper.emitted('move-elements')?.[0]).toEqual([['node-3'], ['node-1'], 'after']);
     wrapper.unmount();
   });
 
@@ -562,9 +562,9 @@ describe('SidebarLayer selection', (): void => {
     await actionButtons[0].trigger('click');
     await actionButtons[1].trigger('click');
 
-    expect(wrapper.emitted('copy-element')?.[0]).toEqual([expect.objectContaining({ id: 'node-2' })]);
-    expect(wrapper.emitted('delete-element')?.[0]).toEqual([expect.objectContaining({ id: 'node-2' })]);
-    expect(wrapper.emitted('select-element')).toBeUndefined();
+    expect(wrapper.emitted('copy-elements')?.[0]).toEqual([[expect.objectContaining({ id: 'node-2' })]]);
+    expect(wrapper.emitted('delete-elements')?.[0]).toEqual([[expect.objectContaining({ id: 'node-2' })]]);
+    expect(wrapper.emitted('select-elements')).toBeUndefined();
     wrapper.unmount();
   });
 

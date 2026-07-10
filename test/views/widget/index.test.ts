@@ -490,7 +490,7 @@ describe('WidgetPage', (): void => {
     });
     const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
 
-    panelSidebar.vm.$emit('select-element', selectedElement);
+    panelSidebar.vm.$emit('select-elements', [selectedElement]);
     await nextTick();
 
     expect(selectElementByIdMock).toHaveBeenCalledWith('node-2');
@@ -516,7 +516,7 @@ describe('WidgetPage', (): void => {
     const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
     const panelSettings = wrapper.findComponent({ name: 'PanelSettings' });
 
-    panelSidebar.vm.$emit('select-element', selectedElement);
+    panelSidebar.vm.$emit('select-elements', [selectedElement]);
     await nextTick();
 
     expect(selectElementByIdMock).toHaveBeenCalledWith('node-2');
@@ -541,7 +541,7 @@ describe('WidgetPage', (): void => {
     });
     const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
 
-    panelSidebar.vm.$emit('select-element', groupElement);
+    panelSidebar.vm.$emit('select-elements', [groupElement]);
     await nextTick();
 
     expect(selectElementByIdMock).toHaveBeenCalledWith('group-1');
@@ -566,7 +566,7 @@ describe('WidgetPage', (): void => {
     const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
     const widget = wrapper.findComponent({ name: 'BWidget' });
 
-    panelSidebar.vm.$emit('select-element', selectedElement);
+    panelSidebar.vm.$emit('select-elements', [selectedElement]);
     await nextTick();
     widget.vm.$emit('selection-change', ['node-1', 'node-3']);
     widget.vm.$emit('update:select', null);
@@ -655,7 +655,7 @@ describe('WidgetPage', (): void => {
     });
     const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
 
-    panelSidebar.vm.$emit('copy-element', copiedElement);
+    panelSidebar.vm.$emit('copy-elements', [copiedElement]);
     await flushPromises();
 
     expect(widgetDataMock.value.elements.map((element: WidgetElement): string => element.id)).toEqual(['node-1', 'node-2', 'copy0001', 'node-3']);
@@ -688,7 +688,7 @@ describe('WidgetPage', (): void => {
     });
     const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
 
-    panelSidebar.vm.$emit('copy-element', groupElement);
+    panelSidebar.vm.$emit('copy-elements', [groupElement]);
     await flushPromises();
     const copiedGroup = widgetDataMock.value.elements[1];
 
@@ -923,7 +923,7 @@ describe('WidgetPage', (): void => {
     const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
     const panelSettings = wrapper.findComponent({ name: 'PanelSettings' });
 
-    panelSidebar.vm.$emit('select-element', selectedElement);
+    panelSidebar.vm.$emit('select-elements', [selectedElement]);
     await nextTick();
 
     const updatedElement = {
@@ -965,7 +965,7 @@ describe('WidgetPage', (): void => {
       size: { width: 180, height: 120 }
     };
 
-    panelSidebar.vm.$emit('select-element', selectedElement);
+    panelSidebar.vm.$emit('select-elements', [selectedElement]);
     await nextTick();
     widget.vm.$emit('update:value', {
       ...widgetDataMock.value,
@@ -1069,8 +1069,8 @@ describe('WidgetPage', (): void => {
     });
     const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
 
-    panelSidebar.vm.$emit('select-element', selectedElement);
-    panelSidebar.vm.$emit('delete-element', selectedElement);
+    panelSidebar.vm.$emit('select-elements', [selectedElement]);
+    panelSidebar.vm.$emit('delete-elements', [selectedElement]);
     await nextTick();
 
     expect(widgetDataMock.value.elements.map((element: WidgetElement): string => element.id)).toEqual(['node-1']);
@@ -1094,8 +1094,8 @@ describe('WidgetPage', (): void => {
     });
     const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
 
-    panelSidebar.vm.$emit('select-element', groupElement);
-    panelSidebar.vm.$emit('delete-element', groupElement);
+    panelSidebar.vm.$emit('select-elements', [groupElement]);
+    panelSidebar.vm.$emit('delete-elements', [groupElement]);
     await nextTick();
 
     expect(widgetDataMock.value.elements.map((element: WidgetElement): string => element.id)).toEqual(['node-3']);
@@ -1120,8 +1120,8 @@ describe('WidgetPage', (): void => {
     });
     const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
 
-    panelSidebar.vm.$emit('select-element', childElement);
-    panelSidebar.vm.$emit('delete-element', childElement);
+    panelSidebar.vm.$emit('select-elements', [childElement]);
+    panelSidebar.vm.$emit('delete-elements', [childElement]);
     await nextTick();
 
     expect(widgetDataMock.value.elements.map((element: WidgetElement): string => element.id)).toEqual(['node-2']);
@@ -1145,9 +1145,9 @@ describe('WidgetPage', (): void => {
     });
     const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
 
-    panelSidebar.vm.$emit('select-element', selectedElement);
+    panelSidebar.vm.$emit('select-elements', [selectedElement]);
     await nextTick();
-    panelSidebar.vm.$emit('move-element', 'node-1', 'node-3', 'before');
+    panelSidebar.vm.$emit('move-elements', ['node-1'], ['node-3'], 'before');
     await nextTick();
 
     expect(widgetDataMock.value.elements.map((element: WidgetElement): string => element.id)).toEqual(['node-2', 'node-3', 'node-1']);

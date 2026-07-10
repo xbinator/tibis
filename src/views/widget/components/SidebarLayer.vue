@@ -111,21 +111,13 @@ const props = withDefaults(defineProps<Props>(), {
   selectedElementIds: (): string[] => []
 });
 const emit = defineEmits<{
-  /** 选择图层元素 */
-  'select-element': [element: WidgetElement];
-  /** 选择多个图层元素 */
+  /** 选择一个或多个图层元素 */
   'select-elements': [elements: WidgetElement[]];
-  /** 复制图层元素 */
-  'copy-element': [element: WidgetElement];
-  /** 复制多个图层元素 */
+  /** 复制一个或多个图层元素 */
   'copy-elements': [elements: WidgetElement[]];
-  /** 删除图层元素 */
-  'delete-element': [element: WidgetElement];
-  /** 删除多个图层元素 */
+  /** 删除一个或多个图层元素 */
   'delete-elements': [elements: WidgetElement[]];
-  /** 移动Widget图层元素 */
-  'move-element': [sourceElementId: string, targetElementId: string, position: WidgetLayerMovePosition];
-  /** 移动Widget图层展示项 */
+  /** 移动一个或多个Widget图层展示项 */
   'move-elements': [sourceElementIds: string[], targetElementIds: string[], position: WidgetLayerMovePosition];
 }>();
 
@@ -238,16 +230,6 @@ function toggleGroupCollapsed(groupElementId: string): void {
   }
 
   collapsedGroupIds.value = nextCollapsedGroupIds;
-}
-
-/**
- * 处理图层拖拽排序。
- * @param sourceElementId - 被移动元素 ID
- * @param targetElementId - 目标元素 ID
- * @param position - 基于侧栏视觉顺序的插入位置
- */
-function handleElementMove(sourceElementId: string, targetElementId: string, position: WidgetLayerMovePosition): void {
-  emit('move-element', sourceElementId, targetElementId, position);
 }
 
 /**
@@ -545,7 +527,7 @@ function resolveFinalLayerMovePosition(
  * @param entry - 被点击的图层展示项
  */
 function handleEntryClick(entry: SidebarLayerEntry): void {
-  emit('select-element', entry.element);
+  emit('select-elements', [entry.element]);
 }
 
 /**
@@ -553,7 +535,7 @@ function handleEntryClick(entry: SidebarLayerEntry): void {
  * @param element - 被复制的Widget元素
  */
 function handleElementCopy(element: WidgetElement): void {
-  emit('copy-element', element);
+  emit('copy-elements', [element]);
 }
 
 /**
@@ -569,7 +551,7 @@ function handleEntryCopy(entry: SidebarLayerEntry): void {
  * @param element - 被删除的Widget元素
  */
 function handleElementDelete(element: WidgetElement): void {
-  emit('delete-element', element);
+  emit('delete-elements', [element]);
 }
 
 /**
@@ -599,11 +581,6 @@ function handleDraggableMove(event: BDraggableMoveEvent<SidebarLayerEntry>): voi
   const targetEntry = afterParentTarget ?? insideParentTarget ?? event.targetItem;
   const targetElements = getEntryElements(targetEntry);
   const movePosition = resolveFinalLayerMovePosition(event, afterParentTarget, insideParentTarget);
-  if (sourceElements.length === 1 && targetElements.length === 1) {
-    handleElementMove(sourceElements[0].id, targetElements[0].id, movePosition);
-    return;
-  }
-
   emit(
     'move-elements',
     sourceElements.map((element: WidgetElement): string => element.id),

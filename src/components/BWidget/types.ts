@@ -148,6 +148,14 @@ export type WidgetLayerAction = 'bringToFront' | 'bringForward' | 'sendBackward'
 export type WidgetElementCreateAnchor = 'center' | 'top-left';
 
 /**
+ * 根据元素 ID 选中元素的配置。
+ */
+export interface WidgetSelectElementByIdOptions {
+  /** 组合选区内是否将该元素作为当前编辑子元素 */
+  activateElement?: boolean;
+}
+
+/**
  * Widget元信息。
  */
 export interface WidgetMetadata {
@@ -331,6 +339,42 @@ export interface WidgetData<TMetadata extends WidgetMetadata = WidgetMetadata> {
  * 当前设置面板可编辑目标。
  */
 export type WidgetSelectTarget = WidgetElement | WidgetMetadata | null;
+
+/**
+ * BWidget组件向父级暴露的控制方法。
+ */
+export interface BWidgetExpose {
+  /**
+   * 根据注册元素和浏览器坐标创建Widget元素。
+   * @param name - 元素注册名称
+   * @param clientPoint - 浏览器坐标
+   */
+  createElementFromClientPoint: (name: string, clientPoint: WidgetPoint) => Promise<void>;
+  /**
+   * 根据元素 ID 选中Widget元素。
+   * @param id - 元素 ID
+   * @param options - 选中配置
+   */
+  selectElementById: (id: string, options?: WidgetSelectElementByIdOptions) => void;
+  /**
+   * 根据元素 ID 列表选中Widget元素。
+   * @param ids - 元素 ID 列表
+   */
+  selectElementsByIds: (ids: string[]) => void;
+  /** 复制当前Widget选区 */
+  copySelection: () => void;
+  /** 合并当前Widget选区 */
+  groupSelection: () => void;
+  /** 取消当前Widget选区中的组合 */
+  ungroupSelection: () => void;
+  /** 删除当前Widget选区 */
+  deleteSelection: () => void;
+  /**
+   * 调整当前Widget选区层级。
+   * @param action - 层级操作
+   */
+  reorderSelection: (action: WidgetLayerAction) => void;
+}
 
 /**
  * Widget历史快照。

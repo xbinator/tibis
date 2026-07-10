@@ -25,13 +25,9 @@
           :active-element-id="activeElementId"
           :elements="elements"
           :selected-element-ids="selectedElementIds"
-          @select-element="handleElementSelect"
           @select-elements="handleElementsSelect"
-          @copy-element="handleElementCopy"
           @copy-elements="handleElementsCopy"
-          @delete-element="handleElementDelete"
           @delete-elements="handleElementsDelete"
-          @move-element="handleElementMove"
           @move-elements="handleElementsMove"
         />
         <SidebarState v-else-if="activeSidebarTab === 'data-source'" v-model:value="dataItem" />
@@ -115,21 +111,13 @@ const props = withDefaults(defineProps<Props>(), {
 const dataItem = defineModel<WidgetData>('value', { required: true });
 
 const emit = defineEmits<{
-  /** 选择侧栏图层元素 */
-  'select-element': [element: WidgetElement];
-  /** 选择多个侧栏图层元素 */
+  /** 选择一个或多个侧栏图层元素 */
   'select-elements': [elements: WidgetElement[]];
-  /** 复制侧栏图层元素 */
-  'copy-element': [element: WidgetElement];
-  /** 复制多个侧栏图层元素 */
+  /** 复制一个或多个侧栏图层元素 */
   'copy-elements': [elements: WidgetElement[]];
-  /** 删除侧栏图层元素 */
-  'delete-element': [element: WidgetElement];
-  /** 删除多个侧栏图层元素 */
+  /** 删除一个或多个侧栏图层元素 */
   'delete-elements': [elements: WidgetElement[]];
-  /** 移动侧栏图层元素 */
-  'move-element': [sourceElementId: string, targetElementId: string, position: WidgetLayerMovePosition];
-  /** 移动多个侧栏图层元素 */
+  /** 移动一个或多个侧栏图层元素 */
   'move-elements': [sourceElementIds: string[], targetElementIds: string[], position: WidgetLayerMovePosition];
   /** 请求保存当前 Widget 文件（来自运行脚本编辑器 Ctrl+S） */
   save: [];
@@ -234,27 +222,11 @@ function handleTabClick(key: WidgetSidebarTabKey): void {
 }
 
 /**
- * 处理图层列表选择。
- * @param element - 被选择的Widget元素
- */
-function handleElementSelect(element: WidgetElement): void {
-  emit('select-element', element);
-}
-
-/**
  * 处理图层列表多选。
  * @param elements - 被选择的Widget元素
  */
 function handleElementsSelect(elements: WidgetElement[]): void {
   emit('select-elements', elements);
-}
-
-/**
- * 处理图层列表复制。
- * @param element - 被复制的Widget元素
- */
-function handleElementCopy(element: WidgetElement): void {
-  emit('copy-element', element);
 }
 
 /**
@@ -266,29 +238,11 @@ function handleElementsCopy(elements: WidgetElement[]): void {
 }
 
 /**
- * 处理图层列表删除。
- * @param element - 被删除的Widget元素
- */
-function handleElementDelete(element: WidgetElement): void {
-  emit('delete-element', element);
-}
-
-/**
  * 处理图层列表多元素删除。
  * @param elements - 被删除的Widget元素
  */
 function handleElementsDelete(elements: WidgetElement[]): void {
   emit('delete-elements', elements);
-}
-
-/**
- * 处理图层列表拖拽排序。
- * @param sourceElementId - 被移动元素 ID
- * @param targetElementId - 目标元素 ID
- * @param position - 基于侧栏视觉顺序的插入位置
- */
-function handleElementMove(sourceElementId: string, targetElementId: string, position: WidgetLayerMovePosition): void {
-  emit('move-element', sourceElementId, targetElementId, position);
 }
 
 /**

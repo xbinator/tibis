@@ -78,6 +78,7 @@
 <script setup lang="ts">
 import type { WidgetElementSchema } from './elements';
 import type {
+  BWidgetExpose,
   WidgetData,
   WidgetContextMenuPayload,
   WidgetElement,
@@ -85,6 +86,7 @@ import type {
   WidgetGeometryChange,
   WidgetLayerAction,
   WidgetPoint,
+  WidgetSelectElementByIdOptions,
   WidgetSelectTarget,
   WidgetShapeElement,
   WidgetSize
@@ -178,14 +180,6 @@ interface WidgetContextMenuState {
   clientPoint: WidgetPoint;
   /** Widget坐标 */
   boardPoint: WidgetPoint;
-}
-
-/**
- * 根据元素 ID 选中元素的配置。
- */
-interface SelectElementByIdOptions {
-  /** 组合选区内是否将该元素作为当前编辑子元素 */
-  activateElement?: boolean;
 }
 
 const dataItem = defineModel<WidgetData>('value', {
@@ -1314,7 +1308,7 @@ async function createElementFromClientPoint(name: string, clientPoint: WidgetPoi
  * @param id - 元素 ID
  * @param options - 选中配置
  */
-function selectElementById(id: string, options: SelectElementByIdOptions = {}): void {
+function selectElementById(id: string, options: WidgetSelectElementByIdOptions = {}): void {
   const hasElement = findWidgetElementTreeNode(board.state.value.elements, id) !== null;
   if (!hasElement) {
     return;
@@ -1509,7 +1503,7 @@ onBeforeUnmount((): void => {
   cancelDirectDrag();
 });
 
-defineExpose({
+defineExpose<BWidgetExpose>({
   createElementFromClientPoint,
   selectElementById,
   selectElementsByIds,
