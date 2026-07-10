@@ -125,6 +125,8 @@ export interface WidgetElementLoopConfig {
   enabled: boolean;
   /** 数组数据源路径 */
   source: string;
+  /** 是否根据可用宽度自适应每行列数 */
+  autoColumns: boolean;
   /** 每行渲染数量 */
   columns: number;
   /** 横向间距 */

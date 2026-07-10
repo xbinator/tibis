@@ -20,14 +20,18 @@
         <AInput v-model:value="element.loop.indexName" placeholder="默认为：index" />
       </BSectionItem>
 
+      <BSectionItem label="列数" direction="vertical">
+        <template #label-extra>
+          <ACheckbox v-model:checked="element.loop.autoColumns"> 自适应 </ACheckbox>
+        </template>
+        <BInputNumber v-model:value="element.loop.columns" :disabled="element.loop.autoColumns" :min="1" :precision="0" placeholder="列数" />
+      </BSectionItem>
+
       <div class="widget-advanced-setter__loop-grid">
-        <BSectionItem class="widget-advanced-setter__loop-field widget-advanced-setter__loop-field--columns" label="列数" direction="vertical">
-          <BInputNumber v-model:value="element.loop.columns" placeholder="列数" />
-        </BSectionItem>
-        <BSectionItem class="widget-advanced-setter__loop-field widget-advanced-setter__loop-field--gap" label="列距" direction="vertical">
+        <BSectionItem label="列距" direction="vertical">
           <BInputNumber v-model:value="element.loop.columnGap" placeholder="列距" />
         </BSectionItem>
-        <BSectionItem class="widget-advanced-setter__loop-field widget-advanced-setter__loop-field--gap" label="行距" direction="vertical">
+        <BSectionItem label="行距" direction="vertical">
           <BInputNumber v-model:value="element.loop.rowGap" placeholder="行距" />
         </BSectionItem>
       </div>
@@ -59,13 +63,5 @@ const { variableOptions } = useElementVariables((): WidgetElement => element.val
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-}
-
-.widget-advanced-setter__loop-field {
-  min-width: 0;
-}
-
-.widget-advanced-setter__loop-field--columns {
-  grid-column: 1 / -1;
 }
 </style>

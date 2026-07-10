@@ -157,6 +157,7 @@ function createLoopConfig(): WidgetElementLoopConfig {
   return {
     enabled: true,
     source: '$input.items',
+    autoColumns: false,
     columns: 3,
     columnGap: 16,
     rowGap: 12,

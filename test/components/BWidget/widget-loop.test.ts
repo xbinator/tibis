@@ -10,6 +10,7 @@ import {
   collectWidgetLoopDataSourceOptions,
   createDefaultWidgetElementLoopConfig,
   createWidgetLoopRenderElements,
+  normalizeWidgetElementLoopConfig,
   type WidgetLoopRenderContext
 } from '@/components/BWidget/utils/widgetLoop';
 
@@ -22,6 +23,7 @@ function createLoopConfig(source = 'products'): WidgetElementLoopConfig {
   return {
     enabled: true,
     source,
+    autoColumns: false,
     columns: 2,
     columnGap: 12,
     rowGap: 10,
@@ -123,10 +125,10 @@ function createTextElement(
  */
 function createRenderContext(): WidgetRenderContext {
   return {
-        input: {
+    input: {
       items: [{ name: '入参 A' }, { name: '入参 B' }]
     },
-      output: undefined,
+    output: undefined,
     data: {
       products: [{ name: 'A' }, { name: 'B' }, { name: 'C' }]
     }
@@ -196,6 +198,17 @@ describe('widgetLoop', (): void => {
     expect(config.indexName).toBe('');
   });
 
+  it('keeps auto loop columns switch during normalization', (): void => {
+    const config = normalizeWidgetElementLoopConfig({
+      ...createLoopConfig(),
+      autoColumns: true,
+      columns: 3
+    });
+
+    expect(config.autoColumns).toBe(true);
+    expect(config.columns).toBe(3);
+  });
+
   it('collects array paths from input and data schemas', (): void => {
     expect(collectWidgetLoopDataSourceOptions(createInputSchema(), createDataSchema()).map((item) => item.value)).toEqual([
       '$input.items',
@@ -215,6 +228,28 @@ describe('widgetLoop', (): void => {
       { x: 10, y: 82 }
     ]);
     expect(result[0].renderContext.locals).toEqual({ item: { name: 'A' }, index: 0 });
+  });
+
+  it('fits auto loop columns inside the available right boundary', (): void => {
+    const loopElement = createElement(
+      'text-1',
+      { x: 10, y: 20 },
+      { width: 100, height: 52 },
+      {},
+      {
+        ...createLoopConfig(),
+        autoColumns: true,
+        columns: 2,
+        columnGap: 10
+      }
+    );
+    const result = createWidgetLoopRenderElements([loopElement], createRenderContext(), { autoColumnsRightX: 330 });
+
+    expect(result.map((item) => item.element.position)).toEqual([
+      { x: 10, y: 20 },
+      { x: 120, y: 20 },
+      { x: 230, y: 20 }
+    ]);
   });
 
   it('uses item and index as runtime variable names when config names are empty', (): void => {
@@ -250,7 +285,7 @@ describe('widgetLoop', (): void => {
     loopElement.loop = loopConfig;
     const renderContext: WidgetRenderContext = {
       input: {},
-        output: undefined,
+      output: undefined,
       data: {
         products: [{ name: '短' }, { name: longName }, { name: '尾' }]
       }
@@ -335,9 +370,9 @@ describe('widgetLoop', (): void => {
     );
     const result = createWidgetLoopRenderElements([groupOwner], {
       input: {
-          items: [firstCategory, secondCategory]
-        },
-        output: undefined,
+        items: [firstCategory, secondCategory]
+      },
+      output: undefined,
       data: {}
     });
     const productRenderElements = result.filter((item): boolean => item.element.id.startsWith('product-title__loop_'));
@@ -377,13 +412,7 @@ describe('widgetLoop', (): void => {
   });
 
   it('does not render loop templates when the source is missing or not an array', (): void => {
-    const loopElement = createElement(
-      'text-1',
-      { x: 10, y: 20 },
-      { width: 100, height: 52 },
-      {},
-      createLoopConfig('missing.items')
-    );
+    const loopElement = createElement('text-1', { x: 10, y: 20 }, { width: 100, height: 52 }, {}, createLoopConfig('missing.items'));
 
     expect(createWidgetLoopRenderElements([loopElement], createRenderContext())).toEqual([]);
   });

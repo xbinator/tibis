@@ -157,9 +157,8 @@ function isWidgetElementLoopConfig(loop: unknown): loop is WidgetElementLoopConf
   return (
     typeof candidate.enabled === 'boolean' &&
     typeof candidate.source === 'string' &&
-    typeof candidate.columns === 'number' &&
-    Number.isInteger(candidate.columns) &&
-    candidate.columns > 0 &&
+    (typeof candidate.autoColumns === 'boolean' || candidate.autoColumns === undefined) &&
+    ((typeof candidate.columns === 'number' && Number.isInteger(candidate.columns) && candidate.columns > 0) || candidate.columns === 'auto') &&
     typeof candidate.columnGap === 'number' &&
     Number.isFinite(candidate.columnGap) &&
     candidate.columnGap >= 0 &&
@@ -550,7 +549,7 @@ function createSupportedElementSnapshot(element: WidgetElementSnapshotCandidate,
     size: cloneDeep(element.size),
     rotation: typeof element.rotation === 'number' ? element.rotation : 0,
     style: cloneDeep(element.style ?? {}),
-    loop: cloneDeep(element.loop),
+    loop: normalizeWidgetElementLoopConfig(element.loop),
     metadata: normalizeElementMetadata(element.metadata)
   };
   if (element.locked === true) {

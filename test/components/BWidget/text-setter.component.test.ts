@@ -133,6 +133,7 @@ function createLoopConfig(source = ''): WidgetElement['loop'] {
   return {
     enabled: true,
     source,
+    autoColumns: false,
     columns: 1,
     columnGap: 12,
     rowGap: 12,

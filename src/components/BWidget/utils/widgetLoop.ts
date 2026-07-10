@@ -49,6 +49,14 @@ export interface WidgetLoopRenderElement {
 }
 
 /**
+ * Widget循环展开选项。
+ */
+export interface CreateWidgetLoopRenderElementsOptions {
+  /** 自适应列数可使用的画布右边界坐标 */
+  autoColumnsRightX?: number;
+}
+
+/**
  * Widget循环运行态变量名。
  */
 export interface WidgetElementLoopVariableNames {
@@ -82,6 +90,8 @@ interface WidgetLoopTemplateTarget {
   element: WidgetElement;
   /** 模板元素树根在画布中的绝对坐标 */
   absolutePosition: WidgetPoint;
+  /** 自适应列数可使用的画布右边界坐标 */
+  autoColumnsRightX?: number;
 }
 
 /**
@@ -104,6 +114,7 @@ export function createDefaultWidgetElementLoopConfig(): WidgetElementLoopConfig 
   return {
     enabled: false,
     source: '',
+    autoColumns: false,
     columns: DEFAULT_WIDGET_LOOP_COLUMNS,
     columnGap: DEFAULT_WIDGET_LOOP_COLUMN_GAP,
     rowGap: DEFAULT_WIDGET_LOOP_ROW_GAP,
@@ -175,10 +186,13 @@ export function normalizeWidgetElementLoopConfig(config: Partial<WidgetElementLo
     return defaultConfig;
   }
 
+  const rawColumns = config.columns as unknown;
+
   return {
     enabled: config.enabled === true,
     source: typeof config.source === 'string' ? config.source : defaultConfig.source,
-    columns: normalizePositiveInteger(config.columns, defaultConfig.columns),
+    autoColumns: config.autoColumns === true || rawColumns === 'auto',
+    columns: normalizePositiveInteger(rawColumns, defaultConfig.columns),
     columnGap: normalizeNonNegativeNumber(config.columnGap, defaultConfig.columnGap),
     rowGap: normalizeNonNegativeNumber(config.rowGap, defaultConfig.rowGap),
     itemName: normalizeLoopVariableName(config.itemName, defaultConfig.itemName),
@@ -410,6 +424,47 @@ function createLoopCellSize(iterations: WidgetLoopIterationTarget[]): WidgetSize
 }
 
 /**
+ * 读取自适应列数可用右边界。
+ * @param target - 循环模板目标
+ * @returns 可用右边界坐标
+ */
+function readLoopAutoColumnsRightX(target: WidgetLoopTemplateTarget): number {
+  return typeof target.autoColumnsRightX === 'number' && Number.isFinite(target.autoColumnsRightX)
+    ? target.autoColumnsRightX
+    : target.absolutePosition.x + target.element.size.width;
+}
+
+/**
+ * 读取循环网格起始横坐标。
+ * @param iterations - 循环迭代目标列表
+ * @returns 起始横坐标
+ */
+function readLoopGridMinX(iterations: WidgetLoopIterationTarget[]): number {
+  return Math.min(...iterations.map((iteration: WidgetLoopIterationTarget): number => iteration.bounds.minX));
+}
+
+/**
+ * 解析运行态实际列数。
+ * @param target - 循环模板目标
+ * @param iterations - 循环迭代目标列表
+ * @param cellSize - 循环单元格尺寸
+ * @returns 实际列数
+ */
+function resolveLoopRenderColumns(target: WidgetLoopTemplateTarget, iterations: WidgetLoopIterationTarget[], cellSize: WidgetSize): number {
+  if (!target.config.autoColumns) {
+    return Math.max(1, target.config.columns);
+  }
+
+  const availableWidth = Math.max(cellSize.width, readLoopAutoColumnsRightX(target) - readLoopGridMinX(iterations));
+  const columnStride = cellSize.width + target.config.columnGap;
+  if (columnStride <= 0) {
+    return 1;
+  }
+
+  return Math.max(1, Math.floor((availableWidth + target.config.columnGap) / columnStride));
+}
+
+/**
  * 展开单个循环模板目标。
  * @param target - 循环模板目标
  * @param renderContext - 渲染上下文
@@ -423,7 +478,7 @@ function expandLoopTemplateTarget(target: WidgetLoopTemplateTarget, renderContex
 
   const iterations = createLoopIterationTargets(target, renderContext, items);
   const cellSize = createLoopCellSize(iterations);
-  const columns = Math.max(1, target.config.columns);
+  const columns = resolveLoopRenderColumns(target, iterations, cellSize);
 
   return iterations.flatMap((iteration: WidgetLoopIterationTarget): WidgetLoopRenderElement[] => {
     const { bounds, itemIndex, renderElements } = iteration;
@@ -460,7 +515,8 @@ function expandLoopTemplateTarget(target: WidgetLoopTemplateTarget, renderContex
 function createElementLoopRenderElements(
   element: WidgetElement,
   renderContext: WidgetRenderContext,
-  parentAbsolutePosition: WidgetPoint
+  parentAbsolutePosition: WidgetPoint,
+  autoColumnsRightX?: number
 ): WidgetLoopRenderElement[] {
   const absolutePosition = {
     x: parentAbsolutePosition.x + element.position.x,
@@ -470,8 +526,10 @@ function createElementLoopRenderElements(
 
   // 循环启用且配置了数据源才走展开逻辑，否则按普通元素渲染一次，避免空 source 导致元素整体消失。
   if (loopConfig.enabled && loopConfig.source) {
-    return expandLoopTemplateTarget({ config: loopConfig, element, absolutePosition }, renderContext);
+    return expandLoopTemplateTarget({ config: loopConfig, element, absolutePosition, autoColumnsRightX }, renderContext);
   }
+
+  const childAutoColumnsRightX = absolutePosition.x + element.size.width;
 
   return [
     {
@@ -479,7 +537,7 @@ function createElementLoopRenderElements(
       renderContext
     },
     ...readWidgetElementChildren(element).flatMap((child: WidgetElement): WidgetLoopRenderElement[] =>
-      createElementLoopRenderElements(child, renderContext, absolutePosition)
+      createElementLoopRenderElements(child, renderContext, absolutePosition, childAutoColumnsRightX)
     )
   ];
 }
@@ -488,8 +546,15 @@ function createElementLoopRenderElements(
  * 创建运行态循环展开元素。
  * @param elements - Widget元素
  * @param renderContext - 渲染上下文
+ * @param options - 循环展开选项
  * @returns 运行态元素
  */
-export function createWidgetLoopRenderElements(elements: WidgetElement[], renderContext: WidgetRenderContext): WidgetLoopRenderElement[] {
-  return elements.flatMap((element: WidgetElement): WidgetLoopRenderElement[] => createElementLoopRenderElements(element, renderContext, { x: 0, y: 0 }));
+export function createWidgetLoopRenderElements(
+  elements: WidgetElement[],
+  renderContext: WidgetRenderContext,
+  options: CreateWidgetLoopRenderElementsOptions = {}
+): WidgetLoopRenderElement[] {
+  return elements.flatMap((element: WidgetElement): WidgetLoopRenderElement[] =>
+    createElementLoopRenderElements(element, renderContext, { x: 0, y: 0 }, options.autoColumnsRightX)
+  );
 }

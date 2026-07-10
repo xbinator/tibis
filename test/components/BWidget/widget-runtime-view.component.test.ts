@@ -136,6 +136,7 @@ function createRuntimeLoopTextWidgetData(): WidgetData {
             loop: {
               enabled: true,
               source: 'products',
+              autoColumns: false,
               columns: 2,
               columnGap: 12,
               rowGap: 10,
@@ -169,6 +170,7 @@ function createRuntimeLoopGroupWidgetData(): WidgetData {
         loop: {
           enabled: true,
           source: 'products',
+          autoColumns: false,
           columns: 2,
           columnGap: 12,
           rowGap: 10,
@@ -305,6 +307,7 @@ function createRuntimeAsyncLoopWidgetData(code: string): WidgetData {
         loop: {
           enabled: true,
           source: 'products',
+          autoColumns: false,
           columns: 1,
           columnGap: 0,
           rowGap: 0,

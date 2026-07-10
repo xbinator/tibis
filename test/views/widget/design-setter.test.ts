@@ -75,6 +75,7 @@ function createLoopConfig(): WidgetElementLoopConfig {
   return {
     enabled: false,
     source: '',
+    autoColumns: false,
     columns: 1,
     columnGap: 0,
     rowGap: 0,

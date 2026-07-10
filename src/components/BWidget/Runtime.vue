@@ -114,6 +114,17 @@ function createRuntimeScriptIdentity(value: WidgetData): string {
   return `${execute?.enabled === false ? 'disabled' : 'enabled'}:${execute?.code ?? ''}`;
 }
 
+/**
+ * 读取自适应循环列数可用的运行态右边界。
+ * @param value - Widget 数据
+ * @returns 右边界坐标；未配置页面宽度时返回 undefined
+ */
+function readRuntimeAutoColumnsRightX(value: WidgetData): number | undefined {
+  const { width } = value.metadata;
+
+  return typeof width === 'number' && Number.isFinite(width) && width > 0 ? width : undefined;
+}
+
 /** 来自宿主 props 的运行态状态快照。 */
 const propsRuntimeState = computed<WidgetRuntimeState>(() => ({
   value: props.value,
@@ -132,7 +143,11 @@ provideRenderContext(providedRenderContext);
 const shouldRenderRuntimeElements = computed<boolean>(() => !runtimeFailed.value);
 /** 循环展开后的运行态渲染元素。 */
 const runtimeRenderElements = computed<WidgetLoopRenderElement[]>(() =>
-  shouldRenderRuntimeElements.value ? createWidgetLoopRenderElements(runtimeState.value.value.elements, runtimeState.value.renderContext) : []
+  shouldRenderRuntimeElements.value
+    ? createWidgetLoopRenderElements(runtimeState.value.value.elements, runtimeState.value.renderContext, {
+        autoColumnsRightX: readRuntimeAutoColumnsRightX(runtimeState.value.value)
+      })
+    : []
 );
 /** 运行态渲染元素上下文索引。 */
 const runtimeRenderContextByElementId = computed<Map<string, WidgetLoopRenderContext>>(

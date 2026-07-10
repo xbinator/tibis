@@ -109,6 +109,7 @@ function createLoopConfig(): WidgetElementLoopConfig {
   return {
     enabled: true,
     source: '$input.items',
+    autoColumns: false,
     columns: 2,
     columnGap: 12,
     rowGap: 12,
@@ -244,7 +245,7 @@ describe('AdvancedSetter', (): void => {
                 default: ''
               }
             },
-            template: '<label><span>{{ label }}</span><slot></slot></label>'
+            template: '<label><span>{{ label }}</span><span class="section-item-label-extra"><slot name="label-extra"></slot></span><slot></slot></label>'
           },
           BTextInput: defineComponent({
             name: 'BTextInputStub',
@@ -289,6 +290,10 @@ describe('AdvancedSetter', (): void => {
                 type: Number,
                 default: null
               },
+              disabled: {
+                type: Boolean,
+                default: false
+              },
               placeholder: {
                 type: String,
                 default: ''
@@ -308,7 +313,7 @@ describe('AdvancedSetter', (): void => {
 
               return { handleInput };
             },
-            template: '<input type="number" :value="value" :placeholder="placeholder" @input="handleInput" />'
+            template: '<input type="number" :value="value" :disabled="disabled" :placeholder="placeholder" @input="handleInput" />'
           })
         }
       }
@@ -361,13 +366,44 @@ describe('AdvancedSetter', (): void => {
     wrapper.unmount();
   });
 
-  it('renders loop number controls in a compact two-row grid', (): void => {
+  it('renders loop number controls without stale field classes', (): void => {
     const element = createWidgetElement();
     const wrapper = mountAdvancedSetter(element);
 
     expect(wrapper.find('.widget-advanced-setter__loop-grid').exists()).toBe(true);
-    expect(wrapper.find('.widget-advanced-setter__loop-field--columns').exists()).toBe(true);
-    expect(wrapper.findAll('.widget-advanced-setter__loop-field--gap')).toHaveLength(2);
+    expect(wrapper.find('.widget-advanced-setter__loop-field').exists()).toBe(false);
+    expect(wrapper.find('.widget-advanced-setter__loop-field--columns').exists()).toBe(false);
+    expect(wrapper.find('.widget-advanced-setter__loop-field--gap').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('toggles auto loop columns from label extra while keeping number input stable', async (): Promise<void> => {
+    const element = createWidgetElement();
+    const wrapper = mountAdvancedSetter(element);
+    const autoCheckbox = wrapper.findAllComponents({ name: 'ACheckboxStub' })[1];
+    const columnsInput = wrapper.find('input[placeholder="列数"]');
+
+    expect(autoCheckbox).toBeDefined();
+    expect(columnsInput.exists()).toBe(true);
+    expect(wrapper.findAll('.section-item-label-extra').some((item): boolean => item.element.contains(autoCheckbox.element))).toBe(true);
+    expect(columnsInput.attributes('disabled')).toBeUndefined();
+    expect((columnsInput.element as HTMLInputElement).value).toBe('2');
+
+    autoCheckbox.vm.$emit('update:checked', true);
+    await nextTick();
+
+    expect(element.loop.autoColumns).toBe(true);
+    expect(element.loop.columns).toBe(2);
+    expect(columnsInput.attributes('disabled')).toBeDefined();
+    expect((columnsInput.element as HTMLInputElement).value).toBe('2');
+
+    autoCheckbox.vm.$emit('update:checked', false);
+    await nextTick();
+
+    expect(element.loop.autoColumns).toBe(false);
+    expect(element.loop.columns).toBe(2);
+    expect(columnsInput.attributes('disabled')).toBeUndefined();
+    expect((columnsInput.element as HTMLInputElement).value).toBe('2');
     wrapper.unmount();
   });
 });
