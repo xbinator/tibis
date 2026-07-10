@@ -94,6 +94,8 @@ const mountedInitialized = shallowRef<boolean>(false);
 const runtimeFailed = shallowRef<boolean>(false);
 /** 串行运行态脚本任务，避免并发交互读取同一个旧快照。 */
 let runtimeTaskQueue: Promise<void> = Promise.resolve();
+/** 当前运行态组件是否已经卸载。 */
+let runtimeUnmounted = false;
 /** 当前允许接收 patch 的执行 ID。 */
 let activePatchExecutionId: string | null = null;
 /** 当前组件显示期复用的 Widget 运行态 session。 */
@@ -133,7 +135,20 @@ const propsRuntimeState = computed<WidgetRuntimeState>(() => ({
 /** 当前运行态脚本身份。 */
 const runtimeScriptIdentity = computed<string>(() => createRuntimeScriptIdentity(props.value));
 /** 当前有效运行态状态快照。 */
-const runtimeState = computed<WidgetRuntimeState>(() => patchPreviewRuntimeState.value ?? localRuntimeState.value ?? propsRuntimeState.value);
+const runtimeState = computed<WidgetRuntimeState>(() => {
+  const localState = patchPreviewRuntimeState.value ?? localRuntimeState.value;
+  if (!localState) return propsRuntimeState.value;
+
+  // 脚本数据使用本地连续快照，外部配置与输入输出始终以最新 props 为准。
+  return {
+    value: props.value,
+    renderContext: {
+      ...localState.renderContext,
+      input: props.renderContext.input,
+      output: props.renderContext.output
+    }
+  };
+});
 /** 运行态渲染上下文响应式包装。 */
 const providedRenderContext = computed<WidgetRenderContext | undefined>(() => runtimeState.value.renderContext);
 
@@ -302,7 +317,12 @@ function handleWidgetConsole(level: 'log' | 'info' | 'warn' | 'error' | 'debug',
  * @returns Widget 运行态 session
  */
 function getRuntimeSession(state: WidgetRuntimeState): WidgetRuntimeSession {
-  if (runtimeSession) return runtimeSession;
+  if (runtimeUnmounted) throw new Error('小组件运行态组件已卸载');
+
+  if (runtimeSession) {
+    runtimeSession.updateState(state);
+    return runtimeSession;
+  }
 
   runtimeSession = createWidgetRuntimeSession(state, {
     http: widgetHttpClient,
@@ -376,6 +396,11 @@ async function emitRuntimeChange(reason: WidgetRuntimeChange['reason'], result: 
  * @param error - 脚本执行错误
  */
 function handleRuntimeFailure(executionId: string, scriptVersion: number, error: unknown): void {
+  if (runtimeUnmounted) {
+    clearPatchPreview(executionId);
+    return;
+  }
+
   if (scriptVersion !== runtimeScriptVersion) {
     clearPatchPreview(executionId);
     return;
@@ -392,7 +417,12 @@ function handleRuntimeFailure(executionId: string, scriptVersion: number, error:
  * @param task - 待运行的异步任务
  */
 function enqueueRuntimeTask(task: () => Promise<void>): void {
-  const queuedTask = runtimeTaskQueue.then(task, task);
+  /** 卸载后让历史队列自然排空，但不再启动任何运行态任务。 */
+  const guardedTask = async (): Promise<void> => {
+    if (runtimeUnmounted) return;
+    await task();
+  };
+  const queuedTask = runtimeTaskQueue.then(guardedTask, guardedTask);
 
   runtimeTaskQueue = queuedTask.catch((): undefined => undefined);
 }
@@ -401,6 +431,7 @@ function enqueueRuntimeTask(task: () => Promise<void>): void {
  * 初始化运行态 mounted 生命周期。
  */
 async function initWidgetRuntime(): Promise<void> {
+  if (runtimeUnmounted) return;
   if (mountedInitialized.value || runtimeFailed.value) return;
   if (hasTriggeredMounted()) {
     getRuntimeSession(runtimeState.value);
@@ -437,6 +468,7 @@ async function initWidgetRuntime(): Promise<void> {
  * @param interactionCode - 元素交互表达式
  */
 async function runRuntimeInteraction(interactionCode: string): Promise<void> {
+  if (runtimeUnmounted) return;
   if (!mountedInitialized.value || runtimeFailed.value) return;
   if (!interactionCode.trim()) return;
 
@@ -467,6 +499,7 @@ async function runRuntimeInteraction(interactionCode: string): Promise<void> {
  * @param args - 方法参数
  */
 async function runRuntimeMethod(methodName: string, args: unknown[]): Promise<void> {
+  if (runtimeUnmounted) return;
   if (!mountedInitialized.value || runtimeFailed.value) return;
   if (!methodName.trim()) return;
 
@@ -522,6 +555,10 @@ watch(runtimeScriptIdentity, (): void => {
 });
 
 onBeforeUnmount((): void => {
+  runtimeUnmounted = true;
+  runtimeScriptVersion += 1;
+  patchPreviewRuntimeState.value = null;
+  activePatchExecutionId = null;
   disposeRuntimeSession();
 });
 

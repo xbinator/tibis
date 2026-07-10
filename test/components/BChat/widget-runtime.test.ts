@@ -83,7 +83,9 @@ class CloneCheckingWorkerMock {
   /**
    * 终止 Worker。
    */
-  public terminate(): void {}
+  public terminate(): void {
+    // 该替身不持有真实 Worker 资源，无需额外释放。
+  }
 }
 
 /**
@@ -669,6 +671,127 @@ describe('widgetRuntime', (): void => {
     }
   });
 
+  it('synchronizes updated input output and data into an existing widget session', async (): Promise<void> => {
+    const part: WidgetRuntimeState = {
+      ...createWidgetPart(
+        [
+          'export default class SnapshotWidget extends Widget {',
+          '  capture() {',
+          '    this.snapshot = {',
+          '      city: this.$input.city,',
+          '      outputVersion: this.$output.version,',
+          '      externalValue: this.externalValue',
+          '    }',
+          '  }',
+          '}'
+        ].join('\n')
+      ),
+      renderContext: {
+        input: { city: '上海' },
+        output: { version: 1 },
+        data: { externalValue: 'first' }
+      }
+    };
+    const session = createWidgetRuntimeSession(part, TEST_WIDGET_RUN_OPTIONS);
+
+    try {
+      await session.run('capture');
+      session.updateState({
+        value: part.value,
+        renderContext: {
+          input: { city: '杭州' },
+          output: { version: 2 },
+          data: { externalValue: 'second' }
+        }
+      });
+      const result = await session.run('capture');
+
+      expect(result.state.renderContext.data).toEqual({
+        externalValue: 'second',
+        snapshot: {
+          city: '杭州',
+          outputVersion: 2,
+          externalValue: 'second'
+        }
+      });
+    } finally {
+      session.dispose();
+    }
+  });
+
+  it('keeps cached nested data proxies connected while synchronizing session data', async (): Promise<void> => {
+    const part: WidgetRuntimeState = {
+      ...createWidgetPart(
+        [
+          'export default class CachedDataWidget extends Widget {',
+          '  private cachedDetails: { name: string } | null = null',
+          '',
+          '  onMounted() {',
+          '    this.cachedDetails = this.profile.details',
+          '  }',
+          '',
+          '  updateCachedDetails() {',
+          "    this.cachedDetails!.name = 'updated-through-cache'",
+          '  }',
+          '}'
+        ].join('\n')
+      ),
+      renderContext: {
+        input: {},
+        output: undefined,
+        data: {
+          profile: {
+            details: {
+              name: 'first'
+            }
+          }
+        }
+      }
+    };
+    const session = createWidgetRuntimeSession(part, TEST_WIDGET_RUN_OPTIONS);
+
+    try {
+      await session.mounted();
+      session.updateState({
+        value: part.value,
+        renderContext: {
+          input: {},
+          output: undefined,
+          data: {
+            profile: {
+              details: {
+                name: 'second'
+              }
+            }
+          }
+        }
+      });
+      const result = await session.run('updateCachedDetails');
+
+      expect(result.state.renderContext.data).toEqual({
+        profile: {
+          details: {
+            name: 'updated-through-cache'
+          }
+        }
+      });
+    } finally {
+      session.dispose();
+    }
+  });
+
+  it('does not expose Object prototype methods as widget session methods', async (): Promise<void> => {
+    const part = createWidgetPart('export default class EmptyWidget extends Widget {}');
+    const session = createWidgetRuntimeSession(part, TEST_WIDGET_RUN_OPTIONS);
+
+    try {
+      await session.mounted();
+      await expect(session.run('toString')).rejects.toThrow('小组件方法不存在：toString');
+    } finally {
+      session.dispose();
+    }
+  });
+
   it('sends cloneable widget payloads to worker sessions from reactive render context', async (): Promise<void> => {
     vi.stubGlobal('Worker', CloneCheckingWorkerMock);
 
@@ -829,6 +952,180 @@ describe('widgetRuntime', (): void => {
 
     expect(result.state.renderContext.data).toEqual({ confirmed: true });
     expect(result.sendMessage).toEqual({ content: '确认下单', isError: false });
+  });
+
+  it('rejects a session run when an unawaited async widget helper fails', async (): Promise<void> => {
+    const part = createWidgetPart(
+      [
+        'export default class Weather extends Widget {',
+        '  async fail() {',
+        "    throw new Error('helper boom')",
+        '  }',
+        '',
+        '  submit() {',
+        '    this.fail()',
+        '  }',
+        '}'
+      ].join('\n')
+    );
+    const session = createWidgetRuntimeSession(part, TEST_WIDGET_RUN_OPTIONS);
+
+    try {
+      await expect(session.run('submit')).rejects.toThrow('helper boom');
+    } finally {
+      session.dispose();
+    }
+  });
+
+  it('rejects an async helper chain that observes only fulfillment', async (): Promise<void> => {
+    const part = createWidgetPart(
+      [
+        'export default class Weather extends Widget {',
+        '  async fail() {',
+        "    throw new Error('then helper boom')",
+        '  }',
+        '',
+        '  submit() {',
+        '    this.fail().then(() => {',
+        '      this.unreachable = true',
+        '    })',
+        '  }',
+        '}'
+      ].join('\n')
+    );
+    const session = createWidgetRuntimeSession(part, TEST_WIDGET_RUN_OPTIONS);
+
+    try {
+      await expect(session.run('submit')).rejects.toThrow('then helper boom');
+    } finally {
+      session.dispose();
+    }
+  });
+
+  it('rejects an async helper chain observed only through finally', async (): Promise<void> => {
+    const part = createWidgetPart(
+      [
+        'export default class Weather extends Widget {',
+        '  async fail() {',
+        "    throw new Error('finally helper boom')",
+        '  }',
+        '',
+        '  submit() {',
+        '    this.fail().finally(() => {',
+        '      this.cleanupFinished = true',
+        '    })',
+        '  }',
+        '}'
+      ].join('\n')
+    );
+    const session = createWidgetRuntimeSession(part, TEST_WIDGET_RUN_OPTIONS);
+
+    try {
+      await expect(session.run('submit')).rejects.toThrow('finally helper boom');
+    } finally {
+      session.dispose();
+    }
+  });
+
+  it('does not repeat an async widget helper error handled by user code', async (): Promise<void> => {
+    const part = createWidgetPart(
+      [
+        'export default class Weather extends Widget {',
+        '  async fail() {',
+        "    throw new Error('handled helper')",
+        '  }',
+        '',
+        '  submit() {',
+        '    this.fail().catch(() => {',
+        '      this.helperErrorHandled = true',
+        '    })',
+        '  }',
+        '}'
+      ].join('\n')
+    );
+    const session = createWidgetRuntimeSession(part, TEST_WIDGET_RUN_OPTIONS);
+
+    try {
+      await expect(session.run('submit')).resolves.toMatchObject({
+        state: {
+          renderContext: {
+            data: {
+              helperErrorHandled: true
+            }
+          }
+        }
+      });
+    } finally {
+      session.dispose();
+    }
+  });
+
+  it('does not repeat an async helper error handled through await and catch', async (): Promise<void> => {
+    const part = createWidgetPart(
+      [
+        'export default class Weather extends Widget {',
+        '  async fail() {',
+        "    throw new Error('await handled helper')",
+        '  }',
+        '',
+        '  async submit() {',
+        '    try {',
+        '      await this.fail()',
+        '    } catch {',
+        '      this.awaitHelperErrorHandled = true',
+        '    }',
+        '  }',
+        '}'
+      ].join('\n')
+    );
+    const session = createWidgetRuntimeSession(part, TEST_WIDGET_RUN_OPTIONS);
+
+    try {
+      await expect(session.run('submit')).resolves.toMatchObject({
+        state: {
+          renderContext: {
+            data: {
+              awaitHelperErrorHandled: true
+            }
+          }
+        }
+      });
+    } finally {
+      session.dispose();
+    }
+  });
+
+  it('does not repeat a helper error handled after Promise.resolve assimilation', async (): Promise<void> => {
+    const part = createWidgetPart(
+      [
+        'export default class Weather extends Widget {',
+        '  async fail() {',
+        "    throw new Error('resolved handled helper')",
+        '  }',
+        '',
+        '  submit() {',
+        '    Promise.resolve(this.fail()).catch(() => {',
+        '      this.resolvedHelperErrorHandled = true',
+        '    })',
+        '  }',
+        '}'
+      ].join('\n')
+    );
+    const session = createWidgetRuntimeSession(part, TEST_WIDGET_RUN_OPTIONS);
+
+    try {
+      await expect(session.run('submit')).resolves.toMatchObject({
+        state: {
+          renderContext: {
+            data: {
+              resolvedHelperErrorHandled: true
+            }
+          }
+        }
+      });
+    } finally {
+      session.dispose();
+    }
   });
 
   it('does not expose a default confirm method from generated scripts', async (): Promise<void> => {

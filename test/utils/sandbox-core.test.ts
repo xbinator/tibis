@@ -7,6 +7,25 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createSandboxSession, runSandboxCode } from '@/utils/sandbox';
+import type { SandboxWorkerOutputMessage } from '@/utils/sandbox/types';
+import { createSandboxWorkerHostBridge } from '@/utils/sandbox/worker/bridge';
+import { createSandboxWorkerRuntime } from '@/utils/sandbox/worker/runtime';
+
+/**
+ * Worker 宿主调用输出消息。
+ */
+interface WorkerHostCallOutputMessage {
+  /** 消息类型。 */
+  type: 'host-call';
+  /** 当前运行 ID。 */
+  runId: string;
+  /** 宿主调用请求 ID。 */
+  requestId: string;
+  /** 宿主函数名称。 */
+  name: string;
+  /** 宿主函数参数。 */
+  args: unknown[];
+}
 
 /** 不主动响应消息的 Worker 测试替身。 */
 class TimeoutWorkerMock {
@@ -244,6 +263,32 @@ describe('runSandboxCode', (): void => {
     await expect(session.run({ code: 'return 1' })).rejects.toThrow('沙箱 session 已销毁');
   });
 
+  it('does not start queued local sandbox runs after dispose', async (): Promise<void> => {
+    let releaseFirstRun: () => void = (): void => undefined;
+    const firstRunGate = new Promise<void>((resolve): void => {
+      releaseFirstRun = resolve;
+    });
+    const executedRuns: string[] = [];
+    const session = createSandboxSession({
+      useWorker: false,
+      hostFunctions: {
+        hold: (): Promise<void> => firstRunGate,
+        record: (value: unknown): void => {
+          executedRuns.push(String(value));
+        }
+      }
+    });
+    const firstRun = session.run({ code: "await hold(); return 'first'" });
+    const queuedRun = session.run({ code: "await record('queued'); return 'second'" });
+
+    session.dispose();
+    releaseFirstRun();
+
+    await expect(firstRun).resolves.toEqual({ value: 'first' });
+    await expect(queuedRun).rejects.toThrow('沙箱 session 已销毁');
+    expect(executedRuns).toEqual([]);
+  });
+
   it('terminates worker sandbox sessions after a run timeout', async (): Promise<void> => {
     vi.useFakeTimers();
     vi.stubGlobal('Worker', TimeoutWorkerMock);
@@ -298,5 +343,120 @@ describe('runSandboxCode', (): void => {
         title: '流浪地球'
       }
     });
+  });
+
+  it('routes a persisted host bridge through the active sandbox session run', async (): Promise<void> => {
+    const messages: WorkerHostCallOutputMessage[] = [];
+    const bridge = createSandboxWorkerHostBridge((message): void => {
+      if (message.type === 'host-call') messages.push(message);
+    });
+    const persistedCallHostFunction = bridge.callHostFunction;
+
+    bridge.activate('run-1');
+    const firstCall = persistedCallHostFunction('echo', ['first']);
+    const firstMessage = messages[0];
+    expect(firstMessage).toMatchObject({ type: 'host-call', runId: 'run-1', name: 'echo', args: ['first'] });
+    bridge.handleHostResponse({ type: 'host-response', requestId: firstMessage.requestId, value: 'first-result' });
+    await expect(firstCall).resolves.toBe('first-result');
+    bridge.deactivate('run-1');
+
+    bridge.activate('run-2');
+    const secondCall = persistedCallHostFunction('echo', ['second']);
+    const secondMessage = messages[1];
+    expect(secondMessage).toMatchObject({ type: 'host-call', runId: 'run-2', name: 'echo', args: ['second'] });
+    bridge.handleHostResponse({ type: 'host-response', requestId: secondMessage.requestId, value: 'second-result' });
+    await expect(secondCall).resolves.toBe('second-result');
+    bridge.deactivate('run-2');
+
+    await expect(persistedCallHostFunction('echo', ['inactive'])).rejects.toThrow('沙箱当前没有活跃运行');
+    expect(messages).toHaveLength(2);
+  });
+
+  it('rejects and removes pending host calls when their sandbox run deactivates', async (): Promise<void> => {
+    const bridge = createSandboxWorkerHostBridge((): void => undefined);
+    bridge.activate('run-pending');
+    const pendingCall = bridge.callHostFunction('hold', []);
+    let rejection: Error | undefined;
+
+    pendingCall.catch((error: unknown): void => {
+      rejection = error instanceof Error ? error : new Error(String(error));
+    });
+    bridge.deactivate('run-pending');
+    await Promise.resolve();
+
+    expect(rejection?.message).toBe('沙箱运行已结束');
+  });
+
+  it('serializes worker runs while routing a persisted host proxy through each active run', async (): Promise<void> => {
+    const outputMessages: SandboxWorkerOutputMessage[] = [];
+    const runtime = createSandboxWorkerRuntime((message): void => {
+      outputMessages.push(message);
+    });
+    const firstRun = runtime.handleMessage({
+      type: 'run',
+      runId: 'worker-run-1',
+      payload: {
+        code: ['globalThis.persistedEcho = echo', "return await globalThis.persistedEcho('first')"].join('\n'),
+        hostFunctionNames: ['echo']
+      }
+    });
+    const secondRun = runtime.handleMessage({
+      type: 'run',
+      runId: 'worker-run-2',
+      payload: {
+        code: "return await globalThis.persistedEcho('second')"
+      }
+    });
+
+    await vi.waitFor((): void => {
+      expect(outputMessages.filter((message): boolean => message.type === 'host-call')).toHaveLength(1);
+    });
+    const firstHostCall = outputMessages.find((message): message is Extract<SandboxWorkerOutputMessage, { type: 'host-call' }> => message.type === 'host-call');
+    expect(firstHostCall).toMatchObject({ runId: 'worker-run-1', name: 'echo', args: ['first'] });
+    if (!firstHostCall) throw new Error('首轮 Worker 宿主调用不存在');
+
+    await runtime.handleMessage({ type: 'host-response', requestId: firstHostCall.requestId, value: 'first-result' });
+    await firstRun;
+    await vi.waitFor((): void => {
+      expect(outputMessages.filter((message): boolean => message.type === 'host-call')).toHaveLength(2);
+    });
+    const hostCalls = outputMessages.filter((message): message is Extract<SandboxWorkerOutputMessage, { type: 'host-call' }> => message.type === 'host-call');
+    const secondHostCall = hostCalls[1];
+    expect(secondHostCall).toMatchObject({ runId: 'worker-run-2', name: 'echo', args: ['second'] });
+    if (!secondHostCall) throw new Error('第二轮 Worker 宿主调用不存在');
+
+    await runtime.handleMessage({ type: 'host-response', requestId: secondHostCall.requestId, value: 'second-result' });
+    await secondRun;
+
+    expect(outputMessages.filter((message): boolean => message.type === 'done')).toMatchObject([
+      { type: 'done', runId: 'worker-run-1', result: { value: 'first-result' } },
+      { type: 'done', runId: 'worker-run-2', result: { value: 'second-result' } }
+    ]);
+  });
+
+  it('returns the active worker run error when a host call fails', async (): Promise<void> => {
+    const outputMessages: SandboxWorkerOutputMessage[] = [];
+    const runtime = createSandboxWorkerRuntime((message): void => {
+      outputMessages.push(message);
+    });
+    const runTask = runtime.handleMessage({
+      type: 'run',
+      runId: 'worker-error-run',
+      payload: {
+        code: 'return await failHost()',
+        hostFunctionNames: ['failHost']
+      }
+    });
+
+    await vi.waitFor((): void => {
+      expect(outputMessages.some((message): boolean => message.type === 'host-call')).toBe(true);
+    });
+    const hostCall = outputMessages.find((message): message is Extract<SandboxWorkerOutputMessage, { type: 'host-call' }> => message.type === 'host-call');
+    if (!hostCall) throw new Error('Worker 失败宿主调用不存在');
+
+    await runtime.handleMessage({ type: 'host-error', requestId: hostCall.requestId, message: 'host boom' });
+    await runTask;
+
+    expect(outputMessages).toContainEqual({ type: 'error', runId: 'worker-error-run', message: 'host boom' });
   });
 });

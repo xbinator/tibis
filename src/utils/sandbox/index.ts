@@ -134,7 +134,7 @@ function canUseWorker(): boolean {
  * @returns Worker 实例
  */
 function createSandboxWorker(): Worker {
-  return new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
+  return new Worker(new URL('./worker/index.ts', import.meta.url), { type: 'module' });
 }
 
 /**
@@ -209,14 +209,17 @@ function createLocalSandboxSession(options: SandboxRunOptions = {}): SandboxSess
         return Promise.reject(error);
       }
 
-      const runTask = (): Promise<SandboxRunResult> =>
-        executeSandboxCode(
+      const runTask = (): Promise<SandboxRunResult> => {
+        if (disposed) return Promise.reject(new Error('沙箱 session 已销毁'));
+
+        return executeSandboxCode(
           compiledPayload,
           {
             callHostFunction: (name: string, args: unknown[]): Promise<unknown> => runHostFunction(options.hostFunctions, name, args)
           },
           context
         );
+      };
       const task = runQueue ? runQueue.then(runTask) : runTask();
 
       runQueue = task.then(

@@ -15,7 +15,7 @@
 - Modify `src/utils/sandbox/core.ts`: allow sandbox execution to reuse one shadow-global context.
 - Modify `src/utils/sandbox/types.ts`: add `SandboxSession` and execution context types.
 - Modify `src/utils/sandbox/index.ts`: export `createSandboxSession` while keeping `runSandboxCode` one-shot.
-- Modify `src/utils/sandbox/worker.ts`: reuse one worker-side execution context for session runs.
+- Modify `src/utils/sandbox/worker/index.ts`: reuse one worker-side execution context for session runs.
 - Modify `src/components/BWidget/utils/widgetRuntime/index.ts`: add `WidgetRuntimeSession`, `createWidgetRuntimeSession`, and method-name command support.
 - Modify `src/components/BWidget/Runtime.vue`: hold one display session and expose `run(methodName, ...args)` through `useWidgetRuntime`.
 - Modify `src/components/BWidget/hooks/useWidgetRuntime.ts`: add the method-call controller API.

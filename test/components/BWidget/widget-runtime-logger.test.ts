@@ -242,6 +242,108 @@ describe('widgetRuntime $logger bridge', (): void => {
     expect(loggerCalls).toEqual([{ level: 'warn', args: ['mount-log'] }]);
   });
 
+  it('waits for unawaited logger continuations before completing the current session run', async (): Promise<void> => {
+    let releaseLogger: () => void = (): void => undefined;
+    const loggerGate = new Promise<void>((resolve): void => {
+      releaseLogger = resolve;
+    });
+    const loggerCalls: Array<{ level: 'info' | 'warn' | 'error'; args: unknown[] }> = [];
+    const state = createLoggerRuntimeState(
+      createLoggerWidgetCode([
+        '  onMounted() {',
+        "    this.$logger.info('deferred-log').then(() => {",
+        "      this.message = 'logger-finished'",
+        '    })',
+        '  }'
+      ])
+    );
+    const session = createWidgetRuntimeSession(state, {
+      useWorker: false,
+      onLogger: async (level, args): Promise<void> => {
+        loggerCalls.push({ level, args });
+        await loggerGate;
+      }
+    });
+    let mountedSettled = false;
+
+    try {
+      const mountedPromise = session.mounted().then((result) => {
+        mountedSettled = true;
+        return result;
+      });
+      await vi.waitFor((): void => {
+        expect(loggerCalls).toHaveLength(1);
+      });
+      const settledBeforeLogger = mountedSettled;
+
+      releaseLogger();
+      const result = await mountedPromise;
+
+      expect(settledBeforeLogger).toBe(false);
+      expect(result.state.renderContext.data).toEqual({ message: 'logger-finished' });
+    } finally {
+      releaseLogger();
+      session.dispose();
+    }
+  });
+
+  it('waits for the full asynchronous logger continuation chain', async (): Promise<void> => {
+    const state = createLoggerRuntimeState(
+      createLoggerWidgetCode([
+        '  onMounted() {',
+        "    this.$logger.info('async-chain').then(async () => {",
+        '      for (let index = 0; index < 20; index += 1) {',
+        '        await Promise.resolve()',
+        '      }',
+        "      this.message = 'async-chain-finished'",
+        '    })',
+        '  }'
+      ])
+    );
+
+    const result = await initWidgetMountState(state, createCaptureOptions([], []));
+
+    expect(result.renderContext.data).toEqual({ message: 'async-chain-finished' });
+  });
+
+  it('tracks logger continuations assimilated through Promise.resolve', async (): Promise<void> => {
+    const state = createLoggerRuntimeState(
+      createLoggerWidgetCode([
+        '  onMounted() {',
+        "    Promise.resolve(this.$logger.info('resolved-chain')).then(async () => {",
+        '      for (let index = 0; index < 20; index += 1) {',
+        '        await Promise.resolve()',
+        '      }',
+        "      this.message = 'resolved-chain-finished'",
+        '    })',
+        '  }'
+      ])
+    );
+
+    const result = await initWidgetMountState(state, createCaptureOptions([], []));
+
+    expect(result.renderContext.data).toEqual({ message: 'resolved-chain-finished' });
+  });
+
+  it('tracks logger continuations assimilated through Promise.all', async (): Promise<void> => {
+    const state = createLoggerRuntimeState(
+      createLoggerWidgetCode([
+        '  onMounted() {',
+        "    Promise.all([this.$logger.info('all-chain')]).then(async () => {",
+        '      for (let index = 0; index < 20; index += 1) {',
+        '        await Promise.resolve()',
+        '      }',
+        "      this.message = 'all-chain-finished'",
+        '    })',
+        '  }'
+      ])
+    );
+
+    const result = await initWidgetMountState(state, createCaptureOptions([], []));
+
+    expect(result.renderContext.data).toEqual({ message: 'all-chain-finished' });
+  });
+
   it('runtime session run forwards $logger calls from custom methods', async (): Promise<void> => {
     const loggerCalls: Array<{ level: 'info' | 'warn' | 'error'; args: unknown[] }> = [];
     const state = createLoggerRuntimeState(createLoggerWidgetCode(['  async submitOrder() {', "    await this.$logger.error('interaction-log')", '  }']));

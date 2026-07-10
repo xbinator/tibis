@@ -1093,6 +1093,72 @@ describe('BWidgetRuntime', (): void => {
     wrapper.unmount();
   });
 
+  it('does not start queued runtime interactions after the component unmounts', async (): Promise<void> => {
+    const mountedRequestDeferred = createDeferred<RequestResponse>();
+    const requests: RequestInput[] = [];
+    stubElectronRequest(async (input: RequestInput): Promise<RequestResponse> => {
+      requests.push(input);
+      if (input.url === 'https://api.example.com/mounted') return mountedRequestDeferred.promise;
+
+      return {
+        status: 200,
+        ok: true,
+        url: input.url,
+        headers: {},
+        data: {}
+      };
+    });
+    const wrapper = mount(BWidgetRuntime, {
+      props: {
+        value: {
+          ...createRuntimeWidgetData(),
+          execute: {
+            code: [
+              'export default class LifecycleWidget extends Widget {',
+              '  async onMounted() {',
+              "    await this.$http.get('https://api.example.com/mounted')",
+              '  }',
+              '',
+              '  async buttonByClick() {',
+              "    await this.$http.get('https://api.example.com/interaction')",
+              '  }',
+              '}'
+            ].join('\n')
+          }
+        },
+        renderContext: {
+          input: {},
+          output: undefined,
+          data: {}
+        }
+      },
+      global: {
+        stubs: {
+          WidgetNode: WidgetNodeRuntimeMethodStub
+        }
+      },
+      attachTo: document.body
+    });
+
+    await vi.waitFor((): void => {
+      expect(requests).toHaveLength(1);
+    });
+    await wrapper.get('.runtime-method-probe').trigger('click');
+    wrapper.unmount();
+    mountedRequestDeferred.resolve({
+      status: 200,
+      ok: true,
+      url: 'https://api.example.com/mounted',
+      headers: {},
+      data: {}
+    });
+    await flushWidgetRuntime();
+    await flushWidgetRuntime();
+
+    expect(requests.map((request): string => request.url)).toEqual(['https://api.example.com/mounted']);
+    expect(wrapper.emitted('change')).toBeUndefined();
+  });
+
   it('keeps runtime interactions available after skipping mounted by render context state', async (): Promise<void> => {
     const runtimeProps = {
       value: {
@@ -1627,6 +1693,65 @@ describe('BWidgetRuntime', (): void => {
       renderContext: {
         data: {
           message: '方法点击'
+        }
+      }
+    });
+    wrapper.unmount();
+  });
+
+  it('uses the latest runtime props input after local interaction state exists', async (): Promise<void> => {
+    const value = {
+      ...createRuntimeWidgetData(),
+      execute: {
+        code: [
+          'export default class InputWidget extends Widget {',
+          '  buttonByClick() {',
+          '    this.message = this.$input.message',
+          '  }',
+          '}'
+        ].join('\n')
+      }
+    };
+    const wrapper: VueWrapper = mount(BWidgetRuntime, {
+      props: {
+        value,
+        renderContext: {
+          input: { message: '第一版' },
+          output: undefined,
+          data: {},
+          isMounted: true
+        }
+      },
+      global: {
+        stubs: {
+          WidgetNode: WidgetNodeRuntimeMethodStub
+        }
+      },
+      attachTo: document.body
+    });
+
+    await flushWidgetRuntime();
+    await wrapper.get('.runtime-method-probe').trigger('click');
+    await flushWidgetRuntime();
+    await wrapper.setProps({
+      renderContext: {
+        input: { message: '第二版' },
+        output: undefined,
+        data: { message: '第一版' },
+        isMounted: true
+      }
+    });
+    await wrapper.get('.runtime-method-probe').trigger('click');
+    await flushWidgetRuntime();
+
+    const changes = (wrapper.emitted('change') ?? []).map(([change]): WidgetRuntimeChange => change as WidgetRuntimeChange);
+    const lastChange = changes[changes.length - 1];
+
+    expect(lastChange).toMatchObject({
+      reason: 'interaction',
+      renderContext: {
+        data: {
+          message: '第二版'
         }
       }
     });

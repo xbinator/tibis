@@ -48,7 +48,7 @@ session.dispose()
 - `src/components/BWidget/utils/widgetRuntime/index.ts`
 - `src/components/BWidget/Runtime.vue`
 - `src/utils/sandbox/index.ts`
-- `src/utils/sandbox/worker.ts`
+- `src/utils/sandbox/worker/index.ts`
 
 ## State Boundaries
 
