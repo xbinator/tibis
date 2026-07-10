@@ -28,78 +28,21 @@
 <script setup lang="ts">
 /* eslint-disable no-use-before-define -- 代码高亮节点是递归结构，类型与组件渲染存在自然递归。 */
 import type { CodeBlockNode as MessageCodeBlockNode } from '../types';
+import type { CodeHighlightRenderNode } from '../utils/codeHighlight';
 import type { PropType, VNodeChild } from 'vue';
 import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
-import { common, createLowlight } from 'lowlight';
 import { getRenderableMermaidSource } from '@/components/BEditor/utils/mermaidMarkdown';
 import { useClipboard } from '@/hooks/useClipboard';
 import { createNamespace } from '@/utils/namespace';
-import { createMessageMermaidRenderId } from '../utils';
+import { highlightMessageCode } from '../utils/codeHighlight';
+import { createMessageMermaidRenderId } from '../utils/messageHelper';
 
 defineOptions({ name: 'CodeBlockNode' });
 
 const [, bem] = createNamespace('message');
-const lowlight = createLowlight(common);
 let mermaidInitialized = false;
 let mermaidCurrentTheme = '';
 let mermaidModule: typeof import('mermaid').default | null = null;
-
-/**
- * Lowlight 文本节点。
- */
-interface LowlightTextNode {
-  /** 节点类型 */
-  type: 'text';
-  /** 文本内容 */
-  value: string;
-}
-
-/**
- * Lowlight 元素节点。
- */
-interface LowlightElementNode {
-  /** 节点类型 */
-  type: 'element' | 'root';
-  /** 子节点 */
-  children?: LowlightNode[];
-  /** 节点属性 */
-  properties?: {
-    /** CSS 类名 */
-    className?: string[] | string;
-  };
-}
-
-/**
- * Lowlight 节点。
- */
-type LowlightNode = LowlightElementNode | LowlightTextNode;
-
-/**
- * 代码高亮文本渲染节点。
- */
-interface CodeHighlightTextNode {
-  /** 节点类型 */
-  type: 'text';
-  /** 文本内容 */
-  value: string;
-}
-
-/**
- * 代码高亮元素渲染节点。
- */
-interface CodeHighlightElementNode {
-  /** 节点类型 */
-  type: 'element';
-  /** 安全 CSS 类名 */
-  className: string;
-  /** 子节点 */
-  children: CodeHighlightRenderNode[];
-}
-
-/**
- * 代码高亮渲染节点。
- */
-type CodeHighlightRenderNode = CodeHighlightElementNode | CodeHighlightTextNode;
 
 /**
  * CodeBlockNode 组件属性。
@@ -114,30 +57,6 @@ const { clipboard } = useClipboard();
 const mermaidPreviewRef = ref<HTMLElement | null>(null);
 const mermaidError = ref<string | null>(null);
 let mermaidRenderIndex = 0;
-
-/**
- * Markdown 代码围栏语言别名。
- */
-const LANGUAGE_ALIASES: Readonly<Record<string, string>> = {
-  bash: 'shell',
-  cjs: 'javascript',
-  htm: 'xml',
-  html: 'xml',
-  js: 'javascript',
-  jsx: 'javascript',
-  md: 'markdown',
-  plaintext: 'plaintext',
-  py: 'python',
-  rb: 'ruby',
-  rs: 'rust',
-  sh: 'shell',
-  shellscript: 'shell',
-  text: 'plaintext',
-  ts: 'typescript',
-  tsx: 'typescript',
-  vue: 'xml',
-  yml: 'yaml'
-};
 
 /**
  * 代码高亮节点递归渲染组件。
@@ -167,26 +86,11 @@ const CodeHighlightNode = defineComponent({
 
 const rawLanguage = computed(() => props.node.lang?.trim().split(/\s+/, 1)[0]?.toLowerCase() ?? '');
 const displayLanguage = computed(() => formatDisplayLanguage(rawLanguage.value || 'text'));
-const highlightLanguage = computed(() => {
-  const language = LANGUAGE_ALIASES[rawLanguage.value] ?? rawLanguage.value;
-  return language && lowlight.registered(language) ? language : '';
-});
 const codeClassName = computed(() => (rawLanguage.value ? `language-${rawLanguage.value}` : undefined));
 const isMermaidLanguage = computed(() => rawLanguage.value === 'mermaid');
 const hasCode = computed(() => props.node.text.trim().length > 0);
 const isMermaidPreviewVisible = computed(() => isMermaidLanguage.value && hasCode.value && props.node.complete);
-const highlightedNodes = computed<CodeHighlightRenderNode[]>(() => {
-  if (!highlightLanguage.value) {
-    return textToHighlightNodes(props.node.text);
-  }
-
-  try {
-    const tree = lowlight.highlight(highlightLanguage.value, props.node.text) as LowlightNode;
-    return lowlightNodeToHighlightNodes(tree);
-  } catch {
-    return textToHighlightNodes(props.node.text);
-  }
-});
+const highlightedNodes = computed<CodeHighlightRenderNode[]>(() => highlightMessageCode(rawLanguage.value, props.node.text, props.node.complete));
 
 /**
  * 初始化 Mermaid 渲染实例。
@@ -252,58 +156,12 @@ async function renderMermaid(): Promise<void> {
 }
 
 /**
- * 将纯文本转为代码高亮文本节点。
- * @param text - 代码文本
- * @returns 高亮渲染节点列表
- */
-function textToHighlightNodes(text: string): CodeHighlightRenderNode[] {
-  return text ? [{ type: 'text', value: text }] : [];
-}
-
-/**
  * 格式化代码块语言展示名称。
  * @param language - 代码块语言
  * @returns 首字母大写后的展示名称
  */
 function formatDisplayLanguage(language: string): string {
   return language.charAt(0).toUpperCase() + language.slice(1);
-}
-
-/**
- * 读取 Lowlight 元素节点的安全类名。
- * @param node - Lowlight 元素节点
- * @returns 安全类名
- */
-function getSafeClassName(node: LowlightElementNode): string {
-  const rawClassName = node.properties?.className;
-  const classNames = Array.isArray(rawClassName) ? rawClassName : rawClassName?.split(/\s+/) ?? [];
-
-  return classNames.filter((className: string) => className.startsWith('hljs-')).join(' ');
-}
-
-/**
- * 将 Lowlight 节点转为可控的 Vue 渲染节点。
- * @param node - Lowlight 节点
- * @returns 高亮渲染节点列表
- */
-function lowlightNodeToHighlightNodes(node: LowlightNode): CodeHighlightRenderNode[] {
-  if (node.type === 'text') {
-    return textToHighlightNodes(node.value);
-  }
-
-  const children = node.children?.flatMap((child: LowlightNode) => lowlightNodeToHighlightNodes(child)) ?? [];
-
-  if (node.type === 'root') {
-    return children;
-  }
-
-  return [
-    {
-      type: 'element',
-      className: getSafeClassName(node),
-      children
-    }
-  ];
 }
 
 /**

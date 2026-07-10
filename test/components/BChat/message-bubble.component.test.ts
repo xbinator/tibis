@@ -999,9 +999,13 @@ describe('MessageBubble', (): void => {
       value: {
         ...createWeatherWidgetData(),
         execute: {
-          code: ['export default class Weather extends Widget {', '  confirmOrder() {', '    this.$sendMessage({ content: this.order.message })', '  }', '}'].join(
-            '\n'
-          )
+          code: [
+            'export default class Weather extends Widget {',
+            '  confirmOrder() {',
+            '    this.$sendMessage({ content: this.order.message })',
+            '  }',
+            '}'
+          ].join('\n')
         }
       },
       renderContext: createWeatherRenderContext()

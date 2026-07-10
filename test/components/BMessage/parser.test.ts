@@ -4,8 +4,8 @@
  */
 import { marked } from 'marked';
 import { describe, expect, it } from 'vitest';
-import { parseMessageNodes } from '@/components/BMessage/parser';
 import type { BlockNode, InlineNode } from '@/components/BMessage/types';
+import { parseMessageNodes } from '@/components/BMessage/utils/messageParser';
 
 /**
  * 断言节点类型并返回窄化后的节点。

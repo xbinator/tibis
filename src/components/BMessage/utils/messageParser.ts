@@ -1,5 +1,5 @@
 /**
- * @file parser.ts
+ * @file messageParser.ts
  * @description 将 BMessage 内容解析为 BlockNode / InlineNode 消息节点。
  */
 /* eslint-disable no-use-before-define -- parser 使用递归下降转换，函数之间存在自然递归。 */
@@ -12,11 +12,11 @@ import type {
   ParseMessageNodesResult,
   SafeHtmlInlineTag,
   TableCellNode
-} from './types';
+} from '../types';
 import type { Token, TokenizerExtension, Tokens } from 'marked';
 import { unescape } from 'lodash-es';
 import { Marked } from 'marked';
-import { assignImageIndexes, stableHash } from './utils';
+import { assignImageIndexes, stableHash } from './messageHelper';
 
 /**
  * BMessage 专用 Marked 实例，避免修改全局 marked 单例。

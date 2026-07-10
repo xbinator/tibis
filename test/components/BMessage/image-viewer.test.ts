@@ -37,6 +37,16 @@ vi.mock('ant-design-vue', () => ({
   message: messageMocks
 }));
 
+/**
+ * 等待 BMessage 调度帧和 Vue DOM 更新。
+ */
+async function waitMessageRender(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+  await nextTick();
+}
+
 describe('BMessage image viewer', () => {
   beforeEach((): void => {
     previewImageMock.mockClear();
@@ -54,7 +64,7 @@ describe('BMessage image viewer', () => {
       }
     });
 
-    await nextTick();
+    await waitMessageRender();
 
     expect(wrapper.findComponent({ name: 'ImageNode' }).exists()).toBe(true);
     expect(wrapper.find('.b-message__image-img').exists()).toBe(true);
@@ -68,7 +78,7 @@ describe('BMessage image viewer', () => {
       }
     });
 
-    await nextTick();
+    await waitMessageRender();
 
     const images = wrapper.findAll('.b-message__markdown img');
     const mouseDownEvent = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
@@ -80,7 +90,7 @@ describe('BMessage image viewer', () => {
     const stopPropagationSpy = vi.spyOn(clickEvent, 'stopPropagation');
     images[1].element.dispatchEvent(clickEvent);
 
-    await nextTick();
+    await waitMessageRender();
 
     expect(mouseDownPreventDefaultSpy).toHaveBeenCalledOnce();
     expect(preventDefaultSpy).toHaveBeenCalledOnce();
@@ -105,7 +115,7 @@ describe('BMessage image viewer', () => {
       }
     });
 
-    await nextTick();
+    await waitMessageRender();
 
     await wrapper.find('.b-message__markdown img').trigger('click');
 
@@ -133,7 +143,7 @@ describe('BMessage image viewer', () => {
       }
     });
 
-    await nextTick();
+    await waitMessageRender();
 
     const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
     const preventDefaultSpy = vi.spyOn(clickEvent, 'preventDefault');
@@ -168,7 +178,7 @@ describe('BMessage image viewer', () => {
       }
     });
 
-    await nextTick();
+    await waitMessageRender();
 
     await wrapper.find('button[aria-label="复制图片"]').trigger('click');
     await flushPromises();

@@ -1,8 +1,8 @@
 /**
- * @file utils.ts
+ * @file messageHelper.ts
  * @description BMessage 节点解析与遍历工具函数。
  */
-import type { BlockNode, ImageInlineNode, InlineNode } from './types';
+import type { BlockNode, ImageInlineNode, InlineNode } from '../types';
 import type { ImagePreviewItem } from '@/hooks/useImagePreview';
 
 let mermaidRenderIdCounter = 0;

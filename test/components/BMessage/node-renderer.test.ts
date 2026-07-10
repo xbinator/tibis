@@ -6,6 +6,7 @@
 import { nextTick } from 'vue';
 import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
+import MessageNodes from '@/components/BMessage/components/MessageNodes';
 import BMessage from '@/components/BMessage/index.vue';
 
 /**
@@ -50,7 +51,7 @@ vi.mock('mermaid', () => ({
 /**
  * 等待一帧 rAF 渲染。
  */
-async function waitAnimationFrame(): Promise<void> {
+async function waitMessageRender(): Promise<void> {
   await new Promise<void>((resolve) => {
     requestAnimationFrame(() => resolve());
   });
@@ -58,7 +59,7 @@ async function waitAnimationFrame(): Promise<void> {
 }
 
 describe('BMessage node renderer', () => {
-  it('renders markdown through BlockNode and InlineNode components', async (): Promise<void> => {
+  it('renders markdown through a single lightweight node tree', async (): Promise<void> => {
     const wrapper = mount(BMessage, {
       props: {
         type: 'markdown',
@@ -66,10 +67,11 @@ describe('BMessage node renderer', () => {
       }
     });
 
-    await nextTick();
+    await waitMessageRender();
 
-    expect(wrapper.findComponent({ name: 'BlockNode' }).exists()).toBe(true);
-    expect(wrapper.findComponent({ name: 'InlineNode' }).exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'MessageNodes' }).exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'BlockNode' }).exists()).toBe(false);
+    expect(wrapper.findComponent({ name: 'InlineNode' }).exists()).toBe(false);
     expect(wrapper.find('h1').text()).toBe('Title');
     expect(wrapper.find('strong').text()).toBe('bold');
     expect(wrapper.find('code').text()).toBe('code');
@@ -83,7 +85,7 @@ describe('BMessage node renderer', () => {
       }
     });
 
-    await nextTick();
+    await waitMessageRender();
 
     expect(wrapper.find('[data-raw-html="1"]').exists()).toBe(false);
     expect(wrapper.text()).toContain('<script data-raw-html="1">unsafe</script>');
@@ -97,7 +99,7 @@ describe('BMessage node renderer', () => {
       }
     });
 
-    await nextTick();
+    await waitMessageRender();
 
     expect(wrapper.find('mark').text()).toBe('highlight');
     expect(wrapper.find('sup').text()).toBe('2');
@@ -115,7 +117,7 @@ describe('BMessage node renderer', () => {
       }
     });
 
-    await nextTick();
+    await waitMessageRender();
 
     expect(wrapper.find('li strong').text()).toBe('粗体');
     expect(wrapper.find('li em').text()).toBe('斜体');
@@ -134,7 +136,7 @@ describe('BMessage node renderer', () => {
       }
     });
 
-    await nextTick();
+    await waitMessageRender();
 
     expect(wrapper.find('ul').exists()).toBe(true);
     expect(wrapper.find('ol').exists()).toBe(true);
@@ -152,7 +154,7 @@ describe('BMessage node renderer', () => {
       }
     });
 
-    await nextTick();
+    await waitMessageRender();
 
     const topOrderedItems = Array.from(wrapper.find('ol').element.children).filter((element) => element.tagName === 'LI');
 
@@ -172,7 +174,7 @@ describe('BMessage node renderer', () => {
       }
     });
 
-    await nextTick();
+    await waitMessageRender();
 
     const checkboxes = wrapper.findAll('li > input[type="checkbox"]');
 
@@ -185,6 +187,40 @@ describe('BMessage node renderer', () => {
     expect(wrapper.text()).not.toContain('[ ]');
   });
 
+  it('renders blockquotes, tables and horizontal rules', async (): Promise<void> => {
+    const wrapper = mount(BMessage, {
+      props: {
+        type: 'markdown',
+        content: '> quoted\n\n| Name | Value |\n| --- | --- |\n| one | two |\n\n---'
+      }
+    });
+
+    await waitMessageRender();
+
+    expect(wrapper.find('blockquote').text()).toContain('quoted');
+    expect(wrapper.find('table thead').text()).toContain('Name');
+    expect(wrapper.find('table tbody').text()).toContain('two');
+    expect(wrapper.find('hr').exists()).toBe(true);
+  });
+
+  it('renders component placeholder nodes without recursive block components', (): void => {
+    const wrapper = mount(MessageNodes, {
+      props: {
+        blocks: [
+          {
+            type: 'component',
+            id: 'component-1',
+            raw: '',
+            componentName: 'WeatherCard'
+          }
+        ]
+      }
+    });
+
+    expect(wrapper.find('.b-message__component-placeholder').text()).toBe('WeatherCard');
+    expect(wrapper.findComponent({ name: 'BlockNode' }).exists()).toBe(false);
+  });
+
   it('decodes markdown html entities when rendering text nodes', async (): Promise<void> => {
     const wrapper = mount(BMessage, {
       props: {
@@ -193,7 +229,7 @@ describe('BMessage node renderer', () => {
       }
     });
 
-    await nextTick();
+    await waitMessageRender();
 
     expect(wrapper.text()).toContain('Fish & chips <ok> & more');
     expect(wrapper.text()).not.toContain('&amp;');
@@ -207,7 +243,7 @@ describe('BMessage node renderer', () => {
       }
     });
 
-    await nextTick();
+    await waitMessageRender();
 
     expect(wrapper.find('.b-message__code-block').exists()).toBe(true);
     expect(wrapper.find('.b-message__code-language').text()).toBe('Ts');
@@ -224,7 +260,7 @@ describe('BMessage node renderer', () => {
       }
     });
 
-    await nextTick();
+    await waitMessageRender();
 
     expect(wrapper.find('.b-message__code-language').text()).toBe('Madeup');
     expect(wrapper.find('.hljs-keyword').exists()).toBe(false);
@@ -239,7 +275,7 @@ describe('BMessage node renderer', () => {
       }
     });
 
-    await nextTick();
+    await waitMessageRender();
 
     expect(wrapper.find('.b-message__math-inline .katex').exists()).toBe(true);
     expect(wrapper.find('.b-message__math-block .katex-display').exists()).toBe(true);
@@ -255,7 +291,7 @@ describe('BMessage node renderer', () => {
       }
     });
 
-    await nextTick();
+    await waitMessageRender();
     await wrapper.find('button[aria-label="复制代码"]').trigger('click');
 
     expect(clipboardMock).toHaveBeenCalledWith('console.log("copy me")', {
@@ -275,7 +311,7 @@ describe('BMessage node renderer', () => {
       }
     });
 
-    await nextTick();
+    await waitMessageRender();
     await flushPromises();
 
     expect(wrapper.find('.b-message__mermaid-preview').exists()).toBe(true);
@@ -301,7 +337,7 @@ describe('BMessage node renderer', () => {
       }
     });
 
-    await nextTick();
+    await waitMessageRender();
     await flushPromises();
 
     expect(wrapper.find('.b-message__mermaid-preview').exists()).toBe(true);
@@ -321,7 +357,7 @@ describe('BMessage node renderer', () => {
       }
     });
 
-    await waitAnimationFrame();
+    await waitMessageRender();
     await flushPromises();
 
     expect(wrapper.find('.b-message__mermaid-preview').exists()).toBe(false);
@@ -332,7 +368,7 @@ describe('BMessage node renderer', () => {
       loading: false,
       content: '```mermaid\ngraph TD\n  A --> B\n```'
     } as Partial<BMessagePublicProps>);
-    await nextTick();
+    await waitMessageRender();
     await flushPromises();
 
     expect(wrapper.find('.b-message__mermaid-preview').exists()).toBe(true);
@@ -349,7 +385,7 @@ describe('BMessage node renderer', () => {
       }
     });
 
-    await waitAnimationFrame();
+    await waitMessageRender();
 
     expect(wrapper.find('.b-message__math-inline .katex').exists()).toBe(false);
     expect(wrapper.find('.b-message__math-block .katex-display').exists()).toBe(false);
@@ -365,7 +401,7 @@ describe('BMessage node renderer', () => {
       }
     });
 
-    await nextTick();
+    await waitMessageRender();
 
     expect(wrapper.find('p code').text()).toBe('const value = 1');
     expect(wrapper.find('button[aria-label="复制代码"]').exists()).toBe(false);
@@ -380,9 +416,9 @@ describe('BMessage node renderer', () => {
       }
     });
 
-    await waitAnimationFrame();
+    await waitMessageRender();
 
-    expect(wrapper.findComponent({ name: 'BlockNode' }).exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'MessageNodes' }).exists()).toBe(true);
     expect(wrapper.find('strong').exists()).toBe(false);
     expect(wrapper.find('.b-message__text').text()).toContain('**not bold**');
     expect(wrapper.find('.b-message__cursor').exists()).toBe(true);
@@ -396,7 +432,7 @@ describe('BMessage node renderer', () => {
       }
     });
 
-    await nextTick();
+    await waitMessageRender();
 
     const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
     wrapper.find('a').element.dispatchEvent(clickEvent);
