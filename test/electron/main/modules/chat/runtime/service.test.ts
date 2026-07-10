@@ -565,22 +565,22 @@ describe('chat runtime service shell', (): void => {
         status: 'done',
         input: { id: 'weather' },
         result: {
-            toolName: 'open_widget',
-            status: 'success',
-            data: {
-              sessionId: 'widget-weather-tool-call-widget',
-              widgetId: 'weather',
-              value: {},
-              renderContext: {
-                input: { city: '上海' },
-                  output: undefined,
-                data: { weather: { temperature: 29 } },
-                isMounted: true
-              },
-              execution: { status: 'success', output: undefined }
-            }
+          toolName: 'open_widget',
+          status: 'success',
+          data: {
+            sessionId: 'widget-weather-tool-call-widget',
+            widgetId: 'weather',
+            value: {},
+            renderContext: {
+              input: { city: '上海' },
+              output: undefined,
+              data: { weather: { temperature: 29 } },
+              isMounted: true
+            },
+            execution: { status: 'success', output: undefined }
           }
         }
+      }
     });
     streamDeferred.resolve();
     await flushRuntimeTasks();
@@ -1647,6 +1647,48 @@ describe('chat runtime service shell', (): void => {
       content: '新回答',
       finished: true
     });
+  });
+
+  it('passes invalidated historical Skill results into continuation streams', async (): Promise<void> => {
+    const previousUser = createMessageRecord('previous-user', 'user', 'previous question', '2026-06-19T00:00:00.000Z');
+    const previousAssistant = createMessageRecord('previous-assistant', 'assistant', '', '2026-06-19T00:00:01.000Z');
+    previousAssistant.parts = [
+      {
+        id: 'previous-skill-part',
+        type: 'tool',
+        toolCallId: 'previous-skill-call',
+        toolName: 'skill',
+        status: 'done',
+        input: { name: 'weather' },
+        result: {
+          toolName: 'skill',
+          status: 'success',
+          data: '<skill_metadata><content_hash>old-hash</content_hash></skill_metadata><skill_content name="weather">old instructions</skill_content>'
+        }
+      }
+    ];
+    const currentUser = createMessageRecord('current-user', 'user', 'current question', '2026-06-19T00:00:02.000Z');
+    const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async (): Promise<{}> => ({}));
+    const service = createChatRuntimeService({
+      emit: vi.fn(),
+      createMessageId: (role) => `${role}-message-1`,
+      messageReader: createNoopMessageReader(),
+      messageWriter: createNoopMessageWriter(),
+      streamExecutor
+    });
+
+    await service.continue(
+      createContinueInput({
+        messages: [previousUser, previousAssistant, currentUser],
+        skillContentHashes: { weather: 'new-hash' }
+      })
+    );
+    await flushRuntimeTasks();
+
+    const sourceMessages = streamExecutor.mock.calls[0]?.[0].sourceMessages ?? [];
+    const serialized = JSON.stringify(sourceMessages);
+    expect(serialized).toContain('skill_invalidated');
+    expect(serialized).not.toContain('old instructions');
   });
 
   it('does not reuse a previous turn assistant when continuation history ends with a user message', async (): Promise<void> => {

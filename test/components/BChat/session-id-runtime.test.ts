@@ -17,6 +17,7 @@ import { type AdaptedUserMessageInput, type SubmitAction, createUserChoice } fro
 import type { Message } from '@/components/BChat/utils/types';
 import type { FileMentionOption } from '@/components/BText/types';
 import { emitChatFileReferenceInsert } from '@/shared/chat/fileReference';
+import { native } from '@/shared/platform';
 import type { StoredFile } from '@/shared/storage';
 import type { TodoItem } from '@/stores/chat/todo';
 import { useSettingStore } from '@/stores/ui/setting';
@@ -118,6 +119,15 @@ const memoryStoreMock = vi.hoisted(() => ({
   loaded: true,
   loadMemory: vi.fn<() => Promise<void>>(),
   buildSystemPromptContext: vi.fn<(_options?: BuildMemoryContextOptions) => string>(() => '')
+}));
+
+const skillStoreMock = vi.hoisted(() => ({
+  initialized: true,
+  getEnabledSkills: vi.fn(() => [] as Array<{ name: string; contentHash?: string }>),
+  waitForInit: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+  syncFromDisk: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+  init: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+  handleSkillChange: vi.fn()
 }));
 
 const filesStoreMock = vi.hoisted(() => ({
@@ -282,12 +292,7 @@ vi.mock('@/stores/ai/memory', () => ({
 }));
 
 vi.mock('@/stores/ai/skill', () => ({
-  useSkillStore: vi.fn(() => ({
-    initialized: false,
-    getEnabledSkills: vi.fn(() => []),
-    init: vi.fn(),
-    handleSkillChange: vi.fn()
-  }))
+  useSkillStore: vi.fn(() => skillStoreMock)
 }));
 
 vi.mock('@/components/BChat/hooks/useAutoName', () => ({
@@ -589,6 +594,7 @@ describe('BChat sessionId runtime', (): void => {
     promptEditorMockState.replaceTextRange.mockReset();
     getPathForFileMock.mockReset();
     getPathForFileMock.mockReturnValue('/workspace/My Notes/note.md');
+    vi.mocked(native.watchDirectory).mockClear();
     todoStoreMock.todosBySession.clear();
     todoStoreMock.clearTodos.mockReset();
     todoStoreMock.getTodos.mockClear();
@@ -611,6 +617,11 @@ describe('BChat sessionId runtime', (): void => {
     memoryStoreMock.loadMemory.mockResolvedValue();
     memoryStoreMock.buildSystemPromptContext.mockReset();
     memoryStoreMock.buildSystemPromptContext.mockReturnValue('');
+    skillStoreMock.initialized = true;
+    skillStoreMock.getEnabledSkills.mockReset();
+    skillStoreMock.getEnabledSkills.mockReturnValue([]);
+    skillStoreMock.waitForInit.mockClear();
+    skillStoreMock.syncFromDisk.mockClear();
     filesStoreMock.recentFiles = [];
     filesStoreMock.ensureLoaded.mockReset();
     filesStoreMock.ensureLoaded.mockResolvedValue();
@@ -777,6 +788,40 @@ describe('BChat sessionId runtime', (): void => {
         parts: [expect.objectContaining({ type: 'text', text: 'fix ' }), expect.objectContaining({ type: 'file', path: 'src/foo.ts' })]
       })
     );
+  });
+
+  it('sends current Skill content versions with the runtime request', async (): Promise<void> => {
+    skillStoreMock.initialized = false;
+    skillStoreMock.getEnabledSkills.mockReturnValue([
+      {
+        name: 'weather',
+        contentHash: 'weather-hash'
+      }
+    ]);
+    const createdSession = createSession('session-created', '查天气');
+    chatStoreMock.createSession.mockResolvedValue(createdSession);
+    const wrapper = mountBChat(null);
+    await flushPromises();
+
+    wrapper.findComponent(BTextEditorStub).vm.$emit('update:value', '查天气');
+    await flushPromises();
+    wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
+    await flushPromises();
+
+    expect(electronAPIMock.chatRuntimeSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skillContentHashes: {
+          weather: 'weather-hash'
+        }
+      })
+    );
+  });
+
+  it('does not own application-level Skill or Widget directory watchers', async (): Promise<void> => {
+    mountBChat(null);
+    await flushPromises();
+
+    expect(native.watchDirectory).not.toHaveBeenCalled();
   });
 
   it('uses relevant memory selection and filters edit_memory for normal sends', async (): Promise<void> => {

@@ -3,6 +3,7 @@
  * @description SKILL.md 解析器，提取 frontmatter 元数据和 body 内容。
  */
 import yaml from 'js-yaml';
+import { hashString } from '@/shared/utils/hash';
 import { DEFAULT_SKILL_MAX_CONTENT_LENGTH, type SkillDefinition, type SkillSource } from './types';
 
 /** 解析选项。 */
@@ -94,6 +95,7 @@ function dirname(filePath: string): string {
 export function parseSkillMarkdown(markdown: string, filePath: string, options: ParseOptions = {}): SkillDefinition {
   const source: SkillSource = options.source ?? 'global';
   const maxContentLength = options.maxContentLength ?? DEFAULT_SKILL_MAX_CONTENT_LENGTH;
+  const contentHash = hashString(markdown);
   // 统一使用 / 分隔符，避免 Windows 下 Chokidar 报告 \ 路径与 scanner 的 / 路径不一致导致去重失败
   const normalizedFilePath = filePath.replace(/\\/g, '/');
   const dirPath = dirname(normalizedFilePath);
@@ -105,6 +107,7 @@ export function parseSkillMarkdown(markdown: string, filePath: string, options: 
       name: '',
       description: '',
       content: '',
+      contentHash,
       filePath: normalizedFilePath,
       dirPath,
       source,
@@ -121,6 +124,7 @@ export function parseSkillMarkdown(markdown: string, filePath: string, options: 
       name: '',
       description: '',
       content: '',
+      contentHash,
       filePath: normalizedFilePath,
       dirPath,
       source,
@@ -138,6 +142,7 @@ export function parseSkillMarkdown(markdown: string, filePath: string, options: 
       name: '',
       description,
       content: '',
+      contentHash,
       filePath: normalizedFilePath,
       dirPath,
       source,
@@ -152,6 +157,7 @@ export function parseSkillMarkdown(markdown: string, filePath: string, options: 
       name,
       description: '',
       content: '',
+      contentHash,
       filePath: normalizedFilePath,
       dirPath,
       source,
@@ -168,6 +174,7 @@ export function parseSkillMarkdown(markdown: string, filePath: string, options: 
     name,
     description,
     content,
+    contentHash,
     filePath: normalizedFilePath,
     dirPath,
     source,

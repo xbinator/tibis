@@ -12,10 +12,10 @@ import { buildUnsavedPath } from '@/utils/file/unsaved';
  * 工具上下文输入。
  */
 export interface CreateEditorToolContextInput {
-  /** 当前文件状态 */
-  fileState: EditorState;
-  /** 当前编辑器实例 */
-  editorInstance: Pick<EditorController, 'getSelection' | 'insertAtCursor' | 'replaceSelection' | 'replaceDocument'> | null;
+  /** 获取当前文件状态 */
+  getFileState: () => EditorState;
+  /** 获取当前编辑器实例 */
+  getEditorInstance: () => Pick<EditorController, 'getSelection' | 'insertAtCursor' | 'replaceSelection' | 'replaceDocument'> | null;
 }
 
 /**
@@ -24,21 +24,29 @@ export interface CreateEditorToolContextInput {
  * @returns AI 工具上下文
  */
 export function createEditorToolContext(input: CreateEditorToolContextInput): AIToolContext {
-  const { fileState, editorInstance } = input;
-
   return {
     document: {
-      id: fileState.id,
-      title: resolveFileTitle(fileState),
-      path: fileState.path,
-      locator: fileState.path ?? buildUnsavedPath({ id: fileState.id, fileName: `${fileState.name}.${fileState.ext}` }),
-      getContent: () => fileState.content
+      get id(): string {
+        return input.getFileState().id;
+      },
+      get title(): string {
+        return resolveFileTitle(input.getFileState());
+      },
+      get path(): string | null {
+        return input.getFileState().path;
+      },
+      get locator(): string {
+        const fileState = input.getFileState();
+
+        return fileState.path ?? buildUnsavedPath({ id: fileState.id, fileName: `${fileState.name}.${fileState.ext}` });
+      },
+      getContent: (): string => input.getFileState().content
     },
     editor: {
-      getSelection: () => editorInstance?.getSelection() ?? null,
-      insertAtCursor: async (content: string): Promise<void> => editorInstance?.insertAtCursor(content),
-      replaceSelection: async (content: string): Promise<void> => editorInstance?.replaceSelection(content),
-      replaceDocument: async (content: string): Promise<void> => editorInstance?.replaceDocument(content)
+      getSelection: () => input.getEditorInstance()?.getSelection() ?? null,
+      insertAtCursor: async (content: string): Promise<void> => input.getEditorInstance()?.insertAtCursor(content),
+      replaceSelection: async (content: string): Promise<void> => input.getEditorInstance()?.replaceSelection(content),
+      replaceDocument: async (content: string): Promise<void> => input.getEditorInstance()?.replaceDocument(content)
     }
   };
 }

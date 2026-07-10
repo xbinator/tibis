@@ -16,6 +16,8 @@ export interface WidgetDefinition {
   description: string;
   /** 小组件完整数据 */
   data: WidgetData;
+  /** 完整 widget.json 源文本的稳定内容版本 */
+  contentHash?: string;
   /** 小组件 JSON 文件绝对路径 */
   filePath: string;
   /** 是否启用 */

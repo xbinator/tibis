@@ -107,10 +107,9 @@ export async function scanSkills(config: SkillScanConfig, api: SkillScannerAPI):
 
   const globalSkills = await scanDirectory(globalSkillsDir, 'global', api, maxContentLength);
 
-  // 去重：同名 skill 后者覆盖前者，过滤掉解析错误的
+  // 去重：同名 Skill 后者覆盖前者；解析错误也是最新磁盘状态，必须保留。
   const skillMap = new Map<string, SkillDefinition>();
   for (const skill of globalSkills) {
-    if (skill.parseError) continue;
     const key = skill.name || skill.filePath;
     skillMap.set(key, skill);
   }

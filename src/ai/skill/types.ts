@@ -17,6 +17,8 @@ export interface SkillDefinition {
   description: string;
   /** 完整指令内容（SKILL.md body 部分） */
   content: string;
+  /** 完整 SKILL.md 源文本的稳定内容版本 */
+  contentHash?: string;
   /** SKILL.md 文件绝对路径 */
   filePath: string;
   /** skill 目录绝对路径 */

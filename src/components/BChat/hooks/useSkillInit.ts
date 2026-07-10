@@ -15,26 +15,15 @@ import { useSkillStore } from '@/stores/ai/skill';
  */
 export function useSkillInit(): void {
   const skillStore = useSkillStore();
+  // setup 阶段先建立屏障，避免布局 onMounted 前聊天绕过资源初始化。
+  skillStore.prepareInitialization();
 
   /** 组件卸载时需要执行的 skill 监听清理函数。 */
   const cleanupCallbacks: Array<() => void | Promise<void>> = [];
 
   onMounted(async () => {
     try {
-      const homeDir = await native.getHomeDir();
-      await skillStore.init(homeDir, {
-        readFile: (filePath: string) => native.readFile(filePath).then((r) => ({ content: r.content })),
-        readWorkspaceDirectory: (options: ReadWorkspaceDirectoryOptions) => native.readWorkspaceDirectory(options),
-        getPathStatus: (targetPath: string) => native.getPathStatus(targetPath),
-        trashFile: (filePath: string) => native.trashFile(filePath)
-      });
-
-      // 监听用户级全局 skill 目录，事件只关注 SKILL.md。
-      const skillDir = joinPath(homeDir, '.agents', 'skills');
-      await native.watchDirectory(skillDir, '**/SKILL.md');
-      cleanupCallbacks.push(() => native.unwatchDirectory(skillDir, '**/SKILL.md'));
-
-      // 监听 skill:changed 事件，增量更新
+      // 先订阅事件，避免异步扫描与 watcher 注册期间丢失磁盘变化。
       const removeSkillChangedListener = native.onSkillChanged(async (data) => {
         // 统一规范化路径分隔符，Windows 下 Chokidar 报告 \ 而 scanner 使用 /
         const normalizedPath = data.filePath.replace(/\\/g, '/');
@@ -51,8 +40,22 @@ export function useSkillInit(): void {
         }
       });
       cleanupCallbacks.push(removeSkillChangedListener);
+
+      const homeDir = await native.getHomeDir();
+      // 监听用户级全局 skill 目录，事件只关注 SKILL.md。
+      const skillDir = joinPath(homeDir, '.agents', 'skills');
+      await native.watchDirectory(skillDir, '**/SKILL.md');
+      cleanupCallbacks.push(() => native.unwatchDirectory(skillDir, '**/SKILL.md'));
+
+      await skillStore.init(homeDir, {
+        readFile: (filePath: string) => native.readFile(filePath).then((r) => ({ content: r.content })),
+        readWorkspaceDirectory: (options: ReadWorkspaceDirectoryOptions) => native.readWorkspaceDirectory(options),
+        getPathStatus: (targetPath: string) => native.getPathStatus(targetPath),
+        trashFile: (filePath: string) => native.trashFile(filePath)
+      });
     } catch (error: unknown) {
       console.error('Skill initialization failed:', error);
+      skillStore.finishInitialization();
     }
   });
 

@@ -26,6 +26,8 @@ export interface SkillStoreLike {
   getEnabledSkills: () => SkillDefinition[];
   /** 按名称查找 skill */
   getSkillByName: (name: string) => SkillDefinition | undefined;
+  /** 执行前解析磁盘中的最新启用 Skill */
+  resolveLatestEnabledSkill?: (name: string) => Promise<SkillDefinition | undefined>;
   /** 是否已完成初始化 */
   initialized: boolean;
 }
@@ -86,6 +88,7 @@ function buildSkillContent(skill: SkillDefinition): string {
     '<skill_metadata>',
     `<dir_path>${escapeXmlText(skill.dirPath)}</dir_path>`,
     `<file_path>${escapeXmlText(skill.filePath)}</file_path>`,
+    `<content_hash>${escapeXmlText(skill.contentHash ?? '')}</content_hash>`,
     '<shell_cwd_hint>When running scripts or using resources bundled with this skill, call run_shell_command with cwd set to dir_path.</shell_cwd_hint>',
     '</skill_metadata>'
   ].join('\n');
@@ -120,9 +123,9 @@ export function createSkillTool(store: SkillStoreLike): AIToolExecutor<{ name: s
       }
     },
     async execute(input: { name: string }) {
-      const skill = store.getSkillByName(input.name);
+      const skill = store.resolveLatestEnabledSkill ? await store.resolveLatestEnabledSkill(input.name) : store.getSkillByName(input.name);
 
-      if (!skill || skill.parseError) {
+      if (!skill) {
         const available = store
           .getEnabledSkills()
           .filter((s) => !s.parseError)
@@ -130,6 +133,10 @@ export function createSkillTool(store: SkillStoreLike): AIToolExecutor<{ name: s
           .join(', ');
 
         return createToolFailureResult(SKILL_TOOL_NAME, 'TOOL_NOT_FOUND', `Skill '${input.name}' not found. Available skills: ${available || 'none'}`);
+      }
+
+      if (skill.parseError) {
+        return createToolFailureResult(SKILL_TOOL_NAME, 'INVALID_INPUT', `Skill '${input.name}' is invalid: ${skill.parseError}`);
       }
 
       const content = buildSkillContent(skill);

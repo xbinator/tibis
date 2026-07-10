@@ -4,7 +4,7 @@
  */
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
-import { DEFAULT_SKILL_MAX_CONTENT_LENGTH, scanSkills, type SkillScannerAPI } from '@/ai/skill';
+import { DEFAULT_SKILL_MAX_CONTENT_LENGTH, parseSkillMarkdown, scanSkills, type SkillScannerAPI } from '@/ai/skill';
 import type { SkillDefinition, SkillScanConfig } from '@/ai/skill/types';
 import { local } from '@/shared/storage/base';
 
@@ -32,10 +32,22 @@ export const useSkillStore = defineStore('skill', () => {
   /** 是否已完成初始化扫描。 */
   const initialized = ref(false);
 
-  /** 初始化 Promise，用于等待扫描完成。 */
+  /** 初始化等待屏障，用于覆盖布局挂载到真正开始扫描之间的窗口。 */
   let initPromise: Promise<void> | null = null;
+  /** 完成初始化等待屏障的回调。 */
+  let resolveInitPromise: (() => void) | null = null;
+  /** 实际初始化任务，用于合并重复调用。 */
+  let initTaskPromise: Promise<void> | null = null;
+  /** 主动磁盘同步 Promise，用于合并并发扫描。 */
+  let syncPromise: Promise<void> | null = null;
   /** 缓存的扫描 API，用于 rescan。 */
   let cachedApi: SkillScannerAPI | null = null;
+  /** 按 Skill 名称合并执行时的并发读取。 */
+  const latestSkillPromises = new Map<string, Promise<SkillDefinition | undefined>>();
+  /** 全局单调资源操作序号。 */
+  let resourceOperationSequence = 0;
+  /** 每个文件路径最后一次成功写回的操作序号。 */
+  const appliedOperationByPath = new Map<string, number>();
 
   /** 扫描配置。 */
   const scanConfig = ref<SkillScanConfig>({
@@ -77,12 +89,125 @@ export const useSkillStore = defineStore('skill', () => {
   }
 
   /**
+   * 领取下一次资源操作序号。
+   * @returns 单调递增操作序号
+   */
+  function nextResourceOperation(): number {
+    resourceOperationSequence += 1;
+    return resourceOperationSequence;
+  }
+
+  /**
+   * 判断指定路径的操作是否仍允许写回。
+   * @param filePath - Skill 文件路径
+   * @param operation - 待写回操作序号
+   * @returns 未被更新操作抢先写回时返回 true
+   */
+  function canApplyResourceOperation(filePath: string, operation: number): boolean {
+    return operation >= (appliedOperationByPath.get(filePath) ?? 0);
+  }
+
+  /**
+   * 合并磁盘定义与当前启用状态。
+   * @param updatedSkill - 磁盘最新解析定义
+   * @param existingSkill - Store 当前定义
+   * @returns 合并后的 Skill 定义
+   */
+  function resolveDiskSkill(updatedSkill: SkillDefinition, existingSkill?: SkillDefinition): SkillDefinition {
+    const name = updatedSkill.name || existingSkill?.name || '';
+    const description = updatedSkill.description || existingSkill?.description || '';
+    const disabledNames = loadFromStorage<string[]>(STORAGE_KEY_DISABLED_NAMES, []);
+
+    return {
+      ...updatedSkill,
+      name,
+      description,
+      enabled: existingSkill?.enabled ?? !disabledNames.includes(name)
+    };
+  }
+
+  /**
+   * 按文件路径操作序号应用 Skill 变更。
+   * @param type - 事件类型
+   * @param updatedSkill - 最新解析定义
+   * @param operation - 操作序号
+   * @returns 本次结果是否成功写回
+   */
+  function applySkillChange(type: 'change' | 'add' | 'unlink', updatedSkill: SkillDefinition, operation: number): boolean {
+    const { filePath } = updatedSkill;
+    if (filePath && !canApplyResourceOperation(filePath, operation)) {
+      return false;
+    }
+
+    if (filePath) {
+      appliedOperationByPath.set(filePath, operation);
+    }
+
+    const index =
+      type === 'unlink' && filePath
+        ? skills.value.findIndex((skill: SkillDefinition): boolean => skill.filePath === filePath)
+        : skills.value.findIndex((skill: SkillDefinition): boolean => skill.filePath === filePath || (!!updatedSkill.name && skill.name === updatedSkill.name));
+    const existingSkill = index !== -1 ? skills.value[index] : undefined;
+
+    if (type === 'unlink') {
+      if (index !== -1) {
+        skills.value.splice(index, 1);
+      }
+      return true;
+    }
+
+    const nextSkill = resolveDiskSkill(updatedSkill, existingSkill);
+    if (index !== -1) {
+      skills.value[index] = nextSkill;
+    } else {
+      skills.value.push(nextSkill);
+    }
+
+    return true;
+  }
+
+  /**
+   * 使用缓存扫描依赖读取并应用最新 Skill 目录。
+   */
+  async function scanAndApplySkills(): Promise<void> {
+    if (!cachedApi || !scanConfig.value.homeDir) {
+      return;
+    }
+
+    const operation = nextResourceOperation();
+    const existingSkills = [...skills.value];
+    const discovered = await scanSkills(
+      {
+        homeDir: scanConfig.value.homeDir,
+        maxContentLength: DEFAULT_SKILL_MAX_CONTENT_LENGTH
+      },
+      cachedApi
+    );
+
+    const discoveredPaths = new Set(discovered.map((skill: SkillDefinition): string => skill.filePath));
+    for (const skill of discovered) {
+      applySkillChange('change', skill, operation);
+    }
+
+    // 扫描开始后没有被更晚操作触及的缺失路径，才按磁盘删除处理。
+    for (const existingSkill of existingSkills) {
+      if (!discoveredPaths.has(existingSkill.filePath)) {
+        applySkillChange('unlink', existingSkill, operation);
+      }
+    }
+
+    initialized.value = true;
+  }
+
+  /**
    * 切换 skill 启用/禁用状态。
    * @param name - skill 名称
    */
   function toggleSkill(name: string): void {
     const skill = skills.value.find((s) => s.name === name);
     if (skill) {
+      const operation = nextResourceOperation();
+      appliedOperationByPath.set(skill.filePath, operation);
       skill.enabled = !skill.enabled;
       persistDisabledNames();
     }
@@ -94,28 +219,30 @@ export const useSkillStore = defineStore('skill', () => {
    * @param updatedSkill - 解析后的 skill（add/change 时提供）
    */
   function handleSkillChange(type: 'change' | 'add' | 'unlink', updatedSkill: SkillDefinition): void {
-    const index = skills.value.findIndex((s) => s.filePath === updatedSkill.filePath);
+    applySkillChange(type, updatedSkill, nextResourceOperation());
+  }
 
-    if (type === 'unlink') {
-      if (index !== -1) {
-        skills.value.splice(index, 1);
-      }
+  /**
+   * 在异步布局挂载前建立初始化等待屏障。
+   */
+  function prepareInitialization(): void {
+    if (initialized.value || initPromise) {
       return;
     }
 
-    // add 或 change，解析错误的直接丢弃
-    if (updatedSkill.parseError) {
-      if (index !== -1) {
-        skills.value.splice(index, 1);
-      }
-      return;
-    }
+    initPromise = new Promise<void>((resolve: () => void): void => {
+      resolveInitPromise = resolve;
+    });
+  }
 
-    if (index !== -1) {
-      skills.value[index] = updatedSkill;
-    } else {
-      skills.value.push(updatedSkill);
-    }
+  /**
+   * 完成初始化等待屏障，初始化失败时也允许聊天继续降级运行。
+   */
+  function finishInitialization(): void {
+    initialized.value = true;
+    resolveInitPromise?.();
+    resolveInitPromise = null;
+    initPromise ??= Promise.resolve();
   }
 
   /**
@@ -124,39 +251,87 @@ export const useSkillStore = defineStore('skill', () => {
    * @param api - electronAPI 实例
    */
   async function init(homeDir: string, api: SkillScannerAPI): Promise<void> {
-    if (initPromise) {
-      return initPromise;
+    if (initTaskPromise) {
+      return initTaskPromise;
     }
 
+    prepareInitialization();
     scanConfig.value.homeDir = homeDir;
     cachedApi = api;
 
-    initPromise = (async () => {
+    initTaskPromise = (async (): Promise<void> => {
       try {
-        const config: SkillScanConfig = {
-          homeDir,
-          maxContentLength: DEFAULT_SKILL_MAX_CONTENT_LENGTH
-        };
-
-        const discovered = await scanSkills(config, api);
-
-        // 应用持久化的禁用状态
-        const disabledNames = loadFromStorage<string[]>(STORAGE_KEY_DISABLED_NAMES, []);
-        for (const skill of discovered) {
-          if (disabledNames.includes(skill.name)) {
-            skill.enabled = false;
-          }
-        }
-
-        skills.value = discovered;
-        initialized.value = true;
+        await scanAndApplySkills();
       } catch (error: unknown) {
         console.error('Skill scan failed:', error);
-        initialized.value = true;
+      } finally {
+        finishInitialization();
       }
     })();
 
-    return initPromise;
+    return initTaskPromise;
+  }
+
+  /**
+   * 从磁盘重新同步完整 Skill 目录。
+   */
+  async function syncFromDisk(): Promise<void> {
+    if (!cachedApi || !scanConfig.value.homeDir) {
+      return;
+    }
+
+    if (!syncPromise) {
+      syncPromise = scanAndApplySkills().finally((): void => {
+        syncPromise = null;
+      });
+    }
+
+    await syncPromise;
+  }
+
+  /**
+   * 执行工具前从磁盘读取最新启用 Skill。
+   * @param name - Skill 名称
+   * @returns 最新 Skill 定义，不存在或已禁用时返回 undefined
+   */
+  async function resolveLatestEnabledSkill(name: string): Promise<SkillDefinition | undefined> {
+    const existingSkill = getSkillByName(name);
+    if (!existingSkill?.enabled || !cachedApi) {
+      return undefined;
+    }
+
+    const pending = latestSkillPromises.get(name);
+    if (pending) {
+      return pending;
+    }
+
+    const operation = nextResourceOperation();
+    const nextPromise = (async (): Promise<SkillDefinition | undefined> => {
+      try {
+        const { content } = await cachedApi.readFile(existingSkill.filePath);
+        const parsed = parseSkillMarkdown(content, existingSkill.filePath, {
+          source: existingSkill.source,
+          maxContentLength: scanConfig.value.maxContentLength ?? DEFAULT_SKILL_MAX_CONTENT_LENGTH
+        });
+
+        if (parsed.name && parsed.name !== name) {
+          applySkillChange('unlink', existingSkill, operation);
+          applySkillChange('add', parsed, operation);
+        } else {
+          applySkillChange('change', parsed, operation);
+        }
+      } catch {
+        applySkillChange('unlink', existingSkill, operation);
+      }
+
+      const latestSkill = getSkillByName(name);
+      return latestSkill?.enabled ? latestSkill : undefined;
+    })().finally((): void => {
+      latestSkillPromises.delete(name);
+    });
+
+    latestSkillPromises.set(name, nextPromise);
+    return nextPromise;
   }
 
   /**
@@ -167,9 +342,7 @@ export const useSkillStore = defineStore('skill', () => {
       console.warn('Skill rescan called before init');
       return;
     }
-    initPromise = null;
-    initialized.value = false;
-    await init(scanConfig.value.homeDir, cachedApi);
+    await syncFromDisk();
   }
 
   /**
@@ -189,7 +362,11 @@ export const useSkillStore = defineStore('skill', () => {
     getEnabledSkills,
     toggleSkill,
     handleSkillChange,
+    prepareInitialization,
+    finishInitialization,
     init,
+    syncFromDisk,
+    resolveLatestEnabledSkill,
     rescan,
     waitForInit
   };

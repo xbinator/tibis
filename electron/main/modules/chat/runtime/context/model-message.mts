@@ -54,6 +54,8 @@ type UserModelMessageContent = Array<{ type: 'text'; text: string } | { type: 'i
 
 /** Runtime 工具结果类型。 */
 type RuntimeToolResult = NonNullable<ChatMessageToolPart['result']>;
+/** Runtime 成功工具结果类型。 */
+type RuntimeToolSuccessResult = Extract<RuntimeToolResult, { status: 'success' }>;
 
 /** 自动压缩后继续当前任务的用户态指令。 */
 const COMPACTION_CONTINUATION_PROMPT = '继续完成当前用户任务。以上 COMPRESSED_CONTEXT 是当前任务的压缩上下文，请基于它继续执行，不要复述压缩内容。';
@@ -63,6 +65,18 @@ const COMPACTION_PROGRESS_CONTEXT_PROMPT = '以下是本次压缩之后、后续
 const MAX_POST_COMPACTION_VALUE_LENGTH = 12000;
 /** 打开小组件工具名称。 */
 const OPEN_WIDGET_TOOL_NAME = 'open_widget';
+/** Skill 工具名称。 */
+const SKILL_TOOL_NAME = 'skill';
+/** Skill 工具结果中的内容版本标签。 */
+const SKILL_CONTENT_HASH_PATTERN = /<content_hash>([^<]*)<\/content_hash>/u;
+
+/**
+ * Runtime 模型消息转换选项。
+ */
+export interface RuntimeModelMessageOptions {
+  /** 当前启用 Skill 名称到内容版本的映射。 */
+  skillContentHashes?: Record<string, string>;
+}
 
 /** 压缩后进展写入模型上下文的模式。 */
 type CompactionProgressMode = 'continue' | 'context';
@@ -83,6 +97,90 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
  */
 function isOpenWidgetDisplayPayload(value: unknown): value is { sessionId: string; widgetId: string; execution: unknown } {
   return isPlainRecord(value) && typeof value.sessionId === 'string' && typeof value.widgetId === 'string' && isPlainRecord(value.execution);
+}
+
+/**
+ * 读取 Skill 工具调用名称。
+ * @param part - Skill 工具消息片段
+ * @returns Skill 名称，不可读取时返回空字符串
+ */
+function readSkillName(part: ChatMessageToolPart): string {
+  return isPlainRecord(part.input) && typeof part.input.name === 'string' ? part.input.name : '';
+}
+
+/**
+ * 读取 Skill 工具结果中的内容版本。
+ * @param data - Skill 工具结果数据
+ * @returns 内容版本，不可读取时返回空字符串
+ */
+function readSkillContentHash(data: unknown): string {
+  if (typeof data !== 'string') return '';
+
+  return data.match(SKILL_CONTENT_HASH_PATTERN)?.[1] ?? '';
+}
+
+/**
+ * 转义 Skill 失效标记属性。
+ * @param value - 原始属性值
+ * @returns XML 安全文本
+ */
+function escapeSkillMarkerAttribute(value: string): string {
+  return value.replace(/&/gu, '&amp;').replace(/"/gu, '&quot;').replace(/</gu, '&lt;').replace(/>/gu, '&gt;');
+}
+
+/**
+ * 判断 Skill 工具结果是否仍匹配当前内容版本。
+ * @param part - Skill 工具消息片段
+ * @param skillContentHashes - 当前 Skill 内容版本
+ * @returns 是否仍为当前版本
+ */
+function isCurrentSkillToolResult(part: ChatMessageToolPart & { result: RuntimeToolSuccessResult }, skillContentHashes: Record<string, string>): boolean {
+  const name = readSkillName(part);
+  const currentHash = skillContentHashes[name];
+  const resultHash = readSkillContentHash(part.result.data);
+
+  return Boolean(name && currentHash && resultHash && currentHash === resultHash);
+}
+
+/**
+ * 将过期 Skill 工具结果替换为重新加载提示，仅生成 runtime 投影。
+ * @param messages - 原始持久化消息
+ * @param skillContentHashes - 当前 Skill 内容版本
+ * @returns 供本轮 runtime 使用的消息投影
+ */
+export function invalidateStaleSkillToolResults(messages: ChatMessageRecord[], skillContentHashes?: Record<string, string>): ChatMessageRecord[] {
+  if (!skillContentHashes) return messages;
+
+  return messages.map((message: ChatMessageRecord): ChatMessageRecord => {
+    let changed = false;
+    const parts = message.parts.map((part: ChatMessagePart): ChatMessagePart => {
+      if (part.type !== 'tool' || part.toolName !== SKILL_TOOL_NAME || part.result?.status !== 'success') {
+        return part;
+      }
+
+      const successfulPart = part as ChatMessageToolPart & { result: RuntimeToolSuccessResult };
+      if (isCurrentSkillToolResult(successfulPart, skillContentHashes)) {
+        return part;
+      }
+
+      changed = true;
+      const name = readSkillName(successfulPart);
+
+      return {
+        ...successfulPart,
+        result: {
+          ...successfulPart.result,
+          data: [
+            `<skill_invalidated name="${escapeSkillMarkerAttribute(name)}">`,
+            'Skill content changed or is unavailable. Call the skill tool again before using its instructions.',
+            '</skill_invalidated>'
+          ].join('')
+        }
+      };
+    });
+
+    return changed ? { ...message, parts } : message;
+  });
 }
 
 /**
@@ -608,6 +706,8 @@ function toModelMessages(message: ChatMessageRecord): ModelMessage[] {
  * @param messages - 聊天消息列表
  * @returns 模型消息列表
  */
-export function toRuntimeModelMessages(messages: ChatMessageRecord[]): ModelMessage[] {
-  return sliceMessagesFromCompressionBoundary(messages).flatMap(toModelMessages);
+export function toRuntimeModelMessages(messages: ChatMessageRecord[], options: RuntimeModelMessageOptions = {}): ModelMessage[] {
+  const projectedMessages = invalidateStaleSkillToolResults(messages, options.skillContentHashes);
+
+  return sliceMessagesFromCompressionBoundary(projectedMessages).flatMap(toModelMessages);
 }

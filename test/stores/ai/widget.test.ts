@@ -19,6 +19,29 @@ interface WidgetScannerAPIMock extends WidgetScannerAPI {
 }
 
 /**
+ * 可由测试控制完成时机的 Promise。
+ */
+interface Deferred<T> {
+  /** 延迟 Promise */
+  promise: Promise<T>;
+  /** 完成 Promise */
+  resolve: (value: T) => void;
+}
+
+/**
+ * 创建可控 Promise。
+ * @returns 可控 Promise
+ */
+function createDeferred<T>(): Deferred<T> {
+  let resolvePromise: (value: T) => void = (): void => undefined;
+  const promise = new Promise<T>((resolve: (value: T) => void): void => {
+    resolvePromise = resolve;
+  });
+
+  return { promise, resolve: resolvePromise };
+}
+
+/**
  * 创建小组件扫描器测试 API。
  * @returns 扫描器依赖 API
  */
@@ -140,6 +163,128 @@ describe('widget store', (): void => {
     store.handleWidgetChange('change', parseWidgetJson('{broken', filePath));
 
     expect(store.getWidgetById('weather')?.parseError).toBeTruthy();
+    expect(store.getWidgetById('weather')?.enabled).toBe(false);
+  });
+
+  it('synchronizes external disk changes while preserving disabled state', async (): Promise<void> => {
+    const api = createScannerAPI();
+    api.readWorkspaceDirectory.mockResolvedValue({ entries: [{ name: 'weather', type: 'directory' }] });
+    api.readFile.mockResolvedValue({ content: JSON.stringify({ name: '天气', description: '旧描述' }) });
+    const store = useWidgetStore();
+    await store.init('/Users/test', api);
+    store.toggleWidget('weather');
+    api.readFile.mockResolvedValue({ content: JSON.stringify({ name: '天气', description: '磁盘新描述' }) });
+
+    await store.syncFromDisk();
+
+    expect(store.getWidgetById('weather')?.description).toBe('磁盘新描述');
+    expect(store.getWidgetById('weather')?.enabled).toBe(false);
+  });
+
+  it('resolves the latest enabled Widget directly from disk', async (): Promise<void> => {
+    const api = createScannerAPI();
+    api.readWorkspaceDirectory.mockResolvedValue({ entries: [{ name: 'weather', type: 'directory' }] });
+    api.readFile.mockResolvedValue({ content: JSON.stringify({ name: '天气', description: '旧描述' }) });
+    const store = useWidgetStore();
+    await store.init('/Users/test', api);
+    api.readFile.mockResolvedValue({ content: JSON.stringify({ name: '天气', description: '执行时新描述' }) });
+
+    const widget = await store.resolveLatestEnabledWidget('weather');
+
+    expect(widget?.description).toBe('执行时新描述');
+    expect(store.getWidgetById('weather')?.description).toBe('执行时新描述');
+  });
+
+  it('does not let a slow execution read overwrite a newer watcher result', async (): Promise<void> => {
+    const api = createScannerAPI();
+    api.readWorkspaceDirectory.mockResolvedValue({ entries: [{ name: 'weather', type: 'directory' }] });
+    api.readFile.mockResolvedValue({ content: JSON.stringify({ name: '天气', description: '初始描述' }) });
+    const store = useWidgetStore();
+    await store.init('/Users/test', api);
+    const staleRead = createDeferred<{ content: string }>();
+    api.readFile.mockImplementationOnce((): Promise<{ content: string }> => staleRead.promise);
+
+    const resolving = store.resolveLatestEnabledWidget('weather');
+    await vi.waitFor((): void => {
+      expect(api.readFile).toHaveBeenCalledTimes(2);
+    });
+    store.handleWidgetChange(
+      'change',
+      parseWidgetJson(JSON.stringify({ name: '天气', description: 'watcher 新描述' }), '/Users/test/.tibis/widgets/weather/widget.json')
+    );
+    staleRead.resolve({ content: JSON.stringify({ name: '天气', description: '过期执行描述' }) });
+
+    expect((await resolving)?.description).toBe('watcher 新描述');
+    expect(store.getWidgetById('weather')?.description).toBe('watcher 新描述');
+  });
+
+  it('merges unrelated scan results when a watcher changes one Widget during the scan', async (): Promise<void> => {
+    const api = createScannerAPI();
+    api.readWorkspaceDirectory.mockResolvedValue({ entries: [{ name: 'weather', type: 'directory' }] });
+    api.readFile.mockResolvedValue({ content: JSON.stringify({ name: '天气', description: '初始描述' }) });
+    const store = useWidgetStore();
+    await store.init('/Users/test', api);
+    const staleWeatherRead = createDeferred<{ content: string }>();
+    api.readWorkspaceDirectory.mockResolvedValue({
+      entries: [
+        { name: 'weather', type: 'directory' },
+        { name: 'travel', type: 'directory' }
+      ]
+    });
+    api.readFile.mockImplementation((filePath: string): Promise<{ content: string }> => {
+      if (filePath.includes('/weather/')) {
+        return staleWeatherRead.promise;
+      }
+
+      return Promise.resolve({ content: JSON.stringify({ name: '出行', description: '出行描述' }) });
+    });
+
+    const syncing = store.syncFromDisk();
+    await vi.waitFor((): void => {
+      expect(api.readFile).toHaveBeenCalledTimes(3);
+    });
+    store.handleWidgetChange(
+      'change',
+      parseWidgetJson(JSON.stringify({ name: '天气', description: 'watcher 新描述' }), '/Users/test/.tibis/widgets/weather/widget.json')
+    );
+    staleWeatherRead.resolve({ content: JSON.stringify({ name: '天气', description: '过期扫描描述' }) });
+    await syncing;
+
+    expect(store.getWidgetById('weather')?.description).toBe('watcher 新描述');
+    expect(store.getWidgetById('travel')?.description).toBe('出行描述');
+    expect(store.initialized).toBe(true);
+  });
+
+  it('waits for initialization after the layout declares it pending', async (): Promise<void> => {
+    const api = createScannerAPI();
+    api.readWorkspaceDirectory.mockResolvedValue({ entries: [] });
+    const store = useWidgetStore();
+    store.prepareInitialization();
+    let completed = false;
+    const waiting = store.waitForInit().then((): void => {
+      completed = true;
+    });
+    await Promise.resolve();
+
+    expect(completed).toBe(false);
+    await store.init('/Users/test', api);
+    await waiting;
+    expect(completed).toBe(true);
+  });
+
+  it('preserves a disabled preference when a Widget is removed and added again', async (): Promise<void> => {
+    const api = createScannerAPI();
+    api.readWorkspaceDirectory.mockResolvedValue({ entries: [{ name: 'weather', type: 'directory' }] });
+    api.readFile.mockResolvedValue({ content: JSON.stringify({ name: '天气', description: '天气描述' }) });
+    const store = useWidgetStore();
+    await store.init('/Users/test', api);
+    store.toggleWidget('weather');
+    api.readWorkspaceDirectory.mockResolvedValue({ entries: [] });
+    await store.syncFromDisk();
+    api.readWorkspaceDirectory.mockResolvedValue({ entries: [{ name: 'weather', type: 'directory' }] });
+
+    await store.syncFromDisk();
+
     expect(store.getWidgetById('weather')?.enabled).toBe(false);
   });
 });

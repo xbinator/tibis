@@ -61,11 +61,15 @@ const registryMockState = vi.hoisted(() => ({
 const storeMockState = vi.hoisted(() => ({
   skillStore: {
     initialized: false,
-    getEnabledSkills: vi.fn(() => [])
+    getEnabledSkills: vi.fn(() => []),
+    waitForInit: vi.fn(() => Promise.resolve()),
+    syncFromDisk: vi.fn(() => Promise.resolve())
   },
   widgetStore: {
     initialized: false,
-    getEnabledWidgets: vi.fn<() => unknown[]>(() => [])
+    getEnabledWidgets: vi.fn<() => unknown[]>(() => []),
+    waitForInit: vi.fn(() => Promise.resolve()),
+    syncFromDisk: vi.fn(() => Promise.resolve())
   },
   toolSettingsStore: {
     hasEnabledMcpServers: false
@@ -274,12 +278,20 @@ describe('useRuntimeTools', () => {
     expect(readActiveToolNames(runtimeTools.getActiveTools)).toContain('open_widget');
   });
 
+  it('synchronizes Skill and Widget stores before request tool discovery', async (): Promise<void> => {
+    const runtimeTools = createRuntimeTools();
+
+    await runtimeTools.syncAIResources();
+
+    expect(storeMockState.skillStore.waitForInit).toHaveBeenCalledTimes(1);
+    expect(storeMockState.widgetStore.waitForInit).toHaveBeenCalledTimes(1);
+    expect(storeMockState.skillStore.syncFromDisk).toHaveBeenCalledTimes(1);
+    expect(storeMockState.widgetStore.syncFromDisk).toHaveBeenCalledTimes(1);
+  });
+
   it('replaces prebuilt open_widget with the renderer executable widget tool', (): void => {
     const staleOpenWidgetTool = builtinMockState.createExecutor('open_widget');
-    builtinMockState.createBuiltinTools.mockReturnValueOnce([
-      builtinMockState.createExecutor('read_current_webpage'),
-      staleOpenWidgetTool
-    ]);
+    builtinMockState.createBuiltinTools.mockReturnValueOnce([builtinMockState.createExecutor('read_current_webpage'), staleOpenWidgetTool]);
     storeMockState.widgetStore.initialized = true;
     storeMockState.widgetStore.getEnabledWidgets.mockReturnValue([
       {

@@ -58,6 +58,10 @@ interface UseRuntimeToolsReturn {
   getWorkspaceRoot: ReturnType<typeof useWorkspaceRoot>['getWorkspaceRoot'];
   /** 动态获取当前可用工具列表。 */
   getActiveTools: () => AIToolExecutor[];
+  /** 发送请求前同步 Skill 与 Widget 磁盘定义。 */
+  syncAIResources: () => Promise<void>;
+  /** 获取当前已启用 Skill 的内容版本。 */
+  getSkillContentHashes: () => Record<string, string>;
   /** 创建并打开未保存草稿。 */
   openDraft: ReturnType<typeof useOpenDraft>['openDraft'];
   /** 通过文件路径打开文件标签页。 */
@@ -208,10 +212,39 @@ export function useRuntimeTools(options: UseRuntimeToolsOptions): UseRuntimeTool
     });
   }
 
+  /**
+   * 发送请求前同步 Skill 与 Widget 磁盘定义。
+   */
+  async function syncAIResources(): Promise<void> {
+    await Promise.allSettled([skillStore.waitForInit(), widgetStore.waitForInit()]);
+    const results = await Promise.allSettled([skillStore.syncFromDisk(), widgetStore.syncFromDisk()]);
+
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        console.error('AI resource synchronization failed:', result.reason);
+      }
+    }
+  }
+
+  /**
+   * 获取当前已启用 Skill 的内容版本。
+   * @returns Skill 名称到内容 hash 的映射
+   */
+  function getSkillContentHashes(): Record<string, string> {
+    return Object.fromEntries(
+      skillStore
+        .getEnabledSkills()
+        .filter((skill): boolean => typeof skill.contentHash === 'string' && skill.contentHash.length > 0)
+        .map((skill): [string, string] => [skill.name, skill.contentHash as string])
+    );
+  }
+
   return {
     workspaceRoot,
     getWorkspaceRoot,
     getActiveTools,
+    syncAIResources,
+    getSkillContentHashes,
     openDraft,
     openFileByPath
   };

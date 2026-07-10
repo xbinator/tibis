@@ -44,6 +44,8 @@ export interface ActiveChatRuntime {
   workspaceRoot?: string;
   /** 传输工具 schema。 */
   tools?: AITransportTool[];
+  /** 当前启用 Skill 的内容版本。 */
+  skillContentHashes?: Record<string, string>;
   /** Tavily 运行时配置。 */
   tavily?: AITavilyRuntimeConfig;
   /** MCP 运行时配置。 */

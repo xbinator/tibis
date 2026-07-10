@@ -61,11 +61,13 @@ function createWeatherWidget(): WidgetDefinition {
  * @param widgets - 可用小组件列表
  * @returns Widget Store 夹具
  */
-function createWidgetStore(widgets: WidgetDefinition[]): WidgetStoreLike {
+function createWidgetStore(widgets: WidgetDefinition[], latestWidgets: WidgetDefinition[] = widgets): WidgetStoreLike {
   return {
     initialized: true,
-    getEnabledWidgets: (): WidgetDefinition[] => widgets.filter((widget: WidgetDefinition): boolean => widget.enabled && !widget.parseError)
-  };
+    getEnabledWidgets: (): WidgetDefinition[] => widgets.filter((widget: WidgetDefinition): boolean => widget.enabled && !widget.parseError),
+    resolveLatestEnabledWidget: async (id: string): Promise<WidgetDefinition | undefined> =>
+      latestWidgets.find((widget: WidgetDefinition): boolean => widget.id === id && widget.enabled)
+  } as WidgetStoreLike;
 }
 
 /**
@@ -112,6 +114,47 @@ describe('WidgetTool', (): void => {
             }
           }
         }
+      }
+    });
+  });
+
+  it('loads the widget contract from the execution-time Store resolver', async (): Promise<void> => {
+    const oldWidget = createWeatherWidget();
+    const latestWidget = {
+      ...createWeatherWidget(),
+      description: '执行时最新描述',
+      data: {
+        ...createWeatherWidget().data,
+        description: '执行时最新描述'
+      }
+    };
+    const tool = createWidgetTool(createWidgetStore([oldWidget], [latestWidget]));
+
+    const result = await tool.execute({ id: 'weather' });
+
+    expect(result).toMatchObject({
+      status: 'success',
+      data: {
+        description: '执行时最新描述'
+      }
+    });
+  });
+
+  it('fails explicitly when the execution-time Widget source is invalid', async (): Promise<void> => {
+    const oldWidget = createWeatherWidget();
+    const invalidWidget = {
+      ...createWeatherWidget(),
+      parseError: 'Unexpected token'
+    };
+    const tool = createWidgetTool(createWidgetStore([oldWidget], [invalidWidget]));
+
+    const result = await tool.execute({ id: 'weather' });
+
+    expect(result).toMatchObject({
+      status: 'failure',
+      error: {
+        code: 'INVALID_INPUT',
+        message: expect.stringContaining('Unexpected token')
       }
     });
   });

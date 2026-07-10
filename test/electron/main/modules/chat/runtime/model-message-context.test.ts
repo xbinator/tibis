@@ -75,7 +75,8 @@ describe('runtime model message context', (): void => {
     const covered = createMessage('a1', 'assistant', 'old answer');
     const compactedAssistant = createMessage('a2', 'assistant', '');
     compactedAssistant.parts = [
-      { id: 'part0063',
+      {
+        id: 'part0063',
         type: 'compaction',
         auto: true,
         reason: 'auto',
@@ -98,7 +99,8 @@ describe('runtime model message context', (): void => {
     const currentUser = createMessage('u1', 'user', 'finish the task');
     const activeAssistant = createMessage('a1', 'assistant', '');
     activeAssistant.parts = [
-      { id: 'part0064',
+      {
+        id: 'part0064',
         type: 'tool',
         toolCallId: 'tool-call-1',
         toolName: 'operate_webpage',
@@ -106,7 +108,8 @@ describe('runtime model message context', (): void => {
         input: { index: 9 },
         result: { toolName: 'operate_webpage', status: 'success', data: { clicked: true } }
       },
-      { id: 'part0065',
+      {
+        id: 'part0065',
         type: 'compaction',
         auto: true,
         reason: 'auto',
@@ -134,7 +137,8 @@ describe('runtime model message context', (): void => {
     const covered = createMessage('a1', 'assistant', 'old answer');
     const compactedAssistant = createMessage('a2', 'assistant', '');
     compactedAssistant.parts = [
-      { id: 'part0066',
+      {
+        id: 'part0066',
         type: 'compaction',
         auto: true,
         reason: 'auto',
@@ -163,7 +167,8 @@ describe('runtime model message context', (): void => {
     const covered = createMessage('a1', 'assistant', 'clicked menu');
     const compactedAssistant = createMessage('a2', 'assistant', '');
     compactedAssistant.parts = [
-      { id: 'part0068',
+      {
+        id: 'part0068',
         type: 'compaction',
         auto: true,
         reason: 'auto',
@@ -174,7 +179,8 @@ describe('runtime model message context', (): void => {
         sourceMessageIds: [oldUser.id, covered.id]
       },
       { id: 'part0069', type: 'thinking', thinking: 'Let me continue the task.' },
-      { id: 'part0070',
+      {
+        id: 'part0070',
         type: 'tool',
         toolCallId: 'tool-call-read-page',
         toolName: 'read_current_webpage',
@@ -242,7 +248,8 @@ describe('runtime model message context', (): void => {
     const assistant = createMessage('a-tool', 'assistant', '');
     assistant.parts = [
       { id: 'part0072', type: 'text', text: 'I will inspect the file.' },
-      { id: 'part0073',
+      {
+        id: 'part0073',
         type: 'tool',
         toolCallId: 'tool-call-1',
         toolName: 'read_file',
@@ -279,7 +286,8 @@ describe('runtime model message context', (): void => {
   it('keeps open_widget snapshots out of runtime model tool results', (): void => {
     const assistant = createMessage('a-widget', 'assistant', '');
     assistant.parts = [
-      { id: 'part0075',
+      {
+        id: 'part0075',
         type: 'tool',
         toolCallId: 'tool-call-widget',
         toolName: 'open_widget',
@@ -294,7 +302,7 @@ describe('runtime model message context', (): void => {
             value: createDefaultWidgetData(),
             renderContext: {
               input: { city: '上海' },
-                output: undefined,
+              output: undefined,
               data: {}
             },
             execution: {
@@ -337,6 +345,54 @@ describe('runtime model message context', (): void => {
         ]
       }
     ]);
+  });
+
+  it('invalidates stale Skill tool results for the next runtime request', (): void => {
+    const assistant = createMessage('a-skill', 'assistant', '');
+    assistant.parts = [
+      {
+        id: 'part-skill',
+        type: 'tool',
+        toolCallId: 'tool-call-skill',
+        toolName: 'skill',
+        status: 'done',
+        input: { name: 'weather' },
+        result: {
+          toolName: 'skill',
+          status: 'success',
+          data: '<skill_metadata><content_hash>old-hash</content_hash></skill_metadata><skill_content name="weather">old instructions</skill_content>'
+        }
+      }
+    ];
+
+    const modelMessages = toRuntimeModelMessages([assistant], { skillContentHashes: { weather: 'new-hash' } });
+    const serialized = JSON.stringify(modelMessages);
+
+    expect(serialized).toContain('skill_invalidated');
+    expect(serialized).not.toContain('old instructions');
+  });
+
+  it('retains Skill tool results when the content version is current', (): void => {
+    const assistant = createMessage('a-skill-current', 'assistant', '');
+    assistant.parts = [
+      {
+        id: 'part-skill-current',
+        type: 'tool',
+        toolCallId: 'tool-call-skill-current',
+        toolName: 'skill',
+        status: 'done',
+        input: { name: 'weather' },
+        result: {
+          toolName: 'skill',
+          status: 'success',
+          data: '<skill_metadata><content_hash>same-hash</content_hash></skill_metadata><skill_content name="weather">current instructions</skill_content>'
+        }
+      }
+    ];
+
+    const modelMessages = toRuntimeModelMessages([assistant], { skillContentHashes: { weather: 'same-hash' } });
+
+    expect(JSON.stringify(modelMessages)).toContain('current instructions');
   });
 
   it('converts widget result parts into a runtime model user text part', (): void => {

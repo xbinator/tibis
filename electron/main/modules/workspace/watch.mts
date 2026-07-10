@@ -144,6 +144,7 @@ class FileWatchService {
 
     const watcher = chokidar.watch(dirPath, {
       persistent: true,
+      ignoreInitial: true,
       depth: 3,
       ignored: ['**/node_modules/**', '**/.git/**'],
       awaitWriteFinish: {

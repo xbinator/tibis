@@ -6,6 +6,7 @@ import type { WidgetDefinition } from './types';
 import { cloneDeep } from 'lodash-es';
 import type { WidgetData } from '@/components/BWidget/types';
 import { createDefaultWidgetData, normalizeWidgetDataContract } from '@/components/BWidget/utils/widgetData';
+import { hashString } from '@/shared/utils/hash';
 
 /**
  * 判断值是否为普通记录。
@@ -82,9 +83,10 @@ function normalizeWidgetData(id: string, value: Record<string, unknown>): Widget
  * 创建解析失败的小组件定义。
  * @param filePath - 小组件 JSON 文件路径
  * @param message - 错误信息
+ * @param contentHash - 完整源文本的内容版本
  * @returns 解析失败定义
  */
-function createWidgetParseError(filePath: string, message: string): WidgetDefinition {
+function createWidgetParseError(filePath: string, message: string, contentHash: string): WidgetDefinition {
   const id = readWidgetIdFromFilePath(filePath);
   const data = createDefaultWidgetData(id);
 
@@ -96,6 +98,7 @@ function createWidgetParseError(filePath: string, message: string): WidgetDefini
       ...data,
       name: id
     },
+    contentHash,
     filePath: filePath.replace(/\\/g, '/'),
     enabled: true,
     parsedAt: Date.now(),
@@ -112,12 +115,13 @@ function createWidgetParseError(filePath: string, message: string): WidgetDefini
 export function parseWidgetJson(content: string, filePath: string): WidgetDefinition {
   const normalizedFilePath = filePath.replace(/\\/g, '/');
   const id = readWidgetIdFromFilePath(normalizedFilePath);
+  const contentHash = hashString(content);
 
   try {
     const parsed: unknown = JSON.parse(content);
 
     if (!isRecord(parsed)) {
-      return createWidgetParseError(normalizedFilePath, 'Widget JSON must be an object.');
+      return createWidgetParseError(normalizedFilePath, 'Widget JSON must be an object.', contentHash);
     }
 
     const data = normalizeWidgetData(id, parsed);
@@ -127,11 +131,12 @@ export function parseWidgetJson(content: string, filePath: string): WidgetDefini
       name: data.name,
       description: data.description,
       data,
+      contentHash,
       filePath: normalizedFilePath,
       enabled: true,
       parsedAt: Date.now()
     };
   } catch (error: unknown) {
-    return createWidgetParseError(normalizedFilePath, error instanceof Error ? error.message : String(error));
+    return createWidgetParseError(normalizedFilePath, error instanceof Error ? error.message : String(error), contentHash);
   }
 }

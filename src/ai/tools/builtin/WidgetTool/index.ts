@@ -35,6 +35,8 @@ const OPEN_WIDGET_DESCRIPTION_FOOTER =
 export interface WidgetStoreLike {
   /** 获取已启用的小组件列表 */
   getEnabledWidgets: () => WidgetDefinition[];
+  /** 执行前解析磁盘中的最新启用小组件 */
+  resolveLatestEnabledWidget?: (id: string) => Promise<WidgetDefinition | undefined>;
   /** 是否已完成初始化 */
   initialized: boolean;
 }
@@ -223,6 +225,16 @@ function findEnabledWidgetById(store: WidgetStoreLike, id: string): WidgetDefini
 }
 
 /**
+ * 执行前解析最新启用小组件。
+ * @param store - Widget store 实例
+ * @param id - 小组件 ID
+ * @returns 最新小组件或 undefined
+ */
+async function resolveEnabledWidgetById(store: WidgetStoreLike, id: string): Promise<WidgetDefinition | undefined> {
+  return store.resolveLatestEnabledWidget ? store.resolveLatestEnabledWidget(id) : findEnabledWidgetById(store, id);
+}
+
+/**
  * 从 WidgetDefinition 创建聊天展示快照。
  * @param widget - 小组件定义
  * @param input - 打开 Widget 工具输入
@@ -271,6 +283,16 @@ function createWidgetNotFoundResult(store: WidgetStoreLike, id: string, toolName
 }
 
 /**
+ * 创建 Widget 源文件解析失败结果。
+ * @param widget - 解析失败的小组件
+ * @param toolName - 当前工具名称
+ * @returns 工具失败结果
+ */
+function createWidgetInvalidResult(widget: WidgetDefinition, toolName: string): AIToolExecutionResult<never> {
+  return createToolFailureResult(toolName, 'INVALID_INPUT', `Widget '${widget.id}' is invalid: ${widget.parseError ?? 'Unknown parse error'}`);
+}
+
+/**
  * 创建 Widget 工具执行器。
  * @param store - Widget store 实例
  * @returns 工具执行器
@@ -297,10 +319,14 @@ export function createWidgetTool(store: WidgetStoreLike): AIToolExecutor<WidgetT
       }
     },
     async execute(input: WidgetToolInput): Promise<AIToolExecutionResult<WidgetContract>> {
-      const widget = findEnabledWidgetById(store, input.id);
+      const widget = await resolveEnabledWidgetById(store, input.id);
 
       if (!widget) {
         return createWidgetNotFoundResult(store, input.id, WIDGET_TOOL_NAME);
+      }
+
+      if (widget.parseError) {
+        return createWidgetInvalidResult(widget, WIDGET_TOOL_NAME);
       }
 
       return createToolSuccessResult(WIDGET_TOOL_NAME, createWidgetContract(widget));
@@ -339,10 +365,14 @@ export function createOpenWidgetTool(store: WidgetStoreLike, options: OpenWidget
       }
     },
     async execute(input: OpenWidgetToolInput, context?: AIToolContext): Promise<AIToolExecutionResult<WidgetDisplayPayload>> {
-      const widget = findEnabledWidgetById(store, input.id);
+      const widget = await resolveEnabledWidgetById(store, input.id);
 
       if (!widget) {
         return createWidgetNotFoundResult(store, input.id, OPEN_WIDGET_TOOL_NAME);
+      }
+
+      if (widget.parseError) {
+        return createWidgetInvalidResult(widget, OPEN_WIDGET_TOOL_NAME);
       }
 
       return createToolSuccessResult(OPEN_WIDGET_TOOL_NAME, await createWidgetDisplayPayload(widget, input, context, options));

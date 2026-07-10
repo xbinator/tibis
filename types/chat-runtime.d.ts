@@ -109,6 +109,8 @@ export interface ChatRuntimeSendInput {
   workspaceRoot?: string;
   /** Transport tool schemas executable by main process AI runtime. */
   tools?: AITransportTool[];
+  /** Current enabled Skill content versions used to invalidate stale history. */
+  skillContentHashes?: Record<string, string>;
   /** Tavily runtime config executable in main process. */
   tavily?: AITavilyRuntimeConfig;
   /** MCP runtime config executable in main process. */
@@ -137,6 +139,8 @@ export interface ChatRuntimeContinueInput {
   workspaceRoot?: string;
   /** Transport tool schemas executable by main process AI runtime. */
   tools?: AITransportTool[];
+  /** Current enabled Skill content versions used to invalidate stale history. */
+  skillContentHashes?: Record<string, string>;
   /** Tavily runtime config executable in main process. */
   tavily?: AITavilyRuntimeConfig;
   /** MCP runtime config executable in main process. */
@@ -163,6 +167,8 @@ export interface ChatRuntimeSubmitUserChoiceInput {
   workspaceRoot?: string;
   /** Transport tool schemas executable by main process AI runtime. */
   tools?: AITransportTool[];
+  /** Current enabled Skill content versions used to invalidate stale history. */
+  skillContentHashes?: Record<string, string>;
   /** Tavily runtime config executable in main process. */
   tavily?: AITavilyRuntimeConfig;
   /** MCP runtime config executable in main process. */

@@ -112,8 +112,8 @@ function registerEditorToolContext(): void {
   editorToolContextRegistry.register(
     documentId,
     createEditorToolContext({
-      fileState: editorState.value,
-      editorInstance
+      getFileState: () => editorState.value,
+      getEditorInstance: getEditorController
     })
   );
   lastRegisteredDocumentId.value = documentId;

@@ -45,7 +45,7 @@ import { createRuntimeCompactionService } from './compaction/service.mjs';
 import { createRuntimeStructuredSummaryGenerator, createRuntimeSummaryInvoke } from './compaction/structured-summary-generator.mjs';
 import { createContextBudgetService } from './context/budget.mjs';
 import { estimateSerializedModelMessages } from './context/estimator.mjs';
-import { toRuntimeModelMessages } from './context/model-message.mjs';
+import { invalidateStaleSkillToolResults, toRuntimeModelMessages } from './context/model-message.mjs';
 import { downgradeOverflowReplaySourceMessages, downgradeUserMessageForOverflowReplay, isContextOverflowError } from './context/overflow.mjs';
 import { findToolOutputPruneProtectedStartIndex, pruneMessageToolOutputs } from './context/tool-output-prune.mjs';
 import { addRuntimeUsage, isSameRuntimeUsage } from './context/usage.mjs';
@@ -426,8 +426,9 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     const persistedMessages = await messageReader.getMessages(runtime.sessionId);
     const messagesWithoutDraft = persistedMessages.filter((message) => message.id !== assistantMessage.id);
     const hasCurrentUserMessage = messagesWithoutDraft.some((message) => message.id === userMessage.id);
+    const sourceMessages = hasCurrentUserMessage ? messagesWithoutDraft : [...messagesWithoutDraft, userMessage];
 
-    return hasCurrentUserMessage ? messagesWithoutDraft : [...messagesWithoutDraft, userMessage];
+    return invalidateStaleSkillToolResults(sourceMessages, runtime.skillContentHashes);
   }
 
   /**
@@ -725,9 +726,13 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   ): Promise<void> {
     let sourceMessages: ChatMessageRecord[] = [];
     try {
-      const initialSourceMessages = sourceMessageSnapshot ?? (await readRuntimeSourceMessages(runtime, userMessage, assistantMessage));
-      sourceMessages = sourceMessageSnapshot ?? (await compactBeforeStreamIfNeeded(runtime, initialSourceMessages, userMessage, assistantMessage));
-      if (sourceMessageSnapshot) emitContextUsageSnapshot(runtime, sourceMessageSnapshot);
+      const initialSourceMessages = sourceMessageSnapshot
+        ? invalidateStaleSkillToolResults(sourceMessageSnapshot, runtime.skillContentHashes)
+        : await readRuntimeSourceMessages(runtime, userMessage, assistantMessage);
+      sourceMessages = sourceMessageSnapshot
+        ? initialSourceMessages
+        : await compactBeforeStreamIfNeeded(runtime, initialSourceMessages, userMessage, assistantMessage);
+      if (sourceMessageSnapshot) emitContextUsageSnapshot(runtime, initialSourceMessages);
       const accumulatedUsage = await executeRuntimeStreamRounds(runtime, sourceMessages, userMessage, assistantMessage);
       await compactAfterProviderUsageIfNeeded(runtime, sourceMessages, assistantMessage, accumulatedUsage);
       await pruneOldToolOutputsIfNeeded(runtime, sourceMessages, assistantMessage);

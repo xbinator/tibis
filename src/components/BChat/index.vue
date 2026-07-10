@@ -134,12 +134,10 @@ import { useRuntimeCompactContext } from './hooks/useRuntimeCompactContext';
 import { useRuntimeConfig } from './hooks/useRuntimeConfig';
 import { useRuntimeSettings } from './hooks/useRuntimeSettings';
 import { useRuntimeTools } from './hooks/useRuntimeTools';
-import { useSkillInit } from './hooks/useSkillInit';
 import { useSlashCommands, chatSlashCommands } from './hooks/useSlashCommands';
 import { useTodoPanel } from './hooks/useTodoPanel';
 import { useUsagePanel } from './hooks/useUsagePanel';
 import { useVoiceInput } from './hooks/useVoiceInput';
-import { useWidgetInit } from './hooks/useWidgetInit';
 import { createFileRefChipResolver } from './utils/chipResolver';
 import { createChatConfirmationController } from './utils/confirmationController';
 import { buildUserInputParts } from './utils/filePartParser';
@@ -154,7 +152,7 @@ const props = withDefaults(defineProps<BChatProps>(), {
 });
 
 /** ChatRuntime 通用请求配置。 */
-type ChatRuntimeRequestConfig = Pick<ChatRuntimeSendInput, 'contextWindow' | 'system' | 'workspaceRoot' | 'tools' | 'tavily' | 'mcp'>;
+type ChatRuntimeRequestConfig = Pick<ChatRuntimeSendInput, 'contextWindow' | 'system' | 'workspaceRoot' | 'tools' | 'skillContentHashes' | 'tavily' | 'mcp'>;
 
 /**
  * 发送到 ChatRuntime 的用户消息输入。
@@ -227,7 +225,7 @@ const confirmationController = createChatConfirmationController();
 /** Runtime 可读写设置能力。 */
 const { getSettingsSnapshot, applyRuntimeSetting } = useRuntimeSettings();
 /** Runtime 内置工具能力。 */
-const { workspaceRoot, getActiveTools, openDraft, openFileByPath } = useRuntimeTools({
+const { workspaceRoot, getActiveTools, syncAIResources, getSkillContentHashes, openDraft, openFileByPath } = useRuntimeTools({
   messages,
   confirm: confirmationController.createAdapter(),
   getSessionId: () => activeSessionId.value ?? undefined,
@@ -676,6 +674,7 @@ async function resolveChatRuntimeRequestConfig(
     return null;
   }
 
+  await syncAIResources();
   const candidateTools = serviceConfig.toolSupport.supported ? getActiveTools() : [];
   const selection = selectionSource ? createMemorySelectionContext(selectionSource, selectionParts) : undefined;
   const finalTools = selection?.mode === 'relevant' ? filterRelevantMemoryTools(candidateTools) : candidateTools;
@@ -693,6 +692,7 @@ async function resolveChatRuntimeRequestConfig(
     system,
     workspaceRoot: workspaceRoot.value || undefined,
     tools: serviceConfig.toolSupport.supported ? toTransportTools(finalTools) : undefined,
+    skillContentHashes: getSkillContentHashes(),
     tavily: resolveRuntimeTavilyConfig(),
     mcp: resolveRuntimeMcpRequestConfig()
   };
@@ -1115,11 +1115,6 @@ function handleFileMentionSelect(file: FileMentionOption): void {
   // 文件提及已经在 BTextEditor 中插入到输入框
   console.log('File mention selected:', file.name);
 }
-
-/** Skill 初始化 hook */
-useSkillInit();
-/** Widget 初始化 hook */
-useWidgetInit();
 
 /** 组件挂载时初始化 */
 onMounted(async () => {

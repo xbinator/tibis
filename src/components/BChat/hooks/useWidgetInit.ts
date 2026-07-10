@@ -25,23 +25,15 @@ function isWidgetJsonPath(filePath: string): boolean {
  */
 export function useWidgetInit(): void {
   const widgetStore = useWidgetStore();
+  // setup 阶段先建立屏障，避免布局 onMounted 前聊天绕过资源初始化。
+  widgetStore.prepareInitialization();
 
   /** 组件卸载时需要执行的小组件监听清理函数。 */
   const cleanupCallbacks: Array<() => void | Promise<void>> = [];
 
   onMounted(async (): Promise<void> => {
     try {
-      const homeDir = await native.getHomeDir();
-      await widgetStore.init(homeDir, {
-        readFile: (filePath: string) => native.readFile(filePath).then((result) => ({ content: result.content })),
-        readWorkspaceDirectory: (options: ReadWorkspaceDirectoryOptions) => native.readWorkspaceDirectory(options),
-        getPathStatus: (targetPath: string) => native.getPathStatus(targetPath)
-      });
-
-      const widgetDir = joinPath(homeDir, '.tibis', 'widgets');
-      await native.watchDirectory(widgetDir, '**/widget.json');
-      cleanupCallbacks.push(() => native.unwatchDirectory(widgetDir, '**/widget.json'));
-
+      // 先订阅事件，避免异步扫描与 watcher 注册期间丢失磁盘变化。
       const removeWidgetChangedListener = native.onSkillChanged((data: { type: string; filePath: string; content?: string }): void => {
         const normalizedPath = data.filePath.replace(/\\/g, '/');
         if (!isWidgetJsonPath(normalizedPath)) {
@@ -60,8 +52,20 @@ export function useWidgetInit(): void {
         widgetStore.handleWidgetChange(data.type as 'change' | 'add', parseWidgetJson(data.content, normalizedPath));
       });
       cleanupCallbacks.push(removeWidgetChangedListener);
+
+      const homeDir = await native.getHomeDir();
+      const widgetDir = joinPath(homeDir, '.tibis', 'widgets');
+      await native.watchDirectory(widgetDir, '**/widget.json');
+      cleanupCallbacks.push(() => native.unwatchDirectory(widgetDir, '**/widget.json'));
+
+      await widgetStore.init(homeDir, {
+        readFile: (filePath: string) => native.readFile(filePath).then((result) => ({ content: result.content })),
+        readWorkspaceDirectory: (options: ReadWorkspaceDirectoryOptions) => native.readWorkspaceDirectory(options),
+        getPathStatus: (targetPath: string) => native.getPathStatus(targetPath)
+      });
     } catch (error: unknown) {
       console.error('Widget initialization failed:', error);
+      widgetStore.finishInitialization();
     }
   });
 

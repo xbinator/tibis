@@ -86,6 +86,8 @@ import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { useEventListener } from '@vueuse/core';
 import BButton from '@/components/BButton/index.vue';
+import { useSkillInit } from '@/components/BChat/hooks/useSkillInit';
+import { useWidgetInit } from '@/components/BChat/hooks/useWidgetInit';
 import BCommandPanel from '@/components/BCommandPanel/index.vue';
 import { getElectronAPI } from '@/shared/platform/electron-api';
 import { isMac } from '@/shared/platform/env';
@@ -112,6 +114,10 @@ const commandPanelStore = useCommandPanelStore();
 const settingStore = useSettingStore();
 const tabsStore = useTabsStore();
 const { getRouteCacheKey, getRouteCacheComponent } = useKeepAlive();
+
+/** 应用级 Skill 与 Widget 资源扫描和目录监听。 */
+useSkillInit();
+useWidgetInit();
 
 /** 快捷键帮助抽屉仅在打开时加载，减少默认布局首屏组件体积。 */
 const ShortcutsHelp = defineAsyncComponent(() => import('./components/ShortcutsHelp.vue'));
