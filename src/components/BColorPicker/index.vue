@@ -105,7 +105,7 @@ const [, bem] = createNamespace('color-picker');
 
 const props = withDefaults(defineProps<BColorPickerProps>(), {
   value: '',
-  format: 'hex',
+  format: 'rgb',
   defaultValue: '',
   width: undefined,
   placeholder: '请输入',
