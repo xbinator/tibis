@@ -365,6 +365,32 @@ function resolveRuntimeTools(tools: UseChatRuntimeOptions['tools']): AIToolExecu
   return typeof tools === 'function' ? tools() : tools ?? [];
 }
 
+/** ChatRuntime 本轮传输的工具 schema 列表。 */
+type RuntimeTransportTools = ChatRuntimeSendInput['tools'];
+
+/**
+ * 按本轮传给模型的工具 schema 过滤 renderer 本地执行器。
+ * @param tools - 当前 renderer 可执行工具
+ * @param transportTools - 本轮发给主进程的工具 schema
+ * @returns 与本轮工具 schema 对齐的执行器快照
+ */
+function filterRuntimeToolsByTransport(tools: AIToolExecutor[], transportTools: RuntimeTransportTools): AIToolExecutor[] {
+  if (!transportTools) return [];
+
+  const exposedToolNames = new Set(transportTools.map((tool) => tool.name));
+  return tools.filter((tool) => exposedToolNames.has(tool.definition.name));
+}
+
+/**
+ * 创建 runtime 生命周期内稳定使用的 renderer 工具执行器快照。
+ * @param tools - 静态工具列表或动态 getter
+ * @param transportTools - 本轮发给主进程的工具 schema
+ * @returns 执行器快照
+ */
+function createRuntimeToolSnapshot(tools: UseChatRuntimeOptions['tools'], transportTools: RuntimeTransportTools): AIToolExecutor[] {
+  return filterRuntimeToolsByTransport(resolveRuntimeTools(tools), transportTools);
+}
+
 /**
  * 判断未知错误码是否为工具执行稳定错误码。
  * @param code - 待判断错误码
@@ -451,6 +477,30 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
   const activeRuntimeId = ref<string | null>(null);
   /** 已发起中止的 runtime ID，用于拒绝中止后迟到的交互请求。 */
   const abortedRuntimeIds = new Set<string>();
+  /** 与 runtimeId 绑定的 renderer 工具执行器快照。 */
+  const runtimeToolSnapshots = new Map<string, AIToolExecutor[]>();
+
+  /**
+   * 记录 runtime 本轮可执行的 renderer 工具快照。
+   * @param result - runtime 启动结果
+   * @param tools - renderer 工具执行器快照
+   */
+  function rememberRuntimeToolSnapshot(result: ChatRuntimeStartResult, tools: AIToolExecutor[]): void {
+    if (result.completed === true) {
+      runtimeToolSnapshots.delete(result.runtimeId);
+      return;
+    }
+
+    runtimeToolSnapshots.set(result.runtimeId, tools);
+  }
+
+  /**
+   * 清理 runtime 对应的 renderer 工具快照。
+   * @param runtimeId - runtime ID
+   */
+  function forgetRuntimeToolSnapshot(runtimeId: string): void {
+    runtimeToolSnapshots.delete(runtimeId);
+  }
 
   /**
    * 判断 runtime 交互请求是否已经失效。
@@ -496,6 +546,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
     if (activeRuntimeId.value === event.runtimeId) {
       activeRuntimeId.value = null;
     }
+    forgetRuntimeToolSnapshot(event.runtimeId);
 
     const completedMessage = findCompletedAssistantMessage(options.messages.value, event.runtimeId);
     if (completedMessage) {
@@ -510,6 +561,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
   function handleErrorEvent(event: ChatRuntimeEventMap['chat:runtime:error']): void {
     if (!isCurrentRuntimeEvent(event, options.getSessionId(), clientId)) return;
     if (options.isRuntimeEventIgnored?.(event.runtimeId) === true) return;
+    forgetRuntimeToolSnapshot(event.runtimeId);
 
     Promise.resolve(options.onError?.(localizeRuntimeServiceError(event.error))).catch(() => undefined);
   }
@@ -564,11 +616,21 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
       await submitToolResult(event, createRuntimeToolUnavailableResult(event.toolName, '当前会话已切换，无法执行工具'));
       return;
     }
+    if (isRuntimeInteractionRequestStale(event.runtimeId)) {
+      await submitToolResult(event, createRuntimeToolUnavailableResult(event.toolName, '当前 runtime 已失效，无法执行工具'));
+      return;
+    }
+
+    const runtimeTools = runtimeToolSnapshots.get(event.runtimeId);
+    if (!runtimeTools) {
+      await submitToolResult(event, createRuntimeToolUnavailableResult(event.toolName, '当前 runtime 工具快照不存在，无法执行工具'));
+      return;
+    }
 
     try {
       const executedToolCall = await executeToolCall(
         { toolCallId: event.toolCallId, toolName: event.toolName, input: event.input },
-        resolveRuntimeTools(options.tools),
+        runtimeTools,
         options.getToolContext?.(),
         { runtimeId: event.runtimeId }
       );
@@ -660,8 +722,10 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
    * @returns runtime 启动结果
    */
   async function send(input: BChatRuntimeSendInput): Promise<ChatRuntimeStartResult> {
+    const toolSnapshot = createRuntimeToolSnapshot(options.tools, input.tools);
     const result = unwrapRuntimeResult(await electronAPI.chatRuntimeSend(toRuntimeSendCommand(input, clientId, agentId)));
     activeRuntimeId.value = result.completed === true ? null : result.runtimeId;
+    rememberRuntimeToolSnapshot(result, toolSnapshot);
     return result;
   }
 
@@ -671,8 +735,10 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
    * @returns runtime 启动结果
    */
   async function continueTurn(input: BChatRuntimeContinueInput): Promise<ChatRuntimeStartResult> {
+    const toolSnapshot = createRuntimeToolSnapshot(options.tools, input.tools);
     const result = unwrapRuntimeResult(await electronAPI.chatRuntimeContinue(toRuntimeContinueCommand(input, clientId, agentId)));
     activeRuntimeId.value = result.completed === true ? null : result.runtimeId;
+    rememberRuntimeToolSnapshot(result, toolSnapshot);
     return result;
   }
 
@@ -682,8 +748,10 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
    * @returns runtime 启动结果
    */
   async function submitUserChoice(input: BChatRuntimeSubmitUserChoiceInput): Promise<ChatRuntimeStartResult> {
+    const toolSnapshot = createRuntimeToolSnapshot(options.tools, input.tools);
     const result = unwrapRuntimeResult(await electronAPI.chatRuntimeSubmitUserChoice(toCloneableData({ ...input, clientId, agentId })));
     activeRuntimeId.value = result.completed === true ? null : result.runtimeId;
+    rememberRuntimeToolSnapshot(result, toolSnapshot);
     return result;
   }
 
@@ -708,6 +776,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
       if (activeRuntimeId.value === runtimeId) {
         activeRuntimeId.value = null;
       }
+      forgetRuntimeToolSnapshot(runtimeId);
     } catch (error) {
       abortedRuntimeIds.delete(runtimeId);
       throw error;

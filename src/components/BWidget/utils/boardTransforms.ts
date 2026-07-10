@@ -752,6 +752,25 @@ export function createWidgetBoardState(snapshot?: Partial<WidgetBoardSnapshot>):
 }
 
 /**
+ * 将外部文档元素替换为一条可撤销的画布历史记录。
+ * @param state - 当前 Widget 状态
+ * @param elements - 新元素树
+ * @returns 替换后的 Widget 状态
+ */
+export function replaceWidgetBoardElements(state: WidgetBoardState, elements: WidgetShapeElement[]): WidgetBoardState {
+  const nextElements = createWidgetBoardState({ elements }).elements;
+  if (isEqual(nextElements, state.elements)) {
+    return state;
+  }
+
+  return withHistory(state, {
+    elements: nextElements,
+    selection: normalizeWidgetElementSelection(nextElements, state.selection),
+    viewport: cloneDeep(state.viewport)
+  });
+}
+
+/**
  * 创建供外部双向绑定和持久化使用的轻量Widget数据。
  * @param snapshot - Widget快照或状态
  * @param options - Widget数据快照选项

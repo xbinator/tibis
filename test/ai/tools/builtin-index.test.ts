@@ -9,6 +9,9 @@ import {
   createBuiltinTools,
   DEFAULT_BUILTIN_READONLY_TOOL_NAMES,
   DEFAULT_BUILTIN_WRITABLE_TOOL_NAMES,
+  EDIT_WIDGET_TOOL_NAME,
+  GET_WIDGET_TOOL_NAME,
+  isBuiltinToolName,
   OPERATE_WEBPAGE_TOOL_NAME,
   READ_CURRENT_WEBPAGE_TOOL_NAME
 } from '@/ai/tools/builtin';
@@ -20,7 +23,17 @@ describe('builtin tools index', (): void => {
     expect(DEFAULT_BUILTIN_READONLY_TOOL_NAMES).toEqual(expect.arrayContaining(getToolNamesByExposure('default-readonly')));
     expect(DEFAULT_BUILTIN_WRITABLE_TOOL_NAMES).toEqual(expect.arrayContaining(getToolNamesByExposure('default-writable')));
     expect(CONDITIONAL_BUILTIN_READONLY_TOOL_NAMES).toEqual(expect.arrayContaining(getToolNamesByExposure('conditional-readonly')));
-    expect(CONDITIONAL_BUILTIN_WRITABLE_TOOL_NAMES).toEqual(getToolNamesByExposure('conditional-writable'));
+    expect(CONDITIONAL_BUILTIN_WRITABLE_TOOL_NAMES).toEqual(expect.arrayContaining(getToolNamesByExposure('conditional-writable')));
+  });
+
+  it('whitelists Widget editor tools without creating them statically', (): void => {
+    const staticToolNames = createBuiltinTools().map((tool) => tool.definition.name);
+
+    expect(CONDITIONAL_BUILTIN_READONLY_TOOL_NAMES).toContain(GET_WIDGET_TOOL_NAME);
+    expect(CONDITIONAL_BUILTIN_WRITABLE_TOOL_NAMES).toContain(EDIT_WIDGET_TOOL_NAME);
+    expect(isBuiltinToolName(GET_WIDGET_TOOL_NAME)).toBe(true);
+    expect(isBuiltinToolName(EDIT_WIDGET_TOOL_NAME)).toBe(true);
+    expect(staticToolNames).not.toEqual(expect.arrayContaining([GET_WIDGET_TOOL_NAME, EDIT_WIDGET_TOOL_NAME]));
   });
 
   it('keeps WebView schema-only tools available for runtime filtering', (): void => {

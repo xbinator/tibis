@@ -17,10 +17,11 @@ import {
   WIDGET_TOOL_NAME
 } from '@/ai/tools/builtin';
 import { createSkillTool } from '@/ai/tools/builtin/SkillTool';
-import { createOpenWidgetTool, createWidgetTool } from '@/ai/tools/builtin/WidgetTool';
+import { createEditWidgetTool, createGetWidgetTool, createOpenWidgetTool, createWidgetTool } from '@/ai/tools/builtin/WidgetTool';
 import type { AIToolConfirmationAdapter } from '@/ai/tools/confirmation';
 import { editorToolContextRegistry } from '@/ai/tools/context/editor';
 import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
+import { widgetToolContextRegistry } from '@/ai/tools/context/widget';
 import { createWidgetHttpClient, executeWidgetRuntime, type WidgetConsoleLevel, type WidgetLogLevel } from '@/components/BWidget/utils/widgetRuntime';
 import { formatWidgetLogArgs } from '@/components/BWidget/utils/widgetRuntime/logger';
 import { useOpenDraft } from '@/hooks/useOpenDraft';
@@ -169,10 +170,11 @@ export function useRuntimeTools(options: UseRuntimeToolsOptions): UseRuntimeTool
   function getActiveTools(): AIToolExecutor[] {
     const hasActiveEditor = Boolean(editorToolContextRegistry.getCurrentContext());
     const hasActiveWebview = Boolean(webviewToolContextRegistry.getCurrentContext());
+    const hasActiveWidget = widgetToolContextRegistry.getCurrentContext();
     const hasWorkspace = Boolean(workspaceRoot.value);
     const enabledWidgets = widgetStore.initialized ? widgetStore.getEnabledWidgets() : [];
-    const hasActiveWidgets = widgetStore.initialized && enabledWidgets.length > 0;
-    const baseBuiltinTools = hasActiveWidgets
+    const hasEnabledWidgets = widgetStore.initialized && enabledWidgets.length > 0;
+    const baseBuiltinTools = hasEnabledWidgets
       ? allBuiltinTools.filter((tool: AIToolExecutor): boolean => tool.definition.name !== OPEN_WIDGET_TOOL_NAME)
       : allBuiltinTools;
 
@@ -185,7 +187,7 @@ export function useRuntimeTools(options: UseRuntimeToolsOptions): UseRuntimeTool
         dynamicTools.push(createSkillTool(skillStore));
       }
     }
-    if (hasActiveWidgets) {
+    if (hasEnabledWidgets) {
       const hasWidgetTool = baseBuiltinTools.some((tool) => tool.definition.name === WIDGET_TOOL_NAME);
       if (!hasWidgetTool) {
         dynamicTools.push(createWidgetTool(widgetStore));
@@ -193,6 +195,17 @@ export function useRuntimeTools(options: UseRuntimeToolsOptions): UseRuntimeTool
       dynamicTools.push(
         createOpenWidgetTool(widgetStore, {
           executeWidget: ({ state }) => executeWidgetRuntime(state, openWidgetRuntimeHost)
+        })
+      );
+    }
+    if (hasActiveWidget) {
+      dynamicTools.push(
+        createGetWidgetTool(hasActiveWidget, {
+          isCurrent: (): boolean => widgetToolContextRegistry.getCurrentContext() === hasActiveWidget
+        }),
+        createEditWidgetTool(hasActiveWidget, {
+          confirm: options.confirm,
+          isCurrent: (): boolean => widgetToolContextRegistry.getCurrentContext() === hasActiveWidget
         })
       );
     }

@@ -386,6 +386,8 @@ describe('BTextMethod', (): void => {
     expect(wrapper.find('.b-text-method__section-meta').exists()).toBe(false);
     expect(wrapper.find('.b-text-method__footer-actions').exists()).toBe(false);
 
+    // 添加参数按钮仅在选中函数后出现在参数区头部，而非 section meta / footer actions
+    await wrapper.find('[data-method-value="refreshList"]').trigger('click');
     await findButtonByText(wrapper, '添加参数').trigger('click');
 
     expect(wrapper.findAll('.b-text-method-test-input')).toHaveLength(1);

@@ -34,7 +34,7 @@ import { QUESTION_TOOL_NAME, createQuestionTool, type PendingQuestionSnapshot } 
 import { createBuiltinShellCommandTool, RUN_SHELL_COMMAND_TOOL_NAME } from './ShellTool';
 import { createSkillTool, SKILL_TOOL_NAME, type SkillStoreLike } from './SkillTool';
 import { TODO_WRITE_TOOL_NAME, createBuiltinTodoWriteTool } from './TodoWriteTool';
-import { createWidgetTool, OPEN_WIDGET_TOOL_NAME, WIDGET_TOOL_NAME, type WidgetStoreLike } from './WidgetTool';
+import { createWidgetTool, EDIT_WIDGET_TOOL_NAME, GET_WIDGET_TOOL_NAME, OPEN_WIDGET_TOOL_NAME, WIDGET_TOOL_NAME, type WidgetStoreLike } from './WidgetTool';
 
 // 重新导出工具名称
 export {
@@ -63,8 +63,7 @@ export { RUN_SHELL_COMMAND_TOOL_NAME } from './ShellTool';
 export { SKILL_TOOL_NAME } from './SkillTool';
 export { TODO_WRITE_TOOL_NAME } from './TodoWriteTool';
 export { EDIT_MEMORY_TOOL_NAME } from './MemoryTool';
-export { WIDGET_TOOL_NAME } from './WidgetTool';
-export { OPEN_WIDGET_TOOL_NAME } from './WidgetTool';
+export { EDIT_WIDGET_TOOL_NAME, GET_WIDGET_TOOL_NAME, OPEN_WIDGET_TOOL_NAME, WIDGET_TOOL_NAME } from './WidgetTool';
 
 /** MCP 工具 store 接口，仅声明条件注册所需字段。 */
 export interface MCPStoreLike {
@@ -116,13 +115,14 @@ export const CONDITIONAL_BUILTIN_READONLY_TOOL_NAMES = [
   ...getToolNamesByExposure('conditional-readonly'),
   SKILL_TOOL_NAME,
   WIDGET_TOOL_NAME,
-  OPEN_WIDGET_TOOL_NAME
+  OPEN_WIDGET_TOOL_NAME,
+  GET_WIDGET_TOOL_NAME
 ] as readonly string[];
 
 /**
  * 条件注册的写工具名称列表（MCP 写操作等，有内容时才注册）。
  */
-export const CONDITIONAL_BUILTIN_WRITABLE_TOOL_NAMES = getToolNamesByExposure('conditional-writable') as readonly string[];
+export const CONDITIONAL_BUILTIN_WRITABLE_TOOL_NAMES = [...getToolNamesByExposure('conditional-writable'), EDIT_WIDGET_TOOL_NAME] as readonly string[];
 
 /**
  * 所有内置工具名称列表（默认 + 条件），用于聊天侧白名单过滤。

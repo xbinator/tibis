@@ -3,7 +3,7 @@
  * @description BChat 主进程 ChatRuntime renderer hook 测试。
  * @vitest-environment jsdom
  */
-import type { AIMCPRequestConfig, AIToolContext, AIToolExecutor } from 'types/ai';
+import type { AIMCPRequestConfig, AIToolContext, AIToolExecutor, AITransportTool } from 'types/ai';
 import type { ChatMessageFile, ChatMessageRecord, ChatMessageToolPart } from 'types/chat';
 import type { WidgetRenderContext } from 'types/widget';
 import { effectScope, reactive, ref } from 'vue';
@@ -105,9 +105,9 @@ function createOpenWidgetToolPart(
   id = 'tool-part-open-widget',
   renderContext: WidgetRenderContext = {
     input: {
-        city: '上海'
-      },
-      output: undefined,
+      city: '上海'
+    },
+    output: undefined,
     data: {}
   }
 ): ChatMessageToolPart {
@@ -130,6 +130,22 @@ function createOpenWidgetToolPart(
         renderContext,
         execution: { status: 'success', output: undefined }
       }
+    }
+  };
+}
+
+/**
+ * 创建 runtime 发送给主进程的工具 schema 快照。
+ * @param name - 工具名称
+ * @returns transport tool
+ */
+function createTransportTool(name: string): AITransportTool {
+  return {
+    name,
+    description: name,
+    parameters: {
+      type: 'object',
+      properties: {}
     }
   };
 }
@@ -358,9 +374,9 @@ describe('useChatRuntime', (): void => {
           value: {},
           renderContext: {
             input: {
-                city: '杭州'
-              },
-              output: undefined,
+              city: '杭州'
+            },
+            output: undefined,
             data: {}
           },
           execution: { status: 'success', output: undefined }
@@ -397,11 +413,11 @@ describe('useChatRuntime', (): void => {
         result: {
           data: {
             renderContext: {
-                            input: {
+              input: {
                 city: '杭州'
               },
-                output: undefined
-              }
+              output: undefined
+            }
           }
         }
       });
@@ -1355,13 +1371,18 @@ describe('useChatRuntime', (): void => {
     const scope = effectScope();
 
     await scope.run(async () => {
-      useChatRuntime({
+      const runtime = useChatRuntime({
         messages,
         getSessionId: () => 'session-1',
         tools: [tool],
         getToolContext: () => context
       });
 
+      await runtime.send({
+        sessionId: 'session-1',
+        content: 'read file',
+        tools: [createTransportTool('read_file')]
+      });
       emitRuntimeEvent(listeners, 'toolRequest', {
         runtimeId: 'runtime-1',
         sessionId: 'session-1',
@@ -1385,6 +1406,63 @@ describe('useChatRuntime', (): void => {
     scope.stop();
   });
 
+  it('executes renderer tool requests with the tools captured when the runtime started', async (): Promise<void> => {
+    const messages = ref<Message[]>([]);
+    const toolAtSend: AIToolExecutor = {
+      definition: {
+        name: 'edit_widget',
+        description: 'Edit Widget A',
+        source: 'builtin',
+        riskLevel: 'write',
+        parameters: { type: 'object', properties: {} }
+      },
+      execute: vi.fn()
+    };
+    const toolAfterPageSwitch: AIToolExecutor = {
+      definition: {
+        name: 'edit_widget',
+        description: 'Edit Widget B',
+        source: 'builtin',
+        riskLevel: 'write',
+        parameters: { type: 'object', properties: {} }
+      },
+      execute: vi.fn()
+    };
+    let currentTools = [toolAtSend];
+    const scope = effectScope();
+
+    await scope.run(async () => {
+      const runtime = useChatRuntime({
+        messages,
+        getSessionId: () => 'session-1',
+        tools: () => currentTools
+      });
+
+      await runtime.send({
+        sessionId: 'session-1',
+        content: 'edit widget',
+        tools: [createTransportTool('edit_widget')]
+      });
+      currentTools = [toolAfterPageSwitch];
+
+      emitRuntimeEvent(listeners, 'toolRequest', {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        toolCallId: 'tool-call-1',
+        toolName: 'edit_widget',
+        input: { patches: [] }
+      });
+      await Promise.resolve();
+
+      const expectedToolCall = { toolCallId: 'tool-call-1', toolName: 'edit_widget', input: { patches: [] } };
+      expect(executeToolCallMock).toHaveBeenCalledWith(expectedToolCall, [toolAtSend], undefined, { runtimeId: 'runtime-1' });
+    });
+
+    scope.stop();
+  });
+
   it('converts renderer tool results into cloneable data before crossing IPC', async (): Promise<void> => {
     const messages = ref<Message[]>([]);
     const scope = effectScope();
@@ -1401,12 +1479,16 @@ describe('useChatRuntime', (): void => {
     });
 
     await scope.run(async () => {
-      useChatRuntime({
+      const runtime = useChatRuntime({
         messages,
         getSessionId: () => 'session-1',
         tools: []
       });
 
+      await runtime.send({
+        sessionId: 'session-1',
+        content: 'read file'
+      });
       emitRuntimeEvent(listeners, 'toolRequest', {
         runtimeId: 'runtime-1',
         sessionId: 'session-1',
@@ -1436,12 +1518,16 @@ describe('useChatRuntime', (): void => {
     executeToolCallMock.mockRejectedValueOnce(error);
 
     await scope.run(async () => {
-      useChatRuntime({
+      const runtime = useChatRuntime({
         messages,
         getSessionId: () => 'session-1',
         tools: []
       });
 
+      await runtime.send({
+        sessionId: 'session-1',
+        content: 'write file'
+      });
       emitRuntimeEvent(listeners, 'toolRequest', {
         runtimeId: 'runtime-1',
         sessionId: 'session-1',

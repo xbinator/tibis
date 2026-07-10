@@ -9,6 +9,7 @@ import { defineComponent, nextTick } from 'vue';
 import type { ComponentPublicInstance, PropType } from 'vue';
 import { shallowMount, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { WidgetToolContext } from '@/ai/tools/context/widget';
 import type { WidgetData, WidgetElement, WidgetElementLoopConfig, WidgetSelectTarget } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
@@ -26,7 +27,14 @@ const groupSelectionMock = vi.hoisted(() => vi.fn());
 const ungroupSelectionMock = vi.hoisted(() => vi.fn());
 const deleteSelectionMock = vi.hoisted(() => vi.fn());
 const reorderSelectionMock = vi.hoisted(() => vi.fn());
+const replaceDocumentValueMock = vi.hoisted(() => vi.fn());
 const nanoidMock = vi.hoisted(() => vi.fn<() => string>());
+const widgetToolContextRegistryMock = vi.hoisted(() => ({
+  register: vi.fn(),
+  unregister: vi.fn(),
+  setCurrent: vi.fn(),
+  clearCurrent: vi.fn()
+}));
 const widgetDataMock = vi.hoisted((): { value: WidgetData } => ({
   value: {
     name: '',
@@ -54,6 +62,28 @@ const widgetDataMock = vi.hoisted((): { value: WidgetData } => ({
   }
 }));
 
+/** Widget 页面测试用文件状态。 */
+interface WidgetFileStateMock {
+  /** 文件唯一 ID。 */
+  id: string;
+  /** 文件名主体。 */
+  name: string;
+  /** 文件扩展名。 */
+  ext: string;
+  /** 文件磁盘路径。 */
+  path: string | null;
+  /** 文件内容。 */
+  content: string;
+}
+
+/** Widget 页面测试用文件状态 ref。 */
+interface WidgetFileStateRefMock {
+  /** 当前文件状态。 */
+  value: WidgetFileStateMock;
+}
+
+const sessionFileStateMock = vi.hoisted((): { current: WidgetFileStateRefMock | null } => ({ current: null }));
+
 vi.mock('nanoid', () => ({
   nanoid: nanoidMock
 }));
@@ -73,35 +103,68 @@ vi.mock('@/stores/workspace/tabs', () => ({
   })
 }));
 
-vi.mock('@/hooks/useFileSession', () => ({
-  useFileSession: () => ({
-    currentTitle: {
-      value: 'board.json',
-      __v_isRef: true
-    },
-    fileState: {
-      value: {
-        id: 'widget-1',
-        name: 'board',
-        ext: 'json',
-        path: null,
-        content: ''
-      },
-      __v_isRef: true
-    },
-    data: widgetDataMock,
-    actions: {
-      onSave: onSaveMock,
-      onSaveAs: onSaveAsMock,
-      onRename: onRenameMock,
-      onDelete: vi.fn(),
-      onShowInFolder: vi.fn(),
-      onCopyPath: vi.fn(),
-      onCopyRelativePath: vi.fn(),
-      onBlur: vi.fn()
-    }
-  })
+vi.mock('@/ai/tools/context/widget', () => ({
+  widgetToolContextRegistry: widgetToolContextRegistryMock
 }));
+
+vi.mock('@/hooks/useFileSession', async (): Promise<Record<string, unknown>> => {
+  const { ref } = await vi.importActual<typeof import('vue')>('vue');
+  const fileState = ref<WidgetFileStateMock>({
+    id: 'widget-1',
+    name: 'board',
+    ext: 'json',
+    path: null,
+    content: ''
+  });
+  sessionFileStateMock.current = fileState;
+
+  return {
+    useFileSession: () => ({
+      currentTitle: {
+        value: 'board.json',
+        __v_isRef: true
+      },
+      fileState,
+      data: widgetDataMock,
+      actions: {
+        onSave: onSaveMock,
+        onSaveAs: onSaveAsMock,
+        onRename: onRenameMock,
+        onDelete: vi.fn(),
+        onShowInFolder: vi.fn(),
+        onCopyPath: vi.fn(),
+        onCopyRelativePath: vi.fn(),
+        onBlur: vi.fn()
+      }
+    })
+  };
+});
+
+/**
+ * 创建 Widget 页面测试用文件状态。
+ * @returns 文件状态
+ */
+function createSessionFileState(): WidgetFileStateMock {
+  return {
+    id: 'widget-1',
+    name: 'board',
+    ext: 'json',
+    path: null,
+    content: ''
+  };
+}
+
+/**
+ * 获取 Widget 页面测试用文件状态 ref。
+ * @returns 文件状态 ref
+ */
+function getSessionFileState(): WidgetFileStateRefMock {
+  if (!sessionFileStateMock.current) {
+    throw new Error('Widget file session mock is not initialized');
+  }
+
+  return sessionFileStateMock.current;
+}
 
 /**
  * 创建页面图层测试元素。
@@ -193,7 +256,8 @@ function createBWidgetStub(): ReturnType<typeof defineComponent> {
         groupSelection: groupSelectionMock,
         ungroupSelection: ungroupSelectionMock,
         deleteSelection: deleteSelectionMock,
-        reorderSelection: reorderSelectionMock
+        reorderSelection: reorderSelectionMock,
+        replaceDocumentValue: replaceDocumentValueMock
       });
 
       return {};
@@ -260,8 +324,81 @@ describe('WidgetPage', (): void => {
     ungroupSelectionMock.mockClear();
     deleteSelectionMock.mockClear();
     reorderSelectionMock.mockClear();
+    replaceDocumentValueMock.mockClear();
+    widgetToolContextRegistryMock.register.mockClear();
+    widgetToolContextRegistryMock.unregister.mockClear();
+    widgetToolContextRegistryMock.setCurrent.mockClear();
+    widgetToolContextRegistryMock.clearCurrent.mockClear();
     nanoidMock.mockReset();
     widgetDataMock.value = createDefaultWidgetData();
+    getSessionFileState().value = createSessionFileState();
+  });
+
+  it('owns the Widget tool context lifecycle and delegates document replacement to BWidget', async (): Promise<void> => {
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: createBWidgetStub(),
+          Icon: true
+        }
+      }
+    });
+    await nextTick();
+
+    expect(widgetToolContextRegistryMock.register).toHaveBeenCalledWith('widget-1', expect.any(Object));
+    expect(widgetToolContextRegistryMock.setCurrent).not.toHaveBeenCalled();
+    getSessionFileState().value = createSessionFileState();
+    await nextTick();
+
+    expect(widgetToolContextRegistryMock.setCurrent).toHaveBeenCalledWith('widget-1');
+    const [, context] = widgetToolContextRegistryMock.register.mock.calls[0] as [string, WidgetToolContext];
+    const replacement: WidgetData = {
+      ...createDefaultWidgetData(),
+      name: 'next-widget'
+    };
+
+    context.replaceValue(replacement);
+
+    expect(context.getSnapshot()).toEqual({
+      file: {
+        id: 'widget-1',
+        name: 'board',
+        ext: 'json',
+        path: null,
+        title: 'board.json'
+      },
+      value: widgetDataMock.value
+    });
+    expect(replaceDocumentValueMock).toHaveBeenCalledWith(replacement);
+    wrapper.unmount();
+
+    expect(widgetToolContextRegistryMock.unregister).toHaveBeenCalledWith('widget-1');
+  });
+
+  it('does not activate the Widget tool context until the file session has replaced its initial state', async (): Promise<void> => {
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: createBWidgetStub(),
+          Icon: true
+        }
+      }
+    });
+    expect(widgetToolContextRegistryMock.setCurrent).not.toHaveBeenCalled();
+    getSessionFileState().value = createSessionFileState();
+
+    await nextTick();
+
+    expect(widgetToolContextRegistryMock.setCurrent).toHaveBeenCalledWith('widget-1');
+    wrapper.unmount();
+  });
+
+  it('builds Widget tool snapshots from the live file session without caching a document descriptor', (): void => {
+    const source = readFileSync('src/views/widget/index.vue', 'utf-8');
+
+    expect(source).not.toContain('widgetToolDocument');
+    expect(source).not.toContain('DocumentId');
+    expect(source).not.toContain('documentId');
   });
 
   it('adds the widget file tab with resolved file title', (): void => {

@@ -91,6 +91,7 @@ import type {
 } from './types';
 import type { WidgetCanvasPointProjection } from './utils/widgetGeometry';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { cloneDeep } from 'lodash-es';
 import { useShortcuts } from '@/hooks/useShortcuts';
 import WidgetContextMenu from './components/ContextMenu.vue';
 import InfiniteViewport from './components/InfiniteViewport.vue';
@@ -453,6 +454,18 @@ useModelSync({
   dataItem,
   onExternalModelReset: handleExternalModelReset
 });
+
+/**
+ * 替换完整 Widget 文档值，并让元素树替换进入画布历史。
+ * @param value - 待替换的 Widget 文档值
+ */
+function replaceDocumentValue(value: WidgetData): void {
+  board.replaceElements(value.elements);
+  dataItem.value = cloneDeep({
+    ...value,
+    elements: board.state.value.elements
+  });
+}
 
 /**
  * 读取元素右键菜单应使用的选区。
@@ -1510,6 +1523,7 @@ onBeforeUnmount((): void => {
 });
 
 defineExpose({
+  replaceDocumentValue,
   createElementFromClientPoint,
   selectElementById,
   selectElementsByIds,

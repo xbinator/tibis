@@ -3,9 +3,28 @@
  * @description AI 工具权限策略执行器。
  */
 import type { AIToolConfirmationAdapter, AIToolConfirmationRequest } from './confirmation';
-import type { AIToolDefinition, AIToolExecutionResult } from 'types/ai';
+import type { AIToolDefinition, AIToolExecutionError, AIToolExecutionResult } from 'types/ai';
 import { useToolPermissionStore } from '@/stores/chat/toolPermission';
 import { createToolCancelledResult, createToolFailureResult, createToolSuccessResult } from './results';
+
+/**
+ * 携带明确工具错误码的受控操作异常。
+ */
+export class AIToolOperationError extends Error {
+  /** 工具执行错误码 */
+  readonly code: AIToolExecutionError['code'];
+
+  /**
+   * 创建受控工具操作异常。
+   * @param code - 工具执行错误码
+   * @param message - 错误说明
+   */
+  constructor(code: AIToolExecutionError['code'], message: string) {
+    super(message);
+    this.name = 'AIToolOperationError';
+    this.code = code;
+  }
+}
 
 /**
  * 权限包装执行选项。
@@ -28,6 +47,15 @@ interface ExecuteWithPermissionOptions<TResult> {
  */
 function getExecutionErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : '工具执行失败';
+}
+
+/**
+ * 获取执行错误对应的工具错误码。
+ * @param error - 捕获到的错误
+ * @returns 明确受控错误码或通用执行失败
+ */
+function getExecutionErrorCode(error: unknown): AIToolExecutionError['code'] {
+  return error instanceof AIToolOperationError ? error.code : 'EXECUTION_FAILED';
 }
 
 /**
@@ -92,7 +120,7 @@ async function executeOperation<TResult>(options: ExecuteWithPermissionOptions<T
   } catch (error) {
     const errorMessage = getExecutionErrorMessage(error);
     await options.adapter.onExecutionComplete?.(options.request, { status: 'failure', errorMessage });
-    return createToolFailureResult(options.definition.name, 'EXECUTION_FAILED', errorMessage);
+    return createToolFailureResult(options.definition.name, getExecutionErrorCode(error), errorMessage);
   }
 }
 

@@ -27,6 +27,7 @@ import {
   moveWidgetElements,
   pasteWidgetElements,
   redoWidgetBoard,
+  replaceWidgetBoardElements,
   reorderWidgetElement,
   reorderWidgetSelection,
   resizeWidgetElements,
@@ -146,6 +147,8 @@ export interface UseWidgetBoardReturn {
   setSelectionLocked: (locked: boolean) => void;
   /** 设置选区 */
   setSelection: (selection: string[]) => void;
+  /** 将外部文档元素替换为一条历史记录 */
+  replaceElements: (elements: WidgetElement[]) => void;
   /** 重置Widget状态 */
   reset: (snapshot?: Partial<WidgetBoardSnapshot>) => void;
 }
@@ -357,6 +360,7 @@ export function useWidgetBoard(snapshot?: Partial<WidgetBoardSnapshot>): UseWidg
     setSelection: (selection: string[]): void => {
       state.value = { ...state.value, selection: normalizeWidgetElementSelection(state.value.elements, selection) };
     },
+    replaceElements: (elements: WidgetElement[]): void => setState(replaceWidgetBoardElements(state.value, elements)),
     reset: (nextSnapshot?: Partial<WidgetBoardSnapshot>): void => {
       setState(createWidgetBoardState(nextSnapshot));
     }

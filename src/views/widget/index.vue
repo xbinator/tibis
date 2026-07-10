@@ -49,10 +49,11 @@
 <script setup lang="ts">
 import type { WidgetMultiSelectLayoutChange } from './types';
 import type { CSSProperties } from 'vue';
-import { computed, nextTick, onActivated, onDeactivated, ref, watch } from 'vue';
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { cloneDeep } from 'lodash-es';
 import { nanoid } from 'nanoid';
+import { widgetToolContextRegistry, type WidgetDocumentSnapshot, type WidgetToolContext } from '@/ai/tools/context/widget';
 import type BWidgetComponent from '@/components/BWidget/index.vue';
 import type { WidgetData, WidgetElement, WidgetElementStyleChange, WidgetLayerAction, WidgetSelectTarget } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
@@ -83,6 +84,10 @@ const route = useRoute();
 const tabsStore = useTabsStore();
 const fileId = ref(String(route.params.id || ''));
 const isActive = ref(true);
+/** 页面根组件是否已经挂载。 */
+const isPageMounted = ref(false);
+/** Widget 文件会话是否已完成首次内容回填。 */
+const isWidgetSessionLoaded = ref(false);
 const widgetRef = ref<InstanceType<typeof BWidgetComponent>>();
 const canvasRef = ref<HTMLElement | null>(null);
 const routePath = computed<string>(() => route.fullPath || `/widget/${fileId.value}`);
@@ -107,6 +112,80 @@ const settingsWidth = ref(300);
 const selectedTarget = ref<WidgetSelectTarget>(session.data.value.metadata);
 /** 当前侧栏需要高亮的元素 ID。 */
 const selectedElementIds = ref<string[]>([]);
+/** 当前 Widget 编辑器是否可以向 BWidget 激活工具上下文。 */
+const isWidgetEditorActive = computed<boolean>(() => isActive.value && isPageMounted.value && isWidgetSessionLoaded.value);
+/** 已注册到 Widget 工具上下文注册表的 Widget ID。 */
+let registeredWidgetToolId: string | null = null;
+
+/**
+ * 创建与页面响应式状态隔离的 Widget 文档快照。
+ * @returns Widget 文档快照
+ */
+function createWidgetToolSnapshot(): WidgetDocumentSnapshot {
+  return cloneDeep({
+    file: {
+      id: session.fileState.value.id,
+      name: session.fileState.value.name,
+      ext: session.fileState.value.ext,
+      path: session.fileState.value.path,
+      title: session.currentTitle.value
+    },
+    value: session.data.value
+  });
+}
+
+/**
+ * 委托 BWidget 替换完整文档值，其中元素树替换进入画布历史。
+ * @param value - 待替换的 Widget 文档值
+ */
+function replaceWidgetToolValue(value: WidgetData): void {
+  if (!widgetRef.value) {
+    throw new Error('Widget 编辑器不可用');
+  }
+
+  widgetRef.value.replaceDocumentValue(value);
+}
+
+/**
+ * 注销当前页面已注册的 Widget 工具上下文。
+ */
+function unregisterWidgetToolContext(): void {
+  if (!registeredWidgetToolId) {
+    return;
+  }
+
+  widgetToolContextRegistry.unregister(registeredWidgetToolId);
+  registeredWidgetToolId = null;
+}
+
+/**
+ * 同步当前页面的 Widget 工具上下文注册与激活状态。
+ */
+function syncWidgetToolContext(): void {
+  const widgetId = session.fileState.value.id;
+  if (!widgetId) {
+    unregisterWidgetToolContext();
+    return;
+  }
+
+  if (registeredWidgetToolId !== widgetId) {
+    unregisterWidgetToolContext();
+    const context: WidgetToolContext = {
+      id: widgetId,
+      getSnapshot: createWidgetToolSnapshot,
+      replaceValue: replaceWidgetToolValue
+    };
+    widgetToolContextRegistry.register(widgetId, context);
+    registeredWidgetToolId = widgetId;
+  }
+
+  if (isWidgetEditorActive.value) {
+    widgetToolContextRegistry.setCurrent(widgetId);
+    return;
+  }
+
+  widgetToolContextRegistry.clearCurrent(widgetId);
+}
 
 /**
  * Widget 页面根节点样式变量。
@@ -840,10 +919,19 @@ function handleSidebarElementsMove(sourceElementIds: string[], targetElementIds:
 watch(selectedTarget, syncSidebarSelectedElementIds, { immediate: true });
 watch(() => session.data.value.elements, syncSelectedTargetFromElementTree, { deep: true });
 watch([fileId, session.currentTitle], syncWidgetTab, { immediate: true });
+// useFileSession 在首次加载时会整体替换 fileState；此时 data 也已在同一批更新中回填。
+watch(session.fileState, (): void => {
+  isWidgetSessionLoaded.value = true;
+});
+watch([(): string => session.fileState.value.id, isWidgetEditorActive], syncWidgetToolContext, { immediate: true });
 
 useBindings({
   isActive,
   actions: session.actions
+});
+
+onMounted((): void => {
+  isPageMounted.value = true;
 });
 
 onActivated((): void => {
@@ -853,6 +941,8 @@ onActivated((): void => {
 onDeactivated((): void => {
   isActive.value = false;
 });
+
+onBeforeUnmount(unregisterWidgetToolContext);
 </script>
 
 <style lang="less" scoped>

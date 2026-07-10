@@ -13,6 +13,7 @@ import {
   moveWidgetElements,
   pasteWidgetElements,
   redoWidgetBoard,
+  replaceWidgetBoardElements,
   reorderWidgetElement,
   reorderWidgetSelection,
   resizeWidgetElements,
@@ -127,6 +128,17 @@ describe('boardTransforms', (): void => {
     expect(undone.history.future).toHaveLength(1);
     expect(redone.elements).toHaveLength(1);
     expect(redone.history.future).toHaveLength(0);
+  });
+
+  it('replaces AI-edited elements as one undoable history entry', (): void => {
+    const initial = createWidgetBoardState({ elements: [createShapeElement('node-1')] });
+    const replacement = createShapeElement('node-2');
+    const updated = replaceWidgetBoardElements(initial, [replacement]);
+    const undone = undoWidgetBoard(updated);
+
+    expect(updated.elements.map((element: WidgetElement): string => element.id)).toEqual(['node-2']);
+    expect(updated.history.past).toHaveLength(1);
+    expect(undone.elements.map((element: WidgetElement): string => element.id)).toEqual(['node-1']);
   });
 
   it('normalizes group children recursively', (): void => {

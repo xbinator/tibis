@@ -2,16 +2,24 @@
  * @file WidgetTool/index.ts
  * @description Widget 工具实现，LLM 通过 widget 读取说明，通过 open_widget 打开聊天小组件。
  */
-import type { AIToolContext, AIToolExecutionResult, AIToolExecutor } from 'types/ai';
+import type { AIToolContext, AIToolDefinition, AIToolExecutionResult, AIToolExecutor } from 'types/ai';
 import type { WidgetContract, WidgetDisplayPayload, WidgetExecutionResult, WidgetRenderContext } from 'types/widget';
 import { cloneDeep, isPlainObject } from 'lodash-es';
+import type { AIToolConfirmationAdapter } from '@/ai/tools/confirmation';
+import type { WidgetDocumentSnapshot, WidgetToolContext } from '@/ai/tools/context/widget';
+import { AIToolOperationError, executeWithPermission } from '@/ai/tools/permission';
 import type { WidgetDefinition } from '@/ai/widget/types';
 import { createToolFailureResult, createToolSuccessResult } from '../../results';
+import { applyWidgetDocumentPatches, validateWidgetDocumentPatches, WidgetDocumentPatchError, type WidgetDocumentPatch } from './patch';
 
 /** Widget 工具名称。 */
 export const WIDGET_TOOL_NAME = 'widget';
 /** 打开 Widget 工具名称。 */
 export const OPEN_WIDGET_TOOL_NAME = 'open_widget';
+/** 获取当前 Widget 编辑页工具名称。 */
+export const GET_WIDGET_TOOL_NAME = 'get_widget';
+/** 编辑当前 Widget 编辑页工具名称。 */
+export const EDIT_WIDGET_TOOL_NAME = 'edit_widget';
 
 /** Widget 工具 description 最大长度，避免大量小组件挤占上下文。 */
 const MAX_WIDGET_DESCRIPTION_LENGTH = 4000;
@@ -55,6 +63,30 @@ export interface OpenWidgetToolInput {
   id: string;
   /** 绑定到 Widget input 的数据 */
   input?: Record<string, unknown>;
+}
+
+/**
+ * 编辑当前 Widget 输入。
+ */
+export interface EditWidgetInput {
+  /** 按顺序应用到当前 WidgetData 的结构化 Patch */
+  patches: WidgetDocumentPatch[];
+}
+
+/**
+ * 当前 Widget 页面工具创建选项。
+ */
+export interface WidgetPageToolOptions {
+  /** 判断创建工具时捕获的页面是否仍为当前页面 */
+  isCurrent: () => boolean;
+}
+
+/**
+ * 编辑当前 Widget 工具创建选项。
+ */
+export interface EditWidgetToolOptions extends WidgetPageToolOptions {
+  /** 写操作确认适配器 */
+  confirm: AIToolConfirmationAdapter;
 }
 
 /**
@@ -346,6 +378,170 @@ export function createOpenWidgetTool(store: WidgetStoreLike, options: OpenWidget
       }
 
       return createToolSuccessResult(OPEN_WIDGET_TOOL_NAME, await createWidgetDisplayPayload(widget, input, context, options));
+    }
+  };
+}
+
+/**
+ * 创建 Widget 页面上下文失效结果。
+ * @param toolName - 当前工具名称
+ * @returns 工具失败结果
+ */
+function createStaleWidgetContextResult(toolName: string): AIToolExecutionResult<never> {
+  return createToolFailureResult(toolName, 'STALE_CONTEXT', '当前 Widget 编辑页已切换或不再激活');
+}
+
+/**
+ * 创建获取当前 Widget 编辑页工具。
+ * @param context - 创建工具时捕获的 Widget 页面上下文
+ * @param options - 当前上下文判断选项
+ * @returns get_widget 工具执行器
+ */
+export function createGetWidgetTool(context: WidgetToolContext, options: WidgetPageToolOptions): AIToolExecutor<Record<string, never>, WidgetDocumentSnapshot> {
+  return {
+    definition: {
+      name: GET_WIDGET_TOOL_NAME,
+      description: 'Read the complete in-memory WidgetData and file metadata from the currently active Widget editor page.',
+      source: 'builtin',
+      riskLevel: 'read',
+      permissionCategory: 'document',
+      requiresActiveDocument: false,
+      parameters: {
+        type: 'object',
+        properties: {},
+        additionalProperties: false
+      }
+    },
+    async execute(): Promise<AIToolExecutionResult<WidgetDocumentSnapshot>> {
+      if (!options.isCurrent()) {
+        return createStaleWidgetContextResult(GET_WIDGET_TOOL_NAME);
+      }
+
+      return createToolSuccessResult(GET_WIDGET_TOOL_NAME, cloneDeep(context.getSnapshot()));
+    }
+  };
+}
+
+/**
+ * 创建 edit_widget 参数 schema。
+ * @returns edit_widget 参数 schema
+ */
+function createEditWidgetParameters(): AIToolDefinition['parameters'] {
+  return {
+    type: 'object',
+    properties: {
+      patches: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 100,
+        description: 'Ordered set/delete operations applied from the WidgetData root.',
+        items: {
+          oneOf: [
+            {
+              type: 'object',
+              properties: {
+                op: { type: 'string', enum: ['set'] },
+                path: {
+                  type: 'array',
+                  minItems: 1,
+                  items: { oneOf: [{ type: 'string' }, { type: 'integer', minimum: 0 }] }
+                },
+                value: {}
+              },
+              required: ['op', 'path', 'value'],
+              additionalProperties: false
+            },
+            {
+              type: 'object',
+              properties: {
+                op: { type: 'string', enum: ['delete'] },
+                path: {
+                  type: 'array',
+                  minItems: 2,
+                  items: { oneOf: [{ type: 'string' }, { type: 'integer', minimum: 0 }] }
+                }
+              },
+              required: ['op', 'path'],
+              additionalProperties: false
+            }
+          ]
+        }
+      }
+    },
+    required: ['patches'],
+    additionalProperties: false
+  };
+}
+
+/**
+ * 格式化 Widget 编辑确认中的目标文件说明。
+ * @param snapshot - 当前 Widget 文档快照
+ * @returns 确认文案中的目标说明
+ */
+function formatWidgetEditTarget(snapshot: WidgetDocumentSnapshot): string {
+  const title = snapshot.file.title || snapshot.file.name || snapshot.file.id;
+  return snapshot.file.path ? `${title} (${snapshot.file.path})` : title;
+}
+
+/**
+ * 创建编辑当前 Widget 编辑页工具。
+ * @param context - 创建工具时捕获的 Widget 页面上下文
+ * @param options - 权限与当前上下文判断选项
+ * @returns edit_widget 工具执行器
+ */
+export function createEditWidgetTool(context: WidgetToolContext, options: EditWidgetToolOptions): AIToolExecutor<EditWidgetInput, WidgetDocumentSnapshot> {
+  const definition: AIToolDefinition = {
+    name: EDIT_WIDGET_TOOL_NAME,
+    description:
+      'Edit the in-memory WidgetData on the active Widget editor page with atomic structured patches. ' +
+      'Use set/delete operations with path arrays rooted at WidgetData.',
+    source: 'builtin',
+    riskLevel: 'write',
+    permissionCategory: 'document',
+    requiresActiveDocument: false,
+    parameters: createEditWidgetParameters()
+  };
+
+  return {
+    definition,
+    async execute(input: EditWidgetInput): Promise<AIToolExecutionResult<WidgetDocumentSnapshot>> {
+      const patchValidation = validateWidgetDocumentPatches(input?.patches);
+      if (!patchValidation.valid) {
+        return createToolFailureResult(EDIT_WIDGET_TOOL_NAME, 'INVALID_INPUT', patchValidation.message);
+      }
+      if (!options.isCurrent()) {
+        return createStaleWidgetContextResult(EDIT_WIDGET_TOOL_NAME);
+      }
+      const confirmationSnapshot = context.getSnapshot();
+
+      return executeWithPermission({
+        definition,
+        adapter: options.confirm,
+        request: {
+          toolName: EDIT_WIDGET_TOOL_NAME,
+          title: '编辑当前小组件',
+          description: `应用 ${patchValidation.patches.length} 个结构化 Patch 到 ${formatWidgetEditTarget(confirmationSnapshot)}`,
+          riskLevel: 'write',
+          beforeText: JSON.stringify(patchValidation.patches, null, 2)
+        },
+        operation: async (): Promise<WidgetDocumentSnapshot> => {
+          if (!options.isCurrent()) {
+            throw new AIToolOperationError('STALE_CONTEXT', '当前 Widget 编辑页已切换或不再激活');
+          }
+
+          try {
+            const latestSnapshot = context.getSnapshot();
+            const nextValue = applyWidgetDocumentPatches(latestSnapshot.value, patchValidation.patches);
+            await context.replaceValue(nextValue);
+            return cloneDeep(context.getSnapshot());
+          } catch (error: unknown) {
+            if (error instanceof WidgetDocumentPatchError) {
+              throw new AIToolOperationError('INVALID_INPUT', error.message);
+            }
+            throw error;
+          }
+        }
+      });
     }
   };
 }

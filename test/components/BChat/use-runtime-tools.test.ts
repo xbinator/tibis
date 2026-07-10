@@ -4,8 +4,15 @@
  */
 import { ref } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createOpenWidgetTool, type OpenWidgetRuntimeState, type OpenWidgetToolOptions } from '@/ai/tools/builtin/WidgetTool';
+import {
+  createEditWidgetTool,
+  createGetWidgetTool,
+  createOpenWidgetTool,
+  type OpenWidgetRuntimeState,
+  type OpenWidgetToolOptions
+} from '@/ai/tools/builtin/WidgetTool';
 import type { WebviewToolContext } from '@/ai/tools/context/webview';
+import type { WidgetToolContext } from '@/ai/tools/context/widget';
 import { useRuntimeTools } from '@/components/BChat/hooks/useRuntimeTools';
 import type { Message } from '@/components/BChat/utils/types';
 
@@ -54,6 +61,9 @@ const registryMockState = vi.hoisted(() => ({
     getContext: vi.fn(() => undefined)
   },
   webviewToolContextRegistry: {
+    getCurrentContext: vi.fn((): unknown => undefined)
+  },
+  widgetToolContextRegistry: {
     getCurrentContext: vi.fn((): unknown => undefined)
   }
 }));
@@ -106,8 +116,12 @@ const widgetRuntimeMockState = vi.hoisted(() => {
 vi.mock('@/ai/tools/builtin', () => ({
   createBuiltinTools: builtinMockState.createBuiltinTools,
   isBuiltinToolName: vi.fn((toolName: string): boolean =>
-    ['read_current_webpage', 'operate_webpage', 'open_resource', 'read_directory', 'skill', 'widget', 'open_widget'].includes(toolName)
+    ['read_current_webpage', 'operate_webpage', 'open_resource', 'read_directory', 'skill', 'widget', 'open_widget', 'get_widget', 'edit_widget'].includes(
+      toolName
+    )
   ),
+  EDIT_WIDGET_TOOL_NAME: 'edit_widget',
+  GET_WIDGET_TOOL_NAME: 'get_widget',
   OPERATE_WEBPAGE_TOOL_NAME: 'operate_webpage',
   OPEN_RESOURCE_TOOL_NAME: 'open_resource',
   READ_CURRENT_WEBPAGE_TOOL_NAME: 'read_current_webpage',
@@ -122,6 +136,26 @@ vi.mock('@/ai/tools/builtin/SkillTool', () => ({
 }));
 
 vi.mock('@/ai/tools/builtin/WidgetTool', () => ({
+  createEditWidgetTool: vi.fn(() => ({
+    definition: {
+      name: 'edit_widget',
+      description: 'edit_widget',
+      source: 'builtin',
+      riskLevel: 'write',
+      parameters: { type: 'object', properties: {} }
+    },
+    execute: async (): Promise<{ toolName: string; status: 'success'; data: null }> => ({ toolName: 'edit_widget', status: 'success', data: null })
+  })),
+  createGetWidgetTool: vi.fn(() => ({
+    definition: {
+      name: 'get_widget',
+      description: 'get_widget',
+      source: 'builtin',
+      riskLevel: 'read',
+      parameters: { type: 'object', properties: {} }
+    },
+    execute: async (): Promise<{ toolName: string; status: 'success'; data: null }> => ({ toolName: 'get_widget', status: 'success', data: null })
+  })),
   createOpenWidgetTool: vi.fn(() => ({
     definition: {
       name: 'open_widget',
@@ -155,6 +189,10 @@ vi.mock('@/ai/tools/context/editor', () => ({
 
 vi.mock('@/ai/tools/context/webview', () => ({
   webviewToolContextRegistry: registryMockState.webviewToolContextRegistry
+}));
+
+vi.mock('@/ai/tools/context/widget', () => ({
+  widgetToolContextRegistry: registryMockState.widgetToolContextRegistry
 }));
 
 vi.mock('@/hooks/useOpenDraft', () => ({
@@ -235,6 +273,7 @@ describe('useRuntimeTools', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     registryMockState.webviewToolContextRegistry.getCurrentContext.mockReturnValue(undefined);
+    registryMockState.widgetToolContextRegistry.getCurrentContext.mockReturnValue(undefined);
     storeMockState.skillStore.initialized = false;
     storeMockState.skillStore.getEnabledSkills.mockReturnValue([]);
     storeMockState.widgetStore.initialized = false;
@@ -274,12 +313,37 @@ describe('useRuntimeTools', () => {
     expect(readActiveToolNames(runtimeTools.getActiveTools)).toContain('open_widget');
   });
 
+  it('exposes Widget editor tools only while a Widget page context is current', (): void => {
+    const context: WidgetToolContext = {
+      id: 'widget-editor-1',
+      getSnapshot: vi.fn(),
+      replaceValue: vi.fn()
+    };
+    const runtimeTools = createRuntimeTools();
+
+    expect(readActiveToolNames(runtimeTools.getActiveTools)).not.toEqual(expect.arrayContaining(['get_widget', 'edit_widget']));
+
+    registryMockState.widgetToolContextRegistry.getCurrentContext.mockReturnValue(context);
+    expect(readActiveToolNames(runtimeTools.getActiveTools)).toEqual(expect.arrayContaining(['get_widget', 'edit_widget']));
+    expect(createGetWidgetTool).toHaveBeenCalledWith(context, expect.objectContaining({ isCurrent: expect.any(Function) }));
+    expect(createEditWidgetTool).toHaveBeenCalledWith(
+      context,
+      expect.objectContaining({
+        confirm: expect.any(Object),
+        isCurrent: expect.any(Function)
+      })
+    );
+
+    const getOptions = vi.mocked(createGetWidgetTool).mock.calls.at(-1)?.[1];
+    expect(getOptions?.isCurrent()).toBe(true);
+    registryMockState.widgetToolContextRegistry.getCurrentContext.mockReturnValue(undefined);
+    expect(getOptions?.isCurrent()).toBe(false);
+    expect(readActiveToolNames(runtimeTools.getActiveTools)).not.toEqual(expect.arrayContaining(['get_widget', 'edit_widget']));
+  });
+
   it('replaces prebuilt open_widget with the renderer executable widget tool', (): void => {
     const staleOpenWidgetTool = builtinMockState.createExecutor('open_widget');
-    builtinMockState.createBuiltinTools.mockReturnValueOnce([
-      builtinMockState.createExecutor('read_current_webpage'),
-      staleOpenWidgetTool
-    ]);
+    builtinMockState.createBuiltinTools.mockReturnValueOnce([builtinMockState.createExecutor('read_current_webpage'), staleOpenWidgetTool]);
     storeMockState.widgetStore.initialized = true;
     storeMockState.widgetStore.getEnabledWidgets.mockReturnValue([
       {
