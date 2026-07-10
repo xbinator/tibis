@@ -1,10 +1,10 @@
 /**
  * @file importer.test.ts
- * @description 小组件 zip 导入解析测试。
+ * @description 小组件文件导入解析测试。
  */
 import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
-import { importWidgetZipFile } from '@/ai/widget';
+import { importWidgetJsonFile, importWidgetZipFile } from '@/ai/widget';
 import { WIDGET_ZIP_MAX_RESOURCE_BYTES } from '@/ai/widget/importer';
 
 /**
@@ -111,5 +111,68 @@ describe('importWidgetZipFile', (): void => {
     );
 
     await expect(importWidgetZipFile(file)).rejects.toThrow(`超过 ${WIDGET_ZIP_MAX_RESOURCE_BYTES} 字节限制`);
+  });
+});
+
+describe('importWidgetJsonFile', (): void => {
+  it('reads widget data from json and suggests id from json filename', async (): Promise<void> => {
+    const file = new File(
+      [
+        JSON.stringify({
+          name: '咖啡菜单',
+          description: '展示咖啡列表',
+          elements: [
+            {
+              id: 'text-1',
+              name: 'text',
+              label: '文本',
+              icon: 'lucide:type',
+              title: '文本节点',
+              position: { x: 12, y: 24 },
+              size: { width: 120, height: 48 },
+              rotation: 0,
+              style: {},
+              metadata: {}
+            }
+          ]
+        })
+      ],
+      'Coffee Menu.json',
+      { type: 'application/json' }
+    );
+
+    const result = await importWidgetJsonFile(file);
+
+    expect(result.suggestedId).toBe('coffee-menu');
+    expect(result.sourceName).toBe('Coffee Menu.json');
+    expect(result.data.name).toBe('咖啡菜单');
+    expect(result.data.description).toBe('展示咖啡列表');
+    expect(result.data.elements).toHaveLength(1);
+    expect(result.resources).toEqual([]);
+  });
+
+  it('uses widget as suggested id when importing a root widget.json file', async (): Promise<void> => {
+    const file = new File(
+      [
+        JSON.stringify({
+          name: '天气',
+          description: '查询天气'
+        })
+      ],
+      'widget.json',
+      { type: 'application/json' }
+    );
+
+    const result = await importWidgetJsonFile(file);
+
+    expect(result.suggestedId).toBe('widget');
+    expect(result.data.name).toBe('天气');
+    expect(result.data.description).toBe('查询天气');
+  });
+
+  it('rejects invalid widget json files with parser feedback', async (): Promise<void> => {
+    const file = new File(['[]'], 'bad.json', { type: 'application/json' });
+
+    await expect(importWidgetJsonFile(file)).rejects.toThrow('widget.json 解析失败：Widget JSON must be an object.');
   });
 });

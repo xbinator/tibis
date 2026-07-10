@@ -8,11 +8,11 @@
       <div class="widget-creator">
         <BUpload
           v-model:drag-over="isImportDragOver"
-          accept=".zip"
+          accept=".zip,.json"
           draggable
           class="widget-creator__dropzone"
           :class="{ 'widget-creator__dropzone--active': isImportDragOver }"
-          @change="handleZipSelected"
+          @change="handleImportFileSelected"
         >
           <div class="widget-creator__dropzone-icon">
             <BIcon icon="lucide:package-plus" :size="26" />
@@ -20,8 +20,8 @@
           <div class="widget-creator__dropzone-title">拖拽文件到此处或点击添加</div>
           <div class="widget-creator__dropzone-badges">
             <span class="widget-creator__badge">.zip</span>
+            <span class="widget-creator__badge">.json</span>
           </div>
-          <div v-if="importedSourceName" class="widget-creator__dropzone-file">{{ importedSourceName }}</div>
         </BUpload>
 
         <AFormItem class="widget-creator__id" label="标识" required v-bind="validateInfos.id">
@@ -54,7 +54,7 @@ import type { Rule } from 'ant-design-vue/es/form';
 import { reactive, ref, shallowRef, watch } from 'vue';
 import { Form, message } from 'ant-design-vue';
 import { cloneDeep } from 'lodash-es';
-import { importWidgetZipFile, type WidgetImportResource } from '@/ai/widget';
+import { importWidgetJsonFile, importWidgetZipFile, type WidgetImportResource, type WidgetImportResult } from '@/ai/widget';
 import type { WidgetData } from '@/components/BWidget/types';
 import { createDefaultWidgetExecuteMethod, isDefaultWidgetExecuteMethod } from '@/components/BWidget/utils/widgetExecuteMethod';
 import { asyncTo } from '@/utils/asyncTo';
@@ -69,7 +69,7 @@ export interface WidgetCreatePayload {
   name: string;
   /** 小组件描述。 */
   description: string;
-  /** 从 zip 导入的小组件数据。 */
+  /** 从导入文件读取的小组件数据。 */
   data?: WidgetData;
   /** 从 zip 导入的小组件资源文件。 */
   resources?: WidgetImportResource[];
@@ -85,6 +85,8 @@ interface Props {
 
 /** 小组件标识符，仅允许英文、数字、下划线和短横线。 */
 const WIDGET_ID_PATTERN = /^[A-Za-z0-9_-]+$/u;
+/** 支持的小组件导入文件扩展名。 */
+const WIDGET_IMPORT_FILE_EXTENSIONS = ['.zip', '.json'] as const;
 
 const props = withDefaults(defineProps<Props>(), {
   existingIds: () => []
@@ -103,16 +105,14 @@ const dataItem = reactive<WidgetCreatePayload>({
   name: '',
   description: ''
 });
-/** 当前是否有 zip 文件拖拽悬停。 */
+/** 当前是否有导入文件拖拽悬停。 */
 const isImportDragOver = ref(false);
 /** 已导入的小组件数据。 */
 const importedWidgetData = shallowRef<WidgetData | null>(null);
 /** 已导入的小组件资源。 */
 const importedWidgetResources = shallowRef<WidgetImportResource[]>([]);
-/** zip 文件名推导出的小组件标识。 */
+/** 导入文件名推导出的小组件标识。 */
 const importedWidgetSuggestedId = ref('');
-/** 已导入来源文件名。 */
-const importedSourceName = ref('');
 
 /**
  * 判断小组件标识是否已经存在。
@@ -171,48 +171,83 @@ function handleIdBlur(): void {
 }
 
 /**
- * 清空 zip 导入态。
+ * 清空文件导入态。
  */
-function resetImportedWidgetPackage(): void {
+function resetImportedWidgetFile(): void {
   importedWidgetData.value = null;
   importedWidgetResources.value = [];
   importedWidgetSuggestedId.value = '';
-  importedSourceName.value = '';
 }
 
 /**
- * 应用 zip 导入结果到创建表单。
- * @param file - zip 文件
+ * 判断导入文件是否为指定扩展名。
+ * @param file - 导入文件
+ * @param extension - 文件扩展名
+ * @returns 是否匹配扩展名
+ */
+function isWidgetImportFileExtension(file: File, extension: (typeof WIDGET_IMPORT_FILE_EXTENSIONS)[number]): boolean {
+  return file.name.trim().toLowerCase().endsWith(extension);
+}
+
+/**
+ * 判断导入建议标识是否应该自动写入表单。
+ * @param suggestedId - 文件名推导出的标识
+ * @returns 是否自动写入标识字段
+ */
+function shouldApplyImportedSuggestedId(suggestedId: string): boolean {
+  return suggestedId !== 'widget';
+}
+
+/**
+ * 读取小组件导入文件。
+ * @param file - 导入文件
+ * @returns 导入结果
+ */
+async function importWidgetFile(file: File): Promise<WidgetImportResult> {
+  if (isWidgetImportFileExtension(file, '.zip')) {
+    return importWidgetZipFile(file);
+  }
+
+  if (isWidgetImportFileExtension(file, '.json')) {
+    return importWidgetJsonFile(file);
+  }
+
+  throw new Error('仅支持 .zip 或 .json 小组件文件');
+}
+
+/**
+ * 应用导入结果到创建表单。
+ * @param file - 导入文件
  * @returns 导入完成信号
  */
-async function importWidgetFromZipFile(file: File): Promise<void> {
-  const result = await importWidgetZipFile(file);
+async function importWidgetFromFile(file: File): Promise<void> {
+  const result = await importWidgetFile(file);
 
   importedWidgetData.value = result.data;
   importedWidgetResources.value = result.resources;
   importedWidgetSuggestedId.value = result.suggestedId;
-  importedSourceName.value = result.sourceName;
-  dataItem.id = result.suggestedId;
+  if (shouldApplyImportedSuggestedId(result.suggestedId)) {
+    dataItem.id = result.suggestedId;
+  }
   dataItem.name = result.data.name || result.suggestedId;
   dataItem.description = result.data.description;
-  message.success(`已导入 ${result.sourceName}`);
 }
 
 /**
- * 处理 zip 文件选择或拖拽添加。
+ * 处理小组件文件选择或拖拽添加。
  * @param files - 文件列表
  * @returns 处理完成信号
  */
-async function handleZipSelected(files: FileList): Promise<void> {
+async function handleImportFileSelected(files: FileList): Promise<void> {
   const file = files[0];
 
   if (!file) {
     return;
   }
 
-  resetImportedWidgetPackage();
+  resetImportedWidgetFile();
 
-  const [error] = await asyncTo(importWidgetFromZipFile(file));
+  const [error] = await asyncTo(importWidgetFromFile(file));
 
   if (error) {
     message.error(error instanceof Error ? error.message : '导入小组件失败');
@@ -275,7 +310,7 @@ watch(
   (open: boolean): void => {
     if (open) {
       resetFields();
-      resetImportedWidgetPackage();
+      resetImportedWidgetFile();
       isImportDragOver.value = false;
     }
   }
@@ -324,18 +359,6 @@ watch(
 .widget-creator__dropzone:hover .widget-creator__dropzone-title,
 .widget-creator__dropzone--active .widget-creator__dropzone-title {
   color: var(--color-primary);
-}
-
-.widget-creator__dropzone-file {
-  max-width: 100%;
-  padding: 2px 8px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 12px;
-  color: var(--color-primary);
-  white-space: nowrap;
-  background: var(--color-primary-bg);
-  border-radius: 4px;
 }
 
 .widget-creator__dropzone-badges {

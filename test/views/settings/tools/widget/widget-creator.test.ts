@@ -95,7 +95,7 @@ interface WidgetCreatePayloadSnapshot {
   name: string;
   /** 小组件描述。 */
   description: string;
-  /** 从 zip 导入的小组件数据。 */
+  /** 从导入文件读取的小组件数据。 */
   data?: WidgetData;
   /** 从 zip 导入的小组件资源文件。 */
   resources?: WidgetImportResource[];
@@ -125,7 +125,7 @@ const BUploadStub = defineComponent({
 
     return { handleChange };
   },
-  template: '<div><slot></slot><input type="file" @change="handleChange" /></div>'
+  template: '<div><slot></slot><input type="file" :accept="accept" @change="handleChange" /></div>'
 });
 
 /**
@@ -215,15 +215,15 @@ function readConfirmPayload(wrapper: VueWrapper): WidgetCreatePayloadSnapshot {
 }
 
 /**
- * 通过真实上传输入框选择 zip 文件。
+ * 通过真实上传输入框选择导入文件。
  * @param wrapper - 组件包装器
- * @param file - zip 文件
+ * @param file - 导入文件
  */
-async function selectZipFile(wrapper: VueWrapper, file: File): Promise<void> {
+async function selectImportFile(wrapper: VueWrapper, file: File): Promise<void> {
   const input = wrapper.find<HTMLInputElement>('.widget-creator__dropzone input[type="file"]');
 
   if (!input.exists()) {
-    throw new Error('未找到 zip 上传输入框');
+    throw new Error('未找到小组件导入上传输入框');
   }
 
   Object.defineProperty(input.element, 'files', {
@@ -304,7 +304,7 @@ describe('WidgetCreator', (): void => {
       ]
     });
 
-    await selectZipFile(wrapper, file);
+    await selectImportFile(wrapper, file);
     await waitForZipImport(wrapper);
 
     expect((wrapper.find('.widget-creator__id input').element as HTMLInputElement).value).toBe('coffee');
@@ -329,7 +329,7 @@ describe('WidgetCreator', (): void => {
       description: '展示咖啡列表'
     });
 
-    await selectZipFile(wrapper, file);
+    await selectImportFile(wrapper, file);
     await waitForZipImport(wrapper);
     await wrapper.find('.widget-creator__id input').setValue('tea-menu');
     await findButtonByText(wrapper, '确定').trigger('click');
@@ -356,7 +356,7 @@ describe('WidgetCreator', (): void => {
       ]
     );
 
-    await selectZipFile(wrapper, file);
+    await selectImportFile(wrapper, file);
     await waitForZipImport(wrapper);
     await findButtonByText(wrapper, '确定').trigger('click');
     await flushPromises();
@@ -387,9 +387,9 @@ describe('WidgetCreator', (): void => {
     const invalidBuffer = await invalidZip.generateAsync({ type: 'arraybuffer' });
     const invalidFile = new File([invalidBuffer], 'bad.zip', { type: 'application/zip' });
 
-    await selectZipFile(wrapper, validFile);
+    await selectImportFile(wrapper, validFile);
     await waitForZipImport(wrapper);
-    await selectZipFile(wrapper, invalidFile);
+    await selectImportFile(wrapper, invalidFile);
     await flushPromises();
     await flushPromises();
     await findButtonByText(wrapper, '确定').trigger('click');
@@ -398,6 +398,55 @@ describe('WidgetCreator', (): void => {
     const payload = readConfirmPayload(wrapper);
 
     expect(payload.data).toBeUndefined();
+    expect(payload.resources).toBeUndefined();
+  });
+
+  it('fills form without overriding an existing identifier when importing widget.json', async (): Promise<void> => {
+    const wrapper = mountWidgetCreator();
+    const file = new File(
+      [
+        JSON.stringify({
+          name: '天气',
+          description: '查询天气',
+          elements: [
+            {
+              id: 'text-1',
+              name: 'text',
+              label: '文本',
+              icon: 'lucide:type',
+              title: '文本节点',
+              position: { x: 12, y: 24 },
+              size: { width: 120, height: 48 },
+              rotation: 0,
+              style: {},
+              metadata: {}
+            }
+          ]
+        })
+      ],
+      'widget.json',
+      { type: 'application/json' }
+    );
+
+    await wrapper.find('.widget-creator__id input').setValue('weather-card');
+    await selectImportFile(wrapper, file);
+    await waitForZipImport(wrapper);
+
+    expect(wrapper.find<HTMLInputElement>('.widget-creator__dropzone input[type="file"]').attributes('accept')).toBe('.zip,.json');
+    expect(wrapper.find('.widget-creator__dropzone-file').exists()).toBe(false);
+    expect((wrapper.find('.widget-creator__id input').element as HTMLInputElement).value).toBe('weather-card');
+    expect((wrapper.find('.widget-creator__name input').element as HTMLInputElement).value).toBe('天气');
+    expect((wrapper.find('.widget-creator__description textarea').element as HTMLTextAreaElement).value).toBe('查询天气');
+
+    await findButtonByText(wrapper, '确定').trigger('click');
+    await flushPromises();
+
+    const payload = readConfirmPayload(wrapper);
+
+    expect(payload.id).toBe('weather-card');
+    expect(payload.name).toBe('天气');
+    expect(payload.description).toBe('查询天气');
+    expect(payload.data?.elements).toHaveLength(1);
     expect(payload.resources).toBeUndefined();
   });
 
