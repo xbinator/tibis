@@ -205,7 +205,7 @@ describe('useElementValue', (): void => {
 
     element.metadata.actions = [
       {
-        args: ['{{ $input.orderId }}', 1],
+        args: ['{{ $input.orderId }}', '城市：{{ $input.city }}', 1],
         method: ' submitOrder '
       },
       {
@@ -217,7 +217,7 @@ describe('useElementValue', (): void => {
 
     const wrapper = mountDisplayValue(element, 'actions', undefined, { transform: 'method' });
 
-    expect(wrapper.text()).toBe('[{"args":["{{ $input.orderId }}"],"method":"submitOrder"}]');
+    expect(wrapper.text()).toBe('[{"args":["{{ $input.orderId }}","城市：{{ $input.city }}"],"method":"submitOrder"}]');
     wrapper.unmount();
   });
 

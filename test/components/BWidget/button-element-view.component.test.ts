@@ -74,6 +74,11 @@ describe('ButtonElementView', (): void => {
     expect(BUTTON_ELEMENT_VIEW_SOURCE).not.toContain('normalizeButtonBoolean');
     expect(BUTTON_ELEMENT_VIEW_SOURCE).not.toContain('normalizeButtonActions');
     expect(BUTTON_ELEMENT_VIEW_SOURCE).not.toContain('buttonActionsValue');
+    expect(BUTTON_ELEMENT_VIEW_SOURCE).not.toContain('useWidgetRuntime');
+    expect(BUTTON_ELEMENT_VIEW_SOURCE).not.toContain('useRenderContext');
+    expect(BUTTON_ELEMENT_VIEW_SOURCE).not.toContain('resolveButtonAction');
+    expect(BUTTON_ELEMENT_VIEW_SOURCE).not.toContain('runButtonAction');
+    expect(BUTTON_ELEMENT_VIEW_SOURCE).not.toContain('executeButtonAction');
   });
 
   it('renders a native button with text from element metadata', (): void => {
@@ -107,7 +112,7 @@ describe('ButtonElementView', (): void => {
     wrapper.unmount();
   });
 
-  it('renders disabled and loading metadata on the native button', (): void => {
+  it('renders loading metadata without native disabled state', (): void => {
     const element = createButtonElement('提交');
 
     element.metadata.disabled = true;
@@ -116,7 +121,7 @@ describe('ButtonElementView', (): void => {
     const wrapper = mountButtonElementView(element);
     const button = wrapper.find('button');
 
-    expect(button.attributes('disabled')).toBeDefined();
+    expect(button.attributes('disabled')).toBeUndefined();
     expect(button.attributes('aria-busy')).toBe('true');
     expect(wrapper.find('.widget-button-element__loading').exists()).toBe(true);
     expect(wrapper.find('.widget-button-element__loading-spinner').exists()).toBe(true);
@@ -139,7 +144,7 @@ describe('ButtonElementView', (): void => {
     });
     const button = wrapper.find('button');
 
-    expect(button.attributes('disabled')).toBeDefined();
+    expect(button.attributes('disabled')).toBeUndefined();
     expect(button.attributes('aria-busy')).toBe('true');
     expect(wrapper.find('.widget-button-element__loading').exists()).toBe(true);
     expect(wrapper.find('.widget-button-element__loading-spinner').exists()).toBe(true);

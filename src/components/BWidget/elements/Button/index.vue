@@ -7,7 +7,7 @@
     <button
       :aria-busy="buttonLoading ? 'true' : 'false'"
       class="widget-button-element__button"
-      :class="{ 'is-loading': buttonLoading }"
+      :class="{ 'is-loading': buttonLoading, disabled: buttonBlocked }"
       type="button"
       @click.stop="handleButtonClick"
     >
@@ -20,13 +20,11 @@
 </template>
 
 <script setup lang="ts">
-import type { WidgetButtonAction, WidgetButtonElementMetadata } from './schema';
+import type { WidgetButtonElementMetadata } from './schema';
 import type { WidgetShapeElement } from '../../types';
 import { computed, toRef } from 'vue';
+import { useElementAction } from '../../hooks/useElementAction';
 import { useElementValue } from '../../hooks/useElementValue';
-import { useRenderContext } from '../../hooks/useRenderContext';
-import { useWidgetRuntime } from '../../hooks/useWidgetRuntime';
-import { resolveWidgetTemplateValue } from '../../utils/widgetBindings';
 
 /**
  * 按钮元素中间Widget视图入参。
@@ -37,47 +35,19 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-/** Widget 运行态控制器。 */
-const runtime = useWidgetRuntime();
-/** Widget 渲染上下文。 */
-const renderContext = useRenderContext();
+/** 当前按钮元素响应式引用。 */
+const elementRef = toRef(props, 'element');
 /** 按钮展示文字（渲染态，已解析变量）。 */
-const buttonText = useElementValue(toRef(props, 'element'), 'text', { transform: 'text' });
+const buttonText = useElementValue(elementRef, 'text', { transform: 'text' });
 /** 是否禁用按钮交互。 */
-const buttonDisabled = useElementValue(toRef(props, 'element'), 'disabled', { transform: 'boolean' });
+const buttonDisabled = useElementValue(elementRef, 'disabled', { transform: 'boolean' });
 /** 是否展示加载态并阻止重复点击。 */
-const buttonLoading = useElementValue(toRef(props, 'element'), 'loading', { transform: 'boolean' });
-
-/**
- * 解析按钮动作参数模板。
- * @param argument - 参数模板
- * @returns 解析后的参数值
- */
-function resolveButtonActionArgument(argument: string): unknown {
-  return resolveWidgetTemplateValue(argument, renderContext.value);
-}
-
-/**
- * 解析按钮动作参数。
- * @param action - 按钮动作
- * @returns 解析后的参数列表
- */
-function resolveButtonActionArgs(action: WidgetButtonAction): unknown[] {
-  return action.args.map(resolveButtonActionArgument);
-}
-
-/**
- * 运行单个按钮动作。
- * @param action - 按钮动作
- */
-function runButtonAction(action: WidgetButtonAction): void {
-  runtime.value?.run(action.method, ...resolveButtonActionArgs(action));
-}
+const buttonLoading = useElementValue(elementRef, 'loading', { transform: 'boolean' });
+/** 点击动作执行器。 */
+const actionRunner = useElementAction(elementRef, 'actions');
 
 /** 按钮是否阻止点击动作。 */
 const buttonBlocked = computed<boolean>((): boolean => buttonDisabled.value || buttonLoading.value);
-/** 点击动作列表。 */
-const buttonActions = useElementValue(toRef(props, 'element'), 'actions', { transform: 'method' });
 
 /**
  * 处理按钮点击，调用运行态中的同名业务方法。
@@ -85,7 +55,7 @@ const buttonActions = useElementValue(toRef(props, 'element'), 'actions', { tran
 function handleButtonClick(): void {
   if (buttonBlocked.value) return;
 
-  buttonActions.value.forEach(runButtonAction);
+  actionRunner();
 }
 </script>
 
@@ -114,9 +84,9 @@ function handleButtonClick(): void {
     opacity: 0.8;
   }
 
-  &:disabled {
+  &.disabled {
     cursor: not-allowed;
-    opacity: 0.72;
+    opacity: 0.5;
   }
 }
 
