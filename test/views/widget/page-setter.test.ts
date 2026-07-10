@@ -976,7 +976,7 @@ describe('PageSetter', (): void => {
     await sizeInputs[0]?.setValue('320');
     await sizeInputs[1]?.setValue('180');
 
-    expect((sizeSection.props() as SectionBlockTitleSnapshot).tips).toBe('设置运行态展示尺寸。留空按内容自适应；容器不足时等比缩小，容器更大时保持配置尺寸');
+    expect((sizeSection.props() as SectionBlockTitleSnapshot).tips).toBe('设置组件运行时的显示尺寸。空间足够时保持设定尺寸，空间不足时自动等比缩小');
     expect(wrapper.vm.dataItem.metadata).toMatchObject({
       preserved: true,
       width: 320,

@@ -17,7 +17,7 @@
           />
         </BSectionItem>
       </BSectionBlock>
-      <BSectionBlock title="尺寸" tips="设置运行态展示尺寸。留空按内容自适应；容器不足时等比缩小，容器更大时保持配置尺寸">
+      <BSectionBlock title="尺寸" tips="设置组件运行时的显示尺寸。空间足够时保持设定尺寸，空间不足时自动等比缩小">
         <div class="page-setter__size-grid">
           <BSectionItem label="宽度" label-min-width="60">
             <BInputNumber v-model:value="dataItem.metadata.width" :min="1" :precision="0" placeholder="自适应" />
