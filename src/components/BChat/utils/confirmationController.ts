@@ -5,7 +5,12 @@
  */
 import { ref, type Ref } from 'vue';
 import { nanoid } from 'nanoid';
-import type { AIToolConfirmationAdapter, AIToolConfirmationDecision, AIToolConfirmationRequest } from '@/ai/tools/confirmation';
+import {
+  normalizeToolConfirmationRequest,
+  type AIToolConfirmationAdapter,
+  type AIToolConfirmationDecision,
+  type AIToolConfirmationRequest
+} from '@/ai/tools/confirmation';
 
 /**
  * 挂起中的确认项。
@@ -79,9 +84,10 @@ export function createChatConfirmationController() {
    */
   async function requestConfirmation(request: AIToolConfirmationRequest): Promise<AIToolConfirmationDecision> {
     const confirmationId = nanoid();
+    const normalizedRequest = normalizeToolConfirmationRequest(request);
 
     return new Promise<AIToolConfirmationDecision>((resolve) => {
-      const confirmation: PendingConfirmation = { id: confirmationId, request, resolve };
+      const confirmation: PendingConfirmation = { id: confirmationId, request: normalizedRequest, resolve };
       if (!pendingConfirmation) {
         activateConfirmation(confirmation);
         return;

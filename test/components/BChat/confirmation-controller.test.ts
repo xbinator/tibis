@@ -22,6 +22,58 @@ function createRequest(toolName: string): AIToolConfirmationRequest {
 }
 
 describe('createChatConfirmationController', (): void => {
+  it('adds default remember scopes for non-dangerous confirmations', async (): Promise<void> => {
+    const controller = createChatConfirmationController();
+
+    const confirmationPromise = controller.requestConfirmation({ ...createRequest('write_file'), riskLevel: 'write' });
+
+    expect(controller.currentConfirmationRequest.value).toEqual(
+      expect.objectContaining({
+        allowRemember: true,
+        rememberScopes: ['session', 'always']
+      })
+    );
+
+    controller.cancelConfirmation(controller.currentConfirmationId.value ?? '');
+    await expect(confirmationPromise).resolves.toEqual({ approved: false });
+  });
+
+  it('does not add remember scopes for dangerous confirmations', async (): Promise<void> => {
+    const controller = createChatConfirmationController();
+
+    const confirmationPromise = controller.requestConfirmation({ ...createRequest('run_shell_command'), riskLevel: 'dangerous' });
+
+    expect(controller.currentConfirmationRequest.value).toEqual(
+      expect.objectContaining({
+        allowRemember: false,
+        rememberScopes: undefined
+      })
+    );
+
+    controller.cancelConfirmation(controller.currentConfirmationId.value ?? '');
+    await expect(confirmationPromise).resolves.toEqual({ approved: false });
+  });
+
+  it('preserves explicitly narrowed remember scopes', async (): Promise<void> => {
+    const controller = createChatConfirmationController();
+
+    const confirmationPromise = controller.requestConfirmation({
+      ...createRequest('read_file'),
+      allowRemember: true,
+      rememberScopes: ['session']
+    });
+
+    expect(controller.currentConfirmationRequest.value).toEqual(
+      expect.objectContaining({
+        allowRemember: true,
+        rememberScopes: ['session']
+      })
+    );
+
+    controller.cancelConfirmation(controller.currentConfirmationId.value ?? '');
+    await expect(confirmationPromise).resolves.toEqual({ approved: false });
+  });
+
   it('queues new confirmations without cancelling the active one', async (): Promise<void> => {
     const controller = createChatConfirmationController();
     const firstPromise = controller.requestConfirmation(createRequest('read_file'));

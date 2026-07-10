@@ -6,6 +6,21 @@ import type { AIToolGrantScope, AIToolRiskLevel } from 'types/ai';
 import type { ChatMessageConfirmationCustomInputConfig } from 'types/chat';
 
 /**
+ * 可归一化的 AI 工具确认请求。
+ */
+interface NormalizableToolConfirmationRequest {
+  /** 风险级别 */
+  riskLevel: AIToolRiskLevel;
+  /** 是否允许记住本次授权 */
+  allowRemember?: boolean;
+  /** 可选的记忆授权范围 */
+  rememberScopes?: AIToolGrantScope[];
+}
+
+/** 默认可记住的确认授权范围。 */
+const DEFAULT_REMEMBER_SCOPES: AIToolGrantScope[] = ['session', 'always'];
+
+/**
  * AI 工具确认决策。
  */
 export type AIToolConfirmationDecision =
@@ -66,4 +81,25 @@ export interface AIToolConfirmationAdapter {
    * @param result - 执行结果
    */
   onExecutionComplete?: (request: AIToolConfirmationRequest, result: { status: 'success' | 'failure'; errorMessage?: string }) => void | Promise<void>;
+}
+
+/**
+ * 归一化确认请求的授权记忆策略。
+ * @param request - 原始确认请求
+ * @returns 可供 UI 和授权记忆逻辑消费的确认请求
+ */
+export function normalizeToolConfirmationRequest<TRequest extends NormalizableToolConfirmationRequest>(request: TRequest): TRequest {
+  if (request.riskLevel === 'dangerous') {
+    return { ...request, allowRemember: false, rememberScopes: undefined };
+  }
+
+  if (request.allowRemember === true) {
+    return { ...request, rememberScopes: request.rememberScopes ?? [...DEFAULT_REMEMBER_SCOPES] };
+  }
+
+  if (request.allowRemember === false) {
+    return { ...request, rememberScopes: undefined };
+  }
+
+  return { ...request, allowRemember: true, rememberScopes: [...DEFAULT_REMEMBER_SCOPES] };
 }

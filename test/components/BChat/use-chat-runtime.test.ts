@@ -938,6 +938,156 @@ describe('useChatRuntime', (): void => {
     scope.stop();
   });
 
+  it('remembers default session grants for runtime confirmations without remember metadata', async (): Promise<void> => {
+    const messages = ref<Message[]>([]);
+    const requestConfirmation = vi.fn(async () => ({ approved: true as const, grantScope: 'session' as const }));
+    const toolPermissionStore = useToolPermissionStore();
+    const scope = effectScope();
+
+    await scope.run(async () => {
+      useChatRuntime({
+        messages,
+        getSessionId: () => 'session-1',
+        requestConfirmation
+      });
+
+      emitRuntimeEvent(listeners, 'confirmationRequest', {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        confirmationId: 'confirmation-default-remember-1',
+        toolCallId: 'tool-call-file-1',
+        request: {
+          toolCallId: 'tool-call-file-1',
+          toolName: 'read_file',
+          title: 'AI 想要读取本地文件',
+          description: 'AI 请求读取本地文件：/Users/zhangbin/code/ai/tibis/test/ai/tools/builtin-index.test.ts',
+          riskLevel: 'read',
+          beforeText: '/Users/zhangbin/code/ai/tibis/test/ai/tools/builtin-index.test.ts'
+        }
+      });
+      await Promise.resolve();
+
+      expect(requestConfirmation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolName: 'read_file',
+          allowRemember: true,
+          rememberScopes: ['session', 'always']
+        })
+      );
+      expect(toolPermissionStore.sessionToolPermissionGrants.read_file).toBe(true);
+      expect(electronAPIMock.chatRuntimeSubmitConfirmation).toHaveBeenCalledWith({
+        runtimeId: 'runtime-1',
+        confirmationId: 'confirmation-default-remember-1',
+        decision: { approved: true, grantScope: 'session' }
+      });
+
+      requestConfirmation.mockClear();
+      electronAPIMock.chatRuntimeSubmitConfirmation.mockClear();
+
+      emitRuntimeEvent(listeners, 'confirmationRequest', {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        confirmationId: 'confirmation-default-remember-2',
+        toolCallId: 'tool-call-file-2',
+        request: {
+          toolCallId: 'tool-call-file-2',
+          toolName: 'read_file',
+          title: 'AI 想要读取本地文件',
+          description: 'AI 请求读取本地文件：/Users/zhangbin/code/ai/tibis/test/components/BChat/use-runtime-tools.test.ts',
+          riskLevel: 'read',
+          beforeText: '/Users/zhangbin/code/ai/tibis/test/components/BChat/use-runtime-tools.test.ts'
+        }
+      });
+      await Promise.resolve();
+
+      expect(requestConfirmation).not.toHaveBeenCalled();
+      expect(electronAPIMock.chatRuntimeSubmitConfirmation).toHaveBeenCalledWith({
+        runtimeId: 'runtime-1',
+        confirmationId: 'confirmation-default-remember-2',
+        decision: { approved: true }
+      });
+    });
+
+    scope.stop();
+  });
+
+  it('does not remember runtime grants outside explicit remember scopes', async (): Promise<void> => {
+    const messages = ref<Message[]>([]);
+    const requestConfirmation = vi.fn(async () => ({ approved: true as const, grantScope: 'always' as const }));
+    const toolPermissionStore = useToolPermissionStore();
+    const scope = effectScope();
+
+    await scope.run(async () => {
+      useChatRuntime({
+        messages,
+        getSessionId: () => 'session-1',
+        requestConfirmation
+      });
+
+      emitRuntimeEvent(listeners, 'confirmationRequest', {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        confirmationId: 'confirmation-narrow-scope-1',
+        toolCallId: 'tool-call-settings-1',
+        request: {
+          toolCallId: 'tool-call-settings-1',
+          toolName: 'update_settings',
+          title: 'AI 想要修改应用设置',
+          description: 'AI 请求修改设置项 theme。',
+          riskLevel: 'write',
+          allowRemember: true,
+          rememberScopes: ['session']
+        }
+      });
+      await Promise.resolve();
+
+      expect(toolPermissionStore.sessionToolPermissionGrants.update_settings).toBeUndefined();
+      expect(toolPermissionStore.alwaysToolPermissionGrants.update_settings).toBeUndefined();
+      expect(electronAPIMock.chatRuntimeSubmitConfirmation).toHaveBeenCalledWith({
+        runtimeId: 'runtime-1',
+        confirmationId: 'confirmation-narrow-scope-1',
+        decision: { approved: true, grantScope: 'always' }
+      });
+
+      requestConfirmation.mockClear();
+      electronAPIMock.chatRuntimeSubmitConfirmation.mockClear();
+
+      emitRuntimeEvent(listeners, 'confirmationRequest', {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        confirmationId: 'confirmation-narrow-scope-2',
+        toolCallId: 'tool-call-settings-2',
+        request: {
+          toolCallId: 'tool-call-settings-2',
+          toolName: 'update_settings',
+          title: 'AI 想要修改应用设置',
+          description: 'AI 请求修改设置项 themePreset。',
+          riskLevel: 'write',
+          allowRemember: true,
+          rememberScopes: ['session']
+        }
+      });
+      await Promise.resolve();
+
+      expect(requestConfirmation).toHaveBeenCalledTimes(1);
+      expect(electronAPIMock.chatRuntimeSubmitConfirmation).toHaveBeenCalledWith({
+        runtimeId: 'runtime-1',
+        confirmationId: 'confirmation-narrow-scope-2',
+        decision: { approved: true, grantScope: 'always' }
+      });
+    });
+
+    scope.stop();
+  });
+
   it('routes runtime bridge requests to the bridge handler and submits responses', async (): Promise<void> => {
     const messages = ref<Message[]>([]);
     const handleBridgeRequest = vi.fn(async () => ({ title: 'index.ts', content: 'hello' }));

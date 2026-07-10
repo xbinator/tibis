@@ -26,6 +26,7 @@ import type {
 } from 'types/chat-runtime';
 import type { Ref } from 'vue';
 import { onScopeDispose, ref, toRaw } from 'vue';
+import { normalizeToolConfirmationRequest } from '@/ai/tools/confirmation';
 import { executeToolCall } from '@/ai/tools/stream';
 import { getElectronAPI } from '@/shared/platform/electron-api';
 import { useToolPermissionStore } from '@/stores/chat/toolPermission';
@@ -593,14 +594,15 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
       return;
     }
 
-    const rememberedDecision = getRememberedRuntimeConfirmationDecision(event.request);
+    const normalizedRequest = normalizeToolConfirmationRequest(event.request);
+    const rememberedDecision = getRememberedRuntimeConfirmationDecision(normalizedRequest);
     if (rememberedDecision) {
       await submitConfirmationDecision(event, rememberedDecision);
       return;
     }
 
-    const decision = options.requestConfirmation ? await options.requestConfirmation(event.request) : { approved: false };
-    rememberRuntimeConfirmationDecision(event.request, decision);
+    const decision = options.requestConfirmation ? await options.requestConfirmation(normalizedRequest) : { approved: false };
+    rememberRuntimeConfirmationDecision(normalizedRequest, decision);
     await submitConfirmationDecision(event, decision);
   }
 
