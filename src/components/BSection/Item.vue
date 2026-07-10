@@ -1,7 +1,7 @@
 <script lang="ts">
 import type { BSectionLabelMinWidth } from './context';
 import type { BSectionItemLabelAlign, BSectionItemProps as Props } from './types';
-import { defineComponent, computed, type CSSProperties, type PropType, h, resolveComponent } from 'vue';
+import { defineComponent, computed, type CSSProperties, type PropType, type VNodeChild, h, resolveComponent } from 'vue';
 import { addCssUnit } from '@/utils/css';
 import { createNamespace } from '@/utils/namespace';
 import { useSectionContext } from './context';
@@ -81,7 +81,7 @@ export default defineComponent({
      * 渲染前缀内容（文字或图标）。
      * @returns 前缀 JSX 节点
      */
-    function renderLabelContent() {
+    function renderLabelContent(): VNodeChild {
       if (props.label && !props.icon) {
         return h('span', null, props.label);
       }
@@ -98,6 +98,16 @@ export default defineComponent({
     }
 
     /**
+     * 渲染标签右侧扩展内容。
+     * @returns 标签扩展 JSX 节点
+     */
+    function renderLabelExtra(): VNodeChild {
+      const labelExtraSlot = slots['label-extra'] ?? slots.labelExtra;
+
+      return labelExtraSlot ? h('div', { class: bem('label-extra') }, labelExtraSlot()) : null;
+    }
+
+    /**
      * 渲染 label 区域，按需用 ATooltip 包裹。
      *
      * - `tooltip`：包裹 ATooltip 并启用 `--tooltip` 修饰符（虚线下划线视觉提示）。
@@ -107,12 +117,13 @@ export default defineComponent({
      */
     function renderLabel() {
       const content = renderLabelContent();
+      const extra = renderLabelExtra();
       /** ATooltip 显示的文本，tooltip 优先于 tips。 */
       const tooltipText = props.tooltip ?? props.tips;
       /** 仅 tooltip 启用虚线下划线视觉提示，tips 不加。 */
       const labelClass = bem('label', { tooltip: !!props.tooltip });
 
-      if (!content) return null;
+      if (!content && !extra) return null;
 
       if (tooltipText) {
         return h(
@@ -130,7 +141,8 @@ export default defineComponent({
               {
                 default: () => content
               }
-            )
+            ),
+            extra
           ]
         );
       }
@@ -141,7 +153,7 @@ export default defineComponent({
           class: labelClass,
           style: labelStyle.value
         },
-        [content]
+        [content, extra]
       );
     }
 
@@ -172,10 +184,20 @@ export default defineComponent({
 .b-section-item__label {
   display: flex;
   flex-shrink: 0;
+  gap: 8px;
   align-items: center;
   min-width: 18px;
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+.b-section-item__label-extra {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  margin-left: auto;
 }
 
 /* 标签启用 tooltip：鼠标移入显示虚线下划线 */

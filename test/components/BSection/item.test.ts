@@ -109,4 +109,30 @@ describe('BSectionItem', (): void => {
     expect(wrapper.find('.b-section-item__label').attributes('style') ?? '').toContain('min-width: 40px;');
     wrapper.unmount();
   });
+
+  it('renders label extra content at the end of label area', (): void => {
+    const wrapper = mount(BSectionItem, {
+      props: {
+        label: '列数',
+        direction: 'vertical'
+      },
+      slots: {
+        'label-extra': '<button class="mode-switch">自适应</button>',
+        default: '<input class="field-input" />'
+      },
+      global: {
+        stubs: {
+          BIcon: true
+        }
+      }
+    });
+
+    const label = wrapper.find('.b-section-item__label');
+    const labelExtra = label.find('.b-section-item__label-extra');
+
+    expect(label.text()).toContain('列数');
+    expect(labelExtra.find('.mode-switch').exists()).toBe(true);
+    expect(wrapper.find('.b-section-item__content .mode-switch').exists()).toBe(false);
+    wrapper.unmount();
+  });
 });
