@@ -44,7 +44,7 @@ import { computed, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { native } from '@/shared/platform';
 import type { ReadWorkspaceDirectoryEntry } from '@/shared/platform/native/types';
-import { getFileIcon } from '@/utils/file/icons';
+import { resolveFileIcon } from '@/utils/file/icons';
 
 /**
  * 文件树节点。
@@ -58,6 +58,14 @@ interface FileTreeNode {
   type: 'file' | 'directory';
   /** 相对根目录的展示层级。 */
   depth: number;
+}
+
+/**
+ * 虚拟文件树构建节点。
+ */
+interface VirtualTreeNode extends FileTreeNode {
+  /** 子节点映射，目录节点用于保存下级文件与目录。 */
+  children: Map<string, VirtualTreeNode>;
 }
 
 interface Props {
@@ -125,35 +133,92 @@ const visibleNodes = computed<FileTreeNode[]>(() => {
 });
 
 /**
+ * 按目录优先、名称升序排序文件树节点。
+ * @param left - 左侧文件树节点
+ * @param right - 右侧文件树节点
+ * @returns 排序结果
+ */
+function sortFileTreeNodes(left: Pick<FileTreeNode, 'name' | 'type'>, right: Pick<FileTreeNode, 'name' | 'type'>): number {
+  if (left.type !== right.type) {
+    return left.type === 'directory' ? -1 : 1;
+  }
+
+  return left.name.localeCompare(right.name);
+}
+
+/**
+ * 创建虚拟文件树节点。
+ * @param name - 节点名称
+ * @param path - 节点完整相对路径
+ * @param type - 节点类型
+ * @param depth - 节点层级
+ * @returns 虚拟文件树节点
+ */
+function createVirtualTreeNode(name: string, path: string, type: FileTreeNode['type'], depth: number): VirtualTreeNode {
+  return {
+    name,
+    path,
+    type,
+    depth,
+    children: new Map<string, VirtualTreeNode>()
+  };
+}
+
+/**
+ * 向虚拟树写入单个路径。
+ * @param root - 虚拟树根节点
+ * @param rawPath - 文件相对路径
+ */
+function insertVirtualPath(root: VirtualTreeNode, rawPath: string): void {
+  const segments = rawPath.split('/').filter((segment: string): boolean => segment.length > 0);
+  let parent = root;
+  let currentPath = '';
+
+  segments.forEach((segment: string, index: number): void => {
+    const isLast = index === segments.length - 1;
+    currentPath = index === 0 ? segment : `${currentPath}/${segment}`;
+
+    if (!parent.children.has(segment)) {
+      parent.children.set(segment, createVirtualTreeNode(segment, currentPath, isLast ? 'file' : 'directory', index));
+    }
+
+    parent = parent.children.get(segment)!;
+  });
+}
+
+/**
+ * 将虚拟树深度优先展开为文件树节点。
+ * @param parent - 当前父节点
+ * @returns 扁平文件树节点列表
+ */
+function flattenVirtualTree(parent: VirtualTreeNode): FileTreeNode[] {
+  return Array.from(parent.children.values())
+    .sort(sortFileTreeNodes)
+    .flatMap((node: VirtualTreeNode): FileTreeNode[] => {
+      const currentNode: FileTreeNode = {
+        name: node.name,
+        path: node.path,
+        type: node.type,
+        depth: node.depth
+      };
+
+      return node.type === 'directory' ? [currentNode, ...flattenVirtualTree(node)] : [currentNode];
+    });
+}
+
+/**
  * 从虚拟路径列表构建文件树节点（无文件系统依赖）。
  * @param paths - 文件相对路径列表，如 ["SKILL.md", "scripts/helper.js"]
  * @returns 扁平文件树节点列表
  */
 function buildVirtualTree(paths: string[]): FileTreeNode[] {
-  const result: FileTreeNode[] = [];
-  const seenDir = new Set<string>();
+  const root = createVirtualTreeNode('', '', 'directory', -1);
 
-  for (const rawPath of paths) {
-    const segments = rawPath.split('/');
-    let currentPath = '';
-
-    for (let i = 0; i < segments.length; i++) {
-      const isLast = i === segments.length - 1;
-      currentPath = i === 0 ? segments[i] : `${currentPath}/${segments[i]}`;
-
-      if (isLast) {
-        result.push({ name: segments[i], path: currentPath, type: 'file', depth: i });
-      } else if (!seenDir.has(currentPath)) {
-        seenDir.add(currentPath);
-        result.push({ name: segments[i], path: currentPath, type: 'directory', depth: i });
-      }
-    }
-  }
-
-  return result.sort((a, b) => {
-    if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
-    return a.name.localeCompare(b.name);
+  paths.forEach((rawPath: string): void => {
+    insertVirtualPath(root, rawPath);
   });
+
+  return flattenVirtualTree(root);
 }
 
 /**
@@ -162,12 +227,7 @@ function buildVirtualTree(paths: string[]): FileTreeNode[] {
  * @returns 排序后的目录项
  */
 function sortEntries(entries: ReadWorkspaceDirectoryEntry[]): ReadWorkspaceDirectoryEntry[] {
-  return [...entries].sort((left, right) => {
-    if (left.type !== right.type) {
-      return left.type === 'directory' ? -1 : 1;
-    }
-    return left.name.localeCompare(right.name);
-  });
+  return [...entries].sort(sortFileTreeNodes);
 }
 
 /**
@@ -234,7 +294,7 @@ async function loadTree(): Promise<void> {
 }
 
 /**
- * 获取节点图标名：目录区分展开/折叠，文件按扩展名匹配。
+ * 获取节点图标名：目录区分展开/折叠，文件优先按完整文件名匹配。
  * @param node - 文件树节点
  * @returns Iconify 图标名
  */
@@ -242,7 +302,7 @@ function getNodeIcon(node: FileTreeNode): string {
   if (node.type === 'directory') {
     return collapsedPaths.value.has(node.path) ? 'lucide:folder' : 'lucide:folder-open';
   }
-  return getFileIcon(node.name.split('.').pop() ?? '');
+  return resolveFileIcon(node.name);
 }
 
 /**
