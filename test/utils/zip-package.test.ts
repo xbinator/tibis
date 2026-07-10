@@ -46,8 +46,22 @@ describe('readZipPackage', (): void => {
     expect(Array.from(new Uint8Array(result.resources[0]?.content ?? new ArrayBuffer(0)))).toEqual([1, 2, 3]);
   });
 
+  it('reads root file from a single wrapper directory and strips wrapper from resource paths', async (): Promise<void> => {
+    const buffer = await createZipBuffer([
+      { path: 'coffee-menu/widget.json', content: JSON.stringify({ name: '咖啡菜单' }) },
+      { path: 'coffee-menu/assets/icon.bin', content: new Uint8Array([1, 2, 3]) }
+    ]);
+
+    const result = await readZipPackage(buffer, { rootFileName: 'widget.json' });
+
+    expect(result.rootFileContent).toBe(JSON.stringify({ name: '咖啡菜单' }));
+    expect(result.resources).toHaveLength(1);
+    expect(result.resources[0]?.relativePath).toBe('assets/icon.bin');
+    expect(Array.from(new Uint8Array(result.resources[0]?.content ?? new ArrayBuffer(0)))).toEqual([1, 2, 3]);
+  });
+
   it('rejects packages without root file', async (): Promise<void> => {
-    const buffer = await createZipBuffer([{ path: 'nested/widget.json', content: '{}' }]);
+    const buffer = await createZipBuffer([{ path: 'nested/not-widget.json', content: '{}' }]);
 
     await expect(readZipPackage(buffer, { rootFileName: 'widget.json' })).rejects.toThrow('zip 中未找到根层级 widget.json');
   });

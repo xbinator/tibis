@@ -86,9 +86,24 @@ describe('importWidgetZipFile', (): void => {
     expect(Array.from(new Uint8Array(result.resources[0]?.content ?? new ArrayBuffer(0)))).toEqual([1, 2, 3, 4]);
   });
 
+  it('reads widget.json from a single wrapper directory and strips resource paths', async (): Promise<void> => {
+    const zip = new JSZip();
+    zip.file('coffee-menu/widget.json', JSON.stringify({ name: '咖啡菜单', description: '展示咖啡列表' }));
+    zip.file('coffee-menu/assets/icon.png', new Uint8Array([1, 2, 3, 4]));
+    const buffer = await zip.generateAsync({ type: 'arraybuffer' });
+    const file = new File([buffer], 'Coffee Menu.zip', { type: 'application/zip' });
+
+    const result = await importWidgetZipFile(file);
+
+    expect(result.data.name).toBe('咖啡菜单');
+    expect(result.resources).toHaveLength(1);
+    expect(result.resources[0]?.relativePath).toBe('assets/icon.png');
+    expect(Array.from(new Uint8Array(result.resources[0]?.content ?? new ArrayBuffer(0)))).toEqual([1, 2, 3, 4]);
+  });
+
   it('rejects zip files without root widget.json', async (): Promise<void> => {
     const zip = new JSZip();
-    zip.file('nested/widget.json', JSON.stringify({ name: '嵌套小组件' }));
+    zip.file('nested/not-widget.json', JSON.stringify({ name: '嵌套小组件' }));
     const buffer = await zip.generateAsync({ type: 'arraybuffer' });
     const file = new File([buffer], 'nested.zip', { type: 'application/zip' });
 

@@ -40,6 +40,16 @@ export interface ZipPackageReadResult {
 }
 
 /**
+ * zip 入口文件匹配结果。
+ */
+interface RootFileEntryMatch {
+  /** 匹配到的入口文件条目。 */
+  entry: JSZip.JSZipObject;
+  /** 需要从资源路径中剥离的单一包装目录前缀。 */
+  wrapperPrefix: string;
+}
+
+/**
  * 检查 ArrayBuffer 前 4 字节是否为 zip magic bytes。
  * @param buffer - 待检查二进制内容
  * @returns 是否为 zip 格式
@@ -82,19 +92,86 @@ function assertEntryCount(entries: JSZip.JSZipObject[], maxEntries: number | und
 }
 
 /**
- * 读取根层入口文件。
+ * 获取 zip 非目录条目的单一顶层目录前缀。
  * @param entries - zip 非目录条目
- * @param rootFileName - 根层入口文件名
- * @returns 入口文件条目
+ * @returns 单一顶层目录前缀，不满足时返回 null
  */
-function findRootFileEntry(entries: JSZip.JSZipObject[], rootFileName: string): JSZip.JSZipObject {
-  const rootFileEntry = entries.find((entry: JSZip.JSZipObject): boolean => normalizeZipEntryPath(entry.name) === rootFileName);
+function getSingleWrapperPrefix(entries: JSZip.JSZipObject[]): string | null {
+  const topLevelNames = new Set<string>();
 
-  if (!rootFileEntry) {
-    throw new Error(`zip 中未找到根层级 ${rootFileName}`);
+  for (const entry of entries) {
+    const relativePath = normalizeZipEntryPath(entry.name);
+    const segments = relativePath.split('/');
+
+    if (segments.length < 2) {
+      return null;
+    }
+
+    topLevelNames.add(segments[0] ?? '');
+
+    if (topLevelNames.size > 1) {
+      return null;
+    }
   }
 
-  return rootFileEntry;
+  const [topLevelName] = Array.from(topLevelNames);
+
+  return topLevelName ? `${topLevelName}/` : null;
+}
+
+/**
+ * 查找单一包装目录中的入口文件。
+ * @param entries - zip 非目录条目
+ * @param rootFileName - 入口文件名
+ * @returns 入口文件匹配结果，未匹配时返回 null
+ */
+function findWrappedRootFileEntry(entries: JSZip.JSZipObject[], rootFileName: string): RootFileEntryMatch | null {
+  const wrapperPrefix = getSingleWrapperPrefix(entries);
+
+  if (!wrapperPrefix) {
+    return null;
+  }
+
+  const wrappedRootFileName = `${wrapperPrefix}${rootFileName}`;
+  const entry = entries.find((item: JSZip.JSZipObject): boolean => normalizeZipEntryPath(item.name) === wrappedRootFileName);
+
+  return entry ? { entry, wrapperPrefix } : null;
+}
+
+/**
+ * 读取入口文件，优先根层级，其次兼容单一包装目录。
+ * @param entries - zip 非目录条目
+ * @param rootFileName - 入口文件名
+ * @returns 入口文件匹配结果
+ */
+function findRootFileEntry(entries: JSZip.JSZipObject[], rootFileName: string): RootFileEntryMatch {
+  const rootFileEntry = entries.find((entry: JSZip.JSZipObject): boolean => normalizeZipEntryPath(entry.name) === rootFileName);
+
+  if (rootFileEntry) {
+    return { entry: rootFileEntry, wrapperPrefix: '' };
+  }
+
+  const wrappedRootFileEntry = findWrappedRootFileEntry(entries, rootFileName);
+
+  if (wrappedRootFileEntry) {
+    return wrappedRootFileEntry;
+  }
+
+  throw new Error(`zip 中未找到根层级 ${rootFileName}`);
+}
+
+/**
+ * 从 zip 条目路径中剥离单一包装目录前缀。
+ * @param relativePath - zip 内安全相对路径
+ * @param wrapperPrefix - 包装目录前缀
+ * @returns 对外暴露的资源相对路径
+ */
+function stripWrapperPrefix(relativePath: string, wrapperPrefix: string): string {
+  if (!wrapperPrefix || !relativePath.startsWith(wrapperPrefix)) {
+    return relativePath;
+  }
+
+  return relativePath.slice(wrapperPrefix.length);
 }
 
 /**
@@ -115,12 +192,12 @@ function isZipPackageResource(resource: ZipPackageResource | null): resource is 
  */
 async function readResourceEntry(
   entry: JSZip.JSZipObject,
-  rootFileEntry: JSZip.JSZipObject,
+  rootFileEntry: RootFileEntryMatch,
   options: ZipPackageReadOptions
 ): Promise<ZipPackageResource | null> {
-  const relativePath = normalizeZipEntryPath(entry.name);
+  const relativePath = stripWrapperPrefix(normalizeZipEntryPath(entry.name), rootFileEntry.wrapperPrefix);
 
-  if (entry === rootFileEntry) {
+  if (entry === rootFileEntry.entry) {
     return null;
   }
 
@@ -145,7 +222,7 @@ async function readResourceEntry(
  */
 async function readResourceEntries(
   entries: JSZip.JSZipObject[],
-  rootFileEntry: JSZip.JSZipObject,
+  rootFileEntry: RootFileEntryMatch,
   options: ZipPackageReadOptions
 ): Promise<ZipPackageResource[]> {
   return entries.reduce<Promise<ZipPackageResource[]>>(
@@ -186,7 +263,7 @@ export async function readZipPackage(buffer: ArrayBuffer, options: ZipPackageRea
   const resources = await readResourceEntries(entries, rootFileEntry, options);
 
   return {
-    rootFileContent: await rootFileEntry.async('string'),
+    rootFileContent: await rootFileEntry.entry.async('string'),
     resources
   };
 }
