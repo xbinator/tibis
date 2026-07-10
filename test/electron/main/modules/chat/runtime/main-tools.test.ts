@@ -389,6 +389,109 @@ describe('createMainToolExecutor', (): void => {
     }
   });
 
+  it('reads absolute paths under trusted home tool directories without confirmation', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    const originalHome = process.env.HOME;
+    const originalUserProfile = process.env.USERPROFILE;
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      const homeRoot = path.join(tempRoot, 'home');
+      const trustedFiles = [
+        path.join(homeRoot, '.agents', 'skills', 'demo', 'SKILL.md'),
+        path.join(homeRoot, '.tibis', 'runtime', 'config.md')
+      ];
+      await fs.mkdir(workspaceRoot);
+      for (const trustedFile of trustedFiles) {
+        await fs.mkdir(path.dirname(trustedFile), { recursive: true });
+        await fs.writeFile(trustedFile, `trusted:${path.basename(trustedFile)}`, 'utf8');
+      }
+      process.env.HOME = homeRoot;
+      process.env.USERPROFILE = homeRoot;
+
+      const requestConfirmation = vi.fn(async () => ({ approved: true }));
+      const executeMainTool = createMainToolExecutor({
+        now: () => '2026-06-19T00:00:00.000Z',
+        async requestBridge() {
+          return { status: 'failure', error: { code: 'EDITOR_UNAVAILABLE', message: 'no editor' } };
+        },
+        requestConfirmation
+      });
+
+      for (const trustedFile of trustedFiles) {
+        const realTrustedFile = await fs.realpath(trustedFile);
+        const result = await executeMainTool({
+          runtime: { ...runtime, workspaceRoot },
+          toolCallId: `tool-call-trusted-${path.basename(trustedFile)}`,
+          toolName: 'read_file',
+          input: { path: trustedFile }
+        });
+
+        expect(result).toMatchObject({
+          toolName: 'read_file',
+          status: 'success',
+          data: { path: realTrustedFile }
+        });
+      }
+      expect(requestConfirmation).not.toHaveBeenCalled();
+    } finally {
+      if (originalHome === undefined) delete process.env.HOME;
+      else process.env.HOME = originalHome;
+      if (originalUserProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = originalUserProfile;
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('confirms read_file trusted home symlinks that resolve outside trusted directories', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    const originalHome = process.env.HOME;
+    const originalUserProfile = process.env.USERPROFILE;
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      const homeRoot = path.join(tempRoot, 'home');
+      const outsideRoot = path.join(tempRoot, 'outside');
+      const outsideFile = path.join(outsideRoot, 'secret.md');
+      const trustedSkillRoot = path.join(homeRoot, '.agents', 'skills', 'demo');
+      const trustedSymlinkFile = path.join(trustedSkillRoot, 'linked-secret.md');
+      await fs.mkdir(workspaceRoot);
+      await fs.mkdir(outsideRoot);
+      await fs.mkdir(trustedSkillRoot, { recursive: true });
+      await fs.writeFile(outsideFile, 'outside secret', 'utf8');
+      await fs.symlink(outsideFile, trustedSymlinkFile);
+      process.env.HOME = homeRoot;
+      process.env.USERPROFILE = homeRoot;
+
+      const requestConfirmation = vi.fn(async () => ({ approved: true }));
+      const executeMainTool = createMainToolExecutor({
+        now: () => '2026-06-19T00:00:00.000Z',
+        async requestBridge() {
+          return { status: 'failure', error: { code: 'EDITOR_UNAVAILABLE', message: 'no editor' } };
+        },
+        requestConfirmation
+      });
+
+      const result = await executeMainTool({
+        runtime: { ...runtime, workspaceRoot },
+        toolCallId: 'tool-call-trusted-symlink-read-1',
+        toolName: 'read_file',
+        input: { path: trustedSymlinkFile }
+      });
+
+      expect(result).toMatchObject({
+        toolName: 'read_file',
+        status: 'success',
+        data: { content: 'outside secret' }
+      });
+      expect(requestConfirmation).toHaveBeenCalledTimes(1);
+    } finally {
+      if (originalHome === undefined) delete process.env.HOME;
+      else process.env.HOME = originalHome;
+      if (originalUserProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = originalUserProfile;
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   it('blocks read_directory relative paths that escape the workspace', async (): Promise<void> => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
     try {
@@ -492,6 +595,95 @@ describe('createMainToolExecutor', (): void => {
       });
       expect(result.data).toEqual(expect.objectContaining({ elapsedMs: expect.any(Number) }));
     } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('searches absolute paths under trusted home tool directories without confirmation', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    const originalHome = process.env.HOME;
+    const originalUserProfile = process.env.USERPROFILE;
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      const homeRoot = path.join(tempRoot, 'home');
+      const tibisRuntimeRoot = path.join(homeRoot, '.tibis', 'runtime');
+      await fs.mkdir(workspaceRoot);
+      await fs.mkdir(tibisRuntimeRoot, { recursive: true });
+      await fs.writeFile(path.join(tibisRuntimeRoot, 'settings.ts'), 'export const trusted = true;\n', 'utf8');
+      const realTibisRuntimeRoot = await fs.realpath(tibisRuntimeRoot);
+      process.env.HOME = homeRoot;
+      process.env.USERPROFILE = homeRoot;
+
+      const requestConfirmation = vi.fn(async () => ({ approved: true }));
+      const executeMainTool = createMainToolExecutor({
+        ...createMainToolDependencies([]),
+        requestConfirmation
+      });
+
+      const result = await executeMainTool({
+        runtime: { ...runtime, workspaceRoot },
+        toolCallId: 'tool-call-glob-trusted-1',
+        toolName: 'glob',
+        input: { pattern: '**/*.ts', path: tibisRuntimeRoot }
+      });
+
+      expect(result).toMatchObject({
+        toolName: 'glob',
+        status: 'success',
+        data: { path: realTibisRuntimeRoot, count: 1 }
+      });
+      expect(requestConfirmation).not.toHaveBeenCalled();
+    } finally {
+      if (originalHome === undefined) delete process.env.HOME;
+      else process.env.HOME = originalHome;
+      if (originalUserProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = originalUserProfile;
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('confirms glob trusted home symlinks that resolve outside trusted directories', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    const originalHome = process.env.HOME;
+    const originalUserProfile = process.env.USERPROFILE;
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      const homeRoot = path.join(tempRoot, 'home');
+      const outsideRoot = path.join(tempRoot, 'outside');
+      const tibisRuntimeRoot = path.join(homeRoot, '.tibis', 'runtime');
+      const trustedSymlinkDir = path.join(tibisRuntimeRoot, 'linked-outside');
+      await fs.mkdir(workspaceRoot);
+      await fs.mkdir(outsideRoot);
+      await fs.mkdir(tibisRuntimeRoot, { recursive: true });
+      await fs.writeFile(path.join(outsideRoot, 'outside.ts'), 'outside', 'utf8');
+      await fs.symlink(outsideRoot, trustedSymlinkDir, 'dir');
+      process.env.HOME = homeRoot;
+      process.env.USERPROFILE = homeRoot;
+
+      const requestConfirmation = vi.fn(async () => ({ approved: true }));
+      const executeMainTool = createMainToolExecutor({
+        ...createMainToolDependencies([]),
+        requestConfirmation
+      });
+
+      const result = await executeMainTool({
+        runtime: { ...runtime, workspaceRoot },
+        toolCallId: 'tool-call-glob-trusted-symlink-1',
+        toolName: 'glob',
+        input: { pattern: '**/*.ts', path: trustedSymlinkDir }
+      });
+
+      expect(result).toMatchObject({
+        toolName: 'glob',
+        status: 'success',
+        data: { count: 1 }
+      });
+      expect(requestConfirmation).toHaveBeenCalledTimes(1);
+    } finally {
+      if (originalHome === undefined) delete process.env.HOME;
+      else process.env.HOME = originalHome;
+      if (originalUserProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = originalUserProfile;
       await fs.rm(tempRoot, { recursive: true, force: true });
     }
   });
