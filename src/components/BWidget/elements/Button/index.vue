@@ -8,7 +8,6 @@
       :aria-busy="buttonLoading ? 'true' : 'false'"
       class="widget-button-element__button"
       :class="{ 'is-loading': buttonLoading }"
-      :disabled="buttonBlocked"
       type="button"
       @click.stop="handleButtonClick"
     >
@@ -98,9 +97,6 @@ function handleButtonClick(): void {
 
 .widget-button-element__button {
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   width: 100%;
   min-width: 0;
   height: 100%;
@@ -112,16 +108,16 @@ function handleButtonClick(): void {
   background: transparent;
   border: 0;
   border-radius: inherit;
-}
 
-.widget-button-element__button:disabled {
-  cursor: not-allowed;
-  opacity: 0.72;
-}
+  &.is-loading {
+    cursor: not-allowed;
+    opacity: 0.8;
+  }
 
-.widget-button-element__button.is-loading {
-  cursor: not-allowed;
-  opacity: 0.8;
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.72;
+  }
 }
 
 .widget-button-element__loading {

@@ -130,6 +130,7 @@ function handleDropdownVisibleChange(open: boolean): void {
 <style lang="less" scoped>
 .b-select {
   :deep(.ant-select-selector) {
+    height: auto;
     transition: all 0.2s ease;
   }
 

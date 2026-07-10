@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootRef" :class="bem()" @focusout="handleFocusOut">
+  <div ref="rootRef" :class="name" @focusout="handleFocusOut">
     <AInput
       ref="inputRef"
       :class="bem('control')"
@@ -107,7 +107,7 @@ const emit = defineEmits<{
 }>();
 
 const modelValue = defineModel<string>('value', { default: '' });
-const [, bem] = createNamespace('text-input');
+const [name, bem] = createNamespace('text-input');
 
 /** 组件根节点。 */
 const rootRef = ref<HTMLDivElement | null>(null);
