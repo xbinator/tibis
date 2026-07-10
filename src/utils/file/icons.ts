@@ -4,6 +4,31 @@
  */
 
 /**
+ * 完整文件名到 vscode-icons 图标名的映射。
+ * 用于处理共享扩展名但需要专用图标的文件。
+ */
+const FILE_NAME_ICON_MAP: Record<string, string> = {
+  'agents.md': 'vscode-icons:file-type-light-agents',
+  'claude.local.md': 'vscode-icons:file-type-claude',
+  'claude.md': 'vscode-icons:file-type-claude',
+  'copilot-instructions.md': 'vscode-icons:file-type-light-copilot',
+  'copying.lesser.md': 'vscode-icons:file-type-license',
+  'copying.md': 'vscode-icons:file-type-license',
+  'gemini.md': 'vscode-icons:file-type-gemini',
+  'licence.md': 'vscode-icons:file-type-license',
+  'license-agpl.md': 'vscode-icons:file-type-license',
+  'license-apache.md': 'vscode-icons:file-type-license',
+  'license-gpl.md': 'vscode-icons:file-type-license',
+  'license-mit.md': 'vscode-icons:file-type-license',
+  'license.md': 'vscode-icons:file-type-license',
+  'package.json': 'vscode-icons:file-type-npm',
+  'skill.md': 'vscode-icons:file-type-light-skill',
+  'unlicence.md': 'vscode-icons:file-type-unlicense',
+  'unlicense.md': 'vscode-icons:file-type-unlicense',
+  'warp.md': 'vscode-icons:file-type-light-warp'
+};
+
+/**
  * 文件扩展名到 vscode-icons 图标名的映射
  * vscode-icons 图标集自带颜色，视觉效果接近 VS Code 文件浏览器
  */
@@ -106,10 +131,12 @@ export function getFileIcon(ext: string): string {
  * @param fileName - 完整文件名，如 `package.json`、`README.md`
  * @returns Iconify 图标名
  */
-export function getFileIconByName(fileName: string): string {
+export function resolveFileIcon(fileName: string): string {
   const normalizedFileName = fileName.toLowerCase();
-  if (normalizedFileName === 'package.json') {
-    return getFileIcon('packagejson');
+  const fileNameIcon = FILE_NAME_ICON_MAP[normalizedFileName];
+
+  if (fileNameIcon) {
+    return fileNameIcon;
   }
 
   return getFileIcon(normalizedFileName.split('.').at(-1) ?? '');

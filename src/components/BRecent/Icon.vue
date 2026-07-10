@@ -19,7 +19,7 @@
 import { computed, ref, type CSSProperties } from 'vue';
 import type { RecentRecord } from '@/shared/storage';
 import { isDocumentRecord } from '@/shared/storage';
-import { DEFAULT_FALLBACK_ICON, getFileIconByName, WEB_RECORD_ICON } from '@/utils/file/icons';
+import { DEFAULT_FALLBACK_ICON, resolveFileIcon, WEB_RECORD_ICON } from '@/utils/file/icons';
 import { resolveFileTitle } from '@/utils/file/title';
 
 defineOptions({
@@ -80,11 +80,11 @@ const resolvedIcon = computed<string>(() => {
   }
 
   if (props.record && isDocumentRecord(props.record)) {
-    return getFileIconByName(resolveFileTitle(props.record));
+    return resolveFileIcon(resolveFileTitle(props.record));
   }
 
   if (props.fileName) {
-    return getFileIconByName(props.fileName);
+    return resolveFileIcon(props.fileName);
   }
 
   return props.fallbackIcon;

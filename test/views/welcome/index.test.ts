@@ -124,7 +124,7 @@ describe('WelcomePage', (): void => {
     const source = readWelcomePageSource();
 
     expect(source).toContain('<BRecentIcon :record="record" :size="14" />');
-    expect(source).not.toContain("import { getFileIconByName } from '@/utils/file/icons';");
+    expect(source).not.toContain("import { resolveFileIcon } from '@/utils/file/icons';");
     expect(source).not.toContain('getRecentRecordFavicon');
     expect(source).not.toContain('getRecentRecordIcon');
     expect(source).not.toContain("record.ext === 'tibis' ? 'lucide:pen-line' : 'lucide:file-text'");
