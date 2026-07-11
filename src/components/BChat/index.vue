@@ -168,6 +168,7 @@ const composer = useChatComposer({
   }
 });
 const {
+  // @ts-ignore
   containerRef,
   imageUpload,
   fileReference,
