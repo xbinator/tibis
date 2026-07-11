@@ -46,8 +46,12 @@ interface UseChatRuntimeOptions {
   onContextUsageUpdated?: (snapshot: ChatRuntimeContextUsageSnapshot) => Promise<void> | void;
   /** runtime 确认请求回调。 */
   requestConfirmation?: (request: ChatRuntimeConfirmationRequest) => Promise<ChatRuntimeConfirmationDecision> | ChatRuntimeConfirmationDecision;
+  /** runtime 确认提交成功回调。 */
+  onConfirmationResolved?: (event: ChatRuntimeConfirmationRequestEvent) => Promise<void> | void;
   /** runtime 通用 renderer bridge 请求回调。 */
   handleBridgeRequest?: (event: ChatRuntimeBridgeRequestEvent) => Promise<unknown> | unknown;
+  /** 判断 renderer 请求是否应交给应用级后台 Runtime listener。 */
+  shouldDeferRendererRequest?: (event: ChatRuntimeToolRequestEvent | ChatRuntimeConfirmationRequestEvent | ChatRuntimeBridgeRequestEvent) => boolean;
   /** 判断指定 runtime 事件是否应被忽略。 */
   isRuntimeEventIgnored?: (runtimeId: string) => boolean;
   /** renderer client id。 */
@@ -544,6 +548,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
     assertRuntimeResult(
       await electronAPI.chatRuntimeSubmitConfirmation(toCloneableData({ runtimeId: event.runtimeId, confirmationId: event.confirmationId, decision }))
     );
+    await options.onConfirmationResolved?.(event);
   }
 
   /**
@@ -561,6 +566,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
    */
   async function handleToolRequestEvent(event: ChatRuntimeToolRequestEvent): Promise<void> {
     if (event.clientId !== clientId) return;
+    if (options.shouldDeferRendererRequest?.(event) === true) return;
     if (event.sessionId !== options.getSessionId()) {
       await submitToolResult(event, createRuntimeToolUnavailableResult(event.toolName, '当前会话已切换，无法执行工具'));
       return;
@@ -585,6 +591,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
    */
   async function handleConfirmationRequestEvent(event: ChatRuntimeConfirmationRequestEvent): Promise<void> {
     if (event.clientId !== clientId) return;
+    if (options.shouldDeferRendererRequest?.(event) === true) return;
     if (event.sessionId !== options.getSessionId()) {
       await submitConfirmationDecision(event, { approved: false });
       return;
@@ -612,6 +619,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
    */
   async function handleBridgeRequestEvent(event: ChatRuntimeBridgeRequestEvent): Promise<void> {
     if (event.clientId !== clientId) return;
+    if (options.shouldDeferRendererRequest?.(event) === true) return;
     if (event.sessionId !== options.getSessionId()) {
       await submitBridgeResponse(event, {
         status: 'failure',
@@ -698,10 +706,11 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
   }
 
   /**
-   * 中止当前活跃 runtime。
+   * 中止指定或当前活跃 runtime。
+   * @param targetRuntimeId - 可选的明确 Runtime ID
    */
-  async function abort(): Promise<void> {
-    const runtimeId = activeRuntimeId.value;
+  async function abort(targetRuntimeId?: string): Promise<void> {
+    const runtimeId = targetRuntimeId ?? activeRuntimeId.value;
     if (!runtimeId) return;
 
     abortedRuntimeIds.add(runtimeId);

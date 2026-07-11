@@ -1,0 +1,171 @@
+/**
+ * @file supervisorMachine.ts
+ * @description 多会话 Chat Session Actor 管理与 Runtime 事件路由。
+ */
+import type { ChatActorAddress } from '../types';
+import type { AgentMachineEvent } from './agentMachine';
+import type { ActorRefFrom } from 'xstate';
+import { assign, setup, stopChild } from 'xstate';
+import { sessionMachine, type SessionMachineEvent } from './sessionMachine';
+
+/** Runtime 可路由到 Agent 的事件。 */
+type RuntimeAgentEvent = Extract<AgentMachineEvent, { runtimeId: string }>;
+
+/**
+ * Supervisor context。
+ */
+export interface SupervisorMachineContext {
+  /** Session ID 到 Session actor */
+  sessions: Map<string, ActorRefFrom<typeof sessionMachine>>;
+  /** Runtime ID 到完整 Actor 地址 */
+  runtimeRoutes: Map<string, ChatActorAddress>;
+}
+
+/**
+ * Supervisor 领域事件。
+ */
+export type SupervisorMachineEvent =
+  | { type: 'supervisor.ensureSession'; sessionId: string }
+  | { type: 'supervisor.removeSession'; sessionId: string }
+  | { type: 'supervisor.sendToSession'; sessionId: string; event: SessionMachineEvent }
+  | { type: 'runtime.register'; address: ChatActorAddress }
+  | { type: 'runtime.unregister'; runtimeId: string }
+  | { type: 'runtime.event'; runtimeId: string; event: RuntimeAgentEvent };
+
+/** 由 Supervisor 父级停止待删除的 Session child。 */
+const stopRemovedSession = stopChild<SupervisorMachineContext, SupervisorMachineEvent, undefined, SupervisorMachineEvent>(({ context, event }) => {
+  if (event.type !== 'supervisor.removeSession') {
+    throw new Error(`Unexpected event for Session removal: ${event.type}`);
+  }
+
+  const sessionRef = context.sessions.get(event.sessionId);
+  if (!sessionRef) {
+    throw new Error(`Chat Session actor does not exist: ${event.sessionId}`);
+  }
+
+  return sessionRef;
+});
+
+/**
+ * 从路由地址查找目标 Agent actor。
+ * @param context - Supervisor context
+ * @param address - Runtime Actor 地址
+ * @returns 目标 Agent actor
+ */
+function findAddressedAgent(context: SupervisorMachineContext, address: ChatActorAddress) {
+  const sessionRef = context.sessions.get(address.sessionId);
+  const turnRef = sessionRef?.getSnapshot().context.turnRef;
+  if (!turnRef || turnRef.getSnapshot().context.turnId !== address.turnId) {
+    return undefined;
+  }
+
+  return turnRef.getSnapshot().context.agents[address.agentId];
+}
+
+/**
+ * 多会话 Supervisor machine。
+ */
+export const supervisorMachine = setup({
+  types: {
+    context: {} as SupervisorMachineContext,
+    events: {} as SupervisorMachineEvent
+  },
+  actors: {
+    sessionMachine
+  },
+  guards: {
+    hasSessionToRemove: ({ context, event }): boolean => event.type === 'supervisor.removeSession' && context.sessions.has(event.sessionId)
+  },
+  actions: {
+    ensureSession: assign({
+      sessions: ({ context, event, spawn }): Map<string, ActorRefFrom<typeof sessionMachine>> => {
+        if (event.type !== 'supervisor.ensureSession' || context.sessions.has(event.sessionId)) {
+          return context.sessions;
+        }
+
+        const sessions = new Map(context.sessions);
+        sessions.set(
+          event.sessionId,
+          spawn('sessionMachine', {
+            id: `session-${event.sessionId}`,
+            input: { sessionId: event.sessionId }
+          })
+        );
+        return sessions;
+      }
+    }),
+    removeSession: assign({
+      sessions: ({ context, event }): Map<string, ActorRefFrom<typeof sessionMachine>> => {
+        if (event.type !== 'supervisor.removeSession') {
+          return context.sessions;
+        }
+
+        const sessions = new Map(context.sessions);
+        sessions.delete(event.sessionId);
+        return sessions;
+      },
+      runtimeRoutes: ({ context, event }): Map<string, ChatActorAddress> => {
+        if (event.type !== 'supervisor.removeSession') {
+          return context.runtimeRoutes;
+        }
+
+        return new Map([...context.runtimeRoutes].filter(([, address]): boolean => address.sessionId !== event.sessionId));
+      }
+    }),
+    sendToSession: ({ context, event }): void => {
+      if (event.type === 'supervisor.sendToSession') {
+        context.sessions.get(event.sessionId)?.send(event.event);
+      }
+    },
+    registerRuntime: assign({
+      runtimeRoutes: ({ context, event }): Map<string, ChatActorAddress> => {
+        if (event.type !== 'runtime.register') {
+          return context.runtimeRoutes;
+        }
+
+        const runtimeRoutes = new Map(context.runtimeRoutes);
+        runtimeRoutes.set(event.address.runtimeId, event.address);
+        return runtimeRoutes;
+      }
+    }),
+    unregisterRuntime: assign({
+      runtimeRoutes: ({ context, event }): Map<string, ChatActorAddress> => {
+        if (event.type !== 'runtime.unregister') {
+          return context.runtimeRoutes;
+        }
+
+        const runtimeRoutes = new Map(context.runtimeRoutes);
+        runtimeRoutes.delete(event.runtimeId);
+        return runtimeRoutes;
+      }
+    }),
+    routeRuntimeEvent: ({ context, event }): void => {
+      if (event.type !== 'runtime.event' || event.event.runtimeId !== event.runtimeId) {
+        return;
+      }
+
+      const address = context.runtimeRoutes.get(event.runtimeId);
+      const agentRef = address ? findAddressedAgent(context, address) : undefined;
+      agentRef?.send(event.event);
+    }
+  }
+}).createMachine({
+  id: 'chatSupervisor',
+  context: {
+    sessions: new Map(),
+    runtimeRoutes: new Map()
+  },
+  initial: 'active',
+  states: {
+    active: {
+      on: {
+        'supervisor.ensureSession': { actions: 'ensureSession' },
+        'supervisor.removeSession': [{ guard: 'hasSessionToRemove', actions: [stopRemovedSession, 'removeSession'] }, { actions: 'removeSession' }],
+        'supervisor.sendToSession': { actions: 'sendToSession' },
+        'runtime.register': { actions: 'registerRuntime' },
+        'runtime.unregister': { actions: 'unregisterRuntime' },
+        'runtime.event': { actions: 'routeRuntimeEvent' }
+      }
+    }
+  }
+});

@@ -85,30 +85,18 @@
 
 <script setup lang="ts">
 import type { BChatProps, Message } from './utils/types';
-import type { AIToolExecutor } from 'types/ai';
 import type { ChatMessageConfirmationAction, ChatSession } from 'types/chat';
-import type { ChatRuntimeContextUsageSnapshot, ChatRuntimeSendInput, ChatRuntimeUserInputPart } from 'types/chat-runtime';
-import { computed, h, nextTick, onMounted, onUnmounted, provide, ref, watch } from 'vue';
+import type { ChatRuntimeContextUsageSnapshot } from 'types/chat-runtime';
+import { computed, h, onUnmounted, provide, ref, toRef, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { cloneDeep, uniq } from 'lodash-es';
 import type { ContextUsageBudgetSnapshot } from '@@/shared/ai/context/usageBudget.ts';
-import type { MemorySelectionContext, MemorySelectionDebugInfo } from '@/ai/memory/types';
-import { EDIT_MEMORY_TOOL_NAME } from '@/ai/tools/builtin';
-import { editorToolContextRegistry } from '@/ai/tools/context/editor';
-import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
-import { toTransportTools } from '@/ai/tools/stream';
+import type { ChatSessionUIEvent } from '@/ai/chat/sessionEvents';
 import BTextEditor from '@/components/BText/Editor.vue';
-import type { FileMentionOption } from '@/components/BText/types';
-import { useFileDrop } from '@/hooks/useFileDrop';
+import { useChatActorSystem } from '@/hooks/useChatActorSystem';
 import { useNavigate } from '@/hooks/useNavigate';
-import { logger } from '@/shared/logger';
-import { native } from '@/shared/platform';
-import { getElectronAPI, unwrap } from '@/shared/platform/electron-api';
 import { useProviderStore } from '@/stores/ai/provider';
 import { useChatSessionStore } from '@/stores/chat/session';
 import { useCommandPanelStore } from '@/stores/ui/commandPanel';
-import { useFilesStore } from '@/stores/workspace/files';
-import type { FileReferenceNavigationTarget } from '@/utils/file/reference';
 import { createNamespace } from '@/utils/namespace';
 import ConfirmationSheet from './components/ConfirmationSheet.vue';
 import ConversationView from './components/ConversationView.vue';
@@ -117,62 +105,28 @@ import InputToolbar from './components/InputToolbar.vue';
 import InteractionContainer from './components/InteractionContainer/index.vue';
 import TodoPanel from './components/TodoPanel.vue';
 import UsagePanel from './components/UsagePanel.vue';
-import { useAutoName } from './hooks/useAutoName';
-import { useChatHistory } from './hooks/useChatHistory';
-import { useChatInput } from './hooks/useChatInput';
-import { useChatRuntime } from './hooks/useChatRuntime';
+import { useChatComposer } from './hooks/useChatComposer';
 import { useChatServiceConfig } from './hooks/useChatServiceConfig';
-import { useChatSubmitter } from './hooks/useChatSubmitter';
-import { useChatTaskRuntime } from './hooks/useChatTaskRuntime';
+import { useChatSessionActor } from './hooks/useChatSessionActor';
+import { useChatSessionLifecycle } from './hooks/useChatSessionLifecycle';
+import { useChatWorkflow } from './hooks/useChatWorkflow';
 import { useContextUsage } from './hooks/useContextUsage';
-import { useFileReference } from './hooks/useFileReference';
-import { useImageUpload } from './hooks/useImageUpload';
 import { useInteractionState } from './hooks/useInteractionState';
-import { useModelSelection } from './hooks/useModelSelection';
-import { useRollback } from './hooks/useRollback';
-import { useRuntimeCompactContext } from './hooks/useRuntimeCompactContext';
+import { useRuntimeBridgeHandler } from './hooks/useRuntimeBridgeHandler';
 import { useRuntimeConfig } from './hooks/useRuntimeConfig';
-import { useRuntimeSettings } from './hooks/useRuntimeSettings';
+import { useRuntimeRequestConfig } from './hooks/useRuntimeRequestConfig';
 import { useRuntimeTools } from './hooks/useRuntimeTools';
 import { useSlashCommands, chatSlashCommands } from './hooks/useSlashCommands';
 import { useTodoPanel } from './hooks/useTodoPanel';
 import { useUsagePanel } from './hooks/useUsagePanel';
-import { useVoiceInput } from './hooks/useVoiceInput';
-import { createFileRefChipResolver } from './utils/chipResolver';
 import { createChatConfirmationController } from './utils/confirmationController';
-import { buildUserInputParts } from './utils/filePartParser';
-import { create, userChoice } from './utils/messageHelper';
-import { handleBChatRuntimeBridgeRequest } from './utils/runtimeBridge';
-import { appendRuntimeErrorMessage } from './utils/runtimeError';
+import { userChoice } from './utils/messageHelper';
 
 const [, bem] = createNamespace('chat');
 
 const props = withDefaults(defineProps<BChatProps>(), {
   sessionId: null
 });
-
-/** ChatRuntime 通用请求配置。 */
-type ChatRuntimeRequestConfig = Pick<ChatRuntimeSendInput, 'contextWindow' | 'system' | 'workspaceRoot' | 'tools' | 'skillContentHashes' | 'tavily' | 'mcp'>;
-
-/**
- * 发送到 ChatRuntime 的用户消息输入。
- */
-interface RuntimeUserMessageSendInput {
-  /** 已创建的用户消息 */
-  userMessage: Message;
-  /** 发送给运行态的结构化输入片段 */
-  parts: ChatRuntimeUserInputPart[];
-  /** 是否清空当前输入草稿 */
-  clearDraft?: boolean;
-}
-
-/**
- * 记忆选择日志信息。
- */
-interface MemorySelectionLogInfo extends MemorySelectionDebugInfo {
-  /** 本轮是否向模型暴露 edit_memory 工具。 */
-  editMemoryExposed: boolean;
-}
 
 const emit = defineEmits<{
   (e: 'session-created', session: ChatSession): void;
@@ -185,15 +139,6 @@ const emit = defineEmits<{
 /** 聊天数据存储 */
 const chatStore = useChatSessionStore();
 
-/** BChat 内部为新会话草稿创建出的会话 ID。 */
-const createdSessionId = ref<string | null>(null);
-/** 自动命名时需要的当前会话镜像。 */
-const currentSessionForAutoName = ref<{ id: string; title: string } | undefined>(undefined);
-/** 当前聊天运行时使用的有效会话 ID。 */
-const activeSessionId = computed<string | null>(() => props.sessionId ?? createdSessionId.value);
-/** Todo 面板状态和回退恢复能力。 */
-const { currentSessionTodos, todoPanelVisible, todoPanelDismissed, restoreTodoSnapshotsForMessages } = useTodoPanel({ activeSessionId });
-
 const router = useRouter();
 
 /** 交互容器状态 */
@@ -202,12 +147,43 @@ const { api: interactionAPI, toastQueue, removeToast } = useInteractionState();
 /** 提供交互 API */
 provide('interaction', interactionAPI);
 
-/** 输入框编辑器引用 */
-const promptEditorRef = ref<InstanceType<typeof BTextEditor>>();
-/** 聊天容器引用，用于接收整个聊天区域的文件拖拽。 */
-const containerRef = ref<HTMLElement>();
 /** 通用文件打开导航能力 */
 const { openFile, openWebview } = useNavigate();
+/** 输入编辑器实例。 */
+const promptEditorRef = ref<InstanceType<typeof BTextEditor>>();
+/** 聚焦输入编辑器。 */
+function focusInput(options?: { moveToEnd?: boolean }): void {
+  promptEditorRef.value?.focus?.(options);
+}
+/** 输入区域状态与交互能力。 */
+const composer = useChatComposer({
+  showToast: interactionAPI.showToast,
+  openFile,
+  editor: {
+    focus: focusInput,
+    saveCursorPosition: (): void => promptEditorRef.value?.saveCursorPosition(),
+    getCursorPosition: (): number => promptEditorRef.value?.getCursorPosition() ?? 0,
+    replaceTextRange: (from: number, to: number, text: string): void => promptEditorRef.value?.replaceTextRange(from, to, text),
+    insertTextAtCursor: (text: string): void => promptEditorRef.value?.insertTextAtCursor(text)
+  }
+});
+const {
+  containerRef,
+  imageUpload,
+  fileReference,
+  canSubmit,
+  isContainerDragActive,
+  fileMentionOptions,
+  promptChipResolver,
+  handleFileMentionSelect,
+  handleVoiceStart,
+  handleVoicePartial,
+  handleVoiceComplete
+} = composer;
+/** 草稿输入状态与操作。 */
+const { inputContent, inputImages, ...inputEvents } = composer.input;
+/** 模型选择状态与操作。 */
+const { selectedModel, supportsVision, contextWindow, ...modelSelectionEvents } = composer.model;
 /** 全局命令面板 Store。 */
 const commandPanelStore = useCommandPanelStore();
 /** Provider 数据源。 */
@@ -216,137 +192,63 @@ const providerStore = useProviderStore();
 const hasAvailableModels = computed<boolean>(() => providerStore.availableModels.length > 0);
 /** 对话视图引用 */
 const conversationRef = ref<InstanceType<typeof ConversationView>>();
-
-/** 聊天历史加载状态和方法 */
-const { setLoadedMessages, fetchAllPriorHistory, messages, hasMoreHistory, loadHistory } = useChatHistory();
-
 /** 确认控制器，管理工具调用的用户确认流程 */
 const confirmationController = createChatConfirmationController();
-/** Runtime 可读写设置能力。 */
-const { getSettingsSnapshot, applyRuntimeSetting } = useRuntimeSettings();
+/** 用量面板 hook */
+const usagePanel = useUsagePanel();
+/** 主进程 runtime 上报的上下文窗口用量快照。 */
+const runtimeContextUsageSnapshot = ref<ContextUsageBudgetSnapshot | undefined>(undefined);
+/** 提供给早期初始化回调的工作流忙碌镜像。 */
+const workflowLoading = ref<boolean>(false);
+/** 会话 ID、历史消息与自动命名生命周期。 */
+const sessionLifecycle = useChatSessionLifecycle({
+  sessionId: toRef(props, 'sessionId'),
+  isLoading: (): boolean => workflowLoading.value,
+  disposeConfirmation: confirmationController.dispose,
+  resetUsagePanel: usagePanel.reset,
+  resetRuntimeContextUsage: (): void => {
+    runtimeContextUsageSnapshot.value = undefined;
+  },
+  focusInput,
+  hasPendingUserChoice: (sourceMessages: Message[]): boolean => Boolean(userChoice.findPending(sourceMessages)),
+  onSessionCreated: (session: ChatSession): void => emit('session-created', session),
+  onSessionTitlePersisted: (sessionId: string, title: string): void => emit('session-title-persisted', sessionId, title),
+  onDraftSessionCreated: (): void => emit('draft-session-created')
+});
+const {
+  activeSessionId,
+  currentSessionForAutoName,
+  setLoadedMessages,
+  fetchAllPriorHistory,
+  messages,
+  ensureActiveSession,
+  createDraftSession,
+  handleLoadHistory,
+  captureAutoNameSnapshot,
+  scheduleAutoName
+} = sessionLifecycle;
+/** 应用级 Chat Actor system。 */
+const chatActorSystem = useChatActorSystem();
+/** Workflow 创建前收到的待重放 Session UI 事件。 */
+const pendingSessionUIEvents: ChatSessionUIEvent[] = [];
+/** 当前 Session UI 事件处理器，Workflow 创建前先暂存事件。 */
+let handleSessionUIEvent = (event: ChatSessionUIEvent): void => {
+  pendingSessionUIEvents.push(event);
+};
+/** 当前会话 Actor 状态与领域事件 API。 */
+const chatSessionActor = useChatSessionActor({
+  activeSessionId,
+  actorSystem: chatActorSystem,
+  onUIEvent: (event: ChatSessionUIEvent): void => handleSessionUIEvent(event)
+});
+/** Todo 面板状态和回退恢复能力。 */
+const { currentSessionTodos, todoPanelVisible, todoPanelDismissed, restoreTodoSnapshotsForMessages } = useTodoPanel({ activeSessionId });
 /** Runtime 内置工具能力。 */
 const { workspaceRoot, getActiveTools, syncAIResources, getSkillContentHashes, openDraft, openFileByPath } = useRuntimeTools({
   messages,
   confirm: confirmationController.createAdapter(),
   getSessionId: () => activeSessionId.value ?? undefined,
   openWebview
-});
-
-/** 显式记忆编辑意图匹配规则，避免普通讨论“记忆系统”时暴露写记忆工具。 */
-const MEMORY_EDIT_INTENT_PATTERNS: RegExp[] = [
-  /(?:记住|记一下|记下来|帮我记|请记|记录一下|保存一下|存一下)/u,
-  /(?:整理|更新|修改|编辑|删除|移除|清理|清空).{0,12}(?:记忆|memory)/iu,
-  /(?:记忆|memory).{0,12}(?:整理|更新|修改|编辑|删除|移除|清理|清空|保存|写入)/iu,
-  /(?:忘记|忘掉)/u,
-  /\b(?:remember|forget)\b/iu,
-  /\b(?:update|edit|delete|remove|save|clean up|cleanup).{0,20}memory\b/iu,
-  /\bmemory.{0,20}(?:update|edit|delete|remove|save|clean up|cleanup)\b/iu
-];
-
-/** 聚焦输入框 */
-function focusInput(options?: { moveToEnd?: boolean }): void {
-  promptEditorRef.value?.focus?.(options);
-}
-
-/**
- * 处理输入框中的文件引用 chip 打开动作。
- * @param target - 文件导航目标
- */
-function handleOpenPromptFileReference(target: FileReferenceNavigationTarget): void {
-  openFile({
-    filePath: target.filePath,
-    fileId: target.fileId,
-    fileName: target.fileName,
-    range: {
-      startLine: target.startLine,
-      endLine: target.endLine
-    }
-  });
-}
-
-/** BTextEditor 使用的文件引用 chip resolver。 */
-const promptChipResolver = createFileRefChipResolver(handleOpenPromptFileReference);
-
-/** 保存输入框光标位置 */
-function saveCursorPosition(): void {
-  promptEditorRef.value?.saveCursorPosition();
-}
-
-/** 插入文本到光标位置 */
-function insertTextAtCursor(text: string): void {
-  promptEditorRef.value?.insertTextAtCursor(text);
-}
-
-/** 语音输入转写事件处理器。 */
-const { handleVoiceStart, handleVoicePartial, handleVoiceComplete } = useVoiceInput({
-  editor: {
-    saveCursorPosition,
-    getCursorPosition: () => promptEditorRef.value?.getCursorPosition() ?? 0,
-    replaceTextRange: (from: number, to: number, text: string) => {
-      promptEditorRef.value?.replaceTextRange(from, to, text);
-    },
-    insertTextAtCursor
-  },
-  showEmptyTranscriptionToast: () => {
-    interactionAPI.showToast({ content: '语音转写结果为空，请重试', type: 'error' });
-  }
-});
-
-/** 用量面板 hook */
-const usagePanel = useUsagePanel();
-
-/** 草稿输入 hook */
-const { inputContent, inputImages, ...inputEvents } = useChatInput({ focusInput });
-
-/** 模型选择 hook */
-const { selectedModel, supportsVision, contextWindow, ...modelSelectionEvents } = useModelSelection();
-
-/** 图片上传 hook */
-const imageUpload = useImageUpload({ supportsVision, inputEvents: { ...inputEvents, inputImages }, showToast: interactionAPI.showToast });
-
-/** 当前是否允许提交消息（文本非空 或 有图片） */
-const canSubmit = computed<boolean>(() => !inputEvents.isEmpty() || inputEvents.hasImages());
-
-/** 文件引用 hook */
-const fileReference = useFileReference({
-  insertTextAtCursor,
-  saveCursorPosition,
-  focusInput
-});
-
-/**
- * 处理投放到聊天容器的文件。
- * @param files - 拖拽文件列表
- */
-async function handleInputDropFiles(files: File[]): Promise<void> {
-  const imageFiles = files.filter((file) => file.type.startsWith('image/'));
-  const otherFiles = files.filter((file) => !file.type.startsWith('image/'));
-
-  if (imageFiles.length > 0) {
-    await imageUpload.appendImages(imageFiles);
-  }
-
-  if (otherFiles.length > 0) {
-    const tokenText = fileReference.onPasteFiles(otherFiles);
-    if (tokenText) {
-      insertTextAtCursor(tokenText);
-    }
-  }
-}
-
-/** 聊天容器文件拖拽 hook */
-const { isDragging: isContainerDragActive } = useFileDrop({
-  targetRef: containerRef,
-  onDropFiles: handleInputDropFiles
-});
-
-/** 文件存储，用于文件提及和 bridge 文件查询。 */
-const filesStore = useFilesStore();
-
-/** 最近文件列表，用于 @ 文件提及功能（实时响应 filesStore.recentFiles） */
-const fileMentionOptions = computed<FileMentionOption[]>(() => {
-  const files = filesStore.recentFiles ?? [];
-  return files.filter((file) => file.ext.toLowerCase() === 'md').map((file) => ({ id: file.id, name: file.name, path: file.path, ext: file.ext }));
 });
 
 /**
@@ -369,61 +271,6 @@ function handleConfirmationSheetAction(action: ChatMessageConfirmationAction): v
 }
 
 /**
- * 消息重新生成前的处理函数。
- * @param nextMessages - 重新生成后的消息列表
- */
-async function handleBeforeRegenerate(nextMessages: Message[]): Promise<void> {
-  confirmationController.expirePendingConfirmation();
-  const sessionId = activeSessionId.value;
-  if (!sessionId) return;
-
-  const historyMessages = await fetchAllPriorHistory(sessionId);
-  await chatStore.setSessionMessages(sessionId, [...historyMessages, ...nextMessages]);
-}
-
-/**
- * 确保当前发送动作有可持久化的会话。
- * @param title - 新会话标题
- * @returns 有效会话 ID
- */
-async function ensureActiveSession(title: string): Promise<string> {
-  if (activeSessionId.value) {
-    return activeSessionId.value;
-  }
-
-  const session = await chatStore.createSession('assistant', { title });
-  createdSessionId.value = session.id;
-  currentSessionForAutoName.value = session;
-  emit('session-created', session);
-  return session.id;
-}
-
-/** Chat 服务配置解析 hook。 */
-const chatServiceConfig = useChatServiceConfig();
-/** Runtime 请求配置解析 hook。 */
-const { resolveRuntimeSystemPrompt, resolveRuntimeTavilyConfig, resolveRuntimeMcpRequestConfig } = useRuntimeConfig();
-
-/** 当前 runtime 聊天任务的中止函数。 */
-let abortRuntimeChatTask: (() => Promise<void>) | null = null;
-
-/** 统一任务运行时。 */
-const taskRuntime = useChatTaskRuntime({
-  abortChatTask: async () => {
-    await abortRuntimeChatTask?.();
-  }
-});
-
-/** 当前是否有活跃任务。 */
-const loading = computed<boolean>(() => taskRuntime.loading.value);
-
-/** 上下文窗口用量 hook（混合策略：空闲态用 API 上报值，流式中用估算器） */
-const { usedTokens, snapshot: contextUsageSnapshot } = useContextUsage({ messages, contextWindow, selectedModel, streaming: loading });
-/** 主进程 runtime 上报的上下文窗口用量快照。 */
-const runtimeContextUsageSnapshot = ref<ContextUsageBudgetSnapshot | undefined>(undefined);
-/** 当前展示给工具栏的上下文窗口用量快照。 */
-const displayedContextUsageSnapshot = computed<ContextUsageBudgetSnapshot>(() => runtimeContextUsageSnapshot.value ?? contextUsageSnapshot.value);
-
-/**
  * 将主进程 runtime 上下文用量快照转换为 renderer 工具栏使用的形状。
  * @param snapshot - 主进程 runtime 上下文用量快照
  * @returns renderer 上下文用量快照
@@ -441,95 +288,6 @@ function toContextUsageBudgetSnapshot(snapshot: ChatRuntimeContextUsageSnapshot)
   };
 }
 
-watch(
-  loading,
-  (value) => {
-    emit('loading-change', value);
-  },
-  { immediate: true }
-);
-
-/**
- * 重置新会话草稿态。
- */
-async function resetDraftSessionState(): Promise<void> {
-  confirmationController.dispose();
-  createdSessionId.value = null;
-  currentSessionForAutoName.value = undefined;
-  runtimeContextUsageSnapshot.value = undefined;
-  usagePanel.reset();
-  setLoadedMessages([]);
-  hasMoreHistory.value = false;
-  await nextTick();
-  focusInput();
-}
-
-/**
- * 加载指定会话消息。
- * @param sessionId - 会话 ID
- */
-async function loadSessionMessages(sessionId: string): Promise<void> {
-  confirmationController.dispose();
-  usagePanel.reset();
-  runtimeContextUsageSnapshot.value = undefined;
-  hasMoreHistory.value = false;
-  setLoadedMessages(await chatStore.getSessionMessages(sessionId));
-}
-
-watch(
-  () => props.sessionId,
-  async (nextSessionId) => {
-    if (nextSessionId && nextSessionId === createdSessionId.value) {
-      createdSessionId.value = null;
-      return;
-    }
-
-    if (!nextSessionId) {
-      await resetDraftSessionState();
-      return;
-    }
-
-    createdSessionId.value = null;
-    currentSessionForAutoName.value = undefined;
-    await loadSessionMessages(nextSessionId);
-  },
-  { immediate: true }
-);
-
-/**
- * 进入新会话草稿态。
- */
-async function createDraftSession(): Promise<void> {
-  if (loading.value) return;
-
-  await resetDraftSessionState();
-  emit('draft-session-created');
-}
-
-/** 自动命名 Hook。 */
-const { captureSnapshot, scheduleAutoName } = useAutoName({
-  getCurrentSession: () => currentSessionForAutoName.value,
-  getFirstRoundContent: (nextMessage) => {
-    // 首轮如果仍在等待用户补充输入，则不应提前触发自动命名
-    if (userChoice.findPending(messages.value)) {
-      return null;
-    }
-
-    // 仅在首轮恰好形成一问一答时才参与自动命名
-    const userMessages = messages.value.filter((item) => item.role === 'user');
-    const assistantMessages = messages.value.filter((item) => item.role === 'assistant');
-    if (userMessages.length !== 1 || assistantMessages.length !== 1) return null;
-
-    return {
-      userMessage: userMessages[0].content,
-      aiResponse: nextMessage.content
-    };
-  },
-  onTitlePersisted: (sessionId, title) => {
-    emit('session-title-persisted', sessionId, title);
-  }
-});
-
 /**
  * 处理主进程 ChatRuntime 完成事件。
  * Runtime 已在主进程完成消息持久化，这里只做 UI 状态、用量刷新和自动命名。
@@ -537,19 +295,15 @@ const { captureSnapshot, scheduleAutoName } = useAutoName({
  */
 async function handleRuntimeComplete(nextMessage: Message): Promise<void> {
   const sessionId = activeSessionId.value;
-  const snapshot = captureSnapshot(nextMessage, sessionId);
+  const snapshot = captureAutoNameSnapshot(nextMessage, sessionId);
 
-  try {
-    if (sessionId) {
-      await usagePanel.refresh(sessionId, currentSessionForAutoName.value?.id ?? sessionId);
-    }
-  } finally {
-    taskRuntime.finishTask('chat');
+  if (sessionId) {
+    await usagePanel.refresh(sessionId, currentSessionForAutoName.value?.id ?? sessionId);
   }
 
   if (!snapshot) return;
 
-  scheduleAutoName(snapshot, () => loading.value);
+  scheduleAutoName(snapshot, () => workflowLoading.value);
 }
 
 /**
@@ -594,405 +348,93 @@ function showNoModelConfigToast(): void {
   });
 }
 
-/**
- * 判断用户是否明确要求编辑长期记忆。
- * @param content - 用户消息内容
- * @returns 是否应切换到完整记忆并暴露 edit_memory
- */
-function hasMemoryEditIntent(content: string): boolean {
-  return MEMORY_EDIT_INTENT_PATTERNS.some((pattern) => pattern.test(content));
-}
+/** Chat 服务配置解析 hook。 */
+const chatServiceConfig = useChatServiceConfig();
+/** Runtime 请求配置解析 hook。 */
+const { resolveRuntimeSystemPrompt, resolveRuntimeTavilyConfig, resolveRuntimeMcpRequestConfig } = useRuntimeConfig();
+/** Runtime 请求准备与纯策略适配 hook。 */
+const { prepareRuntimeRequest, resolveRuntimeRequestConfig: resolveChatRuntimeRequestConfig } = useRuntimeRequestConfig({
+  contextWindow,
+  workspaceRoot,
+  resolveServiceConfig: chatServiceConfig.resolveServiceConfig,
+  syncAIResources,
+  getActiveTools,
+  getSkillContentHashes,
+  resolveRuntimeSystemPrompt,
+  resolveRuntimeTavilyConfig,
+  resolveRuntimeMcpRequestConfig,
+  onMissingServiceConfig: showNoModelConfigToast
+});
 
-/**
- * 从用户消息和 runtime 输入片段构建记忆筛选上下文。
- * @param userMessage - 用户消息
- * @param parts - 发送给 runtime 的结构化输入片段
- * @returns 记忆筛选上下文
- */
-function createMemorySelectionContext(userMessage: Message, parts: ChatRuntimeUserInputPart[] = []): MemorySelectionContext {
-  const messageReferences = userMessage.references?.map((reference) => reference.path) ?? [];
-  const filePartReferences = parts.filter((part) => part.type === 'file').map((part) => part.path);
-  const references = uniq([...messageReferences, ...filePartReferences]).filter((path) => path.trim().length > 0);
-
-  return {
-    userMessage: userMessage.content,
-    references,
-    workspaceRoot: workspaceRoot.value || undefined,
-    mode: hasMemoryEditIntent(userMessage.content) ? 'full' : 'relevant'
-  };
-}
-
-/**
- * 查找消息列表中的最后一条用户消息。
- * @param sourceMessages - 消息列表
- * @returns 最后一条用户消息，不存在时返回 null
- */
-function findLastUserMessage(sourceMessages: Message[]): Message | null {
-  for (let index = sourceMessages.length - 1; index >= 0; index -= 1) {
-    const message = sourceMessages[index];
-    if (message.role === 'user') return message;
-  }
-
-  return null;
-}
-
-/**
- * 过滤普通相关记忆轮次不能暴露的工具。
- * @param tools - 候选工具列表
- * @returns 最终发送给 runtime 的工具列表
- */
-function filterRelevantMemoryTools(tools: AIToolExecutor[]): AIToolExecutor[] {
-  return tools.filter((tool) => tool.definition.name !== EDIT_MEMORY_TOOL_NAME);
-}
-
-/**
- * 写入本轮记忆选择调试日志。
- * @param debugInfo - 记忆选择调试信息
- * @param tools - 本轮最终暴露给模型的工具
- */
-function logMemorySelectionDebug(debugInfo: MemorySelectionDebugInfo, tools: AIToolExecutor[]): void {
-  const logInfo: MemorySelectionLogInfo = {
-    ...debugInfo,
-    editMemoryExposed: tools.some((tool) => tool.definition.name === EDIT_MEMORY_TOOL_NAME)
-  };
-  logger.info(`[memory-selection] ${JSON.stringify(logInfo)}`);
-}
-
-/**
- * 解析 ChatRuntime 通用请求配置。
- * @param selectionSource - 用于构建记忆筛选上下文的用户消息
- * @param selectionParts - 发送给 runtime 的结构化输入片段
- * @returns Runtime 请求配置，未配置模型时返回 null
- */
-async function resolveChatRuntimeRequestConfig(
-  selectionSource?: Message | null,
-  selectionParts: ChatRuntimeUserInputPart[] = []
-): Promise<ChatRuntimeRequestConfig | null> {
-  const serviceConfig = await chatServiceConfig.resolveServiceConfig();
-  if (!serviceConfig) {
-    showNoModelConfigToast();
-    return null;
-  }
-
-  await syncAIResources();
-  const candidateTools = serviceConfig.toolSupport.supported ? getActiveTools() : [];
-  const selection = selectionSource ? createMemorySelectionContext(selectionSource, selectionParts) : undefined;
-  const finalTools = selection?.mode === 'relevant' ? filterRelevantMemoryTools(candidateTools) : candidateTools;
-  let memorySelectionDebugInfo: MemorySelectionDebugInfo | undefined;
-  const system = await resolveRuntimeSystemPrompt(selection, (debugInfo) => {
-    memorySelectionDebugInfo = debugInfo;
-  });
-
-  if (memorySelectionDebugInfo) {
-    logMemorySelectionDebug(memorySelectionDebugInfo, finalTools);
-  }
-
-  return {
-    contextWindow: contextWindow.value,
-    system,
-    workspaceRoot: workspaceRoot.value || undefined,
-    tools: serviceConfig.toolSupport.supported ? toTransportTools(finalTools) : undefined,
-    skillContentHashes: getSkillContentHashes(),
-    tavily: resolveRuntimeTavilyConfig(),
-    mcp: resolveRuntimeMcpRequestConfig()
-  };
-}
-
-/** 已被回退删除的 runtime ID 集合，用于丢弃迟到的主进程事件。 */
-const rollbackIgnoredRuntimeIds = new Set<string>();
-
-/**
- * 记录回退删除区间内的 runtime ID。
- * @param rolledBackMessages - 本次回退删除的消息列表
- */
-function rememberRolledBackRuntimeIds(rolledBackMessages: Message[]): void {
-  for (const message of rolledBackMessages) {
-    if (message.runtimeId) {
-      rollbackIgnoredRuntimeIds.add(message.runtimeId);
-    }
-  }
-}
-
-/**
- * 判断 runtime 事件是否已被回退流程作废。
- * @param runtimeId - runtime ID
- * @returns 是否忽略该 runtime 的迟到事件
- */
-function isRollbackRuntimeEventIgnored(runtimeId: string): boolean {
-  return rollbackIgnoredRuntimeIds.has(runtimeId);
-}
-
-/** 主进程 ChatRuntime hook。 */
-const chatRuntime = useChatRuntime({
+/** 当前应用级 Runtime Bridge 请求处理器。 */
+const handleRuntimeBridgeRequest = useRuntimeBridgeHandler({ openDraft, openFileByPath, openWebview });
+/** Session 状态机与 Runtime IPC 工作流。 */
+const workflow = useChatWorkflow({
   messages,
-  getSessionId: () => activeSessionId.value ?? undefined,
-  tools: getActiveTools,
-  getToolContext: editorToolContextRegistry.getCurrentContext,
-  isRuntimeEventIgnored: isRollbackRuntimeEventIgnored,
-  requestConfirmation: (request) => confirmationController.requestConfirmation(request),
-  handleBridgeRequest: (event) =>
-    handleBChatRuntimeBridgeRequest(event, {
-      getEditorContext: editorToolContextRegistry.getCurrentContext,
-      getEditorContextByDocumentId: (documentId) => editorToolContextRegistry.getContext(documentId),
-      findFileByPath: async (filePath) => {
-        const file = await filesStore.getFileByPath(filePath);
-        return file ? { id: file.id } : null;
-      },
-      getRecentFileById: (fileId) => filesStore.getFileById(fileId),
-      updateRecentFileById: (fileId, updates) => filesStore.updateFile(fileId, updates),
-      getWebviewContext: webviewToolContextRegistry.getCurrentContext,
-      getSettingsSnapshot,
-      applySetting: applyRuntimeSetting,
-      openDraft,
-      openFileByPath,
-      openInWebview: (url) => {
-        openWebview(new URL(url));
-      },
-      openExternal: (url) => native.openExternal(url)
-    }),
-  onComplete: handleRuntimeComplete,
-  onContextUsageUpdated: (snapshot) => {
+  activeSessionId,
+  contextWindow,
+  workspaceRoot,
+  supportsVision,
+  actorSystem: chatActorSystem,
+  sessionActor: chatSessionActor,
+  getActiveTools,
+  prepareRuntimeRequest,
+  resolveRuntimeRequestConfig: resolveChatRuntimeRequestConfig,
+  handleBridgeRequest: handleRuntimeBridgeRequest,
+  confirmationController,
+  ensureActiveSession,
+  fetchAllPriorHistory,
+  setLoadedMessages,
+  persistMessages: (sessionId: string, nextMessages: Message[]): Promise<void> => chatStore.setSessionMessages(sessionId, nextMessages),
+  updateSessionMessage: (sessionId: string | undefined, nextMessage: Message): Promise<void> => chatStore.updateSessionMessage(sessionId, nextMessage),
+  restoreInput: inputEvents.restoreFromMessage,
+  clearInput: inputEvents.clear,
+  focusInput,
+  scrollToBottom: (): void => conversationRef.value?.scrollToBottom({ behavior: 'auto' }),
+  onRuntimeComplete: handleRuntimeComplete,
+  onContextUsageUpdated: (snapshot: ChatRuntimeContextUsageSnapshot): void => {
     runtimeContextUsageSnapshot.value = toContextUsageBudgetSnapshot(snapshot);
   },
-  onError: async (error) => {
-    if (error.code === 'MODEL_NOT_FOUND') {
-      showNoModelConfigToast();
-      return;
-    }
-
-    const sessionId = activeSessionId.value;
-    if (!sessionId) {
-      interactionAPI.showToast({ type: 'error', content: error.message });
-      return;
-    }
-
-    await appendRuntimeErrorMessage({
-      sessionId,
-      content: error.message,
-      visibleMessages: messages.value,
-      fetchAllPriorHistory,
-      persistMessages: (targetSessionId, nextMessages) => chatStore.setSessionMessages(targetSessionId, nextMessages),
-      setLoadedMessages,
-      afterMessagesUpdated: async () => {
-        await nextTick();
-        conversationRef.value?.scrollToBottom({ behavior: 'auto' });
-      }
-    });
-  }
+  onModelNotFound: showNoModelConfigToast,
+  showRuntimeError: (message: string): void => interactionAPI.showToast({ type: 'error', content: message }),
+  restoreTodoSnapshots: restoreTodoSnapshotsForMessages
 });
+handleSessionUIEvent = (event: ChatSessionUIEvent): void => {
+  workflow.handleSessionUIEvent(event).catch((error: unknown) => {
+    interactionAPI.showToast({ type: 'error', content: error instanceof Error ? error.message : '处理确认请求失败' });
+  });
+};
+for (const event of pendingSessionUIEvents.splice(0)) {
+  handleSessionUIEvent(event);
+}
+const {
+  loading,
+  chatSubmitter,
+  rollbackController,
+  handleCompactContext,
+  handleRegenerate: handleChatRegenerate,
+  abort: handleAbort,
+  cancel: handleCancel,
+  rollback: handleRollback
+} = workflow;
 
-abortRuntimeChatTask = () => chatRuntime.abort();
+/** 上下文窗口用量 hook（空闲态用 API 上报值，流式中用估算器）。 */
+const { usedTokens, snapshot: contextUsageSnapshot } = useContextUsage({ messages, contextWindow, selectedModel, streaming: loading });
+/** 当前展示给工具栏的上下文窗口用量快照。 */
+const displayedContextUsageSnapshot = computed<ContextUsageBudgetSnapshot>(() => runtimeContextUsageSnapshot.value ?? contextUsageSnapshot.value);
 
-/**
- * 处理消息编辑。
- * @param nextMessage - 要编辑的消息
- */
+watch(
+  loading,
+  (value: boolean): void => {
+    workflowLoading.value = value;
+    emit('loading-change', value);
+  },
+  { immediate: true }
+);
+
+/** 恢复指定消息到输入编辑器。 */
 function handleChatEdit(nextMessage: Message): void {
   inputEvents.restoreFromMessage(nextMessage);
-}
-
-/** 手动上下文压缩命令 hook。 */
-const { handleCompactContext } = useRuntimeCompactContext({
-  messages,
-  getSessionId: () => activeSessionId.value ?? undefined,
-  getContextWindow: () => contextWindow.value,
-  beginCompactTask: (onAbort) => taskRuntime.beginTask('compact', onAbort),
-  finishCompactTask: () => taskRuntime.finishTask('compact'),
-  scrollToBottom: () => conversationRef.value?.scrollToBottom({ behavior: 'auto' }),
-  isRuntimeEventIgnored: isRollbackRuntimeEventIgnored
-});
-
-/**
- * 查找重新生成时需要保留到哪条 user 消息。
- * @param targetMessage - 目标 assistant 消息
- * @returns 起始 user 消息索引，不存在时返回 -1
- */
-function findRuntimeRegenerateStartIndex(targetMessage: Message): number {
-  const targetIndex = messages.value.findIndex((item) => item.id === targetMessage.id);
-  if (targetIndex === -1 || targetMessage.role !== 'assistant') {
-    return -1;
-  }
-
-  for (let index = targetIndex - 1; index >= 0; index -= 1) {
-    if (messages.value[index].role === 'user') {
-      return index;
-    }
-  }
-
-  return -1;
-}
-
-/**
- * 通过主进程 ChatRuntime 重新生成 assistant 回复。
- * @param targetMessage - 要重新生成的 assistant 消息
- * @returns 是否成功启动 runtime
- */
-async function startRuntimeRegenerate(targetMessage: Message): Promise<boolean> {
-  const startIndex = findRuntimeRegenerateStartIndex(targetMessage);
-  if (startIndex === -1) {
-    return false;
-  }
-
-  const sessionId = activeSessionId.value;
-  if (!sessionId) {
-    return false;
-  }
-
-  const sourceMessages = messages.value.slice(0, startIndex + 1);
-  const removedMessages = messages.value.slice(startIndex + 1);
-  messages.value.splice(0, messages.value.length, ...sourceMessages);
-
-  const runtimeConfig = await resolveChatRuntimeRequestConfig(findLastUserMessage(sourceMessages));
-  if (!runtimeConfig) {
-    messages.value.splice(0, messages.value.length, ...sourceMessages, ...removedMessages);
-    return false;
-  }
-
-  await handleBeforeRegenerate(sourceMessages);
-  await chatRuntime.continueTurn({
-    sessionId,
-    messages: sourceMessages,
-    ...runtimeConfig
-  });
-
-  return true;
-}
-
-/**
- * 处理消息重新生成。
- * @param nextMessage - 要重新生成的消息
- */
-async function handleChatRegenerate(nextMessage: Message): Promise<void> {
-  const startResult = taskRuntime.beginTask('chat');
-  if (!startResult.ok) {
-    return;
-  }
-
-  try {
-    const regenerated = await startRuntimeRegenerate(nextMessage);
-    if (!regenerated) {
-      taskRuntime.finishTask('chat');
-    }
-  } catch (error) {
-    taskRuntime.finishTask('chat');
-    throw error;
-  }
-}
-
-/**
- * 发送一条已经构造好的用户消息到 ChatRuntime。
- * @param input - 运行态发送输入
- */
-async function sendRuntimeUserMessage(input: RuntimeUserMessageSendInput): Promise<void> {
-  let pendingSessionId: string | null = null;
-  let pendingUserMessage: Message | null = null;
-
-  try {
-    const runtimeConfig = await resolveChatRuntimeRequestConfig(input.userMessage, input.parts);
-    if (!runtimeConfig) {
-      taskRuntime.finishTask('chat');
-      return;
-    }
-
-    const sessionId = await ensureActiveSession(input.userMessage.content);
-    pendingSessionId = sessionId;
-    pendingUserMessage = input.userMessage;
-    confirmationController.expirePendingConfirmation();
-    focusInput();
-    if (input.clearDraft === true) {
-      inputEvents.clear();
-    }
-
-    conversationRef.value?.scrollToBottom({ behavior: 'auto' });
-
-    await chatRuntime.send({
-      sessionId,
-      content: input.userMessage.content,
-      parts: input.parts,
-      files: input.userMessage.files,
-      userMessageId: input.userMessage.id,
-      userMessageCreatedAt: input.userMessage.createdAt,
-      ...runtimeConfig
-    });
-  } catch (error) {
-    taskRuntime.finishTask('chat');
-    const message = error instanceof Error ? error.message : '发送消息失败';
-    if (pendingSessionId && pendingUserMessage) {
-      await appendRuntimeErrorMessage({
-        sessionId: pendingSessionId,
-        content: message,
-        visibleMessages: messages.value,
-        precedingMessage: pendingUserMessage,
-        fetchAllPriorHistory,
-        persistMessages: (targetSessionId, nextMessages) => chatStore.setSessionMessages(targetSessionId, nextMessages),
-        setLoadedMessages,
-        afterMessagesUpdated: async () => {
-          await nextTick();
-          conversationRef.value?.scrollToBottom({ behavior: 'auto' });
-        }
-      });
-      return;
-    }
-
-    interactionAPI.showToast({ type: 'error', content: message });
-  }
-}
-
-/** 消息级交互统一提交器。 */
-const chatSubmitter = useChatSubmitter({
-  taskRuntime,
-  messages,
-  getSessionId: () => activeSessionId.value ?? undefined,
-  getActiveRuntimeId: () => chatRuntime.activeRuntimeId.value ?? undefined,
-  resolveRuntimeRequestConfig: resolveChatRuntimeRequestConfig,
-  submitUserChoice: chatRuntime.submitUserChoice,
-  sendRuntimeUserMessage,
-  submitRuntimeMessagePart: chatRuntime.submitMessagePart,
-  updateSessionMessage: (sessionId, nextMessage) => chatStore.updateSessionMessage(sessionId, nextMessage)
-});
-
-/** 用户消息回退 hook。 */
-const rollbackController = useRollback({
-  messages,
-  getSessionId: () => activeSessionId.value ?? undefined,
-  fetchAllPriorHistory,
-  persistMessages: (sessionId, nextMessages) => chatStore.setSessionMessages(sessionId, nextMessages),
-  invalidateCompressionRecords: async (recordIds) => {
-    for (const recordId of recordIds) {
-      // eslint-disable-next-line no-await-in-loop
-      const result = await getElectronAPI().chatCompressionUpdateStatus(recordId, 'invalid', 'rollback_truncation');
-      unwrap(result);
-    }
-  },
-  restoreInput: (nextMessage) => inputEvents.restoreFromMessage(nextMessage),
-  expireConfirmation: () => confirmationController.expirePendingConfirmation(),
-  focusInput
-});
-
-/**
- * 提交用户文本消息并启动新一轮流式对话。
- * @param content - 用户输入内容
- * @param images - 可选图片列表
- * @param clearDraft - 是否清空当前主输入框草稿
- */
-async function submitUserTextMessage(content: string, images: typeof inputImages.value = [], clearDraft = true): Promise<void> {
-  const trimmedContent = content.trim();
-  if (!trimmedContent && !images.length) return;
-
-  const startResult = taskRuntime.beginTask('chat');
-  if (!startResult.ok) return;
-
-  const userMessage = create.userMessage(trimmedContent);
-  if (images.length && supportsVision.value) {
-    userMessage.files = [...images];
-  }
-  const userParts = buildUserInputParts(trimmedContent, workspaceRoot.value || undefined);
-
-  await sendRuntimeUserMessage({
-    userMessage,
-    parts: userParts,
-    clearDraft
-  });
 }
 
 /**
@@ -1003,77 +445,7 @@ async function handleChatSubmit(): Promise<void> {
 
   if (loading.value || !canSubmit.value) return;
 
-  await submitUserTextMessage(content, inputImages.value);
-}
-
-/**
- * 取消等待用户补充输入的问题，并写入中断状态消息。
- * @returns 是否处理了等待用户输入的中止
- */
-async function abortPendingUserChoiceIfNeeded(): Promise<boolean> {
-  const sessionId = activeSessionId.value;
-  if (!sessionId) {
-    return false;
-  }
-
-  const nextMessages = cloneDeep(messages.value);
-  const cancelledAssistantMessage = userChoice.cancelPending(nextMessages);
-  if (!cancelledAssistantMessage) {
-    return false;
-  }
-
-  const visibleMessages = [...nextMessages, create.interruptMessage(cancelledAssistantMessage)];
-  const historyMessages = await fetchAllPriorHistory(sessionId);
-  await chatStore.setSessionMessages(sessionId, [...historyMessages, ...visibleMessages]);
-  setLoadedMessages(visibleMessages);
-  await nextTick();
-  conversationRef.value?.scrollToBottom({ behavior: 'auto' });
-
-  return true;
-}
-
-/**
- * 处理中止流式输出。
- * 交由当前活跃任务运行时区分聊天生成与上下文压缩取消。
- */
-async function handleAbort(): Promise<void> {
-  confirmationController.expirePendingConfirmation();
-
-  if (taskRuntime.activeTask.value !== 'compact' && !chatRuntime.activeRuntimeId.value && (await abortPendingUserChoiceIfNeeded())) {
-    taskRuntime.finishTask('chat');
-    return;
-  }
-
-  await taskRuntime.abortActiveTask();
-}
-
-/**
- * 处理 ESC 取消操作：流式输出中则中止。
- */
-async function handleCancel(): Promise<void> {
-  if (loading.value) {
-    await handleAbort();
-  }
-}
-
-/**
- * 处理回退请求。
- * 二次确认已前置到 MessageBubble 的 inline 确认条，此处直接执行截断与恢复。
- * @param message - 目标用户消息
- */
-async function handleRollback(message: Message): Promise<void> {
-  const index = messages.value.findIndex((m) => m.id === message.id);
-  if (index === -1) return;
-
-  // 流式输出期间先中止，避免截断与流式追加产生竞态
-  if (loading.value) {
-    await handleAbort();
-  }
-
-  const rolledBackMessages = messages.value.slice(index);
-  rememberRolledBackRuntimeIds(rolledBackMessages);
-  await rollbackController.rollback(message);
-  restoreTodoSnapshotsForMessages(activeSessionId.value, rolledBackMessages);
+  await workflow.submitUserTextMessage(content, inputImages.value);
 }
 
 /**
@@ -1099,33 +471,9 @@ const { handleSlashCommand } = useSlashCommands({
   }
 });
 
-/** 加载历史消息 */
-async function handleLoadHistory(): Promise<void> {
-  const sessionId = activeSessionId.value;
-  if (!sessionId) return;
-
-  await loadHistory(sessionId);
-}
-
-/**
- * 处理文件提及选择事件。
- * @param file - 选中的文件
- */
-function handleFileMentionSelect(file: FileMentionOption): void {
-  // 文件提及已经在 BTextEditor 中插入到输入框
-  console.log('File mention selected:', file.name);
-}
-
-/** 组件挂载时初始化 */
-onMounted(async () => {
-  await modelSelectionEvents.loadSelectedModel();
-  // 确保 filesStore 已加载最近文件列表
-  await filesStore.ensureLoaded();
-});
-
 /** 组件卸载时清理 */
 onUnmounted(() => {
-  taskRuntime.dispose();
+  workflow.dispose();
   confirmationController.dispose();
 });
 

@@ -4,6 +4,7 @@
  */
 import type { BChatRuntimeSubmitMessagePartInput, BChatRuntimeSubmitUserChoiceInput } from './useChatRuntime';
 import type { ChatTaskKind, ChatTaskStartResult, ChatTaskState } from './useChatTaskRuntime';
+import type { PreparedRuntimeRequest } from './useRuntimeRequestConfig';
 import type { AdaptedUserMessageInput, MessagePartUpdateInput, SubmitAction } from '../utils/submitAction';
 import type { Message } from '../utils/types';
 import type { AIUserChoiceAnswerData } from 'types/chat';
@@ -47,6 +48,14 @@ interface UseChatSubmitterOptions {
   getActiveRuntimeId: () => string | undefined;
   /** 解析 Runtime 请求配置。 */
   resolveRuntimeRequestConfig: () => Promise<ChatRuntimeRequestConfig | null>;
+  /** 准备完整 Runtime 请求和 renderer capabilities。 */
+  prepareRuntimeRequest?: () => Promise<PreparedRuntimeRequest | null>;
+  /** 用户选择开始续跑回调。 */
+  onContinueStarted?: (answer: AIUserChoiceAnswerData) => void;
+  /** Runtime 成功启动回调。 */
+  onRuntimeStarted?: (result: ChatRuntimeStartResult, prepared: PreparedRuntimeRequest) => void;
+  /** 用户选择续跑准备失败回调。 */
+  onContinueFailed?: (error: unknown) => void;
   /** 提交用户选择并续跑。 */
   submitUserChoice: (input: BChatRuntimeSubmitUserChoiceInput) => Promise<ChatRuntimeStartResult>;
   /** 发送已创建的用户消息。 */
@@ -94,8 +103,11 @@ export function useChatSubmitter(options: UseChatSubmitterOptions): UseChatSubmi
         return;
       }
 
-      const runtimeConfig = await options.resolveRuntimeRequestConfig();
+      options.onContinueStarted?.(answer);
+      const prepared = options.prepareRuntimeRequest ? await options.prepareRuntimeRequest() : undefined;
+      const runtimeConfig = options.prepareRuntimeRequest ? prepared?.config ?? null : await options.resolveRuntimeRequestConfig();
       if (!runtimeConfig) {
+        options.onContinueFailed?.(new Error('Runtime request configuration is unavailable'));
         options.taskRuntime.finishTask('chat');
         return;
       }
@@ -105,10 +117,14 @@ export function useChatSubmitter(options: UseChatSubmitterOptions): UseChatSubmi
         answer,
         ...runtimeConfig
       });
+      if (prepared) {
+        options.onRuntimeStarted?.(result, prepared);
+      }
       if (result.completed === true) {
         options.taskRuntime.finishTask('chat');
       }
     } catch (error) {
+      options.onContinueFailed?.(error);
       options.taskRuntime.finishTask('chat');
       throw error;
     }

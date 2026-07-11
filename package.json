@@ -90,6 +90,7 @@
     "tree-sitter-bash": "^0.25.1",
     "tree-sitter-powershell": "^0.26.4",
     "web-tree-sitter": "^0.26.9",
+    "xstate": "^5.32.4",
     "zod": "^3.25.76"
   },
   "devDependencies": {

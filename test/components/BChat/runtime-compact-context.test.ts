@@ -57,6 +57,7 @@ describe('useRuntimeCompactContext', (): void => {
     const scope = effectScope();
     const messages = ref<Message[]>([createMessage('u1', 'user', '旧用户消息'), createMessage('a1', 'assistant', '旧助手回复')]);
     const finishCompactTask = vi.fn();
+    const onCompactFinished = vi.fn();
 
     electronAPIMock.chatRuntimeCompact.mockImplementation(async () => {
       messageCreatedListener?.({
@@ -106,6 +107,7 @@ describe('useRuntimeCompactContext', (): void => {
         getContextWindow: () => 128_000,
         beginCompactTask: () => ({ ok: true }),
         finishCompactTask,
+        onCompactFinished,
         scrollToBottom: vi.fn()
       })
     );
@@ -130,6 +132,7 @@ describe('useRuntimeCompactContext', (): void => {
       finished: true
     });
     expect(finishCompactTask).toHaveBeenCalledTimes(1);
+    expect(onCompactFinished).toHaveBeenCalledWith(true);
     scope.stop();
   });
 
@@ -255,6 +258,7 @@ describe('useRuntimeCompactContext', (): void => {
     const scope = effectScope();
     const messages = ref<Message[]>([createMessage('u1', 'user', '旧用户消息'), createMessage('a1', 'assistant', '旧助手回复')]);
     const finishCompactTask = vi.fn();
+    const onCompactFinished = vi.fn();
     electronAPIMock.chatRuntimeCompact.mockRejectedValue(new Error('An object could not be cloned.'));
 
     const compact = scope.run(() =>
@@ -263,6 +267,7 @@ describe('useRuntimeCompactContext', (): void => {
         getSessionId: () => 'session-1',
         beginCompactTask: () => ({ ok: true }),
         finishCompactTask,
+        onCompactFinished,
         scrollToBottom: vi.fn()
       })
     );
@@ -270,6 +275,7 @@ describe('useRuntimeCompactContext', (): void => {
     await expect(compact?.handleCompactContext()).resolves.toBeUndefined();
 
     expect(finishCompactTask).toHaveBeenCalledTimes(1);
+    expect(onCompactFinished).toHaveBeenCalledWith(false);
 
     scope.stop();
   });

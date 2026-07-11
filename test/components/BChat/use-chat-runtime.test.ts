@@ -1220,6 +1220,23 @@ describe('useChatRuntime', (): void => {
     scope.stop();
   });
 
+  it('aborts an explicitly addressed background runtime without clearing the visible runtime', async (): Promise<void> => {
+    const messages = ref<Message[]>([]);
+    const scope = effectScope();
+
+    await scope.run(async () => {
+      const runtime = useChatRuntime({ messages, getSessionId: () => 'session-1' });
+      await runtime.send({ sessionId: 'session-1', content: 'hello' });
+
+      await runtime.abort('runtime-background');
+
+      expect(electronAPIMock.chatRuntimeAbort).toHaveBeenCalledWith({ runtimeId: 'runtime-background' });
+      expect(runtime.activeRuntimeId.value).toBe('runtime-1');
+    });
+
+    scope.stop();
+  });
+
   it('rejects late confirmation requests after aborting the active runtime', async (): Promise<void> => {
     const messages = ref<Message[]>([]);
     const requestConfirmation = vi.fn(async () => ({ approved: true as const }));

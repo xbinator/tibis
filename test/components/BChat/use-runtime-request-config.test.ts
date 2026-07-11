@@ -1,0 +1,106 @@
+/**
+ * @file use-runtime-request-config.test.ts
+ * @description BChat Runtime 请求准备 IO hook 测试。
+ */
+import type { AIToolExecutor } from 'types/ai';
+import { ref } from 'vue';
+import { describe, expect, it, vi } from 'vitest';
+import { useRuntimeRequestConfig } from '@/components/BChat/hooks/useRuntimeRequestConfig';
+import type { Message } from '@/components/BChat/utils/types';
+
+/**
+ * 创建测试工具。
+ * @param name - 工具名称
+ * @returns 工具执行器
+ */
+function createTool(name: string): AIToolExecutor {
+  return {
+    definition: {
+      name,
+      description: name,
+      source: 'builtin',
+      riskLevel: 'read',
+      parameters: { type: 'object', properties: {} }
+    },
+    execute: async () => ({ toolName: name, status: 'success', data: null })
+  };
+}
+
+/** 测试用户消息。 */
+const USER_MESSAGE: Message = {
+  id: 'user-1',
+  role: 'user',
+  content: '记住这个偏好',
+  references: [
+    {
+      token: '{{file-ref:/notes/a.md}}',
+      path: '/notes/a.md',
+      startLine: 0,
+      endLine: 0,
+      selectedContent: '',
+      fullContent: ''
+    }
+  ],
+  parts: [],
+  createdAt: '2026-07-11T00:00:00.000Z'
+};
+
+describe('useRuntimeRequestConfig', (): void => {
+  it('synchronizes resources before resolving a complete request', async (): Promise<void> => {
+    const order: string[] = [];
+    const hook = useRuntimeRequestConfig({
+      contextWindow: ref(32000),
+      workspaceRoot: ref('/workspace'),
+      resolveServiceConfig: vi.fn(async () => {
+        order.push('service');
+        return { providerId: 'provider', modelId: 'model', toolSupport: { supported: true, reason: 'supported' } };
+      }),
+      syncAIResources: vi.fn(async (): Promise<void> => {
+        order.push('sync');
+      }),
+      getActiveTools: vi.fn(() => [createTool('edit_memory')]),
+      getSkillContentHashes: vi.fn(() => ({ weather: 'hash-1' })),
+      resolveRuntimeSystemPrompt: vi.fn(async () => 'system'),
+      resolveRuntimeTavilyConfig: vi.fn(() => undefined),
+      resolveRuntimeMcpRequestConfig: vi.fn(() => undefined),
+      onMissingServiceConfig: vi.fn()
+    });
+
+    const prepared = await hook.prepareRuntimeRequest(USER_MESSAGE, [
+      {
+        id: 'file-1',
+        type: 'file',
+        filename: 'b.md',
+        mime: 'text/markdown',
+        url: 'file:///notes/b.md',
+        path: '/notes/b.md',
+        sourceText: { start: 0, end: 10, value: '@b.md' }
+      }
+    ]);
+
+    expect(order).toEqual(['service', 'sync']);
+    expect(prepared?.config.skillContentHashes).toEqual({ weather: 'hash-1' });
+    expect(prepared?.memorySelection).toMatchObject({ mode: 'full', references: ['/notes/a.md', '/notes/b.md'] });
+  });
+
+  it('reports missing model configuration without synchronizing resources', async (): Promise<void> => {
+    const onMissingServiceConfig = vi.fn();
+    const syncAIResources = vi.fn();
+    const hook = useRuntimeRequestConfig({
+      contextWindow: ref(8000),
+      workspaceRoot: ref(''),
+      resolveServiceConfig: vi.fn(async () => null),
+      syncAIResources,
+      getActiveTools: vi.fn(() => []),
+      getSkillContentHashes: vi.fn(() => ({})),
+      resolveRuntimeSystemPrompt: vi.fn(async () => undefined),
+      resolveRuntimeTavilyConfig: vi.fn(() => undefined),
+      resolveRuntimeMcpRequestConfig: vi.fn(() => undefined),
+      onMissingServiceConfig
+    });
+
+    expect(await hook.prepareRuntimeRequest(USER_MESSAGE)).toBeNull();
+    expect(onMissingServiceConfig).toHaveBeenCalledOnce();
+    expect(syncAIResources).not.toHaveBeenCalled();
+  });
+});

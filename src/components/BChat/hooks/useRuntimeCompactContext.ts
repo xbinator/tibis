@@ -26,6 +26,8 @@ interface UseRuntimeCompactContextOptions {
   beginCompactTask: (onAbort?: () => void) => { ok: boolean; reason?: 'busy' };
   /** 结束压缩任务。 */
   finishCompactTask: () => void;
+  /** 报告压缩任务最终是否成功。 */
+  onCompactFinished?: (success: boolean) => void;
   /** 将对话滚动到底部。 */
   scrollToBottom: () => void;
   /** renderer client id。 */
@@ -180,6 +182,7 @@ export function useRuntimeCompactContext(options: UseRuntimeCompactContextOption
       return false;
     }
 
+    let success = false;
     try {
       const result = unwrapRuntimeResult(
         await electronAPI.chatRuntimeCompact({
@@ -192,7 +195,7 @@ export function useRuntimeCompactContext(options: UseRuntimeCompactContextOption
           messages: toRuntimeMessages(messages.value, sessionId)
         })
       );
-      const success = result.status === 'success';
+      success = result.status === 'success';
       if (success && triggerSource === 'manual') {
         scrollToBottom();
       }
@@ -201,6 +204,7 @@ export function useRuntimeCompactContext(options: UseRuntimeCompactContextOption
       return false;
     } finally {
       finishCompactTask();
+      options.onCompactFinished?.(success);
     }
   }
 
