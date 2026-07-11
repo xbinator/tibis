@@ -2,7 +2,8 @@
  * @file session-machine.test.ts
  * @description Chat Session 串行、继续、回退和压缩状态测试。
  */
-import { describe, expect, it } from 'vitest';
+import type { ChatRuntimeRecoverySnapshot } from 'types/chat-runtime';
+import { describe, expect, it, vi } from 'vitest';
 import { createActor } from 'xstate';
 import { sessionMachine } from '@/ai/chat/machine/sessionMachine';
 import type { ChatSubmitInput } from '@/ai/chat/types';
@@ -15,7 +16,50 @@ const SUBMIT_INPUT: ChatSubmitInput = {
   parts: []
 };
 
+/** 创建 Runtime 恢复快照。 */
+function createRecoverySnapshot(waiting = false): ChatRuntimeRecoverySnapshot {
+  return {
+    runtimeId: 'runtime-recovered',
+    sessionId: 'session-1',
+    clientId: 'bchat',
+    agentId: 'primary',
+    phase: 'streaming',
+    createdAt: 1,
+    pendingRequests: waiting
+      ? [
+          {
+            type: 'confirmation',
+            event: {
+              runtimeId: 'runtime-recovered',
+              sessionId: 'session-1',
+              clientId: 'bchat',
+              agentId: 'primary',
+              confirmationId: 'confirmation-1',
+              request: { toolName: 'write_file', title: '写入文件', description: '是否写入？', riskLevel: 'write' }
+            }
+          }
+        ]
+      : []
+  };
+}
+
 describe('sessionMachine', (): void => {
+  it('runs the normal lifecycle without imperative built-in action warnings', (): void => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation((): void => undefined);
+    const actor = createActor(sessionMachine, { input: { sessionId: 'session-1' } });
+    actor.start();
+
+    actor.send({ type: 'session.submit', input: SUBMIT_INPUT });
+    actor.send({ type: 'session.prepared' });
+    actor.send({ type: 'session.userChoiceRequired' });
+    actor.send({ type: 'session.interactionResolved' });
+    actor.send({ type: 'session.completed' });
+
+    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('Custom actions should not call'));
+    warn.mockRestore();
+    actor.stop();
+  });
+
   it('serializes submits and resumes the same Turn after user choice', (): void => {
     const actor = createActor(sessionMachine, { input: { sessionId: 'session-1' } });
     actor.start();
@@ -121,5 +165,19 @@ describe('sessionMachine', (): void => {
     expect(actor.getSnapshot().matches({ rollingBack: 'cancellingActiveRuntime' })).toBe(true);
     actor.send({ type: 'session.runtimeCancelled' });
     expect(actor.getSnapshot().matches({ rollingBack: 'applyingRollback' })).toBe(true);
+  });
+
+  it('hydrates running and waiting turns from main-process runtime snapshots', (): void => {
+    const runningActor = createActor(sessionMachine, { input: { sessionId: 'session-1' } });
+    runningActor.start();
+    runningActor.send({ type: 'session.recoverRuntime', snapshot: createRecoverySnapshot() });
+    expect(runningActor.getSnapshot().matches('running')).toBe(true);
+    expect(runningActor.getSnapshot().context.turnRef?.getSnapshot().context.primaryAgentRef?.getSnapshot().matches('running')).toBe(true);
+
+    const waitingActor = createActor(sessionMachine, { input: { sessionId: 'session-1' } });
+    waitingActor.start();
+    waitingActor.send({ type: 'session.recoverRuntime', snapshot: createRecoverySnapshot(true) });
+    expect(waitingActor.getSnapshot().matches('waitingForUser')).toBe(true);
+    expect(waitingActor.getSnapshot().context.turnRef?.getSnapshot().context.primaryAgentRef?.getSnapshot().matches('waiting')).toBe(true);
   });
 });

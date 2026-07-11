@@ -16,9 +16,12 @@ import type {
 } from 'types/chat-runtime';
 import { onScopeDispose } from 'vue';
 import type { ChatActorSystem } from '@/ai/chat/actorSystem';
+import { getRememberedRuntimeConfirmationDecision } from '@/ai/chat/policies/runtimeConfirmation';
 import type { ChatWorkflowError } from '@/ai/chat/types';
+import { normalizeToolConfirmationRequest } from '@/ai/tools/confirmation';
 import { executeToolCall } from '@/ai/tools/stream';
 import { getElectronAPI } from '@/shared/platform/electron-api';
+import { useToolPermissionStore } from '@/stores/chat/toolPermission';
 
 /** Runtime renderer 工具可透传错误码。 */
 const RUNTIME_TOOL_ERROR_CODES: AIToolExecutionError['code'][] = [
@@ -129,6 +132,7 @@ function assertRuntimeResult(result: ChatRuntimeHandlerResult<void>): void {
  */
 export function useChatRuntimeEvents(actorSystem: ChatActorSystem): void {
   const electronAPI = getElectronAPI();
+  const toolPermissionStore = useToolPermissionStore();
 
   /**
    * 判断事件是否属于已接管 Runtime。
@@ -157,6 +161,7 @@ export function useChatRuntimeEvents(actorSystem: ChatActorSystem): void {
   /** 完成目标 Agent 并释放 Runtime。 */
   function handleComplete(event: ChatRuntimeEventBase): void {
     if (!shouldHandle(event)) return;
+    actorSystem.emitSessionEvent(event.sessionId, { type: 'runtimeCompleted', event });
     actorSystem.send({ type: 'runtime.event', runtimeId: event.runtimeId, event: { type: 'runtime.completed', runtimeId: event.runtimeId } });
     actorSystem.sendToSession(event.sessionId, { type: 'session.completed' });
     actorSystem.unregisterRuntime(event.runtimeId);
@@ -178,7 +183,7 @@ export function useChatRuntimeEvents(actorSystem: ChatActorSystem): void {
   /** 执行已捕获的 renderer 工具。 */
   async function handleToolRequest(event: ChatRuntimeToolRequestEvent): Promise<void> {
     const capabilities = actorSystem.getRuntimeCapabilities(event.runtimeId);
-    if (!shouldHandle(event) || !capabilities || actorSystem.hasSessionUISubscribers(event.sessionId)) return;
+    if (!shouldHandle(event) || !capabilities) return;
 
     try {
       const executed = await executeToolCall(
@@ -200,22 +205,36 @@ export function useChatRuntimeEvents(actorSystem: ChatActorSystem): void {
   }
 
   /** 将确认请求路由到目标 Session UI 和 Agent。 */
-  function handleConfirmationRequest(event: ChatRuntimeConfirmationRequestEvent): void {
+  async function handleConfirmationRequest(event: ChatRuntimeConfirmationRequestEvent): Promise<void> {
     if (!shouldHandle(event)) return;
+    const normalizedEvent = { ...event, request: normalizeToolConfirmationRequest(event.request) };
+    const rememberedDecision = getRememberedRuntimeConfirmationDecision(normalizedEvent.request, {
+      session: toolPermissionStore.sessionToolPermissionGrants,
+      always: toolPermissionStore.alwaysToolPermissionGrants
+    });
+    if (rememberedDecision) {
+      assertRuntimeResult(
+        await electronAPI.chatRuntimeSubmitConfirmation({
+          runtimeId: event.runtimeId,
+          confirmationId: event.confirmationId,
+          decision: rememberedDecision
+        })
+      );
+      return;
+    }
     actorSystem.send({
       type: 'runtime.event',
       runtimeId: event.runtimeId,
       event: { type: 'runtime.userChoiceRequired', runtimeId: event.runtimeId, interaction: 'confirmation' }
     });
     actorSystem.sendToSession(event.sessionId, { type: 'session.userChoiceRequired' });
-    if (actorSystem.hasSessionUISubscribers(event.sessionId)) return;
-    actorSystem.emitSessionEvent(event.sessionId, { type: 'confirmationRequested', event });
+    actorSystem.emitSessionEvent(event.sessionId, { type: 'confirmationRequested', event: normalizedEvent });
   }
 
   /** 执行已捕获的应用级 Bridge handler。 */
   async function handleBridgeRequest(event: ChatRuntimeBridgeRequestEvent): Promise<void> {
     const capabilities = actorSystem.getRuntimeCapabilities(event.runtimeId);
-    if (!shouldHandle(event) || !capabilities || actorSystem.hasSessionUISubscribers(event.sessionId)) return;
+    if (!shouldHandle(event) || !capabilities) return;
 
     let result: ChatRuntimeBridgeResult;
     try {
@@ -236,7 +255,9 @@ export function useChatRuntimeEvents(actorSystem: ChatActorSystem): void {
     electronAPI.chatRuntimeOnToolRequest((event) => {
       handleToolRequest(event).catch(() => undefined);
     }),
-    electronAPI.chatRuntimeOnConfirmationRequested(handleConfirmationRequest),
+    electronAPI.chatRuntimeOnConfirmationRequested((event) => {
+      handleConfirmationRequest(event).catch(() => undefined);
+    }),
     electronAPI.chatRuntimeOnBridgeRequested((event) => {
       handleBridgeRequest(event).catch(() => undefined);
     }),

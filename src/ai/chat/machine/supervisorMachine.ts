@@ -5,7 +5,7 @@
 import type { ChatActorAddress } from '../types';
 import type { AgentMachineEvent } from './agentMachine';
 import type { ActorRefFrom } from 'xstate';
-import { assign, setup, stopChild } from 'xstate';
+import { assign, enqueueActions, setup, stopChild } from 'xstate';
 import { sessionMachine, type SessionMachineEvent } from './sessionMachine';
 
 /** Runtime 可路由到 Agent 的事件。 */
@@ -59,7 +59,7 @@ function findAddressedAgent(context: SupervisorMachineContext, address: ChatActo
     return undefined;
   }
 
-  return turnRef.getSnapshot().context.agents[address.agentId];
+  return address.agentId === 'primary' ? turnRef.getSnapshot().context.primaryAgentRef : undefined;
 }
 
 /**
@@ -112,11 +112,11 @@ export const supervisorMachine = setup({
         return new Map([...context.runtimeRoutes].filter(([, address]): boolean => address.sessionId !== event.sessionId));
       }
     }),
-    sendToSession: ({ context, event }): void => {
-      if (event.type === 'supervisor.sendToSession') {
-        context.sessions.get(event.sessionId)?.send(event.event);
-      }
-    },
+    sendToSession: enqueueActions(({ context, event, enqueue }): void => {
+      if (event.type !== 'supervisor.sendToSession') return;
+      const sessionRef = context.sessions.get(event.sessionId);
+      if (sessionRef) enqueue.sendTo(sessionRef, event.event);
+    }),
     registerRuntime: assign({
       runtimeRoutes: ({ context, event }): Map<string, ChatActorAddress> => {
         if (event.type !== 'runtime.register') {
@@ -139,15 +139,15 @@ export const supervisorMachine = setup({
         return runtimeRoutes;
       }
     }),
-    routeRuntimeEvent: ({ context, event }): void => {
+    routeRuntimeEvent: enqueueActions(({ context, event, enqueue }): void => {
       if (event.type !== 'runtime.event' || event.event.runtimeId !== event.runtimeId) {
         return;
       }
 
       const address = context.runtimeRoutes.get(event.runtimeId);
       const agentRef = address ? findAddressedAgent(context, address) : undefined;
-      agentRef?.send(event.event);
-    }
+      if (agentRef) enqueue.sendTo(agentRef, event.event);
+    })
   }
 }).createMachine({
   id: 'chatSupervisor',

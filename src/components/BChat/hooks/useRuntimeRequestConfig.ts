@@ -18,9 +18,9 @@ interface UseRuntimeRequestConfigOptions {
   /** 模型上下文窗口 */
   contextWindow: Ref<number>;
   /** 当前工作区根目录 */
-  workspaceRoot: Ref<string>;
+  workspaceRoot: Readonly<Ref<string | null>>;
   /** 解析 Provider 服务配置 */
-  resolveServiceConfig: () => Promise<ServiceConfig | null>;
+  resolveServiceConfig: () => Promise<ServiceConfig | undefined>;
   /** 同步磁盘 AI 资源 */
   syncAIResources: () => Promise<void>;
   /** 读取当前候选工具 */

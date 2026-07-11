@@ -8,22 +8,23 @@ import type { createChatConfirmationController } from '../utils/confirmationCont
 import type { Message } from '../utils/types';
 import type { AIServiceError, AIToolExecutor } from 'types/ai';
 import type { ChatMessageFile } from 'types/chat';
-import type { ChatRuntimeContextUsageSnapshot, ChatRuntimeStartResult, ChatRuntimeUserInputPart } from 'types/chat-runtime';
+import type { ChatRuntimeBridgeRequestEvent, ChatRuntimeContextUsageSnapshot, ChatRuntimeUserInputPart } from 'types/chat-runtime';
 import type { ComputedRef, Ref } from 'vue';
-import { computed, nextTick, watch } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import { cloneDeep } from 'lodash-es';
 import type { ChatActorSystem } from '@/ai/chat/actorSystem';
 import { findLastUserMessage } from '@/ai/chat/policies/memorySelection';
 import { createRegenerationSlice } from '@/ai/chat/policies/regeneration';
+import { getRuntimeConfirmationGrantScope } from '@/ai/chat/policies/runtimeConfirmation';
 import type { ChatSessionUIEvent } from '@/ai/chat/sessionEvents';
-import { editorToolContextRegistry } from '@/ai/tools/context/editor';
 import { getElectronAPI, unwrap } from '@/shared/platform/electron-api';
+import { useToolPermissionStore } from '@/stores/chat/toolPermission';
 import { buildUserInputParts } from '../utils/filePartParser';
 import { create, userChoice } from '../utils/messageHelper';
 import { appendRuntimeErrorMessage } from '../utils/runtimeError';
 import { useChatRuntime } from './useChatRuntime';
+import { useChatRuntimeLauncher } from './useChatRuntimeLauncher';
 import { useChatSubmitter } from './useChatSubmitter';
-import { useChatTaskRuntime } from './useChatTaskRuntime';
 import { useRollback, type UseRollbackReturns } from './useRollback';
 import { useRuntimeCompactContext } from './useRuntimeCompactContext';
 
@@ -45,7 +46,7 @@ interface UseChatWorkflowOptions {
   /** 当前模型上下文窗口 */
   contextWindow: Ref<number>;
   /** 当前工作区根目录 */
-  workspaceRoot: Ref<string>;
+  workspaceRoot: Readonly<Ref<string | null>>;
   /** 当前模型是否支持视觉 */
   supportsVision: Ref<boolean>;
   /** 应用级 Actor system */
@@ -59,7 +60,7 @@ interface UseChatWorkflowOptions {
   /** 解析兼容 Runtime 请求配置 */
   resolveRuntimeRequestConfig: ResolveRuntimeRequestConfig;
   /** Runtime Bridge 请求处理器 */
-  handleBridgeRequest: (event: Parameters<NonNullable<Parameters<typeof useChatRuntime>[0]['handleBridgeRequest']>>[0]) => Promise<unknown>;
+  handleBridgeRequest: (event: ChatRuntimeBridgeRequestEvent) => Promise<unknown>;
   /** 工具确认控制器 */
   confirmationController: ChatConfirmationController;
   /** 确保存在可持久化会话 */
@@ -138,68 +139,53 @@ interface RuntimeUserMessageSendInput {
  * @returns 可直接绑定到页面事件的工作流 API
  */
 export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflowReturn {
-  let abortRuntimeChatTask: (() => Promise<void>) | null = null;
+  const toolPermissionStore = useToolPermissionStore();
   const rollbackIgnoredRuntimeIds = new Set<string>();
-  const taskRuntime = useChatTaskRuntime({
-    abortChatTask: async (): Promise<void> => {
-      await abortRuntimeChatTask?.();
-    }
-  });
-  const loading = computed<boolean>(() => taskRuntime.loading.value || options.sessionActor.loading.value);
+  const preflightLoading = ref<boolean>(false);
+  let operationSequence = 0;
+  let compactAbortHandler: (() => void) | null = null;
+  const loading = computed<boolean>(() => preflightLoading.value || options.sessionActor.loading.value);
 
-  watch(options.activeSessionId, (): void => {
-    // renderer 任务锁只属于当前可见会话，后台运行状态由对应 Session actor 保留。
-    taskRuntime.resetToIdle();
+  /** 开始新的 renderer 工作流操作并使旧异步准备结果失效。 */
+  function beginOperation(): number {
+    operationSequence += 1;
+    return operationSequence;
+  }
+
+  /** 判断异步准备结果是否仍属于当前操作。 */
+  function isCurrentOperation(operationId: number): boolean {
+    return operationId === operationSequence;
+  }
+
+  const runtimeLauncher = useChatRuntimeLauncher({
+    activeSessionId: options.activeSessionId,
+    actorSystem: options.actorSystem,
+    sessionActor: options.sessionActor,
+    getActiveTools: options.getActiveTools,
+    prepareRuntimeRequest: options.prepareRuntimeRequest,
+    handleBridgeRequest: options.handleBridgeRequest,
+    isCurrentOperation
   });
+
+  /** 准备当前操作的 Runtime 请求。 */
+  async function prepareRuntimeWithCapabilities(
+    selectionSource?: Message | null,
+    selectionParts?: ChatRuntimeUserInputPart[]
+  ): Promise<PreparedRuntimeRequest | null> {
+    return runtimeLauncher.prepare(operationSequence, selectionSource, selectionParts);
+  }
 
   /** 判断 Runtime 事件是否已被回退流程作废。 */
   function isRuntimeEventIgnored(runtimeId: string): boolean {
     return rollbackIgnoredRuntimeIds.has(runtimeId);
   }
-
-  /** 注册 Runtime 路由与冻结 capability 快照。 */
-  function registerManagedRuntime(result: ChatRuntimeStartResult, prepared: PreparedRuntimeRequest): void {
-    options.sessionActor.markPrepared();
-    if (result.completed === true) {
-      options.sessionActor.markCompleted();
-      return;
-    }
-
-    const sessionId = options.activeSessionId.value;
-    const turnRef = options.sessionActor.sessionRef.value?.getSnapshot().context.turnRef;
-    const turnId = turnRef?.getSnapshot().context.turnId;
-    if (!sessionId || !turnId) {
-      throw new Error('Chat Session Actor is missing the active Turn');
-    }
-
-    const documentId = editorToolContextRegistry.getCurrentContext()?.document.id;
-    options.actorSystem.registerRuntime(
-      { sessionId, turnId, agentId: 'primary', runtimeId: result.runtimeId },
-      {
-        tools: prepared.rendererTools,
-        documentId,
-        getToolContext: () => (documentId ? editorToolContextRegistry.getContext(documentId) : undefined),
-        handleBridgeRequest: options.handleBridgeRequest
-      }
-    );
-    options.actorSystem.send({
-      type: 'runtime.event',
-      runtimeId: result.runtimeId,
-      event: { type: 'runtime.started', runtimeId: result.runtimeId }
-    });
-  }
-
-  /** 处理 Runtime 完成并结束兼容任务锁。 */
+  /** 处理 Runtime 完成。 */
   async function handleRuntimeComplete(nextMessage: Message): Promise<void> {
     options.sessionActor.markCompleted();
     if (nextMessage.runtimeId) {
       options.actorSystem.unregisterRuntime(nextMessage.runtimeId);
     }
-    try {
-      await options.onRuntimeComplete(nextMessage);
-    } finally {
-      taskRuntime.finishTask('chat');
-    }
+    await options.onRuntimeComplete(nextMessage);
   }
 
   /** 处理 Runtime 错误并写入持久化错误消息。 */
@@ -209,7 +195,6 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
     if (activeRuntimeId) {
       options.actorSystem.unregisterRuntime(activeRuntimeId);
     }
-    taskRuntime.finishTask('chat');
     if (error.code === 'MODEL_NOT_FOUND') {
       options.onModelNotFound();
       return;
@@ -245,22 +230,7 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
     options.actorSystem.clearSessionPendingInteraction(sessionId, confirmationId);
   }
 
-  const chatRuntime = useChatRuntime({
-    messages: options.messages,
-    getSessionId: (): string | undefined => options.activeSessionId.value ?? undefined,
-    tools: options.getActiveTools,
-    getToolContext: editorToolContextRegistry.getCurrentContext,
-    isRuntimeEventIgnored,
-    requestConfirmation: options.confirmationController.requestConfirmation,
-    onConfirmationResolved: (event): void => markInteractionResolved(event.runtimeId, event.sessionId, event.confirmationId),
-    handleBridgeRequest: options.handleBridgeRequest,
-    shouldDeferRendererRequest: (event): boolean =>
-      event.sessionId !== options.activeSessionId.value && options.actorSystem.actor.getSnapshot().context.runtimeRoutes.has(event.runtimeId),
-    onComplete: handleRuntimeComplete,
-    onContextUsageUpdated: options.onContextUsageUpdated,
-    onError: handleRuntimeError
-  });
-  abortRuntimeChatTask = (): Promise<void> => chatRuntime.abort(options.sessionActor.activeRuntimeId.value);
+  const chatRuntime = useChatRuntime();
 
   /** 持久化重新生成前的消息截断。 */
   async function handleBeforeRegenerate(nextMessages: Message[]): Promise<void> {
@@ -273,32 +243,41 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
 
   /** 启动指定 assistant 消息的重新生成。 */
   async function startRuntimeRegenerate(targetMessage: Message): Promise<boolean> {
+    const operationId = operationSequence;
+    let managedRuntimeId: string | undefined;
     const regenerationSlice = createRegenerationSlice(options.messages.value, targetMessage.id);
     if (!regenerationSlice || !options.activeSessionId.value) return false;
 
     const { sourceMessages, removedMessages } = regenerationSlice;
     options.messages.value.splice(0, options.messages.value.length, ...sourceMessages);
-    const prepared = await options.prepareRuntimeRequest(findLastUserMessage(sourceMessages));
+    const prepared = await prepareRuntimeWithCapabilities(findLastUserMessage(sourceMessages));
     if (!prepared) {
       options.messages.value.splice(0, options.messages.value.length, ...sourceMessages, ...removedMessages);
       return false;
     }
 
-    options.sessionActor.regenerate(targetMessage.id);
     try {
       await handleBeforeRegenerate(sourceMessages);
+      const runtimeId = runtimeLauncher.start(prepared);
+      managedRuntimeId = runtimeId;
       const result = await chatRuntime.continueTurn({
+        runtimeId,
         sessionId: options.activeSessionId.value,
         messages: sourceMessages,
         ...prepared.config
       });
-      registerManagedRuntime(result, prepared);
+      if (!isCurrentOperation(operationId)) return false;
+      runtimeLauncher.finish(result, runtimeId);
     } catch (error: unknown) {
-      options.sessionActor.markPreparationFailed({
+      if (!isCurrentOperation(operationId)) return false;
+      if (managedRuntimeId) options.actorSystem.unregisterRuntime(managedRuntimeId);
+      const workflowError = {
         code: 'runtime_start_failed',
         message: error instanceof Error ? error.message : '重新生成失败',
         cause: error
-      });
+      } as const;
+      if (managedRuntimeId) options.sessionActor.markFailed(workflowError);
+      else options.sessionActor.markPreparationFailed(workflowError);
       throw error;
     }
     return true;
@@ -306,15 +285,11 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
 
   /** 处理消息重新生成。 */
   async function handleRegenerate(nextMessage: Message): Promise<void> {
-    const startResult = taskRuntime.beginTask('chat');
-    if (!startResult.ok) return;
-    try {
-      if (!(await startRuntimeRegenerate(nextMessage))) {
-        taskRuntime.finishTask('chat');
-      }
-    } catch (error: unknown) {
-      taskRuntime.finishTask('chat');
-      throw error;
+    if (loading.value) return;
+    beginOperation();
+    options.sessionActor.regenerate(nextMessage.id);
+    if (!(await startRuntimeRegenerate(nextMessage))) {
+      options.sessionActor.markPreparationFailed({ code: 'preparation_failed', message: '重新生成准备未完成' });
     }
   }
 
@@ -322,14 +297,12 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
   async function sendRuntimeUserMessage(input: RuntimeUserMessageSendInput): Promise<void> {
     let pendingSessionId: string | null = null;
     let pendingUserMessage: Message | null = null;
+    const operationId = beginOperation();
+    let managedRuntimeId: string | undefined;
+    preflightLoading.value = true;
     try {
-      const prepared = await options.prepareRuntimeRequest(input.userMessage, input.parts);
-      if (!prepared) {
-        taskRuntime.finishTask('chat');
-        return;
-      }
-
       const sessionId = await options.ensureActiveSession(input.userMessage.content);
+      if (!isCurrentOperation(operationId)) return;
       pendingSessionId = sessionId;
       pendingUserMessage = input.userMessage;
       options.sessionActor.submit({
@@ -339,12 +312,22 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
         parts: input.parts,
         files: input.userMessage.files
       });
+      preflightLoading.value = false;
       options.confirmationController.expirePendingConfirmation();
       options.focusInput();
       if (input.clearDraft === true) options.clearInput();
       options.scrollToBottom();
 
+      const prepared = await prepareRuntimeWithCapabilities(input.userMessage, input.parts);
+      if (!prepared) {
+        options.sessionActor.markPreparationFailed({ code: 'preparation_failed', message: '发送准备未完成' });
+        return;
+      }
+
+      const runtimeId = runtimeLauncher.start(prepared);
+      managedRuntimeId = runtimeId;
       const result = await chatRuntime.send({
+        runtimeId,
         sessionId,
         content: input.userMessage.content,
         parts: input.parts,
@@ -353,14 +336,18 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
         userMessageCreatedAt: input.userMessage.createdAt,
         ...prepared.config
       });
-      registerManagedRuntime(result, prepared);
+      if (!isCurrentOperation(operationId)) return;
+      runtimeLauncher.finish(result, runtimeId);
     } catch (error: unknown) {
-      options.sessionActor.markPreparationFailed({
+      if (!isCurrentOperation(operationId)) return;
+      if (managedRuntimeId) options.actorSystem.unregisterRuntime(managedRuntimeId);
+      const workflowError = {
         code: 'runtime_start_failed',
         message: error instanceof Error ? error.message : '发送消息失败',
         cause: error
-      });
-      taskRuntime.finishTask('chat');
+      } as const;
+      if (managedRuntimeId) options.sessionActor.markFailed(workflowError);
+      else options.sessionActor.markPreparationFailed(workflowError);
       const errorMessage = error instanceof Error ? error.message : '发送消息失败';
       if (pendingSessionId && pendingUserMessage) {
         await appendRuntimeErrorMessage({
@@ -379,24 +366,33 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
         return;
       }
       options.showRuntimeError(errorMessage);
+    } finally {
+      if (isCurrentOperation(operationId)) preflightLoading.value = false;
     }
   }
 
   const chatSubmitter = useChatSubmitter({
-    taskRuntime,
+    isWorkflowBusy: (): boolean => loading.value,
     messages: options.messages,
     getSessionId: (): string | undefined => options.activeSessionId.value ?? undefined,
     getActiveRuntimeId: (): string | undefined => options.sessionActor.activeRuntimeId.value,
     resolveRuntimeRequestConfig: options.resolveRuntimeRequestConfig,
-    prepareRuntimeRequest: (): ReturnType<PrepareRuntimeRequest> => options.prepareRuntimeRequest(),
-    onContinueStarted: options.sessionActor.continueWithAnswer,
-    onRuntimeStarted: registerManagedRuntime,
-    onContinueFailed: (error: unknown): void => {
-      options.sessionActor.markPreparationFailed({
+    prepareRuntimeRequest: (): ReturnType<PrepareRuntimeRequest> => prepareRuntimeWithCapabilities(),
+    onContinueStarted: (answer): void => {
+      beginOperation();
+      options.sessionActor.continueWithAnswer(answer);
+    },
+    startRuntime: runtimeLauncher.start,
+    finishRuntimeStart: runtimeLauncher.finish,
+    onContinueFailed: (error: unknown, runtimeId?: string): void => {
+      if (runtimeId) options.actorSystem.unregisterRuntime(runtimeId);
+      const workflowError = {
         code: 'runtime_start_failed',
         message: error instanceof Error ? error.message : '继续生成失败',
         cause: error
-      });
+      } as const;
+      if (runtimeId) options.sessionActor.markFailed(workflowError);
+      else options.sessionActor.markPreparationFailed(workflowError);
     },
     submitUserChoice: chatRuntime.submitUserChoice,
     sendRuntimeUserMessage,
@@ -425,11 +421,15 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
     getSessionId: (): string | undefined => options.activeSessionId.value ?? undefined,
     getContextWindow: (): number => options.contextWindow.value,
     beginCompactTask: (onAbort) => {
-      const result = taskRuntime.beginTask('compact', onAbort);
-      if (result.ok) options.sessionActor.compact();
-      return result;
+      if (loading.value) return { ok: false, reason: 'busy' };
+      beginOperation();
+      compactAbortHandler = onAbort ?? null;
+      options.sessionActor.compact();
+      return { ok: true };
     },
-    finishCompactTask: (): void => taskRuntime.finishTask('compact'),
+    finishCompactTask: (): void => {
+      compactAbortHandler = null;
+    },
     onCompactFinished: options.sessionActor.markCompactFinished,
     scrollToBottom: options.scrollToBottom,
     isRuntimeEventIgnored
@@ -439,8 +439,7 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
   async function submitUserTextMessage(content: string, images: ChatMessageFile[] = [], clearDraft = true): Promise<void> {
     const trimmedContent = content.trim();
     if (!trimmedContent && !images.length) return;
-    const startResult = taskRuntime.beginTask('chat');
-    if (!startResult.ok) return;
+    if (loading.value) return;
 
     const userMessage = create.userMessage(trimmedContent);
     if (images.length && options.supportsVision.value) userMessage.files = [...images];
@@ -468,9 +467,9 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
     return true;
   }
 
-  /** 判断 renderer hook 当前记录的 Runtime 是否属于可见会话。 */
-  function hasCurrentSessionRendererRuntime(): boolean {
-    const runtimeId = chatRuntime.activeRuntimeId.value;
+  /** 判断命令适配器当前记录的 Runtime 是否属于可见会话。 */
+  function hasCurrentSessionCommandRuntime(): boolean {
+    const runtimeId = options.sessionActor.activeRuntimeId.value;
     if (!runtimeId) return false;
     const address = options.actorSystem.actor.getSnapshot().context.runtimeRoutes.get(runtimeId);
     return !address || address.sessionId === options.activeSessionId.value;
@@ -478,16 +477,23 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
 
   /** 中止当前 Chat 或 Compact Runtime。 */
   async function abort(): Promise<void> {
+    beginOperation();
+    preflightLoading.value = false;
     options.confirmationController.expirePendingConfirmation();
     const runtimeId = options.sessionActor.activeRuntimeId.value;
     options.sessionActor.cancel();
     try {
-      if (taskRuntime.activeTask.value !== 'compact' && !hasCurrentSessionRendererRuntime() && (await abortPendingUserChoiceIfNeeded())) {
-        taskRuntime.finishTask('chat');
+      if (compactAbortHandler) {
+        compactAbortHandler();
+        compactAbortHandler = null;
         options.sessionActor.markRuntimeCancelled();
         return;
       }
-      await taskRuntime.abortActiveTask();
+      if (!hasCurrentSessionCommandRuntime() && (await abortPendingUserChoiceIfNeeded())) {
+        options.sessionActor.markRuntimeCancelled();
+        return;
+      }
+      if (runtimeId) await chatRuntime.abort(runtimeId);
       options.sessionActor.markRuntimeCancelled();
       if (runtimeId) options.actorSystem.unregisterRuntime(runtimeId);
     } catch (error: unknown) {
@@ -536,22 +542,56 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
 
   /** 处理切回会话时重放的待确认交互。 */
   async function handleSessionUIEvent(event: ChatSessionUIEvent): Promise<void> {
-    if (event.type !== 'confirmationRequested') return;
-    const decision = await options.confirmationController.requestConfirmation(event.event.request);
-    const result = await getElectronAPI().chatRuntimeSubmitConfirmation({
-      runtimeId: event.event.runtimeId,
-      confirmationId: event.event.confirmationId,
-      decision
-    });
-    if (!result.ok) {
-      throw new Error(result.error ?? '提交确认结果失败');
+    if (event.type === 'messageCreated' || event.type === 'messageUpdated') {
+      const nextMessage = event.event.message as Message;
+      const index = options.messages.value.findIndex((message): boolean => message.id === nextMessage.id);
+      if (index < 0) options.messages.value.push(nextMessage);
+      else options.messages.value.splice(index, 1, { ...options.messages.value[index], ...nextMessage });
+      return;
     }
-    markInteractionResolved(event.event.runtimeId, event.event.sessionId, event.event.confirmationId);
+    if (event.type === 'messageDeleted') {
+      const index = options.messages.value.findIndex((message): boolean => message.id === event.event.messageId);
+      if (index >= 0) options.messages.value.splice(index, 1);
+      return;
+    }
+    if (event.type === 'contextUsageUpdated') {
+      options.onContextUsageUpdated(event.event.snapshot);
+      return;
+    }
+    if (event.type === 'runtimeError') {
+      await handleRuntimeError(event.event.error);
+      return;
+    }
+    if (event.type === 'runtimeCompleted') {
+      const completedMessage = [...options.messages.value]
+        .reverse()
+        .find((message): boolean => message.role === 'assistant' && message.runtimeId === event.event.runtimeId && message.finished === true);
+      if (completedMessage) await handleRuntimeComplete(completedMessage);
+      return;
+    }
+    if (event.type === 'confirmationRequested') {
+      const decision = await options.confirmationController.requestConfirmation(event.event.request);
+      const grantScope = getRuntimeConfirmationGrantScope(event.event.request, decision);
+      if (grantScope) {
+        toolPermissionStore.grantToolPermission(event.event.request.toolName, grantScope);
+      }
+      const result = await getElectronAPI().chatRuntimeSubmitConfirmation({
+        runtimeId: event.event.runtimeId,
+        confirmationId: event.event.confirmationId,
+        decision
+      });
+      if (!result.ok) {
+        throw new Error(result.error ?? '提交确认结果失败');
+      }
+      markInteractionResolved(event.event.runtimeId, event.event.sessionId, event.event.confirmationId);
+    }
   }
 
-  /** 释放兼容任务运行时。 */
+  /** 释放 renderer 局部预处理状态，不中止主进程后台 Runtime。 */
   function dispose(): void {
-    taskRuntime.dispose();
+    beginOperation();
+    preflightLoading.value = false;
+    compactAbortHandler = null;
   }
 
   return {

@@ -25,6 +25,9 @@ type CapturedContextUsageEvent = {
   payload: ChatRuntimeEventMap['chat:runtime:context-usage-updated'];
 };
 
+/** Runtime 输入夹具序号，确保同一测试内 ID 不冲突。 */
+let runtimeInputSequence = 0;
+
 /**
  * 创建发送入参测试夹具。
  * @param overrides - 需要覆盖的发送字段
@@ -32,6 +35,7 @@ type CapturedContextUsageEvent = {
  */
 function createInput(overrides: Partial<ChatRuntimeSendInput> = {}): ChatRuntimeSendInput {
   return {
+    runtimeId: `runtime-test-${++runtimeInputSequence}`,
     sessionId: 'session-1',
     clientId: 'client-1',
     agentId: 'agent-1',
@@ -47,6 +51,7 @@ function createInput(overrides: Partial<ChatRuntimeSendInput> = {}): ChatRuntime
  */
 function createContinueInput(overrides: Partial<ChatRuntimeContinueInput> = {}): ChatRuntimeContinueInput {
   return {
+    runtimeId: `runtime-continue-test-${++runtimeInputSequence}`,
     sessionId: 'session-1',
     clientId: 'client-1',
     agentId: 'agent-1',
@@ -156,6 +161,22 @@ async function flushRuntimeTasks(): Promise<void> {
 }
 
 describe('chat runtime service shell', (): void => {
+  it('uses the runtime id allocated by the renderer', async (): Promise<void> => {
+    const service = createChatRuntimeService({
+      emit: vi.fn(),
+      messageWriter: createNoopMessageWriter(),
+      messageReader: createNoopMessageReader(),
+      streamExecutor: createNoopStreamExecutor(),
+      keepRuntimeOpenForTest: true
+    });
+    const input = { ...createInput(), runtimeId: 'runtime-renderer-owned' } as ChatRuntimeSendInput;
+
+    const result = await service.send(input);
+
+    expect(result.runtimeId).toBe('runtime-renderer-owned');
+    expect(service.getActiveRuntime('runtime-renderer-owned')).toBeDefined();
+  });
+
   it('auto-names a session through the main process model path', async (): Promise<void> => {
     const updateSessionTitle = vi.fn();
     const generateText = vi.fn().mockResolvedValue([undefined, { text: '"运行时标题"', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } }]);
@@ -1181,6 +1202,45 @@ describe('chat runtime service shell', (): void => {
     await expect(decisionPromise).resolves.toEqual({ approved: true, grantScope: 'session' });
   });
 
+  it('projects active runtimes and their pending renderer requests for recovery', async (): Promise<void> => {
+    const service = createChatRuntimeService({
+      emit: vi.fn(),
+      messageWriter: createNoopMessageWriter(),
+      messageReader: createNoopMessageReader(),
+      streamExecutor: createNoopStreamExecutor(),
+      keepRuntimeOpenForTest: true
+    });
+    const result = await service.send(
+      createInput({
+        capabilities: { rendererToolNames: ['read_current_document'], documentId: 'document-1' }
+      })
+    );
+    const decisionPromise = service.requestConfirmation({
+      runtimeId: result.runtimeId,
+      confirmationId: 'confirmation-recovery',
+      request: { toolName: 'write_file', title: '写入文件', description: '是否写入？', riskLevel: 'write' }
+    });
+    const bridgePromise = service.requestBridge({ runtimeId: result.runtimeId, requestId: 'bridge-recovery', kind: 'document-snapshot' });
+
+    const snapshots = service.listRecoverySnapshots();
+    expect(structuredClone(snapshots)).toEqual(snapshots);
+    expect(snapshots).toEqual([
+      expect.objectContaining({
+        runtimeId: result.runtimeId,
+        capabilities: { rendererToolNames: ['read_current_document'], documentId: 'document-1' },
+        pendingRequests: expect.arrayContaining([
+          expect.objectContaining({ type: 'confirmation', event: expect.objectContaining({ confirmationId: 'confirmation-recovery' }) }),
+          expect.objectContaining({ type: 'bridge', event: expect.objectContaining({ requestId: 'bridge-recovery' }) })
+        ])
+      })
+    ]);
+
+    service.submitConfirmation({ runtimeId: result.runtimeId, confirmationId: 'confirmation-recovery', decision: { approved: false } });
+    service.submitBridgeResponse({ runtimeId: result.runtimeId, requestId: 'bridge-recovery', result: { status: 'success', data: null } });
+    await Promise.all([decisionPromise, bridgePromise]);
+    expect(service.listRecoverySnapshots()[0]?.pendingRequests).toEqual([]);
+  });
+
   it('keeps renderer confirmation requests pending until a decision is submitted', async (): Promise<void> => {
     vi.useFakeTimers();
     try {
@@ -1854,6 +1914,7 @@ describe('chat runtime service shell', (): void => {
     });
 
     const result = await service.submitUserChoice({
+      runtimeId: 'runtime-choice-answer',
       sessionId: 'session-1',
       clientId: 'client-1',
       agentId: 'agent-1',
@@ -1969,6 +2030,7 @@ describe('chat runtime service shell', (): void => {
     });
 
     const result = await service.submitUserChoice({
+      runtimeId: 'runtime-choice-cancelled',
       sessionId: 'session-1',
       clientId: 'client-1',
       agentId: 'agent-1',

@@ -5,7 +5,6 @@
 import { ref } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
 import { useChatSubmitter } from '@/components/BChat/hooks/useChatSubmitter';
-import type { ChatTaskStartResult, ChatTaskState } from '@/components/BChat/hooks/useChatTaskRuntime';
 import type { AdaptedUserMessageInput, MessagePartUpdateInput, SubmitAction } from '@/components/BChat/utils/submitAction';
 import type { Message } from '@/components/BChat/utils/types';
 
@@ -54,16 +53,11 @@ function createMessagePartUpdateAction(input: MessagePartUpdateInput): SubmitAct
 }
 
 describe('useChatSubmitter', (): void => {
-  it('sends adapted user messages after starting an inactive chat task', async (): Promise<void> => {
-    const beginTask = vi.fn<(_kind: 'chat' | 'compact') => ChatTaskStartResult>(() => ({ ok: true }));
+  it('sends adapted user messages while the Session workflow accepts input', async (): Promise<void> => {
     const sendRuntimeUserMessage = vi.fn<(_input: AdaptedUserMessageInput) => Promise<void>>(() => Promise.resolve());
     const input = createAdaptedUserMessageInput();
     const submitter = useChatSubmitter({
-      taskRuntime: {
-        activeTask: ref<ChatTaskState>('idle'),
-        beginTask,
-        finishTask: vi.fn()
-      },
+      isWorkflowBusy: () => false,
       messages: ref<Message[]>([]),
       getSessionId: () => 'session-1',
       getActiveRuntimeId: () => undefined,
@@ -76,21 +70,14 @@ describe('useChatSubmitter', (): void => {
 
     await submitter.submit(createSendAdaptedUserMessageAction(input));
 
-    expect(beginTask).toHaveBeenCalledWith('chat');
     expect(sendRuntimeUserMessage).toHaveBeenCalledWith(input);
   });
 
-  it('does not send adapted user messages while the chat task is already active', async (): Promise<void> => {
-    const activeTask = ref<ChatTaskState>('chat');
-    const beginTask = vi.fn<(_kind: 'chat' | 'compact') => ChatTaskStartResult>(() => ({ ok: false, reason: 'busy' }));
+  it('does not send adapted user messages while the Session workflow is busy', async (): Promise<void> => {
     const sendRuntimeUserMessage = vi.fn<(_input: AdaptedUserMessageInput) => Promise<void>>(() => Promise.resolve());
     const input = createAdaptedUserMessageInput();
     const submitter = useChatSubmitter({
-      taskRuntime: {
-        activeTask,
-        beginTask,
-        finishTask: vi.fn()
-      },
+      isWorkflowBusy: () => true,
       messages: ref<Message[]>([]),
       getSessionId: () => 'session-1',
       getActiveRuntimeId: () => undefined,
@@ -103,7 +90,6 @@ describe('useChatSubmitter', (): void => {
 
     await submitter.submit(createSendAdaptedUserMessageAction(input));
 
-    expect(beginTask).not.toHaveBeenCalled();
     expect(sendRuntimeUserMessage).not.toHaveBeenCalled();
   });
 
@@ -129,11 +115,7 @@ describe('useChatSubmitter', (): void => {
     const submitRuntimeMessagePart = vi.fn<() => Promise<void>>(() => Promise.resolve());
     const updateSessionMessage = vi.fn<() => Promise<void>>(() => Promise.resolve());
     const submitter = useChatSubmitter({
-      taskRuntime: {
-        activeTask: ref<ChatTaskState>('chat'),
-        beginTask: vi.fn(),
-        finishTask: vi.fn()
-      },
+      isWorkflowBusy: () => true,
       messages,
       getSessionId: () => 'session-1',
       getActiveRuntimeId: () => 'runtime-1',

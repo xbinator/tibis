@@ -3,7 +3,12 @@
  * @description ChatRuntime renderer bridge 请求等待管理。
  */
 import type { ActiveChatRuntime, ChatRuntimeEventEmitter } from '../types.mjs';
-import type { ChatRuntimeBridgeResponseInput, ChatRuntimeBridgeResult } from 'types/chat-runtime';
+import type {
+  ChatRuntimeBridgeRequestEvent,
+  ChatRuntimeBridgeResponseInput,
+  ChatRuntimeBridgeResult,
+  ChatRuntimeRecoveryPendingRequest
+} from 'types/chat-runtime';
 import { nanoid } from 'nanoid';
 import { ChatRuntimeError } from '../errors.mjs';
 
@@ -53,10 +58,14 @@ export interface RuntimeBridgeRequests {
    * @param reason - 拒绝原因
    */
   rejectRuntime(runtimeId: string, reason: string): void;
+  /** 读取待处理 Bridge 事件的可克隆投影。 */
+  listPending(runtimeId?: string): Array<Extract<ChatRuntimeRecoveryPendingRequest, { type: 'bridge' }>>;
 }
 
 /** 等待 renderer 回传的通用 bridge 请求。 */
 interface PendingRuntimeBridgeRequest {
+  /** 已发送到 renderer 的 Bridge 请求事件。 */
+  event: ChatRuntimeBridgeRequestEvent;
   /** 完成 bridge 请求。 */
   resolve: (result: ChatRuntimeBridgeResult) => void;
   /** 拒绝 bridge 请求。 */
@@ -97,6 +106,17 @@ export function createRuntimeBridgeRequests(dependencies: RuntimeBridgeRequestsD
 
       const requestId = input.requestId ?? `bridge-${nanoid()}`;
       const key = createBridgeRequestKey(input.runtimeId, requestId);
+      const event: ChatRuntimeBridgeRequestEvent = {
+        runtimeId: runtime.runtimeId,
+        sessionId: runtime.sessionId,
+        clientId: runtime.clientId,
+        agentId: runtime.agentId,
+        parentRuntimeId: runtime.parentRuntimeId,
+        requestId,
+        toolCallId: input.toolCallId,
+        kind: input.kind,
+        payload: input.payload
+      };
       return new Promise<ChatRuntimeBridgeResult>((resolve, reject) => {
         const timeoutId = setTimeout((): void => {
           pendingBridgeRequests.delete(key);
@@ -105,18 +125,8 @@ export function createRuntimeBridgeRequests(dependencies: RuntimeBridgeRequestsD
             error: { code: 'TOOL_TIMEOUT', message: 'Renderer bridge request timed out' }
           });
         }, dependencies.timeoutMs);
-        pendingBridgeRequests.set(key, { resolve, reject, timeoutId });
-        dependencies.emit('chat:runtime:bridge-requested', {
-          runtimeId: runtime.runtimeId,
-          sessionId: runtime.sessionId,
-          clientId: runtime.clientId,
-          agentId: runtime.agentId,
-          parentRuntimeId: runtime.parentRuntimeId,
-          requestId,
-          toolCallId: input.toolCallId,
-          kind: input.kind,
-          payload: input.payload
-        });
+        pendingBridgeRequests.set(key, { event, resolve, reject, timeoutId });
+        dependencies.emit('chat:runtime:bridge-requested', event);
       });
     },
 
@@ -147,6 +157,13 @@ export function createRuntimeBridgeRequests(dependencies: RuntimeBridgeRequestsD
         request.reject(new ChatRuntimeError('EDITOR_UNAVAILABLE', reason));
         pendingBridgeRequests.delete(key);
       }
+    },
+
+    /** 读取待处理 Bridge 事件。 */
+    listPending(runtimeId?: string): Array<Extract<ChatRuntimeRecoveryPendingRequest, { type: 'bridge' }>> {
+      return [...pendingBridgeRequests.values()]
+        .filter((pending): boolean => !runtimeId || pending.event.runtimeId === runtimeId)
+        .map((pending) => ({ type: 'bridge', event: { ...pending.event } }));
     }
   };
 }

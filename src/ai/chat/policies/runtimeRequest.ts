@@ -11,7 +11,7 @@ import { filterMemoryTools } from './memorySelection';
 /** ChatRuntime 通用请求配置。 */
 export type ChatRuntimeRequestConfig = Pick<
   ChatRuntimeSendInput,
-  'contextWindow' | 'system' | 'workspaceRoot' | 'tools' | 'skillContentHashes' | 'tavily' | 'mcp'
+  'contextWindow' | 'system' | 'workspaceRoot' | 'tools' | 'skillContentHashes' | 'tavily' | 'mcp' | 'capabilities'
 >;
 
 /**

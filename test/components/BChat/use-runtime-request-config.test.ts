@@ -89,7 +89,7 @@ describe('useRuntimeRequestConfig', (): void => {
     const hook = useRuntimeRequestConfig({
       contextWindow: ref(8000),
       workspaceRoot: ref(''),
-      resolveServiceConfig: vi.fn(async () => null),
+      resolveServiceConfig: vi.fn(async () => undefined),
       syncAIResources,
       getActiveTools: vi.fn(() => []),
       getSkillContentHashes: vi.fn(() => ({})),

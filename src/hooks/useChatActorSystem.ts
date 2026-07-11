@@ -5,6 +5,8 @@
 import type { InjectionKey } from 'vue';
 import { inject, onScopeDispose, provide } from 'vue';
 import { createChatActorSystem, type ChatActorSystem } from '@/ai/chat/actorSystem';
+import { useChatRuntimeEvents } from '@/hooks/useChatRuntimeEvents';
+import { useChatRuntimeRecovery } from '@/hooks/useChatRuntimeRecovery';
 
 /** Chat Actor system 注入键。 */
 const CHAT_ACTOR_SYSTEM_KEY: InjectionKey<ChatActorSystem> = Symbol('chat-actor-system');
@@ -31,6 +33,8 @@ function getApplicationChatActorSystem(): ChatActorSystem {
 export function useProvideChatActorSystem(): ChatActorSystem {
   const actorSystem = getApplicationChatActorSystem();
   provide(CHAT_ACTOR_SYSTEM_KEY, actorSystem);
+  useChatRuntimeEvents(actorSystem);
+  useChatRuntimeRecovery(actorSystem);
 
   onScopeDispose((): void => {
     actorSystem.stop();
@@ -55,6 +59,7 @@ export function useChatActorSystem(): ChatActorSystem {
   // 组件隔离挂载时创建作用域内系统，避免测试或独立预览之间共享会话状态。
   const localActorSystem = createChatActorSystem();
   localActorSystem.start();
+  useChatRuntimeEvents(localActorSystem);
   onScopeDispose((): void => localActorSystem.stop());
   return localActorSystem;
 }

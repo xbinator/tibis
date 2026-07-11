@@ -21,8 +21,6 @@ describe('agentMachine', (): void => {
     const actor = createActor(agentMachine, { input: AGENT_INPUT });
     actor.start();
 
-    expect(actor.getSnapshot().matches('queued')).toBe(true);
-    actor.send({ type: 'agent.start' });
     expect(actor.getSnapshot().matches('starting')).toBe(true);
     expect(selectIsBusy(actor.getSnapshot())).toBe(true);
 
@@ -55,7 +53,6 @@ describe('agentMachine', (): void => {
   it('records runtime failures and cancellation failures', (): void => {
     const runtimeFailureActor = createActor(agentMachine, { input: AGENT_INPUT });
     runtimeFailureActor.start();
-    runtimeFailureActor.send({ type: 'agent.start' });
     runtimeFailureActor.send({ type: 'runtime.started', runtimeId: 'runtime-1' });
     runtimeFailureActor.send({
       type: 'runtime.failed',
@@ -68,7 +65,6 @@ describe('agentMachine', (): void => {
 
     const cancelFailureActor = createActor(agentMachine, { input: AGENT_INPUT });
     cancelFailureActor.start();
-    cancelFailureActor.send({ type: 'agent.start' });
     cancelFailureActor.send({ type: 'runtime.started', runtimeId: 'runtime-2' });
     cancelFailureActor.send({ type: 'agent.cancel' });
     cancelFailureActor.send({

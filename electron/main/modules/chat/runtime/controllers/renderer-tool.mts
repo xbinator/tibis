@@ -4,7 +4,7 @@
  */
 import type { ActiveChatRuntime, ChatRuntimeEventEmitter, ChatRuntimeRendererToolExecutionInput } from '../types.mjs';
 import type { AIToolExecutionResult } from 'types/ai';
-import type { ChatRuntimeSubmitToolResultInput } from 'types/chat-runtime';
+import type { ChatRuntimeRecoveryPendingRequest, ChatRuntimeSubmitToolResultInput, ChatRuntimeToolRequestEvent } from 'types/chat-runtime';
 import { ChatRuntimeError } from '../errors.mjs';
 
 /** 活跃 runtime 读取函数。 */
@@ -39,10 +39,14 @@ export interface RuntimeRendererToolRequests {
    * @param reason - 拒绝原因
    */
   rejectRuntime(runtimeId: string, reason: string): void;
+  /** 读取待处理工具事件的可克隆投影。 */
+  listPending(runtimeId?: string): Array<Extract<ChatRuntimeRecoveryPendingRequest, { type: 'tool' }>>;
 }
 
 /** 等待 renderer 回传的工具请求。 */
 interface PendingRendererToolRequest {
+  /** 已发送到 renderer 的工具请求事件。 */
+  event: ChatRuntimeToolRequestEvent;
   /** 完成工具请求。 */
   resolve: (result: AIToolExecutionResult) => void;
   /** 拒绝工具请求。 */
@@ -81,6 +85,16 @@ export function createRuntimeRendererToolRequests(dependencies: RuntimeRendererT
       }
 
       const key = createToolRequestKey(input.runtime.runtimeId, input.toolCallId);
+      const event: ChatRuntimeToolRequestEvent = {
+        runtimeId: input.runtime.runtimeId,
+        sessionId: input.runtime.sessionId,
+        clientId: input.runtime.clientId,
+        agentId: input.runtime.agentId,
+        parentRuntimeId: input.runtime.parentRuntimeId,
+        toolCallId: input.toolCallId,
+        toolName: input.toolName,
+        input: input.input
+      };
       return new Promise<AIToolExecutionResult>((resolve, reject) => {
         const timeoutId = setTimeout((): void => {
           pendingRendererToolRequests.delete(key);
@@ -90,17 +104,8 @@ export function createRuntimeRendererToolRequests(dependencies: RuntimeRendererT
             error: { code: 'TOOL_TIMEOUT', message: 'Renderer tool request timed out' }
           });
         }, dependencies.timeoutMs);
-        pendingRendererToolRequests.set(key, { resolve, reject, timeoutId });
-        dependencies.emit('chat:runtime:tool-request', {
-          runtimeId: input.runtime.runtimeId,
-          sessionId: input.runtime.sessionId,
-          clientId: input.runtime.clientId,
-          agentId: input.runtime.agentId,
-          parentRuntimeId: input.runtime.parentRuntimeId,
-          toolCallId: input.toolCallId,
-          toolName: input.toolName,
-          input: input.input
-        });
+        pendingRendererToolRequests.set(key, { event, resolve, reject, timeoutId });
+        dependencies.emit('chat:runtime:tool-request', event);
       });
     },
 
@@ -131,6 +136,13 @@ export function createRuntimeRendererToolRequests(dependencies: RuntimeRendererT
         request.reject(new ChatRuntimeError('TOOL_REQUEST_CANCELLED', reason));
         pendingRendererToolRequests.delete(key);
       }
+    },
+
+    /** 读取待处理工具事件。 */
+    listPending(runtimeId?: string): Array<Extract<ChatRuntimeRecoveryPendingRequest, { type: 'tool' }>> {
+      return [...pendingRendererToolRequests.values()]
+        .filter((pending): boolean => !runtimeId || pending.event.runtimeId === runtimeId)
+        .map((pending) => ({ type: 'tool', event: { ...pending.event } }));
     }
   };
 }

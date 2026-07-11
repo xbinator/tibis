@@ -3,7 +3,7 @@
  * @description 按 Runtime ID 冻结 renderer 工具与 Bridge 能力。
  */
 import type { AIToolContext, AIToolExecutor } from 'types/ai';
-import type { ChatRuntimeBridgeRequestEvent } from 'types/chat-runtime';
+import type { ChatRuntimeBridgeRequestEvent, ChatRuntimeCapabilityDescriptor } from 'types/chat-runtime';
 
 /**
  * Runtime 启动时捕获的 renderer 能力。
@@ -11,6 +11,8 @@ import type { ChatRuntimeBridgeRequestEvent } from 'types/chat-runtime';
 export interface RuntimeExecutionCapabilities {
   /** Runtime 可调用的 renderer 工具 */
   tools: readonly AIToolExecutor[];
+  /** 主进程可持有的 Runtime 能力身份描述符 */
+  descriptor?: ChatRuntimeCapabilityDescriptor;
   /** Runtime 启动时对应的文档 ID */
   documentId?: string;
   /** 按已捕获文档 ID 读取工具上下文 */
@@ -46,7 +48,8 @@ export function createRuntimeCapabilityRegistry(): RuntimeCapabilityRegistry {
         runtimeId,
         Object.freeze({
           ...capabilities,
-          tools: Object.freeze([...capabilities.tools])
+          tools: Object.freeze([...capabilities.tools]),
+          descriptor: capabilities.descriptor ? { ...capabilities.descriptor, rendererToolNames: [...capabilities.descriptor.rendererToolNames] } : undefined
         })
       );
     },

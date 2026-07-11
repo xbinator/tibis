@@ -16,10 +16,10 @@ import type {
   AIUsage
 } from 'types/ai';
 import type { ChatMessageRecord } from 'types/chat';
-import type { ChatRuntimeEventMap } from 'types/chat-runtime';
+import type { ChatRuntimeCapabilityDescriptor, ChatRuntimeEventMap } from 'types/chat-runtime';
 
 /** Runtime 生命周期状态。 */
-export type ChatRuntimeStatus = 'running' | 'aborting' | 'completed';
+export type ChatRuntimeStatus = 'running' | 'completed';
 
 /** Runtime 当前执行阶段。 */
 export type ChatRuntimePhase = 'streaming' | 'compacting';
@@ -36,6 +36,8 @@ export interface ActiveChatRuntime {
   agentId: string;
   /** 父 runtime id。 */
   parentRuntimeId?: string;
+  /** Renderer 重建能力所需的可克隆描述符。 */
+  capabilities?: ChatRuntimeCapabilityDescriptor;
   /** 当前模型上下文窗口。 */
   contextWindow?: number;
   /** 系统提示上下文。 */

@@ -3,7 +3,6 @@
  * @description BChat 消息级交互统一提交 hook。
  */
 import type { BChatRuntimeSubmitMessagePartInput, BChatRuntimeSubmitUserChoiceInput } from './useChatRuntime';
-import type { ChatTaskKind, ChatTaskStartResult, ChatTaskState } from './useChatTaskRuntime';
 import type { PreparedRuntimeRequest } from './useRuntimeRequestConfig';
 import type { AdaptedUserMessageInput, MessagePartUpdateInput, SubmitAction } from '../utils/submitAction';
 import type { Message } from '../utils/types';
@@ -13,26 +12,7 @@ import type { Ref } from 'vue';
 import { cloneDeep } from 'lodash-es';
 
 /** ChatRuntime 通用请求配置。 */
-type ChatRuntimeRequestConfig = Pick<ChatRuntimeSendInput, 'contextWindow' | 'system' | 'workspaceRoot' | 'tools' | 'tavily' | 'mcp'>;
-
-/**
- * 统一提交器依赖的任务运行时能力。
- */
-interface ChatSubmitterTaskRuntime {
-  /** 当前活跃任务。 */
-  activeTask: Ref<ChatTaskState>;
-  /**
-   * 启动任务。
-   * @param kind - 任务类型
-   * @returns 启动结果
-   */
-  beginTask: (kind: ChatTaskKind) => ChatTaskStartResult;
-  /**
-   * 结束任务。
-   * @param kind - 任务类型
-   */
-  finishTask: (kind: ChatTaskKind) => void;
-}
+type ChatRuntimeRequestConfig = Pick<ChatRuntimeSendInput, 'contextWindow' | 'system' | 'workspaceRoot' | 'tools' | 'tavily' | 'mcp' | 'capabilities'>;
 
 /**
  * BChat 统一提交 hook 选项。
@@ -40,8 +20,8 @@ interface ChatSubmitterTaskRuntime {
 interface UseChatSubmitterOptions {
   /** 当前消息列表。 */
   messages: Ref<Message[]>;
-  /** 任务运行时。 */
-  taskRuntime: ChatSubmitterTaskRuntime;
+  /** 当前 Session workflow 是否拒绝新消息。 */
+  isWorkflowBusy: () => boolean;
   /** 获取当前会话 ID。 */
   getSessionId: () => string | undefined;
   /** 获取当前活跃 runtime ID。 */
@@ -52,10 +32,12 @@ interface UseChatSubmitterOptions {
   prepareRuntimeRequest?: () => Promise<PreparedRuntimeRequest | null>;
   /** 用户选择开始续跑回调。 */
   onContinueStarted?: (answer: AIUserChoiceAnswerData) => void;
-  /** Runtime 成功启动回调。 */
-  onRuntimeStarted?: (result: ChatRuntimeStartResult, prepared: PreparedRuntimeRequest) => void;
+  /** 在 IPC 前注册 Runtime 并返回 renderer 分配的 ID。 */
+  startRuntime?: (prepared: PreparedRuntimeRequest) => string;
+  /** Runtime IPC 返回后的收尾回调。 */
+  finishRuntimeStart?: (result: ChatRuntimeStartResult, runtimeId: string) => void;
   /** 用户选择续跑准备失败回调。 */
-  onContinueFailed?: (error: unknown) => void;
+  onContinueFailed?: (error: unknown, runtimeId?: string) => void;
   /** 提交用户选择并续跑。 */
   submitUserChoice: (input: BChatRuntimeSubmitUserChoiceInput) => Promise<ChatRuntimeStartResult>;
   /** 发送已创建的用户消息。 */
@@ -88,18 +70,10 @@ export function useChatSubmitter(options: UseChatSubmitterOptions): UseChatSubmi
    * @param answer - 用户选择答案
    */
   async function continueAssistantTurn(answer: AIUserChoiceAnswerData): Promise<void> {
-    const isActiveChatTask = options.taskRuntime.activeTask.value === 'chat';
-    if (!isActiveChatTask) {
-      const startResult = options.taskRuntime.beginTask('chat');
-      if (!startResult.ok) {
-        return;
-      }
-    }
-
+    let runtimeId: string | undefined;
     try {
       const sessionId = options.getSessionId();
       if (!sessionId) {
-        options.taskRuntime.finishTask('chat');
         return;
       }
 
@@ -108,24 +82,24 @@ export function useChatSubmitter(options: UseChatSubmitterOptions): UseChatSubmi
       const runtimeConfig = options.prepareRuntimeRequest ? prepared?.config ?? null : await options.resolveRuntimeRequestConfig();
       if (!runtimeConfig) {
         options.onContinueFailed?.(new Error('Runtime request configuration is unavailable'));
-        options.taskRuntime.finishTask('chat');
+        return;
+      }
+      if (!prepared || !options.startRuntime) {
+        options.onContinueFailed?.(new Error('Prepared Runtime request is unavailable'));
         return;
       }
 
+      runtimeId = options.startRuntime(prepared);
+
       const result = await options.submitUserChoice({
+        runtimeId,
         sessionId,
         answer,
         ...runtimeConfig
       });
-      if (prepared) {
-        options.onRuntimeStarted?.(result, prepared);
-      }
-      if (result.completed === true) {
-        options.taskRuntime.finishTask('chat');
-      }
+      options.finishRuntimeStart?.(result, runtimeId);
     } catch (error) {
-      options.onContinueFailed?.(error);
-      options.taskRuntime.finishTask('chat');
+      options.onContinueFailed?.(error, runtimeId);
       throw error;
     }
   }
@@ -135,13 +109,7 @@ export function useChatSubmitter(options: UseChatSubmitterOptions): UseChatSubmi
    * @param input - 运行态用户消息提交输入
    */
   async function sendAdaptedUserMessage(input: AdaptedUserMessageInput): Promise<void> {
-    const isActiveChatTask = options.taskRuntime.activeTask.value === 'chat';
-    if (isActiveChatTask) {
-      return;
-    }
-
-    const startResult = options.taskRuntime.beginTask('chat');
-    if (!startResult.ok) return;
+    if (options.isWorkflowBusy()) return;
 
     await options.sendRuntimeUserMessage(input);
   }

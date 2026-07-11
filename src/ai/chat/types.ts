@@ -15,8 +15,6 @@ export interface ChatActorAddress {
   turnId: string;
   /** Agent ID */
   agentId: string;
-  /** 父 Agent ID */
-  parentAgentId?: string;
   /** 主进程 Runtime ID */
   runtimeId: string;
 }
@@ -55,7 +53,8 @@ export interface ChatSubmitInput {
 export type ChatIntent =
   | { type: 'submit'; input: ChatSubmitInput }
   | { type: 'regenerate'; targetMessageId: string }
-  | { type: 'continue'; answer: AIUserChoiceAnswerData };
+  | { type: 'continue'; answer: AIUserChoiceAnswerData }
+  | { type: 'recover'; runtimeId: string };
 
 /**
  * 聊天流程稳定错误码。

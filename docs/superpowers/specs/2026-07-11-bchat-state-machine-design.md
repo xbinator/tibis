@@ -4,7 +4,7 @@
 
 - 日期：2026-07-11
 - 状态：已确认
-- 范围：BChat renderer 交互编排、AI 策略下沉、多会话后台运行与子 Agent 扩展边界
+- 范围：BChat renderer 交互编排、AI 策略下沉、多会话后台运行与 Primary Agent 边界
 
 ## 背景
 
@@ -20,13 +20,13 @@
 - 将纯 AI 决策策略迁移到 `src/ai/chat/`，禁止依赖 Vue、Pinia、Router、组件和 DOM。
 - 使用 XState v5 显式表达合法状态转移、异步任务、错误和取消路径。
 - 支持不同会话并行运行；切换会话或卸载 BChat 后，原会话继续在后台生成。
-- 为一个 Turn 内动态创建多个子 Agent 保留稳定 Actor 层级和事件地址。
+- 当前 Turn 只持有一个 Primary Agent，避免为尚未实现的子 Agent 调度维护无效抽象。
 - 保持 Electron ChatRuntime 的模型执行、工具循环和消息持久化职责不变。
 - 迁移期间保持现有消息格式、IPC 协议和用户可见行为兼容。
 
 ## 非目标
 
-- 本次不实现子 Agent 产品功能，只建立可扩展协议和 Actor 边界。
+- 本次不实现子 Agent 产品功能；未来需要独立设计并发、父子关系和聚合语义。
 - 本次不新增多会话运行状态的完整 UI，只暴露可供会话列表订阅的 selectors。
 - 本次不支持 Electron 主进程或应用整体重启后自动恢复未完成模型流。
 - 本次不迁移聊天消息正文到 XState context。
@@ -38,9 +38,7 @@
 新增依赖：
 
 - `xstate`：状态机、状态图和 Actor 系统。
-- `@xstate/vue`：Vue 生命周期接入及 selector 订阅。
-
-机器使用 XState v5 的 `setup(...)` 定义强类型 context、events、actors、actions 和 guards。Vue 层优先使用 `useActorRef` 和 `useSelector`，避免组件订阅完整 snapshot 后产生无关更新。
+机器使用 XState v5 的 `setup(...)` 定义强类型 context、events、actors、actions 和 guards。Vue hook 只订阅当前 Session snapshot，并将必要状态投影为 computed refs。
 
 不采用单一 `useBChatController`。该方案虽然能快速减少组件行数，但会把现有复杂度搬到另一个巨型 hook，无法改善状态合法性和未来多会话扩展。
 
@@ -52,7 +50,7 @@
 
 - 聊天交互生命周期和合法状态转移。
 - 请求准备、Runtime 启动、取消、回退和压缩的编排。
-- 多会话和多 Agent Actor 生命周期。
+- 多会话和 Primary Agent Actor 生命周期。
 - Runtime 事件地址校验和路由。
 - 当前流程错误、取消目标和恢复目标。
 
@@ -94,9 +92,7 @@
 ChatSupervisorActor
 ├─ ChatSessionActor(session-A)
 │  └─ ChatTurnActor(turn-1)
-│     ├─ AgentActor(primary)
-│     ├─ AgentActor(researcher)
-│     └─ AgentActor(coder)
+│     └─ AgentActor(primary)
 └─ ChatSessionActor(session-B)
    └─ ChatTurnActor(turn-8)
       └─ AgentActor(primary)
@@ -134,16 +130,14 @@ Actor system 在 machine context 之外维护按 `runtimeId` 注册的 renderer 
 
 ### ChatTurnActor
 
-一个 Turn 对应一次用户请求及其所有 Agent。
+一个 Turn 对应一次用户请求及其 Primary Agent。
 
 职责：
 
 - 准备 Runtime 请求。
 - 创建 Primary Agent actor。
-- 未来按事件动态创建多个 Subagent actor。
-- 聚合 Agent 进度、错误、待确认和完成结果。
-- Turn 取消时级联停止全部 Agent。
-- 根据子 Agent 失败策略决定继续、重试或终止 Turn。
+- 汇总 Primary Agent 的错误、待确认和完成结果。
+- Turn 取消时停止 Primary Agent。
 
 ### AgentActor
 
@@ -152,15 +146,15 @@ Actor system 在 machine context 之外维护按 `runtimeId` 注册的 renderer 
 状态：
 
 ```text
-queued -> starting -> running -> waiting
-                    |       |      |
-                    |       |      -> running
-                    |       -> cancelling -> cancelled
-                    -> completed
-                    -> failed
+starting -> running -> waiting
+           |       |      |
+           |       |      -> running
+           |       -> cancelling -> cancelled
+           -> completed
+           -> failed
 ```
 
-第一阶段只创建固定 `agentId: "primary"`。未来新增子 Agent 时不修改 BChat 和 Session 状态结构。
+当前只创建固定 `agentId: "primary"`。未来新增子 Agent 时重新设计 Turn context，不复用伪动态 Map。
 
 `waiting` context 必须标记交互类型：
 
@@ -236,7 +230,6 @@ interface ChatActorAddress {
   sessionId: string
   turnId: string
   agentId: string
-  parentAgentId?: string
   runtimeId: string
 }
 ```
@@ -258,7 +251,6 @@ interface ChatActorAddress {
 - `runtime.completed`
 - `runtime.failed`
 - `runtime.cancelled`
-- `agent.spawned`
 - `agent.completed`
 - `agent.failed`
 
@@ -272,7 +264,7 @@ runtimeId -> sessionId / turnId / agentId
 
 路由规则：
 
-1. Runtime 启动成功后注册映射。
+1. Renderer 预分配 `runtimeId`，在调用主进程前注册映射和 capabilities。
 2. IPC 事件先按 `runtimeId` 查找地址。
 3. 地址与事件携带字段一致时发送到目标 Agent actor。
 4. Agent、Turn 被取消或完成后立即注销映射。
@@ -282,7 +274,7 @@ runtimeId -> sessionId / turnId / agentId
 
 ## Runtime Capability Registry
 
-Runtime 启动成功后，Actor system 同时注册不可序列化的 renderer 能力：
+Runtime IPC 发出前，Actor system 同时注册不可序列化的 renderer 能力：
 
 ```ts
 interface RuntimeExecutionCapabilities {
@@ -335,7 +327,7 @@ interface ChatSessionUIEventMap {
    - 解析 system prompt、Tavily 和 MCP 配置。
    - 确保存在可持久化 Session。
 5. Turn 创建 Primary Agent actor。
-6. Agent 调用 Electron ChatRuntime，获得并注册 `runtimeId`。
+6. Renderer 分配 `runtimeId`，注册 Actor 路由和 capabilities，再调用 Electron ChatRuntime。
 7. 全局 Runtime 事件监听器接收 IPC 事件并交给 Supervisor 路由。
 8. Actor system 使用 Runtime capability registry 处理 renderer 工具和 Bridge 请求。
 9. Electron ChatRuntime 持久化消息；Actor 只更新流程状态。
@@ -422,15 +414,9 @@ src/components/BChat/hooks/
 - Supervisor 暴露全局运行和待处理 selectors，供未来会话列表展示。
 - 删除会话时停止对应 Session actor 及其所有后代。
 
-## 子 Agent 扩展规则
+## 子 Agent 扩展边界
 
-- Primary Agent 通过领域事件请求创建子 Agent，不直接操作 Actor refs。
-- Turn actor 为每个子 Agent 分配唯一 `agentId`。
-- 子 Agent 可以并行运行。
-- 子 Agent 失败默认不直接结束 Turn，由 Turn 策略决定继续、重试或终止。
-- 取消单个子 Agent 不影响同 Turn 的其他 Agent。
-- 取消 Turn 级联停止全部 Agent。
-- Primary Agent 完成但仍有必须等待的子 Agent 时，Turn 不得提前完成。
+当前 renderer Actor 只支持 Primary Agent。子 Agent 需要先明确并发 Runtime 锁、父子关系、确认队列、结果聚合和取消范围，再以独立设计扩展；本次不保留无生产入口的 `agent.spawned`、动态 Agent Map 或父 Agent 字段。
 
 ## 取消语义
 
@@ -444,8 +430,8 @@ running -> cancelling -> runtime.cancelled -> idle
 
 取消范围：
 
-- 取消 Agent：只停止目标 Agent。
-- 停止当前回答：取消当前 Turn 并级联全部 Agent。
+- 取消 Agent：停止当前 Primary Agent。
+- 停止当前回答：取消当前 Turn 和 Primary Agent。
 - 取消压缩：只取消当前 Session 的压缩 actor。
 - 切换会话：不取消。
 - 卸载 BChat：不取消。
@@ -472,10 +458,6 @@ Runtime 未成功启动。复用现有错误消息持久化策略，并按 inten
 
 流式生成或工具循环失败。主进程完成消息错误态持久化，Agent 进入 `failed`，Turn 聚合后结束。
 
-### `recoverableAgentFailed`
-
-子 Agent 失败。Turn 根据策略继续其他 Agent、重试或通知 Primary Agent。
-
 ### `protocolError`
 
 收到缺少地址、地址不匹配、非法状态或未知 Runtime 的事件。不得猜测目标，不修改其他会话状态。
@@ -488,7 +470,17 @@ Runtime 未成功启动。复用现有错误消息持久化策略，并按 inten
 - Actor snapshot 只描述流程状态，不复制完整消息。
 - 正常应用运行期间支持多会话后台任务。
 - Electron 主进程或应用整体重启后，未完成任务标记为中断。
-- 自动恢复模型流和 Runtime reconciliation API 留作独立后续设计。
+- Electron 主进程仍存活时支持 renderer rebuild 恢复；整个应用退出后 Runtime 随主进程结束，不承诺跨进程持久化。
+
+## Runtime 恢复边界
+
+- 主进程通过 `chat:runtime:list-active` 暴露活跃 Runtime、capability 描述符和待处理 renderer 请求的可克隆投影。
+- 快照不得包含 system prompt、Provider/MCP 凭据、Promise resolver、定时器、AbortController 或函数闭包。
+- renderer 启动时先注册全局事件 listener，再执行两轮快照查询；第二轮用于吸收查询期间创建或完成的 Runtime。
+- 恢复出的 Session、Turn 和 Agent 使用 `recover` 意图，不伪造用户提交事件，并按待确认状态直接进入 running 或 waiting。
+- capability 描述符只保存 renderer 工具名和启动时文档 ID。BChat 未挂载时使用明确降级能力；会话挂载后按工具名升级执行器，并继续锁定原文档 ID。
+- 无法恢复原文档上下文时返回稳定失败，不允许回退到另一个当前活跃文档。
+- 待处理确认可在会话 UI 重新订阅后恢复；reload 前未完成的本地工具和 Bridge 请求返回明确失败，使主进程模型循环继续而不是静默超时。
 
 ## 迁移策略
 
@@ -502,7 +494,7 @@ Runtime 未成功启动。复用现有错误消息持久化策略，并按 inten
 
 ### 阶段二：建立领域层
 
-- 安装 `xstate` 和 `@xstate/vue`。
+- 安装 `xstate`。
 - 创建 Supervisor、Session、Turn 和 Agent machines。
 - 迁移 Memory 选择、工具过滤、重新生成和回退纯策略。
 - 为 machine、guards、selectors 和 policies 添加纯测试。
@@ -537,7 +529,6 @@ Runtime 未成功启动。复用现有错误消息持久化策略，并按 inten
 - 所有异步状态的成功、失败和取消出口。
 - tags 和 selectors 的派生结果。
 - Turn 取消级联停止 Agent。
-- 单个子 Agent 失败不污染其他 Agent。
 
 ### Supervisor 测试
 
@@ -561,6 +552,7 @@ Runtime 未成功启动。复用现有错误消息持久化策略，并按 inten
 - selector 到 Vue refs 的映射。
 - UI action 到领域事件的转换。
 - BChat 卸载只解除订阅，不停止后台任务。
+- renderer rebuild 后按主进程快照重建 actor 路由与待确认交互。
 
 ### 组件与回归测试
 
@@ -575,10 +567,11 @@ Runtime 未成功启动。复用现有错误消息持久化策略，并按 inten
 - BChat 不维护 Runtime 忽略集合和任务状态布尔组合。
 - 切换会话后原任务继续运行，切回后显示最新持久消息和 Actor 状态。
 - 同一会话拒绝并发用户 Turn，不同会话允许并行运行。
-- Turn 取消停止全部 Agent，单个 Agent 失败不串到其他会话。
+- Turn 取消停止 Primary Agent，Agent 失败不串到其他会话。
 - 回退后迟到 Runtime 事件不能修改已回退会话。
 - 每个异步状态都有完成、失败和取消出口。
 - Electron ChatRuntime 的持久化职责和现有消息格式保持兼容。
+- 主进程存活期间 renderer rebuild 不会重复启动、误停或遗失活跃 Runtime 路由。
 - 现有用户可见行为和测试保持通过。
 
 ## 参考资料

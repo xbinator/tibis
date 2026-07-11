@@ -9,6 +9,7 @@ import type {
   ChatRuntimeCompactInput,
   ChatRuntimeContinueInput,
   ChatRuntimeHandlerResult,
+  ChatRuntimeRecoverySnapshot,
   ChatRuntimeSendInput,
   ChatRuntimeSubmitConfirmationInput,
   ChatRuntimeSubmitMessagePartInput,
@@ -53,6 +54,11 @@ function wrapRuntimeHandler<T>(fn: (...args: unknown[]) => Promise<T> | T): (...
  * 注册 ChatRuntime IPC handler。
  */
 export function registerChatRuntimeHandlers(): void {
+  ipcMain.handle(
+    'chat:runtime:list-active',
+    wrapRuntimeHandler((): ChatRuntimeRecoverySnapshot[] => chatRuntimeService.listRecoverySnapshots())
+  );
+
   ipcMain.handle(
     'chat:runtime:send',
     wrapRuntimeHandler((_event, input) => chatRuntimeService.send(input as ChatRuntimeSendInput))

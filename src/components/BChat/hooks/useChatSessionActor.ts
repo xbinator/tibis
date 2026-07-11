@@ -159,7 +159,9 @@ export function useChatSessionActor(options: UseChatSessionActorOptions): UseCha
     snapshot,
     loading: computed<boolean>(() => snapshot.value?.hasTag('busy') ?? false),
     waitingForUser: computed<boolean>(() => snapshot.value?.hasTag('waitingForUser') ?? false),
-    activeRuntimeId: computed<string | undefined>(() => snapshot.value?.context.turnRef?.getSnapshot().context.agents.primary?.getSnapshot().context.runtimeId),
+    activeRuntimeId: computed<string | undefined>(
+      () => snapshot.value?.context.turnRef?.getSnapshot().context.primaryAgentRef?.getSnapshot().context.runtimeId
+    ),
     submit,
     continueWithAnswer,
     regenerate,

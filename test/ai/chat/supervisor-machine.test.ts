@@ -31,7 +31,7 @@ describe('supervisorMachine', (): void => {
 
     sessionA?.send({ type: 'session.prepared' });
     const turnRef = sessionA?.getSnapshot().context.turnRef;
-    const primaryAgent = turnRef?.getSnapshot().context.agents.primary;
+    const primaryAgent = turnRef?.getSnapshot().context.primaryAgentRef;
     const turnId = turnRef?.getSnapshot().context.turnId;
     expect(turnId).toBeTruthy();
     actor.send({

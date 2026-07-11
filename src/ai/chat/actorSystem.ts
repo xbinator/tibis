@@ -4,6 +4,7 @@
  */
 import type { SessionMachineEvent } from './machine/sessionMachine';
 import type { ChatActorAddress } from './types';
+import type { ChatRuntimeRecoverySnapshot } from 'types/chat-runtime';
 import type { ActorRefFrom } from 'xstate';
 import { createActor } from 'xstate';
 import { supervisorMachine, type SupervisorMachineEvent } from './machine/supervisorMachine';
@@ -34,6 +35,8 @@ export interface ChatActorSystem {
   sendToSession: (sessionId: string, event: SessionMachineEvent) => void;
   /** 注册 Runtime 地址和 renderer 能力 */
   registerRuntime: (address: ChatActorAddress, capabilities: RuntimeExecutionCapabilities) => void;
+  /** 从主进程快照恢复 Runtime 地址、Actor 与 renderer 能力 */
+  recoverRuntime: (snapshot: ChatRuntimeRecoverySnapshot, capabilities: RuntimeExecutionCapabilities) => void;
   /** 注销 Runtime 地址和 renderer 能力 */
   unregisterRuntime: (runtimeId: string) => void;
   /** 读取 Runtime renderer 能力 */
@@ -87,6 +90,33 @@ export function createChatActorSystem(): ChatActorSystem {
     registerRuntime(address: ChatActorAddress, capabilities: RuntimeExecutionCapabilities): void {
       actor.send({ type: 'runtime.register', address });
       capabilityRegistry.register(address.runtimeId, capabilities);
+    },
+    recoverRuntime(snapshot: ChatRuntimeRecoverySnapshot, capabilities: RuntimeExecutionCapabilities): void {
+      const existingAddress = actor.getSnapshot().context.runtimeRoutes.get(snapshot.runtimeId);
+      if (existingAddress) {
+        capabilityRegistry.register(snapshot.runtimeId, capabilities);
+        return;
+      }
+
+      const sessionRef = this.ensureSession(snapshot.sessionId);
+      if (sessionRef.getSnapshot().matches('idle')) {
+        sessionRef.send({ type: 'session.recoverRuntime', snapshot });
+      }
+      const { turnRef } = sessionRef.getSnapshot().context;
+      const turnId = turnRef?.getSnapshot().context.turnId;
+      if (!turnId) {
+        throw new Error(`Failed to recover chat runtime actor: ${snapshot.runtimeId}`);
+      }
+
+      this.registerRuntime(
+        {
+          sessionId: snapshot.sessionId,
+          turnId,
+          agentId: 'primary',
+          runtimeId: snapshot.runtimeId
+        },
+        capabilities
+      );
     },
     unregisterRuntime(runtimeId: string): void {
       actor.send({ type: 'runtime.unregister', runtimeId });

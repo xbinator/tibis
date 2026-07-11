@@ -11,10 +11,12 @@ import type {
   ChatRuntimeMessageDeletedEvent,
   ChatRuntimeMessageEvent
 } from 'types/chat-runtime';
+import { createPinia, setActivePinia } from 'pinia';
 import { effectScope } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createChatActorSystem } from '@/ai/chat/actorSystem';
 import { useChatRuntimeEvents } from '@/hooks/useChatRuntimeEvents';
+import { useToolPermissionStore } from '@/stores/chat/toolPermission';
 
 const runtimeListeners = vi.hoisted(() => ({
   messageCreated: undefined as ((event: ChatRuntimeMessageEvent) => void) | undefined,
@@ -24,6 +26,10 @@ const runtimeListeners = vi.hoisted(() => ({
   confirmation: undefined as ((event: ChatRuntimeConfirmationRequestEvent) => void) | undefined,
   complete: undefined as ((event: ChatRuntimeCompleteEvent) => void) | undefined,
   error: undefined as ((event: ChatRuntimeErrorEvent) => void) | undefined
+}));
+
+const runtimeCommands = vi.hoisted(() => ({
+  submitConfirmation: vi.fn()
 }));
 
 vi.mock('@/shared/platform/electron-api', () => ({
@@ -49,6 +55,7 @@ vi.mock('@/shared/platform/electron-api', () => ({
       runtimeListeners.confirmation = listener;
       return vi.fn();
     }),
+    chatRuntimeSubmitConfirmation: runtimeCommands.submitConfirmation,
     chatRuntimeOnBridgeRequested: vi.fn((): (() => void) => vi.fn()),
     chatRuntimeOnComplete: vi.fn((listener: (event: ChatRuntimeCompleteEvent) => void): (() => void) => {
       runtimeListeners.complete = listener;
@@ -81,9 +88,48 @@ function createEventBase(): {
 
 describe('useChatRuntimeEvents', (): void => {
   beforeEach((): void => {
+    setActivePinia(createPinia());
+    runtimeCommands.submitConfirmation.mockReset();
+    runtimeCommands.submitConfirmation.mockResolvedValue({ ok: true });
     for (const key of Object.keys(runtimeListeners) as Array<keyof typeof runtimeListeners>) {
       runtimeListeners[key] = undefined;
     }
+  });
+
+  it('auto-approves remembered confirmation grants without moving the Session to waiting', async (): Promise<void> => {
+    const system = createChatActorSystem();
+    system.start();
+    const session = system.ensureSession('session-1');
+    session.send({ type: 'session.submit', input: { messageId: 'user-1', createdAt: '2026-07-11T00:00:00.000Z', content: 'hello', parts: [] } });
+    session.send({ type: 'session.prepared' });
+    const turn = session.getSnapshot().context.turnRef;
+    system.registerRuntime(
+      { sessionId: 'session-1', turnId: turn?.getSnapshot().context.turnId as string, agentId: 'primary', runtimeId: 'runtime-1' },
+      { tools: [], getToolContext: () => undefined, handleBridgeRequest: async (): Promise<unknown> => undefined }
+    );
+    system.send({ type: 'runtime.event', runtimeId: 'runtime-1', event: { type: 'runtime.started', runtimeId: 'runtime-1' } });
+    useToolPermissionStore().grantToolPermission('write_file', 'session');
+    const visibleEvents = vi.fn();
+    system.subscribeSessionEvents('session-1', visibleEvents);
+    const scope = effectScope();
+    scope.run((): void => useChatRuntimeEvents(system));
+
+    runtimeListeners.confirmation?.({
+      ...createEventBase(),
+      confirmationId: 'confirmation-remembered',
+      request: { toolName: 'write_file', title: '写入文件', description: '是否写入？', riskLevel: 'write', allowRemember: true }
+    });
+    await Promise.resolve();
+
+    expect(runtimeCommands.submitConfirmation).toHaveBeenCalledWith({
+      runtimeId: 'runtime-1',
+      confirmationId: 'confirmation-remembered',
+      decision: { approved: true }
+    });
+    expect(visibleEvents).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'confirmationRequested' }));
+    expect(session.getSnapshot().matches('running')).toBe(true);
+    scope.stop();
+    system.stop();
   });
 
   it('publishes visible events and completes the addressed background Agent', (): void => {
@@ -101,7 +147,7 @@ describe('useChatRuntimeEvents', (): void => {
     });
     session.send({ type: 'session.prepared' });
     const turn = session.getSnapshot().context.turnRef;
-    const agent = turn?.getSnapshot().context.agents.primary;
+    const agent = turn?.getSnapshot().context.primaryAgentRef;
     const turnId = turn?.getSnapshot().context.turnId;
     system.registerRuntime(
       { sessionId: 'session-1', turnId: turnId as string, agentId: 'primary', runtimeId: 'runtime-1' },
@@ -117,6 +163,12 @@ describe('useChatRuntimeEvents', (): void => {
 
     runtimeListeners.messageDeleted?.({ ...createEventBase(), messageId: 'assistant-1' });
     expect(visibleEvents).toHaveBeenCalledWith(expect.objectContaining({ type: 'messageDeleted', event: expect.objectContaining({ sessionId: 'session-1' }) }));
+    runtimeListeners.confirmation?.({
+      ...createEventBase(),
+      confirmationId: 'confirmation-visible',
+      request: { toolName: 'write_file', title: '写入文件', description: '是否写入？', riskLevel: 'write' }
+    });
+    expect(visibleEvents).toHaveBeenCalledWith(expect.objectContaining({ type: 'confirmationRequested' }));
     runtimeListeners.complete?.(createEventBase());
 
     expect(agent?.getSnapshot().matches('completed')).toBe(true);

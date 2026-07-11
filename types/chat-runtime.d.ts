@@ -74,6 +74,14 @@ export interface ChatRuntimeClientSnapshot {
   };
 }
 
+/** Cloneable renderer capability identity retained by the main-process runtime. */
+export interface ChatRuntimeCapabilityDescriptor {
+  /** Renderer tool names exposed when the runtime started. */
+  rendererToolNames: string[];
+  /** Document id captured when document-scoped tools were registered. */
+  documentId?: string;
+}
+
 /** Renderer message snapshot accepted by runtime continuation commands. */
 export type ChatRuntimeMessageSnapshot = Omit<ChatMessageRecord, 'sessionId'> & {
   /** Session id may be absent in renderer-only BChat messages. */
@@ -85,6 +93,8 @@ export type ChatRuntimeUserInputPart = ChatMessageTextPart | ChatMessageFilePart
 
 /** Send command input. */
 export interface ChatRuntimeSendInput {
+  /** Runtime id allocated by renderer before the command starts. */
+  runtimeId: string;
   /** Existing session id; omitted for draft sessions. */
   sessionId?: string;
   /** Renderer chat panel id. */
@@ -119,10 +129,14 @@ export interface ChatRuntimeSendInput {
   files?: ChatMessageRecord['files'];
   /** Renderer-side context snapshot captured at send time. */
   snapshot?: ChatRuntimeClientSnapshot;
+  /** Renderer capability identity used to rebuild routing after renderer reload. */
+  capabilities?: ChatRuntimeCapabilityDescriptor;
 }
 
 /** Continue command input for resuming a paused assistant turn. */
 export interface ChatRuntimeContinueInput {
+  /** Runtime id allocated by renderer before the command starts. */
+  runtimeId: string;
   /** Existing session id. */
   sessionId: string;
   /** Renderer chat panel id. */
@@ -147,10 +161,14 @@ export interface ChatRuntimeContinueInput {
   mcp?: AIMCPRequestConfig;
   /** Renderer-updated message snapshot to continue from. */
   messages: ChatRuntimeMessageSnapshot[];
+  /** Renderer capability identity used to rebuild routing after renderer reload. */
+  capabilities?: ChatRuntimeCapabilityDescriptor;
 }
 
 /** Submit-user-choice command input for resuming an awaiting assistant turn from persisted runtime messages. */
 export interface ChatRuntimeSubmitUserChoiceInput {
+  /** Runtime id allocated by renderer before the command starts. */
+  runtimeId: string;
   /** Existing session id. */
   sessionId: string;
   /** Renderer chat panel id. */
@@ -175,6 +193,8 @@ export interface ChatRuntimeSubmitUserChoiceInput {
   mcp?: AIMCPRequestConfig;
   /** User choice answer submitted by renderer UI. */
   answer: AIUserChoiceAnswerData;
+  /** Renderer capability identity used to rebuild routing after renderer reload. */
+  capabilities?: ChatRuntimeCapabilityDescriptor;
 }
 
 /** Runtime confirmation decision submitted by renderer UI. */
@@ -463,6 +483,24 @@ export interface ChatRuntimeBridgeRequestEvent extends ChatRuntimeEventBase {
   kind: string;
   /** JSON-cloneable bridge request payload. */
   payload?: unknown;
+}
+
+/** Recoverable renderer request retained while the main-process runtime waits. */
+export type ChatRuntimeRecoveryPendingRequest =
+  | { type: 'tool'; event: ChatRuntimeToolRequestEvent }
+  | { type: 'confirmation'; event: ChatRuntimeConfirmationRequestEvent }
+  | { type: 'bridge'; event: ChatRuntimeBridgeRequestEvent };
+
+/** Cloneable active-runtime projection used to rebuild renderer actor state. */
+export interface ChatRuntimeRecoverySnapshot extends ChatRuntimeEventBase {
+  /** Current runtime execution phase. */
+  phase: 'streaming' | 'compacting';
+  /** Main-process runtime creation timestamp. */
+  createdAt: number;
+  /** Renderer capability identity captured at runtime start. */
+  capabilities?: ChatRuntimeCapabilityDescriptor;
+  /** Renderer requests that were emitted but not answered. */
+  pendingRequests: ChatRuntimeRecoveryPendingRequest[];
 }
 
 /** Runtime error event. */

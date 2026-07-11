@@ -18,8 +18,10 @@ import type {
   ChatRuntimeConfirmationRequestEvent,
   ChatRuntimeContextUsageEvent,
   ChatRuntimeEventMap,
+  ChatRuntimeHandlerResult,
   ChatRuntimeMessageDeletedEvent,
   ChatRuntimeMessageEvent,
+  ChatRuntimeRecoverySnapshot,
   ChatRuntimeToolRequestEvent
 } from 'types/chat-runtime';
 import type { ElectronAPI, ElectronShellCommandOutputChunk, ElectronSpeechInstallProgress, FileChangeEvent } from 'types/electron-api';
@@ -448,6 +450,12 @@ const electronAPI: ElectronAPI = {
   aiStreamAbort: (requestId) => ipcRenderer.invoke('ai:stream:abort', requestId),
 
   // ==================== Chat runtime 操作 ====================
+
+  /**
+   * 查询主进程当前活跃 ChatRuntime 快照。
+   * @returns 可用于 renderer 恢复的 Runtime 列表
+   */
+  chatRuntimeListActive: (): Promise<ChatRuntimeHandlerResult<ChatRuntimeRecoverySnapshot[]>> => ipcRenderer.invoke('chat:runtime:list-active'),
 
   /**
    * 通过主进程 ChatRuntime 发送一轮对话。

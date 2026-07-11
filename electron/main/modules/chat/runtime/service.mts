@@ -27,6 +27,7 @@ import type {
   ChatRuntimeConfirmationDecision,
   ChatRuntimeContinueInput,
   ChatRuntimeContextUsageSnapshot,
+  ChatRuntimeRecoverySnapshot,
   ChatRuntimeSendInput,
   ChatRuntimeStartResult,
   ChatRuntimeSubmitConfirmationInput,
@@ -257,6 +258,16 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   });
 
   const streamExecutor = dependencies.streamExecutor ?? createDefaultStreamExecutor(rendererToolRequests.request, executeMainTool, rendererToolTimeoutMs);
+
+  /**
+   * 拒绝 renderer 重复分配仍在使用的 Runtime ID。
+   * @param runtimeId - renderer 分配的 Runtime ID
+   */
+  function assertRuntimeIdAvailable(runtimeId: string): void {
+    if (activeRuntimes.has(runtimeId)) {
+      throw new ChatRuntimeError('RUNTIME_ALREADY_ACTIVE', `Runtime ${runtimeId} is already active`);
+    }
+  }
 
   /**
    * 完成 runtime 并释放 session 写入锁。
@@ -770,7 +781,8 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
      */
     async send(input: ChatRuntimeSendInput): Promise<ChatRuntimeStartResult> {
       const sessionId = input.sessionId ?? `session-${nanoid()}`;
-      const runtimeId = `runtime-${nanoid()}`;
+      const { runtimeId } = input;
+      assertRuntimeIdAvailable(runtimeId);
       const lock = locks.acquireWritingLock({ sessionId, runtimeId });
 
       if (!lock.ok) {
@@ -790,6 +802,9 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
               requestBridge: bridgeRequests.request
             })
           : undefined;
+        if (!activeRuntimes.has(runtimeId)) {
+          throw new ChatRuntimeError('RUNTIME_NOT_ACTIVE', `Runtime ${runtimeId} was aborted before message persistence`);
+        }
         const userMessage = createRuntimeUserMessage({ ...input, parts: userParts }, runtime, input.userMessageId ?? createMessageId('user'), createdAt);
         const assistantMessage = createRuntimeAssistantPlaceholder(runtime, createMessageId('assistant'), createdAt);
         activeAssistantMessages.set(runtimeId, assistantMessage);
@@ -836,7 +851,8 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
      * @returns 已启动 runtime 标识
      */
     async continue(input: ChatRuntimeContinueInput): Promise<ChatRuntimeStartResult> {
-      const runtimeId = `runtime-${nanoid()}`;
+      const { runtimeId } = input;
+      assertRuntimeIdAvailable(runtimeId);
       const lock = locks.acquireWritingLock({ sessionId: input.sessionId, runtimeId });
       if (!lock.ok) {
         throw new ChatRuntimeError('SESSION_BUSY', `Session ${input.sessionId} is already running ${lock.ownerRuntimeId}`);
@@ -910,32 +926,35 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
      * @returns 已启动 runtime 标识
      */
     async submitUserChoice(input: ChatRuntimeSubmitUserChoiceInput): Promise<ChatRuntimeStartResult> {
-      const runtimeId = `runtime-${nanoid()}`;
+      const { runtimeId } = input;
+      assertRuntimeIdAvailable(runtimeId);
       const lock = locks.acquireWritingLock({ sessionId: input.sessionId, runtimeId });
       if (!lock.ok) {
         throw new ChatRuntimeError('SESSION_BUSY', `Session ${input.sessionId} is already running ${lock.ownerRuntimeId}`);
       }
 
-      const continuationMessages = (await messageReader.getMessages(input.sessionId)).map(cloneRuntimeMessage);
-      const assistantMessage = applyUserChoiceAnswer(continuationMessages, input.answer);
-      const userMessage = findLastRuntimeUserMessage(continuationMessages);
-      if (!userMessage || !assistantMessage) {
-        locks.releaseWritingLock({ sessionId: input.sessionId, runtimeId });
-        throw new ChatRuntimeError('USER_CHOICE_NOT_FOUND', 'No pending user choice was found');
-      }
-
       const runtime = createUserChoiceRuntime(input, runtimeId);
       activeRuntimes.set(runtimeId, runtime);
-      ensureRuntimeMessageCreatedAt(assistantMessage, now());
-      assistantMessage.runtimeId = runtimeId;
-      assistantMessage.agentId = runtime.agentId;
-      assistantMessage.parentRuntimeId = runtime.parentRuntimeId;
-      assistantMessage.loading = true;
-      assistantMessage.finished = false;
-      activeAssistantMessages.set(runtimeId, assistantMessage);
-      const sourceMessageSnapshot = continuationMessages.map((message) => (message.id === assistantMessage.id ? assistantMessage : message));
 
       try {
+        const continuationMessages = (await messageReader.getMessages(input.sessionId)).map(cloneRuntimeMessage);
+        if (!activeRuntimes.has(runtimeId)) {
+          throw new ChatRuntimeError('RUNTIME_NOT_ACTIVE', `Runtime ${runtimeId} was aborted before continuation started`);
+        }
+        const assistantMessage = applyUserChoiceAnswer(continuationMessages, input.answer);
+        const userMessage = findLastRuntimeUserMessage(continuationMessages);
+        if (!userMessage || !assistantMessage) {
+          throw new ChatRuntimeError('USER_CHOICE_NOT_FOUND', 'No pending user choice was found');
+        }
+
+        ensureRuntimeMessageCreatedAt(assistantMessage, now());
+        assistantMessage.runtimeId = runtimeId;
+        assistantMessage.agentId = runtime.agentId;
+        assistantMessage.parentRuntimeId = runtime.parentRuntimeId;
+        assistantMessage.loading = true;
+        assistantMessage.finished = false;
+        activeAssistantMessages.set(runtimeId, assistantMessage);
+        const sourceMessageSnapshot = continuationMessages.map((message) => (message.id === assistantMessage.id ? assistantMessage : message));
         await messageWriter.updateMessage(assistantMessage);
         emit('chat:runtime:message-updated', {
           runtimeId,
@@ -1038,7 +1057,6 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       const runtime = activeRuntimes.get(input.runtimeId);
       if (!runtime) return;
 
-      runtime.status = 'aborting';
       runtime.abortController.abort();
       activeRuntimes.delete(runtime.runtimeId);
       const assistantMessage = activeAssistantMessages.get(runtime.runtimeId);
@@ -1150,6 +1168,33 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
 
       assistantMessage.parts.splice(partIndex, 1, { ...input.part });
       await updateAssistantMessage(runtime, assistantMessage);
+    },
+
+    /**
+     * 读取 renderer 重建所需的活跃 Runtime 投影。
+     * @returns 按创建时间排序的可克隆 Runtime 快照
+     */
+    listRecoverySnapshots(): ChatRuntimeRecoverySnapshot[] {
+      return [...activeRuntimes.values()]
+        .filter((runtime): boolean => runtime.status !== 'completed')
+        .sort((left, right): number => left.createdAt - right.createdAt)
+        .map(
+          (runtime): ChatRuntimeRecoverySnapshot => ({
+            runtimeId: runtime.runtimeId,
+            sessionId: runtime.sessionId,
+            clientId: runtime.clientId,
+            agentId: runtime.agentId,
+            parentRuntimeId: runtime.parentRuntimeId,
+            phase: runtime.phase,
+            createdAt: runtime.createdAt,
+            capabilities: runtime.capabilities ? { ...runtime.capabilities, rendererToolNames: [...runtime.capabilities.rendererToolNames] } : undefined,
+            pendingRequests: [
+              ...rendererToolRequests.listPending(runtime.runtimeId),
+              ...confirmationRequests.listPending(runtime.runtimeId),
+              ...bridgeRequests.listPending(runtime.runtimeId)
+            ]
+          })
+        );
     },
 
     /**

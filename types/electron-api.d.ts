@@ -31,6 +31,7 @@ import type {
   ChatRuntimeHandlerResult,
   ChatRuntimeMessageDeletedEvent,
   ChatRuntimeMessageEvent,
+  ChatRuntimeRecoverySnapshot,
   ChatRuntimeSendInput,
   ChatRuntimeStartResult,
   ChatRuntimeSubmitConfirmationInput,
@@ -586,6 +587,7 @@ export interface ElectronAPI {
   aiStreamAbort: (requestId: string) => Promise<void>;
 
   // Chat runtime 操作
+  chatRuntimeListActive: () => Promise<ChatRuntimeHandlerResult<ChatRuntimeRecoverySnapshot[]>>;
   chatRuntimeSend: (input: ChatRuntimeSendInput) => Promise<ChatRuntimeHandlerResult<ChatRuntimeStartResult>>;
   chatRuntimeContinue: (input: ChatRuntimeContinueInput) => Promise<ChatRuntimeHandlerResult<ChatRuntimeStartResult>>;
   chatRuntimeSubmitUserChoice: (input: ChatRuntimeSubmitUserChoiceInput) => Promise<ChatRuntimeHandlerResult<ChatRuntimeStartResult>>;

@@ -3,7 +3,13 @@
  * @description ChatRuntime renderer 确认请求等待管理。
  */
 import type { ActiveChatRuntime, ChatRuntimeEventEmitter } from '../types.mjs';
-import type { ChatRuntimeConfirmationDecision, ChatRuntimeConfirmationRequest, ChatRuntimeSubmitConfirmationInput } from 'types/chat-runtime';
+import type {
+  ChatRuntimeConfirmationDecision,
+  ChatRuntimeConfirmationRequest,
+  ChatRuntimeConfirmationRequestEvent,
+  ChatRuntimeRecoveryPendingRequest,
+  ChatRuntimeSubmitConfirmationInput
+} from 'types/chat-runtime';
 import { nanoid } from 'nanoid';
 import { ChatRuntimeError } from '../errors.mjs';
 
@@ -49,10 +55,14 @@ export interface RuntimeConfirmationRequests {
    * @param reason - 拒绝原因
    */
   rejectRuntime(runtimeId: string, reason: string): void;
+  /** 读取待处理确认事件的可克隆投影。 */
+  listPending(runtimeId?: string): Array<Extract<ChatRuntimeRecoveryPendingRequest, { type: 'confirmation' }>>;
 }
 
 /** 等待 renderer 回传的确认请求。 */
 interface PendingRuntimeConfirmationRequest {
+  /** 已发送到 renderer 的确认事件。 */
+  event: ChatRuntimeConfirmationRequestEvent;
   /** 完成确认请求。 */
   resolve: (decision: ChatRuntimeConfirmationDecision) => void;
   /** 拒绝确认请求。 */
@@ -93,18 +103,19 @@ export function createRuntimeConfirmationRequests(dependencies: RuntimeConfirmat
 
       const confirmationId = input.confirmationId ?? `confirmation-${nanoid()}`;
       const key = createConfirmationRequestKey(input.runtimeId, confirmationId);
+      const event: ChatRuntimeConfirmationRequestEvent = {
+        runtimeId: runtime.runtimeId,
+        sessionId: runtime.sessionId,
+        clientId: runtime.clientId,
+        agentId: runtime.agentId,
+        parentRuntimeId: runtime.parentRuntimeId,
+        confirmationId,
+        toolCallId: input.toolCallId,
+        request: input.request
+      };
       return new Promise<ChatRuntimeConfirmationDecision>((resolve, reject) => {
-        pendingConfirmationRequests.set(key, { resolve, reject });
-        dependencies.emit('chat:runtime:confirmation-requested', {
-          runtimeId: runtime.runtimeId,
-          sessionId: runtime.sessionId,
-          clientId: runtime.clientId,
-          agentId: runtime.agentId,
-          parentRuntimeId: runtime.parentRuntimeId,
-          confirmationId,
-          toolCallId: input.toolCallId,
-          request: input.request
-        });
+        pendingConfirmationRequests.set(key, { event, resolve, reject });
+        dependencies.emit('chat:runtime:confirmation-requested', event);
       });
     },
 
@@ -135,6 +146,16 @@ export function createRuntimeConfirmationRequests(dependencies: RuntimeConfirmat
         request.reject(new ChatRuntimeError('CONFIRMATION_DISMISSED', reason));
         pendingConfirmationRequests.delete(key);
       }
+    },
+
+    /** 读取待处理确认事件。 */
+    listPending(runtimeId?: string): Array<Extract<ChatRuntimeRecoveryPendingRequest, { type: 'confirmation' }>> {
+      return [...pendingConfirmationRequests.values()]
+        .filter((pending): boolean => !runtimeId || pending.event.runtimeId === runtimeId)
+        .map((pending) => ({
+          type: 'confirmation',
+          event: { ...pending.event, request: { ...pending.event.request } }
+        }));
     }
   };
 }

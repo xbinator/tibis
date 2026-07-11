@@ -4,8 +4,9 @@
  */
 import type { ChatIntent, ChatSubmitInput, ChatWorkflowError } from '../types';
 import type { AIUserChoiceAnswerData } from 'types/chat';
+import type { ChatRuntimeRecoverySnapshot } from 'types/chat-runtime';
 import type { ActorRefFrom } from 'xstate';
-import { assign, setup } from 'xstate';
+import { assign, enqueueActions, sendTo, setup } from 'xstate';
 import { turnMachine } from './turnMachine';
 
 /**
@@ -36,6 +37,7 @@ export interface SessionMachineContext extends SessionMachineInput {
  * Session machine 领域事件。
  */
 export type SessionMachineEvent =
+  | { type: 'session.recoverRuntime'; snapshot: ChatRuntimeRecoverySnapshot }
   | { type: 'session.submit'; input: ChatSubmitInput }
   | { type: 'session.regenerate'; targetMessageId: string }
   | { type: 'session.userChoiceSubmitted'; answer: AIUserChoiceAnswerData }
@@ -70,17 +72,11 @@ function readNewTurnIntent(event: SessionMachineEvent): ChatIntent | undefined {
   if (event.type === 'session.userChoiceSubmitted') {
     return { type: 'continue', answer: event.answer };
   }
+  if (event.type === 'session.recoverRuntime') {
+    return { type: 'recover', runtimeId: event.snapshot.runtimeId };
+  }
 
   return undefined;
-}
-
-/**
- * 通知当前 Turn 领域事件。
- * @param turnRef - 当前 Turn actor
- * @param event - Turn 事件
- */
-function sendTurnEvent(turnRef: ActorRefFrom<typeof turnMachine> | undefined, event: Parameters<ActorRefFrom<typeof turnMachine>['send']>[0]): void {
-  turnRef?.send(event);
 }
 
 /**
@@ -97,7 +93,9 @@ export const sessionMachine = setup({
     turnMachine
   },
   guards: {
-    isContinueIntent: ({ context }): boolean => context.intent?.type === 'continue'
+    isContinueIntent: ({ context }): boolean => context.intent?.type === 'continue',
+    hasPendingRecoveryInteraction: ({ event }): boolean =>
+      event.type === 'session.recoverRuntime' && event.snapshot.pendingRequests.some((request): boolean => request.type === 'confirmation')
   },
   actions: {
     startNewTurn: assign({
@@ -118,7 +116,6 @@ export const sessionMachine = setup({
             intent
           }
         });
-        turnRef.send({ type: 'turn.prepare' });
         return turnRef;
       },
       error: (): undefined => undefined
@@ -127,19 +124,39 @@ export const sessionMachine = setup({
       intent: ({ event }): ChatIntent | undefined => (event.type === 'session.userChoiceSubmitted' ? { type: 'continue', answer: event.answer } : undefined),
       error: (): undefined => undefined
     }),
-    notifyTurnResume: ({ context }): void => sendTurnEvent(context.turnRef, { type: 'turn.resume' }),
-    notifyTurnPrepared: ({ context }): void => sendTurnEvent(context.turnRef, { type: 'turn.prepared', request: {} }),
-    notifyTurnWaiting: ({ context }): void => sendTurnEvent(context.turnRef, { type: 'turn.waiting' }),
-    notifyTurnInteractionResolved: ({ context }): void => sendTurnEvent(context.turnRef, { type: 'turn.interactionResolved' }),
-    notifyTurnCancel: ({ context }): void => sendTurnEvent(context.turnRef, { type: 'turn.cancel' }),
-    notifyTurnCancelled: ({ context }): void => sendTurnEvent(context.turnRef, { type: 'turn.cancelled' }),
-    notifyTurnCompleted: ({ context }): void => sendTurnEvent(context.turnRef, { type: 'turn.completed' }),
-    notifyTurnFailed: ({ context, event }): void => {
-      if ('error' in event) {
-        sendTurnEvent(context.turnRef, { type: 'turn.failed', error: event.error });
-      }
-    },
-    restoreTurnWaiting: ({ context }): void => sendTurnEvent(context.turnRef, { type: 'turn.waiting' }),
+    notifyTurnResume: enqueueActions(({ context, enqueue }): void => {
+      if (context.turnRef) enqueue.sendTo(context.turnRef, { type: 'turn.resume' });
+    }),
+    notifyTurnPrepared: sendTo(({ context }) => context.turnRef as ActorRefFrom<typeof turnMachine>, { type: 'turn.prepared', request: {} }),
+    notifyTurnWaiting: enqueueActions(({ context, enqueue }): void => {
+      if (context.turnRef) enqueue.sendTo(context.turnRef, { type: 'turn.waiting' });
+    }),
+    notifyTurnInteractionResolved: enqueueActions(({ context, enqueue }): void => {
+      if (context.turnRef) enqueue.sendTo(context.turnRef, { type: 'turn.interactionResolved' });
+    }),
+    notifyTurnCancel: enqueueActions(({ context, enqueue }): void => {
+      if (context.turnRef) enqueue.sendTo(context.turnRef, { type: 'turn.cancel' });
+    }),
+    notifyTurnCancelled: enqueueActions(({ context, enqueue }): void => {
+      if (context.turnRef) enqueue.sendTo(context.turnRef, { type: 'turn.cancelled' });
+    }),
+    notifyTurnCompleted: enqueueActions(({ context, enqueue }): void => {
+      if (context.turnRef) enqueue.sendTo(context.turnRef, { type: 'turn.completed' });
+    }),
+    notifyTurnFailed: enqueueActions(({ context, event, enqueue }): void => {
+      if (context.turnRef && 'error' in event) enqueue.sendTo(context.turnRef, { type: 'turn.failed', error: event.error });
+    }),
+    restoreTurnWaiting: enqueueActions(({ context, enqueue }): void => {
+      if (context.turnRef) enqueue.sendTo(context.turnRef, { type: 'turn.waiting' });
+    }),
+    hydrateRecoveredTurn: enqueueActions(({ context, event, enqueue }): void => {
+      if (event.type !== 'session.recoverRuntime' || !context.turnRef) return;
+      enqueue.sendTo(context.turnRef, {
+        type: 'turn.recovered',
+        runtimeId: event.snapshot.runtimeId,
+        waiting: event.snapshot.pendingRequests.some((request): boolean => request.type === 'confirmation')
+      });
+    }),
     assignRollbackTarget: assign({
       rollbackTargetMessageId: ({ event }): string | undefined => (event.type === 'session.rollbackRequested' ? event.targetMessageId : undefined)
     }),
@@ -162,6 +179,17 @@ export const sessionMachine = setup({
     idle: {
       tags: ['acceptsInput'],
       on: {
+        'session.recoverRuntime': [
+          {
+            target: 'waitingForUser',
+            guard: 'hasPendingRecoveryInteraction',
+            actions: ['startNewTurn', 'hydrateRecoveredTurn']
+          },
+          {
+            target: 'running',
+            actions: ['startNewTurn', 'hydrateRecoveredTurn']
+          }
+        ],
         'session.submit': {
           target: 'preparing',
           actions: 'startNewTurn'
@@ -240,6 +268,14 @@ export const sessionMachine = setup({
         'session.interactionResolved': {
           target: 'running',
           actions: 'notifyTurnInteractionResolved'
+        },
+        'session.completed': {
+          target: 'idle',
+          actions: ['notifyTurnCompleted', 'clearActiveTurn']
+        },
+        'session.failed': {
+          target: 'idle',
+          actions: ['assignError', 'notifyTurnFailed', 'clearActiveTurn']
         },
         'session.cancelRequested': {
           target: 'cancelling',

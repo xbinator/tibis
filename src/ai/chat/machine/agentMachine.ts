@@ -36,8 +36,6 @@ export interface AgentMachineContext {
  * Agent machine 领域事件。
  */
 export type AgentMachineEvent =
-  | { type: 'agent.start' }
-  | { type: 'agent.resume' }
   | { type: 'agent.cancel' }
   | { type: 'runtime.started'; runtimeId: string }
   | { type: 'runtime.userChoiceRequired'; runtimeId: string; interaction: AgentWaitingInteraction }
@@ -92,13 +90,8 @@ export const agentMachine = setup({
 }).createMachine({
   id: 'chatAgent',
   context: ({ input }): AgentMachineContext => ({ address: input.address }),
-  initial: 'queued',
+  initial: 'starting',
   states: {
-    queued: {
-      on: {
-        'agent.start': 'starting'
-      }
-    },
     starting: {
       tags: ['busy'],
       on: {
@@ -136,9 +129,9 @@ export const agentMachine = setup({
     waiting: {
       tags: ['busy', 'abortable', 'waitingForUser'],
       on: {
-        'agent.resume': {
+        'runtime.started': {
           target: 'running',
-          actions: 'clearInteraction'
+          actions: ['assignRuntime', 'clearInteraction']
         },
         'runtime.interactionResolved': {
           target: 'running',
@@ -173,10 +166,7 @@ export const agentMachine = setup({
     },
     cancelFailed: {
       on: {
-        'agent.cancel': {
-          target: 'cancelling',
-          actions: 'clearError'
-        },
+        'agent.cancel': { target: 'cancelling', actions: 'clearError' },
         'runtime.cancelled': {
           target: 'cancelled',
           guard: 'isMatchingRuntime'
