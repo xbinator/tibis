@@ -41,17 +41,6 @@ function areTodosFinished(todos: TodoItem[]): boolean {
 }
 
 /**
- * 判断待办面板是否应由当前待办更新自动展开。
- * @param visible - 当前面板可见性
- * @param sessionId - 当前会话 ID
- * @param previousSessionId - 上一次监听到的会话 ID
- * @returns 同一会话的后续待办更新可自动展开时返回 true
- */
-function shouldAutoShowTodoPanel(visible: boolean, sessionId: string | null, previousSessionId: string | null | undefined): boolean {
-  return previousSessionId !== undefined && sessionId === previousSessionId && !visible;
-}
-
-/**
  * 管理聊天会话 Todo 面板的自动展示、隐藏和回退恢复。
  * @param options - Todo 面板 hook 配置
  * @returns Todo 面板状态和操作
@@ -86,10 +75,18 @@ export function useTodoPanel(options: UseTodoPanelOptions): UseTodoPanelReturn {
     todoStore.restoreBeforeRuntimeIds(sessionId, runtimeIds);
   }
 
-  /** LLM 调用 todowrite 时自动打开/关闭面板。 */
+  /**
+   * 监听会话与待办变化，控制面板的隐藏与收起态。
+   *
+   * 面板默认保持收起（仅显示底部摘要条），由用户手动点击展开；
+   * LLM 写入/更新待办时不再自动展开。仅保留以下自动行为：
+   * - 待办清空：隐藏面板
+   * - 待办全部完成/取消：清理并隐藏面板
+   * - 其余情况：确保面板未被 dismissed，以便摘要条可见
+   */
   watch(
     () => [options.activeSessionId.value, todoStore.getTodos(options.activeSessionId.value ?? '')] as const,
-    ([sessionId, newTodos], previousValue) => {
+    ([sessionId, newTodos]) => {
       if (newTodos.length === 0) {
         todoPanelVisible.value = false;
         todoPanelDismissed.value = false;
@@ -97,9 +94,6 @@ export function useTodoPanel(options: UseTodoPanelOptions): UseTodoPanelReturn {
         if (sessionId) {
           clearFinishedTodos(sessionId);
         }
-      } else if (shouldAutoShowTodoPanel(todoPanelVisible.value, sessionId, previousValue?.[0])) {
-        todoPanelVisible.value = true;
-        todoPanelDismissed.value = false;
       } else {
         todoPanelDismissed.value = false;
       }
