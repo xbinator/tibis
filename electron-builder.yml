@@ -52,6 +52,19 @@ win:
     - nsis
     - portable
   icon: resources/icons/app.png
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+  selectPerMachineByDefault: false
+  allowElevation: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Tibis
+  runAfterFinish: true
+  artifactName: "tibis-${os}-${arch}-setup.${ext}"
+portable:
+  artifactName: "tibis-${os}-${arch}-portable.${ext}"
 linux:
   target:
     - AppImage
