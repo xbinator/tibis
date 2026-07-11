@@ -5,7 +5,6 @@
 
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
-import path from 'node:path';
 import chokidar from 'chokidar';
 import { BrowserWindow } from 'electron';
 
@@ -21,21 +20,85 @@ const RECREATE_WINDOW_MS = 300;
 type FileWatcher = ReturnType<typeof chokidar.watch>;
 
 /**
+ * 统一监听路径分隔符，避免 Windows 反斜杠影响匹配。
+ * @param filePath - 原始文件路径
+ * @returns 使用 / 分隔的路径
+ */
+function normalizeWatchPath(filePath: string): string {
+  return filePath.replace(/\\/g, '/');
+}
+
+/**
+ * 获取跨平台文件名。
+ * @param filePath - 原始文件路径
+ * @returns 文件名
+ */
+function getWatchPathBasename(filePath: string): string {
+  const normalizedPath = normalizeWatchPath(filePath);
+  const index = normalizedPath.lastIndexOf('/');
+  return index === -1 ? normalizedPath : normalizedPath.slice(index + 1);
+}
+
+/**
+ * 获取跨平台文件扩展名。
+ * @param filePath - 原始文件路径
+ * @returns 小写扩展名，包含前导点
+ */
+function getWatchPathExtname(filePath: string): string {
+  const basename = getWatchPathBasename(filePath);
+  const index = basename.lastIndexOf('.');
+  return index > 0 ? basename.slice(index).toLowerCase() : '';
+}
+
+/**
+ * 判断路径是否位于安装临时目录或备份目录中。
+ * @param filePath - 原始文件路径
+ * @returns 位于安装中间目录时返回 true
+ */
+function isInstallerScratchPath(filePath: string): boolean {
+  return normalizeWatchPath(filePath)
+    .split('/')
+    .some((segment: string): boolean => segment.startsWith('.tmp-') || segment.startsWith('.bak-'));
+}
+
+/**
+ * 判断文件是否位于被监听根目录下的隐藏目录。
+ * @param filePath - 原始文件路径
+ * @param rootDirPath - 被监听根目录路径
+ * @returns 位于隐藏目录时返回 true
+ */
+function isHiddenPathUnderWatchRoot(filePath: string, rootDirPath: string | undefined): boolean {
+  if (!rootDirPath) return false;
+
+  const normalizedPath = normalizeWatchPath(filePath);
+  const normalizedRoot = normalizeWatchPath(rootDirPath).replace(/\/+$/u, '');
+  const relativePath = normalizedPath.startsWith(`${normalizedRoot}/`) ? normalizedPath.slice(normalizedRoot.length + 1) : normalizedPath;
+  const directorySegments = relativePath.split('/').slice(0, -1);
+
+  return directorySegments.some((segment: string): boolean => segment.startsWith('.'));
+}
+
+/**
  * 判断目录监听事件是否匹配请求的 skill 文件模式。
  * @param filePath - 变更文件路径
  * @param globPattern - 调用方传入的匹配模式
+ * @param rootDirPath - 被监听根目录路径
  * @returns 是否应该广播 skill 变更事件
  */
-export function isDirectoryWatchMatch(filePath: string, globPattern: string): boolean {
+export function isDirectoryWatchMatch(filePath: string, globPattern: string, rootDirPath?: string): boolean {
+  if (isInstallerScratchPath(filePath) || isHiddenPathUnderWatchRoot(filePath, rootDirPath)) {
+    return false;
+  }
+
   if (globPattern.endsWith('SKILL.md')) {
-    return path.basename(filePath) === 'SKILL.md';
+    return getWatchPathBasename(filePath) === 'SKILL.md';
   }
 
   if (globPattern.endsWith('*.md')) {
-    return path.extname(filePath).toLowerCase() === '.md';
+    return getWatchPathExtname(filePath) === '.md';
   }
 
-  return path.basename(filePath) === path.basename(globPattern);
+  return getWatchPathBasename(filePath) === getWatchPathBasename(globPattern);
 }
 
 /**
@@ -146,7 +209,7 @@ class FileWatchService {
       persistent: true,
       ignoreInitial: true,
       depth: 3,
-      ignored: ['**/node_modules/**', '**/.git/**'],
+      ignored: ['**/node_modules/**', '**/.git/**', '**/.tmp-*/**', '**/.bak-*/**'],
       awaitWriteFinish: {
         stabilityThreshold: 100,
         pollInterval: 100
@@ -154,7 +217,7 @@ class FileWatchService {
     });
 
     watcher.on('change', async (changedPath: string) => {
-      if (!isDirectoryWatchMatch(changedPath, globPattern)) return;
+      if (!isDirectoryWatchMatch(changedPath, globPattern, dirPath)) return;
       try {
         const content = await fsPromises.readFile(changedPath, 'utf-8');
         this.notifyWindowsSkill('change', changedPath, content);
@@ -164,7 +227,7 @@ class FileWatchService {
     });
 
     watcher.on('add', async (addedPath: string) => {
-      if (!isDirectoryWatchMatch(addedPath, globPattern)) return;
+      if (!isDirectoryWatchMatch(addedPath, globPattern, dirPath)) return;
       try {
         const content = await fsPromises.readFile(addedPath, 'utf-8');
         this.notifyWindowsSkill('add', addedPath, content);
@@ -174,7 +237,7 @@ class FileWatchService {
     });
 
     watcher.on('unlink', (removedPath: string) => {
-      if (!isDirectoryWatchMatch(removedPath, globPattern)) return;
+      if (!isDirectoryWatchMatch(removedPath, globPattern, dirPath)) return;
       this.notifyWindowsSkill('unlink', removedPath);
     });
 

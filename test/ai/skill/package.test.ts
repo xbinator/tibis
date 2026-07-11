@@ -9,11 +9,12 @@ import { parseSkillPackageBuffer } from '@/ai/skill/package';
 /**
  * 创建 Skill zip 测试数据。
  * @param wrapperPrefix - 可选的 zip 单一顶层目录前缀
+ * @param skillName - SKILL.md frontmatter name
  * @returns zip 二进制内容
  */
-async function createSkillZipBuffer(wrapperPrefix = ''): Promise<ArrayBuffer> {
+async function createSkillZipBuffer(wrapperPrefix = '', skillName = 'demo-skill'): Promise<ArrayBuffer> {
   const zip = new JSZip();
-  zip.file(`${wrapperPrefix}SKILL.md`, ['---', 'name: demo-skill', 'description: Demo skill', '---', '', 'Use bundled resources.'].join('\n'));
+  zip.file(`${wrapperPrefix}SKILL.md`, ['---', `name: ${skillName}`, 'description: Demo skill', '---', '', 'Use bundled resources.'].join('\n'));
   zip.file(`${wrapperPrefix}assets/icon.bin`, new Uint8Array([5, 6, 7]));
 
   return zip.generateAsync({ type: 'arraybuffer' });
@@ -42,5 +43,17 @@ describe('parseSkillPackageBuffer', (): void => {
     expect(result.resources).toHaveLength(1);
     expect(result.resources[0]?.relativePath).toBe('assets/icon.bin');
     expect(Array.from(new Uint8Array(result.resources[0]?.content ?? new ArrayBuffer(0)))).toEqual([5, 6, 7]);
+  });
+
+  it('rejects unsafe skill names before install paths are created', async (): Promise<void> => {
+    const buffer = await createSkillZipBuffer('', '../demo');
+
+    await expect(parseSkillPackageBuffer(buffer)).rejects.toThrow('Skill name 只能包含字母、数字、下划线和短横线');
+  });
+
+  it('rejects Windows reserved skill names before install paths are created', async (): Promise<void> => {
+    const buffer = await createSkillZipBuffer('', 'CON');
+
+    await expect(parseSkillPackageBuffer(buffer)).rejects.toThrow('Skill name 不能使用 Windows 保留名称');
   });
 });

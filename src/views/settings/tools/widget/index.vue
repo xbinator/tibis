@@ -58,6 +58,8 @@ const filesStore = useFilesStore();
 const initializing = ref(false);
 /** 创建弹窗开关。 */
 const createModalOpen = ref(false);
+/** 是否正在创建小组件，防止重复提交并发写入。 */
+const creatingWidget = ref(false);
 
 /**
  * 当前页码，来源为路由查询参数 `page`。
@@ -203,37 +205,46 @@ async function writeWidgetImportResources(widgetDir: string, resources: WidgetIm
  * @returns 创建完成信号
  */
 async function handleCreateConfirm(payload: WidgetCreatePayload): Promise<void> {
-  const widgetId = payload.id;
-  const widgetName = payload.name;
-  const widgetDescription = payload.description;
-  const homeDir = await native.getHomeDir();
-  const widgetDir = joinPath(homeDir, '.tibis', 'widgets', widgetId);
-  const payloadWidgetData = payload.data ?? createDefaultWidgetData(widgetId);
-  const widgetData = {
-    ...payloadWidgetData,
-    name: widgetName,
-    description: widgetDescription
-  };
-  const filePath = joinPath(widgetDir, 'widget.json');
-  const createdWidget: WidgetDefinition = {
-    id: widgetId,
-    name: widgetData.name,
-    description: widgetData.description,
-    data: widgetData,
-    filePath,
-    enabled: true,
-    parsedAt: Date.now()
-  };
+  if (creatingWidget.value) {
+    return;
+  }
 
-  await getElectronAPI().ensureDir(widgetDir);
-  await writeWidgetImportResources(widgetDir, payload.resources ?? []);
-  await native.writeFile(filePath, JSON.stringify(widgetData, null, 2));
-  await store.rescan();
-  store.upsertWidget(createdWidget);
+  creatingWidget.value = true;
+  try {
+    const widgetId = payload.id;
+    const widgetName = payload.name;
+    const widgetDescription = payload.description;
+    const homeDir = await native.getHomeDir();
+    const widgetDir = joinPath(homeDir, '.tibis', 'widgets', widgetId);
+    const payloadWidgetData = payload.data ?? createDefaultWidgetData(widgetId);
+    const widgetData = {
+      ...payloadWidgetData,
+      name: widgetName,
+      description: widgetDescription
+    };
+    const filePath = joinPath(widgetDir, 'widget.json');
+    const createdWidget: WidgetDefinition = {
+      id: widgetId,
+      name: widgetData.name,
+      description: widgetData.description,
+      data: widgetData,
+      filePath,
+      enabled: true,
+      parsedAt: Date.now()
+    };
 
-  createModalOpen.value = false;
+    await getElectronAPI().ensureDir(widgetDir);
+    await writeWidgetImportResources(widgetDir, payload.resources ?? []);
+    await native.writeFile(filePath, JSON.stringify(widgetData, null, 2));
+    await store.rescan();
+    store.upsertWidget(createdWidget);
 
-  await openWidgetEditor(createdWidget);
+    createModalOpen.value = false;
+
+    await openWidgetEditor(createdWidget);
+  } finally {
+    creatingWidget.value = false;
+  }
 }
 
 /**

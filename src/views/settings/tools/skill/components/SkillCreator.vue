@@ -249,7 +249,7 @@ async function getSkillDir(api: ReturnType<typeof getElectronAPI>): Promise<stri
 
 /** 确认安装：备份 → 替换 → 清理或回滚（消除 TOCTOU 竞态）。 */
 async function handleInstall(): Promise<void> {
-  if (!parsedSkill.value) return;
+  if (installing.value || !parsedSkill.value) return;
 
   const api = getElectronAPI();
   if (!api) {
@@ -300,13 +300,19 @@ async function handleInstall(): Promise<void> {
       if (bakDir) await asyncTo(api.renameFile(bakDir, targetDir));
       throw new Error('无法完成安装，已回滚');
     }
+    tmpDir = '';
 
     // 4. 清理备份（忽略失败，孤儿清理会处理）
     if (bakDir) await asyncTo(api.trashFile(bakDir));
 
     // 5. 重新扫描并关闭
-    await store.rescan();
-    message.success(`技能 "${skillName}" 安装成功`);
+    const [rescanErr] = await asyncTo(store.rescan());
+    if (rescanErr) {
+      console.error('Skill rescan after install failed:', rescanErr);
+      message.warning(`技能 "${skillName}" 安装成功，但刷新列表失败，请稍后重试`);
+    } else {
+      message.success(`技能 "${skillName}" 安装成功`);
+    }
     handleClose();
   } catch (err: unknown) {
     // 失败时清理临时目录（忽略失败，孤儿清理会处理）

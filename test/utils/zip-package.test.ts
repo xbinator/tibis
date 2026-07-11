@@ -75,6 +75,24 @@ describe('readZipPackage', (): void => {
     await expect(readZipPackage(buffer, { rootFileName: 'widget.json' })).rejects.toThrow('zip 条目路径不安全');
   });
 
+  it('rejects resource paths with Windows-invalid characters', async (): Promise<void> => {
+    const buffer = await createZipBuffer([
+      { path: 'widget.json', content: '{}' },
+      { path: 'assets/icon:bad.bin', content: new Uint8Array([1]) }
+    ]);
+
+    await expect(readZipPackage(buffer, { rootFileName: 'widget.json' })).rejects.toThrow('zip 条目路径不安全');
+  });
+
+  it('rejects resource paths with Windows reserved names', async (): Promise<void> => {
+    const buffer = await createZipBuffer([
+      { path: 'widget.json', content: '{}' },
+      { path: 'assets/CON.txt', content: new Uint8Array([1]) }
+    ]);
+
+    await expect(readZipPackage(buffer, { rootFileName: 'widget.json' })).rejects.toThrow('zip 条目路径不安全');
+  });
+
   it('rejects resources larger than maxFileBytes', async (): Promise<void> => {
     const buffer = await createZipBuffer([
       { path: 'SKILL.md', content: '---\nname: demo\ndescription: demo\n---\nbody' },

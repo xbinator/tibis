@@ -33,6 +33,29 @@ const createAndOpenMock = vi.hoisted(() =>
   vi.fn<(file: { type: 'file' | 'widget'; id: string; content: string; name: string; ext: string; path: string | null }) => Promise<{ id: string }>>()
 );
 
+/**
+ * 可由测试控制完成时机的 Promise。
+ */
+interface Deferred<T> {
+  /** 延迟 Promise。 */
+  promise: Promise<T>;
+  /** 完成 Promise。 */
+  resolve: (value: T) => void;
+}
+
+/**
+ * 创建可控 Promise。
+ * @returns 可控 Promise
+ */
+function createDeferred<T>(): Deferred<T> {
+  let resolvePromise: (value: T) => void = (): void => undefined;
+  const promise = new Promise<T>((resolve: (value: T) => void): void => {
+    resolvePromise = resolve;
+  });
+
+  return { promise, resolve: resolvePromise };
+}
+
 vi.mock('@/shared/platform', () => ({
   native: nativeMock
 }));
@@ -568,6 +591,30 @@ describe('WidgetSettingsPage', (): void => {
     expect(nativeMock.writeFile).not.toHaveBeenCalled();
     expect(electronAPIMock.ensureDir).not.toHaveBeenCalled();
     expect(createAndOpenMock).not.toHaveBeenCalled();
+  });
+
+  it('ignores repeated create confirmations while a widget is being written', async (): Promise<void> => {
+    const deferredHomeDir = createDeferred<string>();
+    nativeMock.getHomeDir.mockReturnValue(deferredHomeDir.promise);
+    const wrapper = mountWidgetSettingsPage();
+
+    await flushPromises();
+    await wrapper
+      .findAll('button')
+      .find((button: DOMWrapper<HTMLButtonElement>): boolean => button.text() === '创建小组件')
+      ?.trigger('click');
+    await wrapper.find('.widget-creator__id input').setValue('weather');
+    await wrapper.find('.widget-creator__name input').setValue('天气');
+    const confirmButton = wrapper.findAll('button').find((button: DOMWrapper<HTMLButtonElement>): boolean => button.text() === '确定');
+    await confirmButton?.trigger('click');
+    confirmButton?.element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushPromises();
+
+    expect(nativeMock.getHomeDir).toHaveBeenCalledTimes(2);
+    expect(electronAPIMock.ensureDir).not.toHaveBeenCalled();
+
+    deferredHomeDir.resolve('/Users/test');
+    await flushPromises();
   });
 
   it('does not render a widget delete action for now', async (): Promise<void> => {

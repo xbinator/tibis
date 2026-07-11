@@ -26,7 +26,8 @@ const rescanMock = vi.hoisted(() => vi.fn<() => Promise<void>>());
 /** Ant Design message mock。 */
 const messageMock = vi.hoisted(() => ({
   error: vi.fn<(content: string) => void>(),
-  success: vi.fn<(content: string) => void>()
+  success: vi.fn<(content: string) => void>(),
+  warning: vi.fn<(content: string) => void>()
 }));
 
 vi.mock('@/shared/platform/electron-api', () => ({
@@ -100,6 +101,29 @@ const workerSuccessResponse: WorkerSuccessFixture = {
   ],
   warnings: []
 };
+
+/**
+ * 可由测试控制完成时机的 Promise。
+ */
+interface Deferred<T> {
+  /** 延迟 Promise。 */
+  promise: Promise<T>;
+  /** 完成 Promise。 */
+  resolve: (value: T) => void;
+}
+
+/**
+ * 创建可控 Promise。
+ * @returns 可控 Promise
+ */
+function createDeferred<T>(): Deferred<T> {
+  let resolvePromise: (value: T) => void = (): void => undefined;
+  const promise = new Promise<T>((resolve: (value: T) => void): void => {
+    resolvePromise = resolve;
+  });
+
+  return { promise, resolve: resolvePromise };
+}
 
 /**
  * Worker 测试替身。
@@ -254,6 +278,7 @@ describe('SkillCreator', (): void => {
     rescanMock.mockReset();
     messageMock.error.mockReset();
     messageMock.success.mockReset();
+    messageMock.warning.mockReset();
     electronAPIMock.ensureDir.mockResolvedValue(undefined);
     electronAPIMock.getHomeDir.mockResolvedValue('/Users/test');
     electronAPIMock.getPathStatus.mockResolvedValue({ exists: false });
@@ -277,5 +302,35 @@ describe('SkillCreator', (): void => {
     expect(electronAPIMock.writeFile).toHaveBeenCalledWith(expect.stringContaining('/SKILL.md'), workerSuccessResponse.rawSkillMd);
     expect(saveBinaryFileCall?.[1]).toMatch(/\/assets\/icon\.bin$/u);
     expect(Array.from(new Uint8Array(savedContent))).toEqual([5, 6, 7]);
+  });
+
+  it('ignores repeated install clicks while an install is already running', async (): Promise<void> => {
+    const deferredHomeDir = createDeferred<string>();
+    electronAPIMock.getHomeDir.mockReturnValue(deferredHomeDir.promise);
+    const wrapper = mountSkillCreator();
+
+    await uploadSkillPackage(wrapper);
+    const confirmButton = findButtonByText(wrapper, '确认安装');
+    await confirmButton.trigger('click');
+    confirmButton.element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushPromises();
+
+    expect(electronAPIMock.getHomeDir).toHaveBeenCalledTimes(1);
+
+    deferredHomeDir.resolve('/Users/test');
+    await flushPromises();
+  });
+
+  it('keeps a completed install successful when list refresh fails', async (): Promise<void> => {
+    rescanMock.mockRejectedValueOnce(new Error('scan failed'));
+    const wrapper = mountSkillCreator();
+
+    await uploadSkillPackage(wrapper);
+    await findButtonByText(wrapper, '确认安装').trigger('click');
+    await flushPromises();
+
+    expect(electronAPIMock.renameFile).toHaveBeenCalledWith(expect.stringContaining('/.tmp-'), expect.stringContaining('/demo-skill'));
+    expect(messageMock.error).not.toHaveBeenCalledWith(expect.stringContaining('安装失败'));
+    expect(messageMock.warning).toHaveBeenCalledWith('技能 "demo-skill" 安装成功，但刷新列表失败，请稍后重试');
   });
 });

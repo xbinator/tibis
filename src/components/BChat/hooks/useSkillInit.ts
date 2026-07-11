@@ -10,6 +10,40 @@ import type { ReadWorkspaceDirectoryOptions } from '@/shared/platform/native/typ
 import { useSkillStore } from '@/stores/ai/skill';
 
 /**
+ * 获取 `.agents/skills` 下的目录片段。
+ * @param normalizedPath - 已使用 / 统一分隔符的文件路径
+ * @returns Skill 根目录之后、文件名之前的路径片段
+ */
+function getSkillDirectorySegments(normalizedPath: string): string[] {
+  const segments = normalizedPath.split('/');
+  const agentsIndex = segments.lastIndexOf('.agents');
+
+  if (agentsIndex === -1 || segments[agentsIndex + 1] !== 'skills') {
+    return [];
+  }
+
+  return segments.slice(agentsIndex + 2, -1);
+}
+
+/**
+ * 判断路径是否位于 Skill 隐藏目录。
+ * @param normalizedPath - 已使用 / 统一分隔符的文件路径
+ * @returns 隐藏目录下的文件返回 true
+ */
+function isHiddenSkillPath(normalizedPath: string): boolean {
+  return getSkillDirectorySegments(normalizedPath).some((segment: string): boolean => segment.startsWith('.'));
+}
+
+/**
+ * 判断变更路径是否是需要进入 Store 的正式 Skill 文件。
+ * @param normalizedPath - 已使用 / 统一分隔符的文件路径
+ * @returns 正式 Skill 文件返回 true
+ */
+function isManagedSkillFilePath(normalizedPath: string): boolean {
+  return normalizedPath.endsWith('/SKILL.md') && !isHiddenSkillPath(normalizedPath);
+}
+
+/**
  * 初始化 Skill Store：扫描 skill 目录并监听变更。
  * 在组件 onMounted 时自动执行初始化，onUnmounted 时自动清理监听。
  */
@@ -27,14 +61,14 @@ export function useSkillInit(): void {
       const removeSkillChangedListener = native.onSkillChanged(async (data) => {
         // 统一规范化路径分隔符，Windows 下 Chokidar 报告 \ 而 scanner 使用 /
         const normalizedPath = data.filePath.replace(/\\/g, '/');
+        if (!isManagedSkillFilePath(normalizedPath)) return;
+
         if (data.type === 'unlink') {
-          if (!normalizedPath.endsWith('/SKILL.md')) return;
           skillStore.handleSkillChange('unlink', { filePath: normalizedPath } as import('@/ai/skill/types').SkillDefinition);
           return;
         }
         // change/add：重新解析文件
         if (data.content) {
-          if (!normalizedPath.endsWith('/SKILL.md')) return;
           const skill = parseSkillMarkdown(data.content, normalizedPath, { source: 'global' });
           skillStore.handleSkillChange(data.type as 'change' | 'add', skill);
         }

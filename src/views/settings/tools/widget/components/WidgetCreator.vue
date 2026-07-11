@@ -85,6 +85,8 @@ interface Props {
 
 /** 小组件标识符，仅允许英文、数字、下划线和短横线。 */
 const WIDGET_ID_PATTERN = /^[A-Za-z0-9_-]+$/u;
+/** Windows 保留设备名，不可作为小组件目录名。 */
+const WINDOWS_RESERVED_WIDGET_ID_PATTERN = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/iu;
 /** 支持的小组件导入文件扩展名。 */
 const WIDGET_IMPORT_FILE_EXTENSIONS = ['.zip', '.json'] as const;
 
@@ -139,6 +141,20 @@ function validateWidgetIdUnique(_rule: Rule, value: string): Promise<void> {
   return Promise.resolve();
 }
 
+/**
+ * 校验小组件标识可安全作为跨平台目录名。
+ * @param _rule - Ant Design Vue 表单规则对象
+ * @param value - 待校验的小组件标识
+ * @returns 校验完成信号
+ */
+function validateWidgetIdSafe(_rule: Rule, value: string): Promise<void> {
+  if (value && WINDOWS_RESERVED_WIDGET_ID_PATTERN.test(value)) {
+    return Promise.reject(new Error('小组件标识不能使用 Windows 保留名称'));
+  }
+
+  return Promise.resolve();
+}
+
 /** 表单校验规则。 */
 const rules = reactive<Record<string, Rule[]>>({
   id: [
@@ -146,6 +162,9 @@ const rules = reactive<Record<string, Rule[]>>({
     {
       pattern: WIDGET_ID_PATTERN,
       message: '标识只能包含英文、数字、下划线和短横线'
+    },
+    {
+      validator: validateWidgetIdSafe
     },
     {
       validator: validateWidgetIdUnique

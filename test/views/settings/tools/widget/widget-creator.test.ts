@@ -283,6 +283,17 @@ describe('WidgetCreator', (): void => {
     expect(wrapper.emitted('confirm')).toBeUndefined();
   });
 
+  it('does not emit confirm when identifier is a Windows reserved name', async (): Promise<void> => {
+    const wrapper = mountWidgetCreator();
+
+    await wrapper.find('.widget-creator__id input').setValue('CON');
+    await wrapper.find('.widget-creator__name input').setValue('系统设备名');
+    await findButtonByText(wrapper, '确定').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.emitted('confirm')).toBeUndefined();
+  });
+
   it('fills form and emits imported widget data from a zip file', async (): Promise<void> => {
     const wrapper = mountWidgetCreator();
     const file = await createWidgetZipFile({

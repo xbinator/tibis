@@ -10,14 +10,37 @@ import type { ReadWorkspaceDirectoryOptions } from '@/shared/platform/native/typ
 import { useWidgetStore } from '@/stores/ai/widget';
 
 /**
- * 判断变更路径是否为用户小组件配置文件。
- * @param filePath - 原始文件路径
- * @returns 是否为 widget.json 路径
+ * 获取 `.tibis/widgets` 下的目录片段。
+ * @param normalizedPath - 已使用 / 统一分隔符的文件路径
+ * @returns Widget 根目录之后、文件名之前的路径片段
  */
-function isWidgetJsonPath(filePath: string): boolean {
-  const normalizedPath = filePath.replace(/\\/g, '/');
+function getWidgetDirectorySegments(normalizedPath: string): string[] {
+  const segments = normalizedPath.split('/');
+  const tibisIndex = segments.lastIndexOf('.tibis');
 
-  return normalizedPath.includes('/.tibis/widgets/') && normalizedPath.endsWith('/widget.json');
+  if (tibisIndex === -1 || segments[tibisIndex + 1] !== 'widgets') {
+    return [];
+  }
+
+  return segments.slice(tibisIndex + 2, -1);
+}
+
+/**
+ * 判断路径是否位于 Widget 隐藏目录。
+ * @param normalizedPath - 已使用 / 统一分隔符的文件路径
+ * @returns 隐藏目录下的文件返回 true
+ */
+function isHiddenWidgetPath(normalizedPath: string): boolean {
+  return getWidgetDirectorySegments(normalizedPath).some((segment: string): boolean => segment.startsWith('.'));
+}
+
+/**
+ * 判断变更路径是否为用户小组件配置文件。
+ * @param normalizedPath - 已使用 / 统一分隔符的文件路径
+ * @returns 是否为正式 widget.json 路径
+ */
+function isWidgetJsonPath(normalizedPath: string): boolean {
+  return normalizedPath.includes('/.tibis/widgets/') && normalizedPath.endsWith('/widget.json') && !isHiddenWidgetPath(normalizedPath);
 }
 
 /**

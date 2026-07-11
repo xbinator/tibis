@@ -12,6 +12,10 @@ const MAX_ENTRIES = 50;
 const MAX_FILE_BYTES = 1 * 1024 * 1024;
 /** Skill 根层入口文件名。 */
 const SKILL_MD_FILE_NAME = 'SKILL.md';
+/** 可作为安装目录名的 Skill 名称格式。 */
+const SAFE_SKILL_NAME_PATTERN = /^[A-Za-z0-9_-]+$/;
+/** Windows 保留设备名，不可作为目录名。 */
+const WINDOWS_RESERVED_SKILL_NAME_PATTERN = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/iu;
 
 /**
  * Skill 包资源文件。
@@ -61,6 +65,20 @@ function normalizeSkillPackageResource(resource: ZipPackageResource): SkillPacka
 }
 
 /**
+ * 校验导入 Skill 名称可安全作为安装目录名。
+ * @param name - SKILL.md frontmatter name
+ */
+function assertSafeSkillName(name: string): void {
+  if (!SAFE_SKILL_NAME_PATTERN.test(name)) {
+    throw new Error('Skill name 只能包含字母、数字、下划线和短横线');
+  }
+
+  if (WINDOWS_RESERVED_SKILL_NAME_PATTERN.test(name)) {
+    throw new Error('Skill name 不能使用 Windows 保留名称');
+  }
+}
+
+/**
  * 解析 Skill zip 包。
  * @param buffer - zip 文件二进制内容
  * @returns Skill 包解析结果
@@ -82,6 +100,8 @@ export async function parseSkillPackageBuffer(buffer: ArrayBuffer): Promise<Skil
   if (skill.parseError || !skill.name) {
     throw new Error(`SKILL.md 解析失败：${skill.parseError || '缺少必填字段 name'}`);
   }
+
+  assertSafeSkillName(skill.name);
 
   return {
     skill,

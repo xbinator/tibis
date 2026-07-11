@@ -6,6 +6,10 @@ import JSZip from 'jszip';
 
 /** zip 文件 magic bytes（PK\x03\x04）。 */
 const ZIP_MAGIC = new Uint8Array([0x50, 0x4b, 0x03, 0x04]);
+/** Windows 文件名非法字符。 */
+const WINDOWS_INVALID_PATH_CHARS = /[<>:"|?*]/u;
+/** Windows 保留设备名，带扩展名也不可作为文件名。 */
+const WINDOWS_RESERVED_PATH_SEGMENT = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu;
 
 /**
  * zip 包资源文件。
@@ -73,7 +77,19 @@ export function normalizeZipEntryPath(entryName: string): string {
   const normalized = entryName.replace(/\\/g, '/');
   const segments = normalized.split('/');
 
-  if (!normalized || normalized.startsWith('/') || segments.includes('..')) {
+  const hasUnsafeSegment = segments.some((segment: string): boolean => {
+    return (
+      !segment ||
+      segment === '.' ||
+      segment === '..' ||
+      WINDOWS_INVALID_PATH_CHARS.test(segment) ||
+      WINDOWS_RESERVED_PATH_SEGMENT.test(segment) ||
+      segment.endsWith(' ') ||
+      segment.endsWith('.')
+    );
+  });
+
+  if (!normalized || normalized.startsWith('/') || hasUnsafeSegment) {
     throw new Error(`zip 条目路径不安全：${entryName}`);
   }
 
