@@ -118,6 +118,12 @@ export interface TibisWorkspaceRoot {
 }
 
 export interface Native {
+  /** 在 Electron 主进程获取目标目录跨窗口安装锁。 */
+  acquireDirectoryInstallLock(path: string): Promise<string>;
+
+  /** 确保目录存在。 */
+  ensureDir(path: string): Promise<void>;
+
   readFile(path: string): Promise<ReadFileResult>;
 
   /** 获取拖拽文件对应的本地磁盘路径，Web 平台不可用时返回 null。 */
@@ -146,6 +152,9 @@ export interface Native {
   writeFile(path: string, content: string): Promise<void>;
 
   renameFile(oldPath: string, newPath: string): Promise<void>;
+
+  /** 释放目标目录跨窗口安装锁。 */
+  releaseDirectoryInstallLock(token: string): Promise<void>;
 
   trashFile(path: string): Promise<void>;
 

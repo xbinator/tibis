@@ -3,13 +3,10 @@
  * @description 通用 zip 包根文件与资源文件解析工具。
  */
 import JSZip from 'jszip';
+import { normalizeSafeRelativeFilePath } from '@/shared/workspace/pathUtils';
 
 /** zip 文件 magic bytes（PK\x03\x04）。 */
 const ZIP_MAGIC = new Uint8Array([0x50, 0x4b, 0x03, 0x04]);
-/** Windows 文件名非法字符。 */
-const WINDOWS_INVALID_PATH_CHARS = /[<>:"|?*]/u;
-/** Windows 保留设备名，带扩展名也不可作为文件名。 */
-const WINDOWS_RESERVED_PATH_SEGMENT = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu;
 
 /**
  * zip 包资源文件。
@@ -74,26 +71,7 @@ export function isZipPackageBuffer(buffer: ArrayBuffer): boolean {
  * @returns 安全相对路径
  */
 export function normalizeZipEntryPath(entryName: string): string {
-  const normalized = entryName.replace(/\\/g, '/');
-  const segments = normalized.split('/');
-
-  const hasUnsafeSegment = segments.some((segment: string): boolean => {
-    return (
-      !segment ||
-      segment === '.' ||
-      segment === '..' ||
-      WINDOWS_INVALID_PATH_CHARS.test(segment) ||
-      WINDOWS_RESERVED_PATH_SEGMENT.test(segment) ||
-      segment.endsWith(' ') ||
-      segment.endsWith('.')
-    );
-  });
-
-  if (!normalized || normalized.startsWith('/') || hasUnsafeSegment) {
-    throw new Error(`zip 条目路径不安全：${entryName}`);
-  }
-
-  return normalized;
+  return normalizeSafeRelativeFilePath(entryName, 'zip 条目路径');
 }
 
 /**

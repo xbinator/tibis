@@ -142,6 +142,10 @@ const electronAPI: ElectronAPI = {
 
   ensureDir: (dirPath: string) => ipcRenderer.invoke('fs:ensureDir', dirPath),
 
+  acquireDirectoryInstallLock: (targetPath: string) => ipcRenderer.invoke('fs:acquireDirectoryInstallLock', targetPath),
+
+  releaseDirectoryInstallLock: (token: string) => ipcRenderer.invoke('fs:releaseDirectoryInstallLock', token),
+
   trashFile: (filePath: string) => ipcRenderer.invoke('ui:trashFile', filePath),
 
   showItemInFolder: (filePath: string) => ipcRenderer.invoke('ui:showItemInFolder', filePath),
