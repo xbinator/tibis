@@ -6,7 +6,10 @@
 <template>
   <SettingsPage :title="MENU_ITEMS.logger.label" class="log-settings">
     <template #extra>
-      <LogFilterBar v-model:value="dataItem" :available-dates="availableDates" @change="handleFilterChange" />
+      <div class="log-settings__actions">
+        <LogFilterBar v-model:value="dataItem" :available-dates="availableDates" @change="handleFilterChange" />
+        <BButton data-testid="refresh-logs" :loading="loading" size="small" @click="handleRefresh"> 刷新 </BButton>
+      </div>
     </template>
 
     <BScrollbar inset="auto" @scroll="handleScroll">
@@ -157,6 +160,16 @@ async function loadAvailableDates(): Promise<void> {
 }
 
 /**
+ * 主动刷新可用日期与当前筛选条件下的第一页日志。
+ * @returns 刷新完成信号
+ */
+async function handleRefresh(): Promise<void> {
+  offset.value = 0;
+  hasMore.value = true;
+  await Promise.all([loadAvailableDates(), loadLogs(true)]);
+}
+
+/**
  * 触底时尝试加载更多日志。
  */
 function onLoadMore() {
@@ -198,6 +211,12 @@ onMounted(() => {
   :deep(.settings-page__body) {
     padding: 0;
   }
+}
+
+.log-settings__actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .log-timeline {

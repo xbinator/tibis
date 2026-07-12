@@ -126,7 +126,42 @@ function disabledDate(current: Dayjs): boolean {
   align-items: center;
 }
 
+.log-filter-bar :deep(.b-select) {
+  height: 28px;
+  font-size: 12px;
+}
+
+.log-filter-bar :deep(.b-select .ant-select-selector) {
+  box-sizing: border-box;
+  height: 28px;
+  min-height: 28px;
+  font-size: 12px;
+}
+
+.log-filter-bar :deep(.b-select .ant-select-selection-item),
+.log-filter-bar :deep(.b-select .ant-select-selection-placeholder) {
+  font-size: 12px;
+  line-height: 26px;
+}
+
+.log-filter-bar__input {
+  box-sizing: border-box;
+  height: 28px;
+  font-size: 12px;
+}
+
+.log-filter-bar__input :deep(.ant-input) {
+  font-size: 12px;
+}
+
 .log-filter-bar__date {
+  box-sizing: border-box;
   width: 200px;
+  height: 28px;
+  font-size: 12px;
+}
+
+.log-filter-bar__date :deep(.ant-picker-input > input) {
+  font-size: 12px;
 }
 </style>
