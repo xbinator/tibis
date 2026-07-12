@@ -8,6 +8,8 @@ import type { WidgetData } from '@/components/BWidget/types';
 import { createDefaultWidgetData, normalizeWidgetDataContract } from '@/components/BWidget/utils/widgetData';
 import { hashString } from '@/shared/utils/hash';
 
+export { joinFilePath as joinPath } from '@/shared/workspace/pathUtils';
+
 /**
  * 判断值是否为普通记录。
  * @param value - 待判断值
@@ -26,18 +28,6 @@ function hasWidgetExecuteMethod(value: Record<string, unknown>): boolean {
   const { execute } = value;
 
   return isRecord(execute) && typeof execute.code === 'string';
-}
-
-/**
- * 拼接路径片段，统一使用 / 分隔。
- * @param segments - 路径片段
- * @returns 拼接后的路径
- */
-export function joinPath(...segments: string[]): string {
-  return segments
-    .map((segment: string): string => segment.replace(/\\/g, '/').replace(/\/+$/u, ''))
-    .join('/')
-    .replace(/\/+/gu, '/');
 }
 
 /**

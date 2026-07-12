@@ -3,6 +3,8 @@
  * @description 小组件目录扫描器。
  */
 import type { WidgetDefinition, WidgetScanConfig } from './types';
+import { logDirectoryInstallRecoveryFailure } from '@/shared/logger/directoryInstall';
+import { recoverDirectoryInstallTransactions } from '@/utils/file/directory';
 import { canReadDirectory, type PathStatusReader } from '@/utils/file/status';
 import { joinPath, parseWidgetJson } from './parser';
 
@@ -10,6 +12,8 @@ import { joinPath, parseWidgetJson } from './parser';
  * 小组件扫描器依赖的平台 API 接口。
  */
 export interface WidgetScannerAPI extends PathStatusReader {
+  /** 获取目标目录跨窗口安装锁。 */
+  acquireDirectoryInstallLock?: (targetDir: string) => Promise<string>;
   /** 读取文件内容 */
   readFile: (filePath: string) => Promise<{ content: string }>;
   /** 读取工作区目录 */
@@ -17,6 +21,12 @@ export interface WidgetScannerAPI extends PathStatusReader {
     directoryPath: string;
     workspaceRoot?: string;
   }) => Promise<{ entries: Array<{ name: string; type: 'file' | 'directory' }> }>;
+  /** 移动文件或目录到回收站。 */
+  trashFile?: (filePath: string) => Promise<void>;
+  /** 重命名文件或目录。 */
+  renameFile?: (oldPath: string, newPath: string) => Promise<void>;
+  /** 释放目标目录跨窗口安装锁。 */
+  releaseDirectoryInstallLock?: (token: string) => Promise<void>;
 }
 
 /**
@@ -40,6 +50,22 @@ export async function scanWidgets(config: WidgetScanConfig, api: WidgetScannerAP
   try {
     if (!(await canReadDirectory(widgetDir, api))) {
       return [];
+    }
+
+    if (api.trashFile && api.renameFile && api.getPathStatus && api.acquireDirectoryInstallLock && api.releaseDirectoryInstallLock) {
+      await recoverDirectoryInstallTransactions(
+        widgetDir,
+        {
+          acquireDirectoryInstallLock: api.acquireDirectoryInstallLock,
+          getPathStatus: api.getPathStatus,
+          readFile: api.readFile,
+          readWorkspaceDirectory: api.readWorkspaceDirectory,
+          renameFile: api.renameFile,
+          releaseDirectoryInstallLock: api.releaseDirectoryInstallLock,
+          trashFile: api.trashFile
+        },
+        (failure) => logDirectoryInstallRecoveryFailure('widget', failure)
+      );
     }
 
     const { entries } = await api.readWorkspaceDirectory({ directoryPath: widgetDir });

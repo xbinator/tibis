@@ -1,6 +1,6 @@
 <!--
   @file WidgetCreator.vue
-  @description 小组件创建弹窗，负责创建表单输入与标识符校验。
+  @description 小组件创建弹窗，闭环处理导入校验、目录安装、列表同步与编辑器打开。
 -->
 <template>
   <BModal v-model:open="visible" title="创建小组件" :width="480" @close="handleCancel">
@@ -44,7 +44,7 @@
 
     <template #footer>
       <BButton type="secondary" @click="handleCancel">取消</BButton>
-      <BButton type="primary" @click="handleConfirm">确定</BButton>
+      <BButton type="primary" :loading="creatingWidget" @click="handleConfirm">确定</BButton>
     </template>
   </BModal>
 </template>
@@ -54,55 +54,41 @@ import type { Rule } from 'ant-design-vue/es/form';
 import { reactive, ref, shallowRef, watch } from 'vue';
 import { Form, message } from 'ant-design-vue';
 import { cloneDeep } from 'lodash-es';
-import { importWidgetJsonFile, importWidgetZipFile, type WidgetImportResource, type WidgetImportResult } from '@/ai/widget';
+import { importWidgetJsonFile, importWidgetZipFile, joinPath, type WidgetDefinition, type WidgetImportResource, type WidgetImportResult } from '@/ai/widget';
 import type { WidgetData } from '@/components/BWidget/types';
+import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { createDefaultWidgetExecuteMethod, isDefaultWidgetExecuteMethod } from '@/components/BWidget/utils/widgetExecuteMethod';
+import { useOpenFile } from '@/hooks/useOpenFile';
+import { logger } from '@/shared/logger';
+import { createDirectoryInstallLogger } from '@/shared/logger/directoryInstall';
+import { native } from '@/shared/platform';
+import { isWindowsReservedFileName, PORTABLE_RESOURCE_ID_PATTERN } from '@/shared/workspace/pathUtils';
+import { useWidgetStore } from '@/stores/ai/widget';
 import { asyncTo } from '@/utils/asyncTo';
+import { formatDirectoryInstallError, installDirectory, type DirectoryInstallFile } from '@/utils/file/directory';
 
 /**
- * 创建小组件提交数据。
+ * 创建小组件表单数据。
  */
-export interface WidgetCreatePayload {
+interface WidgetCreateFormData {
   /** 小组件标识。 */
   id: string;
   /** 小组件名称。 */
   name: string;
   /** 小组件描述。 */
   description: string;
-  /** 从导入文件读取的小组件数据。 */
-  data?: WidgetData;
-  /** 从 zip 导入的小组件资源文件。 */
-  resources?: WidgetImportResource[];
 }
 
-/**
- * 小组件创建弹窗属性。
- */
-interface Props {
-  /** 已存在的小组件标识列表，用于创建前去重校验。 */
-  existingIds?: string[];
-}
-
-/** 小组件标识符，仅允许英文、数字、下划线和短横线。 */
-const WIDGET_ID_PATTERN = /^[A-Za-z0-9_-]+$/u;
-/** Windows 保留设备名，不可作为小组件目录名。 */
-const WINDOWS_RESERVED_WIDGET_ID_PATTERN = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/iu;
 /** 支持的小组件导入文件扩展名。 */
 const WIDGET_IMPORT_FILE_EXTENSIONS = ['.zip', '.json'] as const;
 
-const props = withDefaults(defineProps<Props>(), {
-  existingIds: () => []
-});
-
-const emit = defineEmits<{
-  confirm: [payload: WidgetCreatePayload];
-}>();
-
 /** 弹窗可见性。 */
 const visible = defineModel<boolean>('open', { default: false });
+const store = useWidgetStore();
+const { openWidgetFile } = useOpenFile();
 
 /** 表单数据。 */
-const dataItem = reactive<WidgetCreatePayload>({
+const dataItem = reactive<WidgetCreateFormData>({
   id: '',
   name: '',
   description: ''
@@ -115,6 +101,8 @@ const importedWidgetData = shallowRef<WidgetData | null>(null);
 const importedWidgetResources = shallowRef<WidgetImportResource[]>([]);
 /** 导入文件名推导出的小组件标识。 */
 const importedWidgetSuggestedId = ref('');
+/** 是否正在创建小组件，防止重复提交并发写入。 */
+const creatingWidget = ref(false);
 
 /**
  * 判断小组件标识是否已经存在。
@@ -124,7 +112,7 @@ const importedWidgetSuggestedId = ref('');
 function isExistingWidgetId(id: string): boolean {
   const normalizedId = id.trim().toLowerCase();
 
-  return props.existingIds.some((existingId: string): boolean => existingId.toLowerCase() === normalizedId);
+  return store.widgets.some((widget: WidgetDefinition): boolean => widget.id.toLowerCase() === normalizedId);
 }
 
 /**
@@ -148,7 +136,7 @@ function validateWidgetIdUnique(_rule: Rule, value: string): Promise<void> {
  * @returns 校验完成信号
  */
 function validateWidgetIdSafe(_rule: Rule, value: string): Promise<void> {
-  if (value && WINDOWS_RESERVED_WIDGET_ID_PATTERN.test(value)) {
+  if (value && isWindowsReservedFileName(value)) {
     return Promise.reject(new Error('小组件标识不能使用 Windows 保留名称'));
   }
 
@@ -160,7 +148,7 @@ const rules = reactive<Record<string, Rule[]>>({
   id: [
     { required: true, message: '请输入小组件标识' },
     {
-      pattern: WIDGET_ID_PATTERN,
+      pattern: PORTABLE_RESOURCE_ID_PATTERN,
       message: '标识只能包含英文、数字、下划线和短横线'
     },
     {
@@ -178,9 +166,12 @@ const { resetFields, validate, validateInfos } = Form.useForm(dataItem, rules);
 
 /**
  * 执行表单校验。
- * @returns 校验结果元组
+ * @returns 校验错误；校验通过时返回 undefined
  */
-const onValidate = () => asyncTo(validate());
+async function validateForm(): Promise<Error | undefined> {
+  const [error] = await asyncTo(validate());
+  return error;
+}
 
 /**
  * 规范化小组件标识。
@@ -292,9 +283,28 @@ function createImportedWidgetDataForConfirm(): WidgetData | undefined {
 }
 
 /**
+ * 将 Widget 配置与导入资源转换为通用目录安装文件。
+ * @param widgetData - Widget 配置数据
+ * @param resources - 导入资源
+ * @returns widget.json 与资源文件列表
+ */
+function createWidgetInstallFiles(widgetData: WidgetData, resources: WidgetImportResource[]): DirectoryInstallFile[] {
+  return [
+    { kind: 'text', relativePath: 'widget.json', content: JSON.stringify(widgetData, null, 2) },
+    ...resources.map(
+      (resource: WidgetImportResource): DirectoryInstallFile => ({ kind: 'binary', relativePath: resource.relativePath, content: resource.content })
+    )
+  ];
+}
+
+/**
  * 取消创建小组件。
  */
 function handleCancel(): void {
+  if (creatingWidget.value) {
+    return;
+  }
+
   visible.value = false;
 }
 
@@ -303,25 +313,76 @@ function handleCancel(): void {
  * @returns 创建确认完成信号
  */
 async function handleConfirm(): Promise<void> {
+  if (creatingWidget.value) {
+    return;
+  }
+
+  creatingWidget.value = true;
   dataItem.id = dataItem.id.trim().toLowerCase();
   dataItem.name = dataItem.name.trim();
   dataItem.description = dataItem.description.trim();
 
-  const [error] = await onValidate();
+  const error = await validateForm();
 
   if (error) {
+    creatingWidget.value = false;
     return;
   }
 
-  const importedData = createImportedWidgetDataForConfirm();
+  const widgetId = dataItem.id;
+  const widgetName = dataItem.name;
+  const installLogger = createDirectoryInstallLogger('widget', widgetId);
 
-  emit('confirm', {
-    id: dataItem.id,
-    name: dataItem.name,
-    description: dataItem.description,
-    ...(importedData ? { data: importedData } : {}),
-    ...(importedWidgetResources.value.length > 0 ? { resources: importedWidgetResources.value } : {})
-  });
+  try {
+    await installLogger.start();
+    const homeDir = await native.getHomeDir();
+    const widgetDir = joinPath(homeDir, '.tibis', 'widgets', widgetId);
+    const importedData = createImportedWidgetDataForConfirm();
+    const widgetData: WidgetData = {
+      ...(importedData ?? createDefaultWidgetData(widgetId)),
+      name: widgetName,
+      description: dataItem.description
+    };
+    const createdWidget: WidgetDefinition = {
+      id: widgetId,
+      name: widgetData.name,
+      description: widgetData.description,
+      data: widgetData,
+      filePath: joinPath(widgetDir, 'widget.json'),
+      enabled: true,
+      parsedAt: Date.now()
+    };
+
+    await installDirectory({
+      api: native,
+      targetDir: widgetDir,
+      conflictStrategy: 'reject',
+      files: createWidgetInstallFiles(widgetData, importedWidgetResources.value),
+      onEvent: installLogger.onEvent
+    });
+    await installLogger.success();
+
+    const [rescanError] = await asyncTo(store.rescan());
+    if (rescanError) {
+      await logger.warn(`[widget-install] rescan-failed resource=${widgetId} error=${formatDirectoryInstallError(rescanError)}`);
+      message.warning(`小组件 "${widgetName}" 创建成功，但刷新列表失败，请稍后重试`);
+    }
+    store.upsertWidget(createdWidget);
+    visible.value = false;
+
+    const [openEditorError] = await asyncTo(openWidgetFile(createdWidget));
+    if (openEditorError) {
+      await logger.warn(`[widget-install] open-editor-failed resource=${widgetId} error=${formatDirectoryInstallError(openEditorError)}`);
+      message.warning(`小组件 "${widgetName}" 创建成功，但打开编辑器失败`);
+    } else if (!rescanError) {
+      message.success(`小组件 "${widgetName}" 创建成功`);
+    }
+  } catch (installError: unknown) {
+    await installLogger.failure(installError);
+    message.error(`创建失败：${formatDirectoryInstallError(installError)}`);
+  } finally {
+    creatingWidget.value = false;
+  }
 }
 
 watch(

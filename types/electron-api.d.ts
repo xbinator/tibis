@@ -489,7 +489,7 @@ export interface ElectronAPI {
   getPathForFile: (file: globalThis.File) => string;
   readWorkspaceFile: (options: ElectronReadWorkspaceFileOptions) => Promise<ElectronReadWorkspaceFileResult>;
   readWorkspaceDirectory: (options: ElectronReadWorkspaceDirectoryOptions) => Promise<ElectronReadWorkspaceDirectoryResult>;
-  getPathStatus?: (targetPath: string) => Promise<ElectronFilePathStatus>;
+  getPathStatus: (targetPath: string) => Promise<ElectronFilePathStatus>;
 
   // 文件对话框操作
   openFile: (options?: ElectronOpenFileOptions) => Promise<ElectronFileResult>;
@@ -503,6 +503,10 @@ export interface ElectronAPI {
   writeFile: (filePath: string, content: string) => Promise<void>;
   renameFile: (oldPath: string, newPath: string) => Promise<void>;
   ensureDir: (dirPath: string) => Promise<void>;
+  /** 在主进程获取指定目标目录的跨窗口安装锁。 */
+  acquireDirectoryInstallLock: (targetPath: string) => Promise<string>;
+  /** 释放跨窗口目录安装锁。 */
+  releaseDirectoryInstallLock: (token: string) => Promise<void>;
   trashFile: (filePath: string) => Promise<void>;
   showItemInFolder: (filePath: string) => Promise<void>;
   getRelativePath: (filePath: string) => Promise<string>;

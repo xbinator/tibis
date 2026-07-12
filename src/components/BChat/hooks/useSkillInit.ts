@@ -6,7 +6,6 @@
 import { onMounted, onUnmounted } from 'vue';
 import { joinPath, parseSkillMarkdown } from '@/ai/skill';
 import { native } from '@/shared/platform';
-import type { ReadWorkspaceDirectoryOptions } from '@/shared/platform/native/types';
 import { useSkillStore } from '@/stores/ai/skill';
 
 /**
@@ -81,12 +80,7 @@ export function useSkillInit(): void {
       await native.watchDirectory(skillDir, '**/SKILL.md');
       cleanupCallbacks.push(() => native.unwatchDirectory(skillDir, '**/SKILL.md'));
 
-      await skillStore.init(homeDir, {
-        readFile: (filePath: string) => native.readFile(filePath).then((r) => ({ content: r.content })),
-        readWorkspaceDirectory: (options: ReadWorkspaceDirectoryOptions) => native.readWorkspaceDirectory(options),
-        getPathStatus: (targetPath: string) => native.getPathStatus(targetPath),
-        trashFile: (filePath: string) => native.trashFile(filePath)
-      });
+      await skillStore.init(homeDir, native);
     } catch (error: unknown) {
       console.error('Skill initialization failed:', error);
       skillStore.finishInitialization();

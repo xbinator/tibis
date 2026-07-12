@@ -3,6 +3,7 @@
  * @description 验证统一文件打开入口按最近记录类型路由。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { useOpenFile } from '@/hooks/useOpenFile';
 
 const routerPushMock = vi.hoisted(() => vi.fn());
@@ -89,5 +90,39 @@ describe('useOpenFile', (): void => {
     await openFileByPath('/tmp/board.json');
 
     expect(routerPushMock).toHaveBeenCalledWith({ name: 'editor', params: { id: 'json-1' } });
+  });
+
+  it('opens an installed widget definition through the shared widget file session', async (): Promise<void> => {
+    createAndOpenMock.mockResolvedValue({
+      type: 'widget',
+      id: 'widget-weather',
+      path: '/tmp/widgets/weather/widget.json',
+      name: 'weather',
+      ext: 'json',
+      content: '{"name":"天气"}',
+      savedContent: '{"name":"天气"}'
+    });
+
+    const { openWidgetFile } = useOpenFile();
+    await openWidgetFile({
+      id: 'weather',
+      name: '天气',
+      description: '查询天气',
+      data: { ...createDefaultWidgetData('weather'), name: '天气', description: '查询天气' },
+      filePath: '/tmp/widgets/weather/widget.json',
+      enabled: true,
+      parsedAt: 1
+    });
+
+    expect(createAndOpenMock).toHaveBeenCalledWith({
+      type: 'widget',
+      id: 'widget-weather',
+      path: '/tmp/widgets/weather/widget.json',
+      name: 'weather',
+      ext: 'json',
+      content: expect.stringContaining('"name": "天气"'),
+      savedContent: expect.stringContaining('"name": "天气"')
+    });
+    expect(routerPushMock).toHaveBeenCalledWith({ name: 'widget', params: { id: 'widget-weather' } });
   });
 });

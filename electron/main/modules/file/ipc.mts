@@ -4,7 +4,30 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { ipcMain } from 'electron';
+import { ipcMain, type IpcMainInvokeEvent } from 'electron';
+import { DirectoryInstallLockManager } from './install-lock.mjs';
+
+/** 所有渲染窗口共享的目录安装锁。 */
+const directoryInstallLocks = new DirectoryInstallLockManager();
+/** 已注册销毁监听的渲染进程。 */
+const trackedInstallLockOwners = new Set<number>();
+
+/**
+ * 监听渲染进程销毁并释放其遗留安装锁。
+ * @param event - IPC 调用事件
+ */
+function trackInstallLockOwner(event: IpcMainInvokeEvent): void {
+  const ownerId = event.sender.id;
+  if (trackedInstallLockOwners.has(ownerId)) {
+    return;
+  }
+
+  trackedInstallLockOwners.add(ownerId);
+  event.sender.once('destroyed', (): void => {
+    trackedInstallLockOwners.delete(ownerId);
+    directoryInstallLocks.releaseOwner(ownerId);
+  });
+}
 
 /**
  * 文件路径状态。
@@ -16,6 +39,20 @@ export interface FilePathStatus {
   isFile: boolean;
   /** 路径是否为目录。 */
   isDirectory: boolean;
+}
+
+/**
+ * 判断文件系统错误是否仅表示路径不存在。
+ * @param error - 文件系统错误
+ * @returns 是否为 ENOENT 或 ENOTDIR
+ */
+function isMissingPathError(error: unknown): boolean {
+  if (!(error instanceof Error) || !('code' in error)) {
+    return false;
+  }
+
+  const { code } = error as NodeJS.ErrnoException;
+  return code === 'ENOENT' || code === 'ENOTDIR';
 }
 
 /**
@@ -32,7 +69,11 @@ export async function getFilePathStatus(targetPath: string): Promise<FilePathSta
       isFile: stats.isFile(),
       isDirectory: stats.isDirectory()
     };
-  } catch {
+  } catch (error: unknown) {
+    if (!isMissingPathError(error)) {
+      throw error;
+    }
+
     return {
       exists: false,
       isFile: false,
@@ -61,5 +102,14 @@ export function registerFileHandlers(): void {
 
   ipcMain.handle('fs:ensureDir', async (_event, dirPath: string) => {
     await fs.promises.mkdir(dirPath, { recursive: true });
+  });
+
+  ipcMain.handle('fs:acquireDirectoryInstallLock', async (event: IpcMainInvokeEvent, targetPath: string) => {
+    trackInstallLockOwner(event);
+    return directoryInstallLocks.acquire(targetPath, event.sender.id);
+  });
+
+  ipcMain.handle('fs:releaseDirectoryInstallLock', (event: IpcMainInvokeEvent, token: string) => {
+    directoryInstallLocks.release(token, event.sender.id);
   });
 }

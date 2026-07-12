@@ -51,7 +51,7 @@ withDefaults(defineProps<Props>(), {
   gap: 6px;
   align-items: center;
   height: 40px;
-  padding: 0 20px;
+  padding: 0 10px 0 20px;
   border-bottom: 1px solid var(--border-primary);
 }
 

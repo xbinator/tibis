@@ -19,6 +19,23 @@ import { OPEN_FILE_FILTER, SAVE_FILE_FILTER } from '@/constants/extensions';
 import { getElectronAPI } from '../electron-api';
 
 export class ElectronNative implements Native {
+  /**
+   * 获取跨窗口目录安装锁。
+   * @param targetPath - 安装目标目录
+   * @returns 锁令牌
+   */
+  async acquireDirectoryInstallLock(targetPath: string): Promise<string> {
+    return getElectronAPI().acquireDirectoryInstallLock(targetPath);
+  }
+
+  /**
+   * 确保目录存在。
+   * @param dirPath - 目录路径
+   */
+  async ensureDir(dirPath: string): Promise<void> {
+    await getElectronAPI().ensureDir(dirPath);
+  }
+
   async readFile(filePath: string): Promise<ReadFileResult> {
     const result = await getElectronAPI().readFile(filePath);
     return { content: result.content, name: result.fileName, ext: result.ext };
@@ -101,6 +118,14 @@ export class ElectronNative implements Native {
 
   async renameFile(oldPath: string, newPath: string): Promise<void> {
     await getElectronAPI().renameFile(oldPath, newPath);
+  }
+
+  /**
+   * 释放跨窗口目录安装锁。
+   * @param token - 锁令牌
+   */
+  async releaseDirectoryInstallLock(token: string): Promise<void> {
+    await getElectronAPI().releaseDirectoryInstallLock(token);
   }
 
   async trashFile(filePath: string): Promise<void> {

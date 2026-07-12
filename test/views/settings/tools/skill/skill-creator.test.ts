@@ -6,15 +6,17 @@
 /* eslint-disable vue/one-component-per-file */
 import { defineComponent } from 'vue';
 import { flushPromises, mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SkillCreator from '@/views/settings/tools/skill/components/SkillCreator.vue';
 
 /** Electron API mock。 */
 const electronAPIMock = vi.hoisted(() => ({
+  acquireDirectoryInstallLock: vi.fn<(path: string) => Promise<string>>(),
   ensureDir: vi.fn<(path: string) => Promise<void>>(),
   getHomeDir: vi.fn<() => Promise<string>>(),
   getPathStatus: vi.fn<(path: string) => Promise<{ exists: boolean }>>(),
   renameFile: vi.fn<(oldPath: string, newPath: string) => Promise<void>>(),
+  releaseDirectoryInstallLock: vi.fn<(token: string) => Promise<void>>(),
   saveBinaryFile: vi.fn<(content: ArrayBuffer, path?: string) => Promise<string | null>>(),
   trashFile: vi.fn<(path: string) => Promise<void>>(),
   writeFile: vi.fn<(path: string, content: string) => Promise<void>>()
@@ -30,6 +32,13 @@ const messageMock = vi.hoisted(() => ({
   warning: vi.fn<(content: string) => void>()
 }));
 
+/** 持久化日志 mock。 */
+const loggerMock = vi.hoisted(() => ({
+  error: vi.fn<(content: string) => Promise<void>>(),
+  info: vi.fn<(content: string) => Promise<void>>(),
+  warn: vi.fn<(content: string) => Promise<void>>()
+}));
+
 vi.mock('@/shared/platform/electron-api', () => ({
   getElectronAPI: () => electronAPIMock
 }));
@@ -43,6 +52,10 @@ vi.mock('@/stores/ai/skill', () => ({
 
 vi.mock('ant-design-vue', () => ({
   message: messageMock
+}));
+
+vi.mock('@/shared/logger', () => ({
+  logger: loggerMock
 }));
 
 vi.mock('@iconify/vue', () => ({
@@ -266,12 +279,18 @@ async function uploadSkillPackage(wrapper: VueWrapper): Promise<void> {
 }
 
 describe('SkillCreator', (): void => {
+  afterEach((): void => {
+    vi.useRealTimers();
+  });
+
   beforeEach((): void => {
     vi.stubGlobal('Worker', WorkerStub);
+    electronAPIMock.acquireDirectoryInstallLock.mockReset();
     electronAPIMock.ensureDir.mockReset();
     electronAPIMock.getHomeDir.mockReset();
     electronAPIMock.getPathStatus.mockReset();
     electronAPIMock.renameFile.mockReset();
+    electronAPIMock.releaseDirectoryInstallLock.mockReset();
     electronAPIMock.saveBinaryFile.mockReset();
     electronAPIMock.trashFile.mockReset();
     electronAPIMock.writeFile.mockReset();
@@ -279,21 +298,29 @@ describe('SkillCreator', (): void => {
     messageMock.error.mockReset();
     messageMock.success.mockReset();
     messageMock.warning.mockReset();
+    loggerMock.error.mockReset();
+    loggerMock.info.mockReset();
+    loggerMock.warn.mockReset();
+    electronAPIMock.acquireDirectoryInstallLock.mockResolvedValue('skill-install-lock');
     electronAPIMock.ensureDir.mockResolvedValue(undefined);
     electronAPIMock.getHomeDir.mockResolvedValue('/Users/test');
     electronAPIMock.getPathStatus.mockResolvedValue({ exists: false });
     electronAPIMock.renameFile.mockResolvedValue(undefined);
+    electronAPIMock.releaseDirectoryInstallLock.mockResolvedValue(undefined);
     electronAPIMock.saveBinaryFile.mockResolvedValue(null);
     electronAPIMock.trashFile.mockResolvedValue(undefined);
     electronAPIMock.writeFile.mockResolvedValue(undefined);
     rescanMock.mockResolvedValue(undefined);
+    loggerMock.error.mockResolvedValue(undefined);
+    loggerMock.info.mockResolvedValue(undefined);
+    loggerMock.warn.mockResolvedValue(undefined);
   });
 
   it('writes imported resources as binary files during install', async (): Promise<void> => {
     const wrapper = mountSkillCreator();
 
     await uploadSkillPackage(wrapper);
-    await findButtonByText(wrapper, '确认安装').trigger('click');
+    await findButtonByText(wrapper, '确定').trigger('click');
     await flushPromises();
 
     const saveBinaryFileCall = electronAPIMock.saveBinaryFile.mock.calls[0];
@@ -310,7 +337,7 @@ describe('SkillCreator', (): void => {
     const wrapper = mountSkillCreator();
 
     await uploadSkillPackage(wrapper);
-    const confirmButton = findButtonByText(wrapper, '确认安装');
+    const confirmButton = findButtonByText(wrapper, '确定');
     await confirmButton.trigger('click');
     confirmButton.element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await flushPromises();
@@ -326,11 +353,41 @@ describe('SkillCreator', (): void => {
     const wrapper = mountSkillCreator();
 
     await uploadSkillPackage(wrapper);
-    await findButtonByText(wrapper, '确认安装').trigger('click');
+    await findButtonByText(wrapper, '确定').trigger('click');
     await flushPromises();
 
     expect(electronAPIMock.renameFile).toHaveBeenCalledWith(expect.stringContaining('/.tmp-'), expect.stringContaining('/demo-skill'));
     expect(messageMock.error).not.toHaveBeenCalledWith(expect.stringContaining('安装失败'));
     expect(messageMock.warning).toHaveBeenCalledWith('技能 "demo-skill" 安装成功，但刷新列表失败，请稍后重试');
+  });
+
+  it('normalizes Windows home paths and records install stages', async (): Promise<void> => {
+    electronAPIMock.getHomeDir.mockResolvedValue('C:\\Users\\test');
+    const wrapper = mountSkillCreator();
+
+    await uploadSkillPackage(wrapper);
+    await findButtonByText(wrapper, '确定').trigger('click');
+    await flushPromises();
+
+    expect(electronAPIMock.writeFile).toHaveBeenCalledWith(
+      expect.stringMatching(/^C:\/Users\/test\/\.agents\/skills\/\.tmp-.+\/SKILL\.md$/u),
+      workerSuccessResponse.rawSkillMd
+    );
+    expect(loggerMock.info).toHaveBeenCalledWith('[skill-install] success resource=demo-skill');
+  });
+
+  it('shows and logs the original rename error after retries are exhausted', async (): Promise<void> => {
+    const wrapper = mountSkillCreator();
+
+    await uploadSkillPackage(wrapper);
+    vi.useFakeTimers();
+    electronAPIMock.renameFile.mockRejectedValue(new Error('EPERM: operation not permitted'));
+    await findButtonByText(wrapper, '确定').trigger('click');
+    await vi.runAllTimersAsync();
+    await flushPromises();
+
+    expect(messageMock.error).toHaveBeenCalledWith(expect.stringContaining('EPERM'));
+    expect(loggerMock.error).toHaveBeenCalledWith(expect.stringContaining('[skill-install] failed resource=demo-skill stage=activate error=EPERM'));
+    expect(electronAPIMock.renameFile).toHaveBeenCalledTimes(3);
   });
 });
