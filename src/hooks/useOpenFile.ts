@@ -5,6 +5,7 @@
 
 import { useRouter } from 'vue-router';
 import { customAlphabet } from 'nanoid';
+import type { WidgetDefinition } from '@/ai/widget';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { native } from '@/shared/platform';
 import type { StoredDocumentRecord } from '@/shared/storage/files/types';
@@ -43,6 +44,8 @@ interface OpenFileActions {
   createNewFile: () => Promise<StoredDocumentRecord>;
   /** 创建新的 Widget 文件 */
   createNewWidgetFile: () => Promise<StoredDocumentRecord>;
+  /** 打开已安装的 Widget 文件 */
+  openWidgetFile: (widget: WidgetDefinition) => Promise<StoredDocumentRecord>;
 }
 
 /**
@@ -197,5 +200,26 @@ export function useOpenFile(): OpenFileActions {
     return createdFile;
   }
 
-  return { openFile, openFileById, openFileByPath, openNativeFile, createNewFile, createNewWidgetFile };
+  /**
+   * 将已安装小组件定义作为 Widget 文件会话打开。
+   * @param widget - 已安装小组件定义
+   * @returns 打开的文件记录
+   */
+  async function openWidgetFile(widget: WidgetDefinition): Promise<StoredDocumentRecord> {
+    const content = JSON.stringify(widget.data, null, 2);
+    const openedFile = await filesStore.createAndOpen({
+      type: 'widget',
+      id: `widget-${widget.id}`,
+      path: widget.filePath,
+      name: widget.id,
+      ext: 'json',
+      content,
+      savedContent: content
+    });
+
+    await router.push({ name: 'widget', params: { id: openedFile.id } });
+    return openedFile;
+  }
+
+  return { openFile, openFileById, openFileByPath, openNativeFile, createNewFile, createNewWidgetFile, openWidgetFile };
 }

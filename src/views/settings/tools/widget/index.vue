@@ -25,26 +25,22 @@
     </SettingsSection>
   </SettingsPage>
 
-  <WidgetCreator v-model:open="createModalOpen" :existing-ids="existingWidgetIds" @confirm="handleCreateConfirm" />
+  <WidgetCreator v-model:open="createModalOpen" />
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { WidgetDefinition, WidgetImportResource } from '@/ai/widget';
-import { joinPath, parseWidgetJson } from '@/ai/widget';
-import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
+import { parseWidgetJson, type WidgetDefinition } from '@/ai/widget';
+import { useOpenFile } from '@/hooks/useOpenFile';
 import { native } from '@/shared/platform';
-import { getElectronAPI } from '@/shared/platform/electron-api';
 import type { ReadWorkspaceDirectoryOptions } from '@/shared/platform/native/types';
 import { useWidgetStore } from '@/stores/ai/widget';
-import { useFilesStore } from '@/stores/workspace/files';
-import { normalizeZipEntryPath } from '@/utils/zip/package';
 import SettingsPage from '@/views/settings/_components/SettingsPage.vue';
 import SettingsPagination from '@/views/settings/_components/SettingsPagination.vue';
 import SettingsSection from '@/views/settings/_components/SettingsSection.vue';
 import { MENU_ITEMS } from '@/views/settings/constants';
-import WidgetCreator, { type WidgetCreatePayload } from './components/WidgetCreator.vue';
+import WidgetCreator from './components/WidgetCreator.vue';
 import WidgetItemRow from './components/WidgetItemRow.vue';
 
 /** 每页显示数量。 */
@@ -53,13 +49,11 @@ const PAGE_SIZE = 8;
 const route = useRoute();
 const router = useRouter();
 const store = useWidgetStore();
-const filesStore = useFilesStore();
+const { openWidgetFile } = useOpenFile();
 /** 是否正在初始化扫描。 */
 const initializing = ref(false);
 /** 创建弹窗开关。 */
 const createModalOpen = ref(false);
-/** 是否正在创建小组件，防止重复提交并发写入。 */
-const creatingWidget = ref(false);
 
 /**
  * 当前页码，来源为路由查询参数 `page`。
@@ -86,8 +80,6 @@ const pagedWidgets = computed<WidgetDefinition[]>((): WidgetDefinition[] => {
   return store.widgets.slice(start, start + PAGE_SIZE);
 });
 
-/** 已存在的小组件 ID 列表，用于创建时去重校验。 */
-const existingWidgetIds = computed<string[]>((): string[] => store.widgets.map((widget: WidgetDefinition): string => widget.id));
 /**
  * 初始化小组件扫描。
  * @returns 初始化完成信号
@@ -133,118 +125,10 @@ async function readLatestWidgetDefinition(widget: WidgetDefinition): Promise<Wid
 }
 
 /**
- * 将小组件数据作为 Widget JSON 文件会话打开。
- * @param widget - 小组件定义
- * @returns 打开完成信号
- */
-async function openWidgetEditor(widget: WidgetDefinition): Promise<void> {
-  const content = JSON.stringify(widget.data, null, 2);
-  const openedFile = await filesStore.createAndOpen({
-    type: 'widget',
-    id: `widget-${widget.id}`,
-    path: widget.filePath,
-    name: widget.id,
-    ext: 'json',
-    content,
-    savedContent: content
-  });
-
-  await router.push({ name: 'widget', params: { id: openedFile.id } });
-}
-
-/**
  * 打开小组件创建弹窗。
  */
 function openCreateModal(): void {
   createModalOpen.value = true;
-}
-
-/**
- * 读取资源相对路径的父目录。
- * @param relativePath - 资源相对路径
- * @returns 父目录相对路径
- */
-function readWidgetResourceParentPath(relativePath: string): string {
-  const normalized = normalizeZipEntryPath(relativePath);
-  const index = normalized.lastIndexOf('/');
-
-  return index > -1 ? normalized.slice(0, index) : '';
-}
-
-/**
- * 写入单个 zip 导入的小组件资源文件。
- * @param widgetDir - 小组件目标目录
- * @param resource - 待写入资源
- * @returns 写入完成信号
- */
-async function writeWidgetImportResource(widgetDir: string, resource: WidgetImportResource): Promise<void> {
-  const relativePath = normalizeZipEntryPath(resource.relativePath);
-  const parentPath = readWidgetResourceParentPath(relativePath);
-  const filePath = joinPath(widgetDir, relativePath);
-
-  if (parentPath) {
-    await getElectronAPI().ensureDir(joinPath(widgetDir, parentPath));
-  }
-
-  await native.saveBinaryFile(resource.content, filePath);
-}
-
-/**
- * 写入 zip 导入的小组件资源文件。
- * @param widgetDir - 小组件目标目录
- * @param resources - 待写入资源
- * @returns 写入完成信号
- */
-async function writeWidgetImportResources(widgetDir: string, resources: WidgetImportResource[]): Promise<void> {
-  await Promise.all(resources.map((resource: WidgetImportResource): Promise<void> => writeWidgetImportResource(widgetDir, resource)));
-}
-
-/**
- * 确认创建小组件。
- * @param payload - 创建表单提交数据
- * @returns 创建完成信号
- */
-async function handleCreateConfirm(payload: WidgetCreatePayload): Promise<void> {
-  if (creatingWidget.value) {
-    return;
-  }
-
-  creatingWidget.value = true;
-  try {
-    const widgetId = payload.id;
-    const widgetName = payload.name;
-    const widgetDescription = payload.description;
-    const homeDir = await native.getHomeDir();
-    const widgetDir = joinPath(homeDir, '.tibis', 'widgets', widgetId);
-    const payloadWidgetData = payload.data ?? createDefaultWidgetData(widgetId);
-    const widgetData = {
-      ...payloadWidgetData,
-      name: widgetName,
-      description: widgetDescription
-    };
-    const filePath = joinPath(widgetDir, 'widget.json');
-    const createdWidget: WidgetDefinition = {
-      id: widgetId,
-      name: widgetData.name,
-      description: widgetData.description,
-      data: widgetData,
-      filePath,
-      enabled: true,
-      parsedAt: Date.now()
-    };
-
-    await getElectronAPI().ensureDir(widgetDir);
-    await writeWidgetImportResources(widgetDir, payload.resources ?? []);
-    await native.writeFile(filePath, JSON.stringify(widgetData, null, 2));
-    await store.rescan();
-    store.upsertWidget(createdWidget);
-
-    createModalOpen.value = false;
-
-    await openWidgetEditor(createdWidget);
-  } finally {
-    creatingWidget.value = false;
-  }
 }
 
 /**
@@ -259,7 +143,9 @@ function handleOpenWidget(id: string): void {
   }
 
   readLatestWidgetDefinition(widget)
-    .then((latestWidget: WidgetDefinition): Promise<void> => openWidgetEditor(latestWidget))
+    .then(async (latestWidget: WidgetDefinition): Promise<void> => {
+      await openWidgetFile(latestWidget);
+    })
     .catch((error: unknown): void => {
       console.error('Open widget editor failed:', error);
     });

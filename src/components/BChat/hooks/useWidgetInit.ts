@@ -6,7 +6,6 @@
 import { onMounted, onUnmounted } from 'vue';
 import { joinPath, parseWidgetJson } from '@/ai/widget';
 import { native } from '@/shared/platform';
-import type { ReadWorkspaceDirectoryOptions } from '@/shared/platform/native/types';
 import { useWidgetStore } from '@/stores/ai/widget';
 
 /**
@@ -81,11 +80,7 @@ export function useWidgetInit(): void {
       await native.watchDirectory(widgetDir, '**/widget.json');
       cleanupCallbacks.push(() => native.unwatchDirectory(widgetDir, '**/widget.json'));
 
-      await widgetStore.init(homeDir, {
-        readFile: (filePath: string) => native.readFile(filePath).then((result) => ({ content: result.content })),
-        readWorkspaceDirectory: (options: ReadWorkspaceDirectoryOptions) => native.readWorkspaceDirectory(options),
-        getPathStatus: (targetPath: string) => native.getPathStatus(targetPath)
-      });
+      await widgetStore.init(homeDir, native);
     } catch (error: unknown) {
       console.error('Widget initialization failed:', error);
       widgetStore.finishInitialization();
