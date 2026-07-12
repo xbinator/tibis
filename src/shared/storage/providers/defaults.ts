@@ -15,6 +15,19 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     readonly: true,
     models: [
       {
+        id: 'claude-fable-5',
+        name: 'Claude Fable 5',
+        type: 'reasoning',
+        isEnabled: true,
+        contextWindow: 1000000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
         id: 'claude-opus-4-8',
         name: 'Claude Opus 4.8',
         type: 'reasoning',
@@ -209,6 +222,45 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     readonly: true,
     models: [
       {
+        id: 'gpt-5.6-sol',
+        name: 'GPT-5.6 Sol',
+        type: 'reasoning',
+        isEnabled: true,
+        contextWindow: 1050000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      },
+      {
+        id: 'gpt-5.6-terra',
+        name: 'GPT-5.6 Terra',
+        type: 'reasoning',
+        isEnabled: true,
+        contextWindow: 1050000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      },
+      {
+        id: 'gpt-5.6-luna',
+        name: 'GPT-5.6 Luna',
+        type: 'chat',
+        isEnabled: true,
+        contextWindow: 1050000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: false,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      },
+      {
         id: 'gpt-5.5-pro',
         name: 'GPT-5.5 Pro',
         type: 'reasoning',
@@ -313,7 +365,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
   {
     id: 'baidu',
     name: '百度智能云',
-    description: '提供文心一言系列模型，深耕中文场景，支持知识增强与对话生成。',
+    description: '提供文心一言系列模型，深耕中文场景，支持知识增强、多模态理解与智能体应用。',
     baseUrl: 'https://qianfan.baidubce.com/v2',
     type: 'openai',
     isEnabled: false,
@@ -337,12 +389,38 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
   {
     id: 'volcengine',
     name: '火山引擎',
-    description: '提供豆包系列模型，适用于对话生成、内容创作与智能助手场景。',
+    description: '提供豆包系列模型，适用于智能体工程、代码开发与内容创作场景。',
     baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
     type: 'volcengine',
     isEnabled: false,
     readonly: true,
     models: [
+      {
+        id: 'doubao-seed-2.1-pro',
+        name: 'Doubao Seed 2.1 Pro',
+        type: 'reasoning',
+        isEnabled: true,
+        contextWindow: 256000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      },
+      {
+        id: 'doubao-seed-2.1-turbo',
+        name: 'Doubao Seed 2.1 Turbo',
+        type: 'chat',
+        isEnabled: true,
+        contextWindow: 256000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
       {
         id: 'doubao-seed-2.0-pro',
         name: 'Doubao Seed 2.0 Pro',
@@ -374,7 +452,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
   {
     id: 'tencentcloud',
     name: '腾讯云',
-    description: '提供混元系列大模型，擅长对话、创作、代码与企业级智能服务。',
+    description: '提供混元系列大模型，擅长对话、创作、代码、Agent 任务与企业级智能服务。',
     baseUrl: 'https://tokenhub.tencentmaas.com/v1',
     type: 'openai',
     isEnabled: false,
@@ -387,11 +465,11 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         isEnabled: true,
         contextWindow: 256000,
         supportsTools: true,
-        supportsVision: true,
+        supportsVision: false,
         supportsDeepThought: true,
         supportsWebSearch: true,
         supportsImageGeneration: false,
-        supportsVideoRecognition: true
+        supportsVideoRecognition: false
       },
       {
         id: 'hy3-preview',
@@ -400,18 +478,18 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         isEnabled: true,
         contextWindow: 256000,
         supportsTools: true,
-        supportsVision: true,
+        supportsVision: false,
         supportsDeepThought: true,
         supportsWebSearch: true,
         supportsImageGeneration: false,
-        supportsVideoRecognition: true
+        supportsVideoRecognition: false
       }
     ]
   },
   {
     id: 'xiaomi',
     name: '小米',
-    description: '提供小米 MiMo 系列大模型，支持超长上下文、原生多模态与 Agent 能力。',
+    description: '提供小米 MiMo 系列大模型，原生全模态 Agent 模型，支持超长上下文与智能体能力。',
     baseUrl: 'https://api.xiaomimimo.com/v1',
     type: 'mimo',
     isEnabled: false,
@@ -420,6 +498,19 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'mimo-v2.5-pro',
         name: 'MiMo V2.5 Pro',
+        type: 'reasoning',
+        isEnabled: true,
+        contextWindow: 1000000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'mimo-v2.5',
+        name: 'MiMo V2.5',
         type: 'reasoning',
         isEnabled: true,
         contextWindow: 1000000,
@@ -477,6 +568,56 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         supportsDeepThought: false,
         supportsWebSearch: false,
         supportsImageGeneration: true,
+        supportsVideoRecognition: false
+      }
+    ]
+  },
+  {
+    id: 'longcat',
+    name: 'LongCat',
+    description: '美团自研 AI 大模型，LongCat-2.0 采用万亿参数 MoE 架构，原生支持 1M 上下文，擅长代码生成、智能体与长文本处理。',
+    baseUrl: 'https://api.longcat.chat/openai/v1',
+    type: 'openai',
+    isEnabled: false,
+    readonly: true,
+    models: [
+      {
+        id: 'LongCat-2.0',
+        name: 'LongCat-2.0',
+        type: 'reasoning',
+        isEnabled: true,
+        contextWindow: 1000000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'LongCat-Flash-Chat',
+        name: 'LongCat Flash Chat',
+        type: 'chat',
+        isEnabled: true,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: false,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'LongCat-Flash-Thinking-2601',
+        name: 'LongCat Flash Thinking',
+        type: 'reasoning',
+        isEnabled: true,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
         supportsVideoRecognition: false
       }
     ]
