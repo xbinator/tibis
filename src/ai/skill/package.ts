@@ -3,6 +3,7 @@
  * @description Skill zip 包解析与资源归一化工具。
  */
 import type { SkillDefinition } from './types';
+import { isWindowsReservedFileName, PORTABLE_RESOURCE_ID_PATTERN } from '@/shared/workspace/pathUtils';
 import { isZipPackageBuffer, readZipPackage, type ZipPackageResource } from '@/utils/zip/package';
 import { parseSkillMarkdown } from './parser';
 
@@ -12,10 +13,6 @@ const MAX_ENTRIES = 50;
 const MAX_FILE_BYTES = 1 * 1024 * 1024;
 /** Skill 根层入口文件名。 */
 const SKILL_MD_FILE_NAME = 'SKILL.md';
-/** 可作为安装目录名的 Skill 名称格式。 */
-const SAFE_SKILL_NAME_PATTERN = /^[A-Za-z0-9_-]+$/;
-/** Windows 保留设备名，不可作为目录名。 */
-const WINDOWS_RESERVED_SKILL_NAME_PATTERN = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/iu;
 
 /**
  * Skill 包资源文件。
@@ -69,11 +66,11 @@ function normalizeSkillPackageResource(resource: ZipPackageResource): SkillPacka
  * @param name - SKILL.md frontmatter name
  */
 function assertSafeSkillName(name: string): void {
-  if (!SAFE_SKILL_NAME_PATTERN.test(name)) {
+  if (!PORTABLE_RESOURCE_ID_PATTERN.test(name)) {
     throw new Error('Skill name 只能包含字母、数字、下划线和短横线');
   }
 
-  if (WINDOWS_RESERVED_SKILL_NAME_PATTERN.test(name)) {
+  if (isWindowsReservedFileName(name)) {
     throw new Error('Skill name 不能使用 Windows 保留名称');
   }
 }

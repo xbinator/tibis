@@ -6,6 +6,8 @@ import yaml from 'js-yaml';
 import { hashString } from '@/shared/utils/hash';
 import { DEFAULT_SKILL_MAX_CONTENT_LENGTH, type SkillDefinition, type SkillSource } from './types';
 
+export { joinFilePath as joinPath } from '@/shared/workspace/pathUtils';
+
 /** 解析选项。 */
 interface ParseOptions {
   /** skill 来源，默认 'global' */
@@ -59,16 +61,6 @@ function truncateContent(content: string, maxLength: number, filePath: string): 
   }
   const truncationNotice = `\n[Content truncated at ${maxLength} chars, full content at: ${filePath}]`;
   return { text: content.slice(0, maxLength - truncationNotice.length) + truncationNotice, truncated: true };
-}
-
-/**
- * 拼接路径片段，统一使用 / 分隔。
- */
-export function joinPath(...segments: string[]): string {
-  return segments
-    .map((s) => s.replace(/\\/g, '/').replace(/\/+$/, ''))
-    .join('/')
-    .replace(/\/+/g, '/');
 }
 
 /**

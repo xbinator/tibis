@@ -74,7 +74,7 @@
 
     <template v-if="step !== 'parsing'" #footer>
       <BButton type="secondary" @click="handleClose">取消</BButton>
-      <BButton v-if="step === 'preview'" type="primary" :loading="installing" @click="handleInstall"> 确认安装 </BButton>
+      <BButton v-if="step === 'preview'" type="primary" :loading="installing" @click="handleInstall"> 确定 </BButton>
     </template>
   </BModal>
 </template>
@@ -84,12 +84,15 @@ import type { VirtualFile } from './SkillPreview.vue';
 import { computed, ref, shallowRef, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { message } from 'ant-design-vue';
-import { nanoid } from 'nanoid';
+import { joinPath } from '@/ai/skill';
 import type { SkillPackageResource } from '@/ai/skill/package';
 import type { SkillDefinition } from '@/ai/skill/types';
+import { logger } from '@/shared/logger';
+import { createDirectoryInstallLogger } from '@/shared/logger/directoryInstall';
 import { getElectronAPI } from '@/shared/platform/electron-api';
 import { useSkillStore } from '@/stores/ai/skill';
 import { asyncTo } from '@/utils/asyncTo';
+import { formatDirectoryInstallError, installDirectory, type DirectoryInstallFile } from '@/utils/file/directory';
 import SkillPreview from './SkillPreview.vue';
 
 /** Worker 解析返回数据结构。 */
@@ -231,20 +234,27 @@ async function handleFileSelected(files: FileList): Promise<void> {
 }
 
 /**
- * 拼接路径片段（简单以 '/' 连接，避免重复拼接逻辑）。
+ * 获取 skills 目录路径。
+ * 格式：<homeDir>/.agents/skills
+ * @param api - Electron 文件系统 API
+ * @returns skills 目录绝对路径
  */
-function joinPath(...parts: string[]): string {
-  return parts.join('/');
+async function getSkillDir(api: ReturnType<typeof getElectronAPI>): Promise<string> {
+  const homeDir = await api.getHomeDir();
+  return joinPath(homeDir, '.agents', 'skills');
 }
 
 /**
- * 获取 skills 目录路径。
- * 格式：<homeDir>/.agents/skills
+ * 将已解析 Skill 内容转换为通用目录安装文件。
+ * @returns SKILL.md 与资源文件列表
  */
-async function getSkillDir(api: ReturnType<typeof getElectronAPI>): Promise<string | null> {
-  const [err, homeDir] = await asyncTo(api!.getHomeDir());
-  if (err) return null;
-  return joinPath(homeDir, '.agents', 'skills');
+function createSkillInstallFiles(): DirectoryInstallFile[] {
+  return [
+    { kind: 'text', relativePath: 'SKILL.md', content: rawSkillMd.value },
+    ...parsedResources.value.map(
+      (resource: SkillPackageResource): DirectoryInstallFile => ({ kind: 'binary', relativePath: resource.relativePath, content: resource.content })
+    )
+  ];
 }
 
 /** 确认安装：备份 → 替换 → 清理或回滚（消除 TOCTOU 竞态）。 */
@@ -252,72 +262,38 @@ async function handleInstall(): Promise<void> {
   if (installing.value || !parsedSkill.value) return;
 
   const api = getElectronAPI();
-  if (!api) {
-    message.error('当前环境不支持文件操作');
-    return;
-  }
-
   installing.value = true;
-  const tmpDirName = `.tmp-${nanoid(8)}`;
-  const bakDirName = `.bak-${nanoid(8)}`;
-  let tmpDir = '';
-  let bakDir = '';
+  const skillName = parsedSkill.value.name;
+  const installLogger = createDirectoryInstallLogger('skill', skillName);
 
   try {
-    const skillName = parsedSkill.value.name;
+    await installLogger.start();
     const baseDir = await getSkillDir(api);
-
-    if (!baseDir) {
-      message.error('无法获取 skills 目录');
-      return;
-    }
-
-    tmpDir = joinPath(baseDir, tmpDirName);
     const targetDir = joinPath(baseDir, skillName);
 
-    // 1. 写入临时目录
-    await api.ensureDir(tmpDir);
-    await api.writeFile(joinPath(tmpDir, 'SKILL.md'), rawSkillMd.value);
-    await Promise.all(
-      parsedResources.value.map(async (resource) => {
-        const resourcePath = joinPath(tmpDir, resource.relativePath);
-        const resourceDir = resourcePath.substring(0, resourcePath.lastIndexOf('/'));
-        if (resourceDir) await api.ensureDir(resourceDir);
-        await api.saveBinaryFile(resource.content, resourcePath);
-      })
-    );
+    await installDirectory({
+      api,
+      targetDir,
+      conflictStrategy: 'replace',
+      files: createSkillInstallFiles(),
+      onEvent: installLogger.onEvent
+    });
+    await installLogger.success();
 
-    // 2. 目标已存在 → 备份
-    const status = await api.getPathStatus?.(targetDir);
-    if (status?.exists) {
-      bakDir = joinPath(baseDir, bakDirName);
-      await api.renameFile(targetDir, bakDir);
-    }
-
-    // 3. 替换：临时目录 → 目标；失败则回滚备份
-    const [renameErr] = await asyncTo(api.renameFile(tmpDir, targetDir));
-    if (renameErr) {
-      if (bakDir) await asyncTo(api.renameFile(bakDir, targetDir));
-      throw new Error('无法完成安装，已回滚');
-    }
-    tmpDir = '';
-
-    // 4. 清理备份（忽略失败，孤儿清理会处理）
-    if (bakDir) await asyncTo(api.trashFile(bakDir));
-
-    // 5. 重新扫描并关闭
+    // 磁盘安装完成后刷新 Store；扫描失败不回滚已安装目录。
     const [rescanErr] = await asyncTo(store.rescan());
     if (rescanErr) {
       console.error('Skill rescan after install failed:', rescanErr);
+      await logger.warn(`[skill-install] rescan-failed resource=${skillName} error=${formatDirectoryInstallError(rescanErr)}`);
       message.warning(`技能 "${skillName}" 安装成功，但刷新列表失败，请稍后重试`);
     } else {
       message.success(`技能 "${skillName}" 安装成功`);
     }
     handleClose();
   } catch (err: unknown) {
-    // 失败时清理临时目录（忽略失败，孤儿清理会处理）
-    if (tmpDir) await asyncTo(api.trashFile(tmpDir));
-    message.error(`安装失败：${err instanceof Error ? err.message : String(err)}`);
+    const errorMessage = formatDirectoryInstallError(err);
+    await installLogger.failure(err);
+    message.error(`安装失败：${errorMessage}`);
   } finally {
     installing.value = false;
   }
