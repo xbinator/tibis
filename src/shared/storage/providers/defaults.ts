@@ -6,6 +6,55 @@ import type { AIProvider } from 'types/ai';
 
 export const DEFAULT_PROVIDERS: AIProvider[] = [
   {
+    id: 'alibaba',
+    name: '阿里云',
+    description: '提供通义千问系列模型，支持中文优化、多模态处理与企业级应用。',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    type: 'alibaba',
+    isEnabled: false,
+    readonly: true,
+    models: [
+      {
+        id: 'qwen3.7-max',
+        name: 'Qwen3.7 Max',
+        type: 'reasoning',
+        isEnabled: true,
+        contextWindow: 1000000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      },
+      {
+        id: 'qwen3.7-plus',
+        name: 'Qwen3.7 Plus',
+        type: 'chat',
+        isEnabled: true,
+        contextWindow: 1000000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      },
+      {
+        id: 'qwen-image',
+        name: 'Qwen Image',
+        type: 'image',
+        isEnabled: true,
+        supportsTools: false,
+        supportsVision: false,
+        supportsDeepThought: false,
+        supportsWebSearch: false,
+        supportsImageGeneration: true,
+        supportsVideoRecognition: false
+      }
+    ]
+  },
+  {
     id: 'anthropic',
     name: 'Anthropic',
     description: '提供 Claude 系列模型，擅长长文本理解、分析推理和高质量写作。',
@@ -65,6 +114,30 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         supportsWebSearch: true,
         supportsImageGeneration: false,
         supportsVideoRecognition: false
+      }
+    ]
+  },
+  {
+    id: 'baidu',
+    name: '百度智能云',
+    description: '提供文心一言系列模型，深耕中文场景，支持知识增强、多模态理解与智能体应用。',
+    baseUrl: 'https://qianfan.baidubce.com/v2',
+    type: 'openai',
+    isEnabled: false,
+    readonly: true,
+    models: [
+      {
+        id: 'ernie-5.1',
+        name: 'ERNIE 5.1',
+        type: 'reasoning',
+        isEnabled: true,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
       }
     ]
   },
@@ -150,6 +223,56 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         supportsDeepThought: false,
         supportsWebSearch: false,
         supportsImageGeneration: true,
+        supportsVideoRecognition: false
+      }
+    ]
+  },
+  {
+    id: 'longcat',
+    name: 'LongCat',
+    description: '美团自研 AI 大模型，LongCat-2.0 采用万亿参数 MoE 架构，原生支持 1M 上下文，擅长代码生成、智能体与长文本处理。',
+    baseUrl: 'https://api.longcat.chat/openai/v1',
+    type: 'openai',
+    isEnabled: false,
+    readonly: true,
+    models: [
+      {
+        id: 'LongCat-2.0',
+        name: 'LongCat-2.0',
+        type: 'reasoning',
+        isEnabled: true,
+        contextWindow: 1000000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'LongCat-Flash-Chat',
+        name: 'LongCat Flash Chat',
+        type: 'chat',
+        isEnabled: true,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: false,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'LongCat-Flash-Thinking-2601',
+        name: 'LongCat Flash Thinking',
+        type: 'reasoning',
+        isEnabled: true,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
         supportsVideoRecognition: false
       }
     ]
@@ -314,75 +437,39 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     ]
   },
   {
-    id: 'alibaba',
-    name: '阿里云',
-    description: '提供通义千问系列模型，支持中文优化、多模态处理与企业级应用。',
-    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    type: 'alibaba',
-    isEnabled: false,
-    readonly: true,
-    models: [
-      {
-        id: 'qwen3.7-max',
-        name: 'Qwen3.7 Max',
-        type: 'reasoning',
-        isEnabled: true,
-        contextWindow: 1000000,
-        supportsTools: true,
-        supportsVision: true,
-        supportsDeepThought: true,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: true
-      },
-      {
-        id: 'qwen3.7-plus',
-        name: 'Qwen3.7 Plus',
-        type: 'chat',
-        isEnabled: true,
-        contextWindow: 1000000,
-        supportsTools: true,
-        supportsVision: true,
-        supportsDeepThought: true,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: true
-      },
-      {
-        id: 'qwen-image',
-        name: 'Qwen Image',
-        type: 'image',
-        isEnabled: true,
-        supportsTools: false,
-        supportsVision: false,
-        supportsDeepThought: false,
-        supportsWebSearch: false,
-        supportsImageGeneration: true,
-        supportsVideoRecognition: false
-      }
-    ]
-  },
-  {
-    id: 'baidu',
-    name: '百度智能云',
-    description: '提供文心一言系列模型，深耕中文场景，支持知识增强、多模态理解与智能体应用。',
-    baseUrl: 'https://qianfan.baidubce.com/v2',
+    id: 'tencentcloud',
+    name: '腾讯云',
+    description: '提供混元系列大模型，擅长对话、创作、代码、Agent 任务与企业级智能服务。',
+    baseUrl: 'https://tokenhub.tencentmaas.com/v1',
     type: 'openai',
     isEnabled: false,
     readonly: true,
     models: [
       {
-        id: 'ernie-5.1',
-        name: 'ERNIE 5.1',
+        id: 'hy3',
+        name: 'Hy3',
         type: 'reasoning',
         isEnabled: true,
-        contextWindow: 128000,
+        contextWindow: 256000,
         supportsTools: true,
-        supportsVision: true,
+        supportsVision: false,
         supportsDeepThought: true,
         supportsWebSearch: true,
         supportsImageGeneration: false,
-        supportsVideoRecognition: true
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'hy3-preview',
+        name: 'Hy3 Preview',
+        type: 'reasoning',
+        isEnabled: true,
+        contextWindow: 256000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
       }
     ]
   },
@@ -442,43 +529,6 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         contextWindow: 256000,
         supportsTools: true,
         supportsVision: true,
-        supportsDeepThought: true,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: false
-      }
-    ]
-  },
-  {
-    id: 'tencentcloud',
-    name: '腾讯云',
-    description: '提供混元系列大模型，擅长对话、创作、代码、Agent 任务与企业级智能服务。',
-    baseUrl: 'https://tokenhub.tencentmaas.com/v1',
-    type: 'openai',
-    isEnabled: false,
-    readonly: true,
-    models: [
-      {
-        id: 'hy3',
-        name: 'Hy3',
-        type: 'reasoning',
-        isEnabled: true,
-        contextWindow: 256000,
-        supportsTools: true,
-        supportsVision: false,
-        supportsDeepThought: true,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: false
-      },
-      {
-        id: 'hy3-preview',
-        name: 'Hy3 Preview',
-        type: 'reasoning',
-        isEnabled: true,
-        contextWindow: 256000,
-        supportsTools: true,
-        supportsVision: false,
         supportsDeepThought: true,
         supportsWebSearch: true,
         supportsImageGeneration: false,
@@ -568,56 +618,6 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         supportsDeepThought: false,
         supportsWebSearch: false,
         supportsImageGeneration: true,
-        supportsVideoRecognition: false
-      }
-    ]
-  },
-  {
-    id: 'longcat',
-    name: 'LongCat',
-    description: '美团自研 AI 大模型，LongCat-2.0 采用万亿参数 MoE 架构，原生支持 1M 上下文，擅长代码生成、智能体与长文本处理。',
-    baseUrl: 'https://api.longcat.chat/openai/v1',
-    type: 'openai',
-    isEnabled: false,
-    readonly: true,
-    models: [
-      {
-        id: 'LongCat-2.0',
-        name: 'LongCat-2.0',
-        type: 'reasoning',
-        isEnabled: true,
-        contextWindow: 1000000,
-        supportsTools: true,
-        supportsVision: true,
-        supportsDeepThought: true,
-        supportsWebSearch: false,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: false
-      },
-      {
-        id: 'LongCat-Flash-Chat',
-        name: 'LongCat Flash Chat',
-        type: 'chat',
-        isEnabled: true,
-        contextWindow: 128000,
-        supportsTools: true,
-        supportsVision: true,
-        supportsDeepThought: false,
-        supportsWebSearch: false,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: false
-      },
-      {
-        id: 'LongCat-Flash-Thinking-2601',
-        name: 'LongCat Flash Thinking',
-        type: 'reasoning',
-        isEnabled: true,
-        contextWindow: 128000,
-        supportsTools: true,
-        supportsVision: true,
-        supportsDeepThought: true,
-        supportsWebSearch: false,
-        supportsImageGeneration: false,
         supportsVideoRecognition: false
       }
     ]
