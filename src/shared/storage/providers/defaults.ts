@@ -437,6 +437,43 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     ]
   },
   {
+    id: 'sensenova',
+    name: '商汤科技',
+    description: '日日新 SenseNova 大模型平台，提供原生多模态理解生成统一模型，擅长图文创作、智能体与复杂工作流任务。',
+    baseUrl: 'https://api.sensenova.cn/v1',
+    type: 'openai',
+    isEnabled: false,
+    readonly: true,
+    models: [
+      {
+        id: 'sensenova-u1-fast',
+        name: 'SenseNova U1 Fast',
+        type: 'reasoning',
+        isEnabled: true,
+        contextWindow: 256000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: false,
+        supportsImageGeneration: true,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'sensenova-6.7-flash-lite',
+        name: 'SenseNova 6.7 Flash-Lite',
+        type: 'chat',
+        isEnabled: true,
+        contextWindow: 256000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: false,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      }
+    ]
+  },
+  {
     id: 'tencentcloud',
     name: '腾讯云',
     description: '提供混元系列大模型，擅长对话、创作、代码、Agent 任务与企业级智能服务。',
