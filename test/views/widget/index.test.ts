@@ -5,7 +5,7 @@
  */
 /* eslint-disable vue/one-component-per-file */
 import { readFileSync } from 'node:fs';
-import { defineComponent, nextTick, ref } from 'vue';
+import { defineComponent, nextTick } from 'vue';
 import type { ComponentPublicInstance, PropType } from 'vue';
 import { shallowMount, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -16,7 +16,6 @@ import { emitter } from '@/utils/emitter';
 import WidgetPage from '@/views/widget/index.vue';
 
 const addTabMock = vi.hoisted(() => vi.fn());
-const updateTabTitleMock = vi.hoisted(() => vi.fn());
 const onSaveMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const onSaveAsMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const onRenameMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
@@ -28,7 +27,6 @@ const ungroupSelectionMock = vi.hoisted(() => vi.fn());
 const deleteSelectionMock = vi.hoisted(() => vi.fn());
 const reorderSelectionMock = vi.hoisted(() => vi.fn());
 const nanoidMock = vi.hoisted(() => vi.fn<() => string>());
-const savedContentMock = ref('');
 const widgetDataMock = vi.hoisted((): { value: WidgetData } => ({
   value: {
     name: '',
@@ -71,8 +69,7 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/stores/workspace/tabs', () => ({
   useTabsStore: () => ({
-    addTab: addTabMock,
-    updateTabTitle: updateTabTitleMock
+    addTab: addTabMock
   })
 }));
 
@@ -92,7 +89,6 @@ vi.mock('@/hooks/useFileSession', () => ({
       },
       __v_isRef: true
     },
-    savedContent: savedContentMock,
     data: widgetDataMock,
     actions: {
       onSave: onSaveMock,
@@ -255,7 +251,6 @@ function flushPromises(): Promise<void> {
 describe('WidgetPage', (): void => {
   beforeEach((): void => {
     addTabMock.mockClear();
-    updateTabTitleMock.mockClear();
     onSaveMock.mockClear();
     onSaveAsMock.mockClear();
     onRenameMock.mockClear();
@@ -268,7 +263,6 @@ describe('WidgetPage', (): void => {
     reorderSelectionMock.mockClear();
     nanoidMock.mockReset();
     widgetDataMock.value = createDefaultWidgetData();
-    savedContentMock.value = JSON.stringify(widgetDataMock.value, null, 2);
   });
 
   it('adds the widget file tab with resolved file title', (): void => {
@@ -281,35 +275,13 @@ describe('WidgetPage', (): void => {
       }
     });
 
-    expect(addTabMock).toHaveBeenCalledWith(
-      {
-        id: 'widget-1',
-        path: '/widget/widget-1',
-        title: 'board.json',
-        cacheKey: 'widget:widget-1'
-      },
-      { preserveTitle: true }
-    );
-    expect(updateTabTitleMock).not.toHaveBeenCalled();
-
-    wrapper.unmount();
-  });
-
-  it('updates the widget tab title from saved Widget content', async (): Promise<void> => {
-    const wrapper = shallowMount(WidgetPage, {
-      global: {
-        stubs: {
-          BWidget: true,
-          Icon: true
-        }
-      }
+    expect(addTabMock).toHaveBeenCalledWith({
+      id: 'widget-1',
+      path: '/widget/widget-1',
+      title: 'board.json',
+      cacheKey: 'widget:widget-1'
     });
-    updateTabTitleMock.mockClear();
 
-    savedContentMock.value = JSON.stringify({ ...createDefaultWidgetData(), name: '天气卡片' }, null, 2);
-    await nextTick();
-
-    expect(updateTabTitleMock).toHaveBeenCalledWith({ id: 'widget-1', title: '天气卡片' });
     wrapper.unmount();
   });
 

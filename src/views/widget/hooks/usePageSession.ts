@@ -10,7 +10,6 @@ import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { useFileSession, type UseFileSessionReturn } from '@/hooks/useFileSession';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import { useBindings } from './useBindings';
-import { resolveSavedWidgetTabTitle, useWidgetTabTitle } from './useWidgetTabTitle';
 
 /**
  * Widget页面根节点样式变量。
@@ -58,8 +57,6 @@ export function usePageSession(): UsePageSessionReturn {
     routeName: 'widget',
     fallbackRouteName: 'editor'
   });
-  /** Widget 标签使用实际保存的业务名称，空名称回退文件标题。 */
-  const widgetTabTitle = computed<string>(() => resolveSavedWidgetTabTitle(session.savedContent.value, session.currentTitle.value));
   const settingsWidth = ref(300);
   const widgetPageStyle = computed<WidgetPageStyle>(
     (): WidgetPageStyle => ({
@@ -82,24 +79,15 @@ export function usePageSession(): UsePageSessionReturn {
       return;
     }
 
-    tabsStore.addTab(
-      {
-        id: fileId.value,
-        path: routePath.value,
-        title: widgetTabTitle.value,
-        cacheKey: `widget:${fileId.value}`
-      },
-      { preserveTitle: true }
-    );
+    tabsStore.addTab({
+      id: fileId.value,
+      path: routePath.value,
+      title: session.currentTitle.value,
+      cacheKey: `widget:${fileId.value}`
+    });
   }
 
   watch([fileId, session.currentTitle], syncWidgetTab, { immediate: true });
-
-  useWidgetTabTitle({
-    tabId: fileId,
-    title: widgetTabTitle,
-    savedContent: session.savedContent
-  });
 
   useBindings({
     isActive,
