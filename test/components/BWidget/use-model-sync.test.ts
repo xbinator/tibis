@@ -111,9 +111,9 @@ describe('useModelSync', (): void => {
         dataItem: modelValue
       });
 
-      board.startCreateShapeDraft('rect', { x: 20, y: 30 });
-      board.updateDraftPoint({ x: 140, y: 90 });
-      board.commitCreateShapeDraft();
+      board.onStartShapeDraft('rect', { x: 20, y: 30 });
+      board.onUpdateDraftPoint({ x: 140, y: 90 });
+      board.onCommitShapeDraft();
     });
 
     await nextTick();
@@ -152,9 +152,9 @@ describe('useModelSync', (): void => {
         dataItem: modelValue
       });
 
-      board.startCreateShapeDraft('rect', { x: 20, y: 30 });
-      board.updateDraftPoint({ x: 140, y: 90 });
-      board.commitCreateShapeDraft();
+      board.onStartShapeDraft('rect', { x: 20, y: 30 });
+      board.onUpdateDraftPoint({ x: 140, y: 90 });
+      board.onCommitShapeDraft();
     });
 
     await nextTick();
@@ -202,9 +202,9 @@ describe('useModelSync', (): void => {
         dataItem: modelValue
       });
 
-      board.startCreateShapeDraft('rect', { x: 20, y: 30 });
-      board.updateDraftPoint({ x: 140, y: 90 });
-      board.commitCreateShapeDraft();
+      board.onStartShapeDraft('rect', { x: 20, y: 30 });
+      board.onUpdateDraftPoint({ x: 140, y: 90 });
+      board.onCommitShapeDraft();
     });
 
     await nextTick();
@@ -244,9 +244,9 @@ describe('useModelSync', (): void => {
         dataItem: modelValue
       });
 
-      board.startCreateShapeDraft('rect', { x: 20, y: 30 });
-      board.updateDraftPoint({ x: 140, y: 90 });
-      board.commitCreateShapeDraft();
+      board.onStartShapeDraft('rect', { x: 20, y: 30 });
+      board.onUpdateDraftPoint({ x: 140, y: 90 });
+      board.onCommitShapeDraft();
     });
 
     await nextTick();
@@ -305,9 +305,9 @@ describe('useModelSync', (): void => {
           zoom: 0.8
         }
       };
-      board.startCreateShapeDraft('rect', { x: 20, y: 30 });
-      board.updateDraftPoint({ x: 140, y: 90 });
-      board.commitCreateShapeDraft();
+      board.onStartShapeDraft('rect', { x: 20, y: 30 });
+      board.onUpdateDraftPoint({ x: 140, y: 90 });
+      board.onCommitShapeDraft();
     });
 
     await nextTick();
@@ -374,9 +374,9 @@ describe('useModelSync', (): void => {
       elements: [existingElement]
     });
 
-    board.startCreateShapeDraft('rect', { x: 20, y: 30 });
-    board.updateDraftPoint({ x: 140, y: 90 });
-    board.commitCreateShapeDraft();
+    board.onStartShapeDraft('rect', { x: 20, y: 30 });
+    board.onUpdateDraftPoint({ x: 140, y: 90 });
+    board.onCommitShapeDraft();
 
     expect(board.state.value.elements[1]?.id).toMatch(/^[A-Za-z0-9_-]{8}$/);
     expect(board.state.value.elements[1]?.title).toBe('矩形9');
@@ -404,6 +404,104 @@ describe('useModelSync', (): void => {
 
     expect(readBoardElements().map((element: WidgetElement): string => element.id)).toEqual(['node-2']);
     expect(modelValue.value?.elements.map((element: WidgetElement): string => element.id)).toEqual(['node-2']);
+  });
+
+  it('records an in-place external element edit for undo and redo', async (): Promise<void> => {
+    const scope = effectScope();
+    const modelValue = ref<WidgetData | undefined>(createWidgetData('node-1'));
+    let readHistory = (): { past: number; future: number } => ({ past: -1, future: -1 });
+    let undo = (): void => undefined;
+    let redo = (): void => undefined;
+
+    scope.run((): void => {
+      const board = useWidgetBoard(modelValue.value);
+      useModelSync({ board, dataItem: modelValue });
+      readHistory = (): { past: number; future: number } => ({
+        past: board.state.value.history.past.length,
+        future: board.state.value.history.future.length
+      });
+      undo = board.onUndo;
+      redo = board.onRedo;
+    });
+
+    const element = modelValue.value?.elements[0];
+    if (!element) {
+      throw new Error('测试数据缺少Widget元素');
+    }
+    element.title = '属性面板更新';
+    await nextTick();
+
+    expect(readHistory()).toEqual({ past: 1, future: 0 });
+    undo();
+    await nextTick();
+    expect(modelValue.value?.elements[0]?.title).toBe('外部节点');
+    expect(readHistory()).toEqual({ past: 0, future: 1 });
+
+    redo();
+    await nextTick();
+    expect(modelValue.value?.elements[0]?.title).toBe('属性面板更新');
+    scope.stop();
+  });
+
+  it('clears existing history when the external model root is replaced', async (): Promise<void> => {
+    const scope = effectScope();
+    const modelValue = ref<WidgetData | undefined>(createWidgetData('node-1'));
+    let readPastLength = (): number => -1;
+
+    scope.run((): void => {
+      const board = useWidgetBoard(modelValue.value);
+      useModelSync({ board, dataItem: modelValue });
+      board.onUpdateElementTitle('node-1', '画布更新');
+      readPastLength = (): number => board.state.value.history.past.length;
+    });
+
+    await nextTick();
+    expect(readPastLength()).toBe(1);
+    modelValue.value = createWidgetData('node-2');
+    await nextTick();
+
+    expect(readPastLength()).toBe(0);
+    scope.stop();
+  });
+
+  it('keeps history when code editing replaces the model root', async (): Promise<void> => {
+    const scope = effectScope();
+    const modelValue = ref<WidgetData | undefined>(createWidgetData('node-1'));
+    let readHistory = (): { past: number; future: number } => ({ past: -1, future: -1 });
+    let undo = (): void => undefined;
+
+    scope.run((): void => {
+      const board = useWidgetBoard(modelValue.value);
+      useModelSync({ board, dataItem: modelValue });
+      board.onUpdateElementTitle('node-1', '画布更新');
+      readHistory = (): { past: number; future: number } => ({
+        past: board.state.value.history.past.length,
+        future: board.state.value.history.future.length
+      });
+      undo = board.onUndo;
+    });
+
+    await nextTick();
+    expect(readHistory()).toEqual({ past: 1, future: 0 });
+    const currentData = modelValue.value;
+    if (!currentData) {
+      throw new Error('测试数据缺少Widget模型');
+    }
+    modelValue.value = {
+      ...currentData,
+      execute: {
+        ...currentData.execute,
+        code: 'return { updated: true }'
+      }
+    };
+    await nextTick();
+
+    expect(readHistory()).toEqual({ past: 1, future: 0 });
+    undo();
+    await nextTick();
+    expect(modelValue.value?.elements[0]?.title).toBe('外部节点');
+    expect(modelValue.value?.execute.code).toBe('return { updated: true }');
+    scope.stop();
   });
 
   it('does not echo model data when the external model is replaced during file loading', async (): Promise<void> => {

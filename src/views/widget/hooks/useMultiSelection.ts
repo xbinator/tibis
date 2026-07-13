@@ -292,10 +292,7 @@ export function useMultiSelection(options: UseMultiSelectionOptions): UseMultiSe
       return;
     }
 
-    session.data.value = {
-      ...session.data.value,
-      elements: updateSelectedElementLayouts(session.data.value.elements, selectedIds, layout)
-    };
+    session.data.value.elements = updateSelectedElementLayouts(session.data.value.elements, selectedIds, layout);
   }
 
   /**
@@ -308,10 +305,7 @@ export function useMultiSelection(options: UseMultiSelectionOptions): UseMultiSe
       return;
     }
 
-    session.data.value = {
-      ...session.data.value,
-      elements: mergeSelectedElementStyles(session.data.value.elements, selectedIds, style)
-    };
+    session.data.value.elements = mergeSelectedElementStyles(session.data.value.elements, selectedIds, style);
   }
 
   return {

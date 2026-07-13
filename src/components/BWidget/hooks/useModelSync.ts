@@ -4,10 +4,10 @@
  */
 import type { WidgetBoardSnapshot, WidgetData } from '../types';
 import type { UseWidgetBoardReturn } from './useWidgetBoard';
-import { nextTick, watch } from 'vue';
+import { nextTick, toRaw, watch } from 'vue';
 import type { Ref } from 'vue';
 import { isEqual } from 'lodash-es';
-import { createWidgetDataSnapshot } from '../utils/boardTransforms';
+import { createWidgetDataSnapshot, replaceWidgetElements } from '../utils/boardTransforms';
 import { flattenWidgetElementTree } from '../utils/widgetTree';
 
 /**
@@ -39,7 +39,7 @@ function createWidgetModelSnapshot(snapshot: Pick<WidgetBoardSnapshot, 'elements
  * @param board - 内部Widget状态与命令
  * @returns 是否一致
  */
-function isModelContentEqualToBoard(dataItem: WidgetData, board: UseWidgetBoardReturn): boolean {
+function isModelContentEqual(dataItem: WidgetData, board: UseWidgetBoardReturn): boolean {
   return isEqual(createWidgetModelSnapshot(dataItem), createWidgetModelSnapshot(board.state.value));
 }
 
@@ -88,26 +88,24 @@ function createModelResetSnapshot(dataItem: WidgetData, board: UseWidgetBoardRet
 }
 
 /**
- * 回写外部模型中的规格化Widget数据。
+ * 创建需要回写的规格化Widget数据。
  * @param dataItem - 外部Widget数据
  * @param options - 模型同步配置
+ * @returns 需要回写的数据，无变化时返回 null
  */
-function syncNormalizedBoardToModel(dataItem: WidgetData, options: UseModelSyncOptions): void {
+function createNormalizedUpdate(dataItem: WidgetData, options: UseModelSyncOptions): WidgetData | null {
   const normalizedData = createModelUpdateSnapshot(options.board, dataItem);
-  if (isEqual(dataItem, normalizedData)) {
-    return;
-  }
 
-  options.dataItem.value = normalizedData;
+  return isEqual(dataItem, normalizedData) ? null : normalizedData;
 }
 
 /**
- * 判断本次外部模型变化是否允许回写归一化结果。
+ * 判断模型变化是否为当前对象的深层编辑。
  * @param dataItem - 最新外部模型
  * @param previousDataItem - 变化前外部模型
- * @returns 是否允许回写归一化结果
+ * @returns 是否为同一文档对象内编辑
  */
-function shouldEchoNormalizedModel(dataItem: WidgetData, previousDataItem: WidgetData | undefined): boolean {
+function isNestedModelEdit(dataItem: WidgetData, previousDataItem: WidgetData | undefined): boolean {
   return dataItem === previousDataItem;
 }
 
@@ -117,19 +115,56 @@ function shouldEchoNormalizedModel(dataItem: WidgetData, previousDataItem: Widge
  */
 export function useModelSync(options: UseModelSyncOptions): void {
   let syncingDataItemToBoard = false;
+  const boardModelUpdates = new WeakSet<object>();
+
+  /**
+   * 回写由 Board 产生的外部模型。
+   * @param dataItem - 最新外部模型
+   */
+  function writeModelUpdate(dataItem: WidgetData): void {
+    boardModelUpdates.add(toRaw(dataItem));
+    options.dataItem.value = dataItem;
+  }
+
+  /**
+   * 消费由 Board 产生的模型回写标记。
+   * @param dataItem - 最新外部模型
+   * @returns 是否为 Board 自身回写
+   */
+  function takeBoardModelUpdate(dataItem: WidgetData): boolean {
+    const rawDataItem = toRaw(dataItem);
+    if (!boardModelUpdates.has(rawDataItem)) {
+      return false;
+    }
+
+    boardModelUpdates.delete(rawDataItem);
+    return true;
+  }
 
   watch(
     () => options.dataItem.value,
     (dataItem: WidgetData | undefined, previousDataItem: WidgetData | undefined): void => {
-      if (!dataItem || isModelContentEqualToBoard(dataItem, options.board)) {
+      if (!dataItem || takeBoardModelUpdate(dataItem)) {
+        return;
+      }
+
+      const nestedEdit = isNestedModelEdit(dataItem, previousDataItem);
+      if (isModelContentEqual(dataItem, options.board)) {
         return;
       }
 
       syncingDataItemToBoard = true;
-      options.board.reset(createModelResetSnapshot(dataItem, options.board));
-      options.onExternalModelReset?.(dataItem);
-      if (shouldEchoNormalizedModel(dataItem, previousDataItem)) {
-        syncNormalizedBoardToModel(dataItem, options);
+      if (nestedEdit) {
+        options.board.state.value = replaceWidgetElements(options.board.state.value, dataItem.elements);
+      } else {
+        options.board.onReset(createModelResetSnapshot(dataItem, options.board));
+        options.onExternalModelReset?.(dataItem);
+      }
+      if (nestedEdit) {
+        const normalizedData = createNormalizedUpdate(dataItem, options);
+        if (normalizedData) {
+          writeModelUpdate(normalizedData);
+        }
       }
       nextTick()
         .then((): void => {
@@ -150,11 +185,11 @@ export function useModelSync(options: UseModelSyncOptions): void {
         return;
       }
 
-      if (isModelContentEqualToBoard(options.dataItem.value, options.board)) {
+      if (isModelContentEqual(options.dataItem.value, options.board)) {
         return;
       }
 
-      options.dataItem.value = createModelUpdateSnapshot(options.board, options.dataItem.value);
+      writeModelUpdate(createModelUpdateSnapshot(options.board, options.dataItem.value));
     },
     { deep: true }
   );

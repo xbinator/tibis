@@ -13,6 +13,7 @@ import {
   moveWidgetElements,
   pasteWidgetElements,
   redoWidgetBoard,
+  replaceWidgetElements,
   reorderWidgetElement,
   reorderWidgetSelection,
   resizeWidgetElements,
@@ -111,6 +112,32 @@ function getChildIds(element: WidgetElement | undefined): string[] {
 }
 
 describe('boardTransforms', (): void => {
+  it('replaces external elements as one undoable history entry', (): void => {
+    const initial = createWidgetBoardState({
+      elements: [createShapeElement('node-1')],
+      selection: ['node-1']
+    });
+    const nextElement = createShapeElement('node-1');
+    nextElement.title = '属性面板更新';
+
+    const updated = replaceWidgetElements(initial, [nextElement]);
+    const undone = undoWidgetBoard(updated);
+    const redone = redoWidgetBoard(undone);
+
+    expect(updated.elements[0]?.title).toBe('属性面板更新');
+    expect(updated.history.past).toHaveLength(1);
+    expect(undone.elements[0]?.title).toBe('矩形');
+    expect(redone.elements[0]?.title).toBe('属性面板更新');
+  });
+
+  it('ignores an external element tree without content changes', (): void => {
+    const initial = createWidgetBoardState({ elements: [createShapeElement('node-1')] });
+    const updated = replaceWidgetElements(initial, [createShapeElement('node-1')]);
+
+    expect(updated).toBe(initial);
+    expect(updated.history.past).toHaveLength(0);
+  });
+
   it('supports undo and redo after adding a shape', (): void => {
     const added = addWidgetShape(createWidgetBoardState(), {
       id: 'shape-1',

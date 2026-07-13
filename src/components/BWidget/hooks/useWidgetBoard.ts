@@ -7,7 +7,6 @@ import type {
   WidgetBoardState,
   WidgetElement,
   WidgetElementStyle,
-  WidgetElementStyleChange,
   WidgetGeometryChange,
   WidgetLayerAction,
   WidgetPoint,
@@ -27,13 +26,11 @@ import {
   moveWidgetElements,
   pasteWidgetElements,
   redoWidgetBoard,
-  reorderWidgetElement,
   reorderWidgetSelection,
   resizeWidgetElements,
   setWidgetSelectionLocked,
   ungroupWidgetSelection,
   undoWidgetBoard,
-  updateWidgetElementStyle,
   updateWidgetElementTitle
 } from '../utils/boardTransforms';
 import {
@@ -77,7 +74,7 @@ function getElementTitleIndex(element: WidgetElement, name: string, label: strin
  * @param label - 元素类型展示名
  * @returns 最大标题序号
  */
-function getMaxExistingElementTitleIndex(elements: WidgetElement[], name: string, label: string): number {
+function getMaxTitleIndex(elements: WidgetElement[], name: string, label: string): number {
   return flattenWidgetElementTree(elements).reduce<number>((maxIndex: number, item: WidgetRenderTreeNode): number => {
     const index = getElementTitleIndex(item.element, name, label);
 
@@ -90,7 +87,7 @@ function getMaxExistingElementTitleIndex(elements: WidgetElement[], name: string
  * @param existingIds - 已存在的元素 ID 集合
  * @returns 新元素 ID
  */
-function createUniqueWidgetElementId(existingIds: Set<string>): string {
+function createUniqueElementId(existingIds: Set<string>): string {
   let nextId = nanoid(WIDGET_ELEMENT_ID_SIZE);
 
   while (existingIds.has(nextId)) {
@@ -98,6 +95,49 @@ function createUniqueWidgetElementId(existingIds: Set<string>): string {
   }
 
   return nextId;
+}
+
+/**
+ * 创建元素初始样式，临时创建样式优先覆盖 schema 默认样式。
+ * @param schemaStyle - 元素注册默认样式
+ * @param creationStyle - 创建时指定样式
+ * @returns 合并后的初始样式
+ */
+function createInitialElementStyle(schemaStyle: WidgetElementStyle | undefined, creationStyle: WidgetElementStyle | undefined): WidgetElementStyle {
+  return { ...(schemaStyle ?? {}), ...(creationStyle ?? {}) };
+}
+
+/**
+ * 读取选区的直接父级。
+ * @param elements - 当前元素树
+ * @param selection - 选区元素 ID 列表
+ * @returns 同父级选区的父级 ID，顶层为 null
+ */
+function resolveSelectionParent(elements: WidgetElement[], selection: string[]): string | null {
+  if (selection.length === 0 || !isSameParent(elements, selection)) {
+    return null;
+  }
+
+  return findElementTreeNode(elements, selection[0])?.parentId ?? null;
+}
+
+/**
+ * 读取剪贴板粘贴目标父级。
+ * @param elements - 当前元素树
+ * @param selection - 当前选区元素 ID 列表
+ * @param clipboardParentId - 复制来源父级 ID
+ * @returns 粘贴目标父级 ID，顶层为 null
+ */
+function resolvePasteParent(elements: WidgetElement[], selection: string[], clipboardParentId: string | null): string | null {
+  let parentId = clipboardParentId;
+  if (selection.length === 1) {
+    const selectedNode = findElementTreeNode(elements, selection[0]);
+    parentId = selectedNode && isWidgetGroupElement(selectedNode.element) ? selectedNode.element.id : selectedNode?.parentId ?? null;
+  } else if (selection.length > 1) {
+    parentId = resolveSelectionParent(elements, selection);
+  }
+
+  return parentId && !findElementTreeNode(elements, parentId) ? null : parentId;
 }
 
 /**
@@ -109,45 +149,41 @@ export interface UseWidgetBoardReturn {
   /** 当前是否存在可粘贴元素 */
   hasClipboard: ComputedRef<boolean>;
   /** 开始创建形状草稿 */
-  startCreateShapeDraft: (name: string, start: WidgetPoint) => void;
+  onStartShapeDraft: (name: string, start: WidgetPoint) => void;
   /** 更新当前草稿坐标 */
-  updateDraftPoint: (point: WidgetPoint) => void;
+  onUpdateDraftPoint: (point: WidgetPoint) => void;
   /** 提交创建形状草稿 */
-  commitCreateShapeDraft: (style?: WidgetElementStyle) => void;
+  onCommitShapeDraft: (style?: WidgetElementStyle) => void;
   /** 清空交互草稿 */
-  clearDraft: () => void;
+  onClearDraft: () => void;
   /** 撤销 */
-  undo: () => void;
+  onUndo: () => void;
   /** 重做 */
-  redo: () => void;
+  onRedo: () => void;
   /** 移动元素 */
-  moveElements: (changes: WidgetGeometryChange[]) => void;
+  onMoveElements: (changes: WidgetGeometryChange[]) => void;
   /** 缩放元素 */
-  resizeElements: (changes: WidgetGeometryChange[]) => void;
-  /** 更新元素样式 */
-  updateElementStyle: (elementId: string, style: WidgetElementStyleChange) => void;
+  onResizeElements: (changes: WidgetGeometryChange[]) => void;
   /** 删除选区 */
-  deleteSelection: () => void;
+  onDeleteSelection: () => void;
   /** 复制选区 */
-  copySelection: () => void;
+  onCopySelection: () => void;
   /** 粘贴剪贴板元素 */
-  pasteClipboard: (anchorPoint?: WidgetPoint) => void;
+  onPasteClipboard: (anchorPoint?: WidgetPoint) => void;
   /** 合并选区为组合 */
-  groupSelection: () => void;
+  onGroupSelection: () => void;
   /** 取消选区命中的组合 */
-  ungroupSelection: () => void;
+  onUngroupSelection: () => void;
   /** 更新元素自定义名称 */
-  updateElementTitle: (elementId: string, title: string) => void;
-  /** 调整元素层级 */
-  reorderElement: (elementId: string, action: WidgetLayerAction) => void;
+  onUpdateElementTitle: (elementId: string, title: string) => void;
   /** 调整选区层级 */
-  reorderSelection: (action: WidgetLayerAction) => void;
+  onReorderSelection: (action: WidgetLayerAction) => void;
   /** 设置选区位置尺寸锁定状态 */
-  setSelectionLocked: (locked: boolean) => void;
+  onSetSelectionLocked: (locked: boolean) => void;
   /** 设置选区 */
-  setSelection: (selection: string[]) => void;
+  onSetSelection: (selection: string[]) => void;
   /** 重置Widget状态 */
-  reset: (snapshot?: Partial<WidgetBoardSnapshot>) => void;
+  onReset: (snapshot?: Partial<WidgetBoardSnapshot>) => void;
 }
 
 /**
@@ -171,65 +207,13 @@ export function useWidgetBoard(snapshot?: Partial<WidgetBoardSnapshot>): UseWidg
   }
 
   /**
-   * 创建元素初始样式，临时创建样式优先覆盖 schema 默认样式。
-   * @param schemaStyle - 元素注册默认样式
-   * @param creationStyle - 创建时指定样式
-   * @returns 合并后的初始样式
-   */
-  function createInitialElementStyle(schemaStyle: WidgetElementStyle | undefined, creationStyle: WidgetElementStyle | undefined): WidgetElementStyle {
-    return { ...(schemaStyle ?? {}), ...(creationStyle ?? {}) };
-  }
-
-  /**
    * 创建不与当前Widget元素冲突的新元素 ID。
    * @returns 新元素 ID
    */
-  function createWidgetElementId(): string {
-    return createUniqueWidgetElementId(new Set(flattenWidgetElementTree(state.value.elements).map((item: WidgetRenderTreeNode): string => item.element.id)));
-  }
+  function createElementId(): string {
+    const existingIds = new Set(flattenWidgetElementTree(state.value.elements).map((item: WidgetRenderTreeNode): string => item.element.id));
 
-  /**
-   * 读取当前选区的直接父级。
-   * @param selection - 选区元素 ID 列表
-   * @returns 同父级选区的父级 ID，顶层为 null
-   */
-  function resolveSelectionParentId(selection: string[]): string | null {
-    if (selection.length === 0 || !isSameParent(state.value.elements, selection)) {
-      return null;
-    }
-
-    return findElementTreeNode(state.value.elements, selection[0])?.parentId ?? null;
-  }
-
-  /**
-   * 读取当前选区粘贴时应使用的目标父级。
-   * @param selection - 选区元素 ID 列表
-   * @returns 粘贴目标父级 ID，顶层为 null
-   */
-  function resolveSelectionPasteParentId(selection: string[]): string | null {
-    if (selection.length === 1) {
-      const selectedNode = findElementTreeNode(state.value.elements, selection[0]);
-      if (!selectedNode) {
-        return null;
-      }
-
-      return isWidgetGroupElement(selectedNode.element) ? selectedNode.element.id : selectedNode.parentId;
-    }
-
-    return resolveSelectionParentId(selection);
-  }
-
-  /**
-   * 读取本次粘贴的目标父级。
-   * @returns 目标父级 ID，顶层为 null
-   */
-  function resolvePasteParentId(): string | null {
-    const selectionParentId = state.value.selection.length > 0 ? resolveSelectionPasteParentId(state.value.selection) : clipboardParentId.value;
-    if (selectionParentId && !findElementTreeNode(state.value.elements, selectionParentId)) {
-      return null;
-    }
-
-    return selectionParentId;
+    return createUniqueElementId(existingIds);
   }
 
   /**
@@ -239,126 +223,235 @@ export function useWidgetBoard(snapshot?: Partial<WidgetBoardSnapshot>): UseWidg
    * @returns 新标题
    */
   function createElementTitle(name: string, label: string): string {
-    const existingMaxIndex = getMaxExistingElementTitleIndex(state.value.elements, name, label);
+    const existingMaxIndex = getMaxTitleIndex(state.value.elements, name, label);
 
     return `${label}${existingMaxIndex + 1}`;
+  }
+
+  /**
+   * 开始创建形状草稿。
+   * @param name - 元素注册名称
+   * @param start - 草稿起点
+   */
+  function onStartShapeDraft(name: string, start: WidgetPoint): void {
+    setState({
+      ...state.value,
+      draft: {
+        kind: 'creating-shape',
+        name,
+        start,
+        current: start
+      },
+      selection: []
+    });
+  }
+
+  /**
+   * 更新当前草稿坐标。
+   * @param point - 最新草稿坐标
+   */
+  function onUpdateDraftPoint(point: WidgetPoint): void {
+    if (state.value.draft?.kind !== 'creating-shape') {
+      return;
+    }
+
+    setState({
+      ...state.value,
+      draft: {
+        ...state.value.draft,
+        current: point
+      }
+    });
+  }
+
+  /**
+   * 提交创建形状草稿。
+   * @param style - 创建时覆盖的元素样式
+   */
+  function onCommitShapeDraft(style?: WidgetElementStyle): void {
+    const { draft } = state.value;
+    if (draft?.kind !== 'creating-shape') {
+      return;
+    }
+
+    const schema = getWidgetElementSchema(draft.name);
+    if (!schema) {
+      setState({
+        ...state.value,
+        draft: undefined,
+        lastError: new Error(`找不到元素注册配置: ${draft.name}`)
+      });
+      return;
+    }
+
+    setState(
+      addWidgetShape(
+        {
+          ...state.value,
+          draft: undefined
+        },
+        {
+          id: createElementId(),
+          name: draft.name,
+          label: schema.label,
+          title: createElementTitle(draft.name, schema.label),
+          icon: schema.icon,
+          createAnchor: schema.createAnchor,
+          start: draft.start,
+          end: draft.current,
+          style: createInitialElementStyle(schema.style, style),
+          metadata: schema.metadata
+        }
+      )
+    );
+  }
+
+  /** 清空交互草稿。 */
+  function onClearDraft(): void {
+    setState({
+      ...state.value,
+      draft: undefined
+    });
+  }
+
+  /** 撤销最近一次操作。 */
+  function onUndo(): void {
+    setState(undoWidgetBoard(state.value));
+  }
+
+  /** 重做最近一次撤销。 */
+  function onRedo(): void {
+    setState(redoWidgetBoard(state.value));
+  }
+
+  /**
+   * 移动元素。
+   * @param changes - 元素位置变更
+   */
+  function onMoveElements(changes: WidgetGeometryChange[]): void {
+    setState(moveWidgetElements(state.value, changes));
+  }
+
+  /**
+   * 缩放元素。
+   * @param changes - 元素尺寸变更
+   */
+  function onResizeElements(changes: WidgetGeometryChange[]): void {
+    // MoveableLayer 已按当前渲染上下文归一化尺寸，避免纯模型层按模板源码二次测量。
+    setState(resizeWidgetElements(state.value, changes, { normalizeSize: false }));
+  }
+
+  /** 删除当前选区。 */
+  function onDeleteSelection(): void {
+    setState(deleteWidgetSelection(state.value));
+  }
+
+  /** 复制当前选区。 */
+  function onCopySelection(): void {
+    clipboard.value = copyWidgetSelection(state.value);
+    clipboardParentId.value = resolveSelectionParent(state.value.elements, state.value.selection);
+  }
+
+  /**
+   * 粘贴剪贴板元素。
+   * @param anchorPoint - 粘贴锚点
+   */
+  function onPasteClipboard(anchorPoint?: WidgetPoint): void {
+    if (clipboard.value.length === 0) {
+      return;
+    }
+
+    const usedElementIds = new Set(flattenWidgetElementTree(state.value.elements).map((item: WidgetRenderTreeNode): string => item.element.id));
+    const parentId = resolvePasteParent(state.value.elements, state.value.selection, clipboardParentId.value);
+
+    setState(
+      pasteWidgetElements(state.value, clipboard.value, {
+        anchorPoint,
+        parentId,
+        createElementId: (): string => {
+          const id = createUniqueElementId(usedElementIds);
+          usedElementIds.add(id);
+
+          return id;
+        }
+      })
+    );
+  }
+
+  /** 合并当前选区。 */
+  function onGroupSelection(): void {
+    setState(groupWidgetSelection(state.value, createElementId()));
+  }
+
+  /** 取消当前选区中的组合。 */
+  function onUngroupSelection(): void {
+    setState(ungroupWidgetSelection(state.value));
+  }
+
+  /**
+   * 更新元素标题。
+   * @param elementId - 元素 ID
+   * @param title - 最新标题
+   */
+  function onUpdateElementTitle(elementId: string, title: string): void {
+    setState(updateWidgetElementTitle(state.value, elementId, title));
+  }
+
+  /**
+   * 调整当前选区层级。
+   * @param action - 层级操作
+   */
+  function onReorderSelection(action: WidgetLayerAction): void {
+    setState(reorderWidgetSelection(state.value, action));
+  }
+
+  /**
+   * 设置当前选区锁定状态。
+   * @param locked - 是否锁定位置和尺寸
+   */
+  function onSetSelectionLocked(locked: boolean): void {
+    setState(setWidgetSelectionLocked(state.value, locked));
+  }
+
+  /**
+   * 设置当前选区。
+   * @param selection - 元素 ID 列表
+   */
+  function onSetSelection(selection: string[]): void {
+    setState({
+      ...state.value,
+      selection: normalizeWidgetElementSelection(state.value.elements, selection)
+    });
+  }
+
+  /**
+   * 重置Widget状态。
+   * @param nextSnapshot - 最新Widget快照
+   */
+  function onReset(nextSnapshot?: Partial<WidgetBoardSnapshot>): void {
+    setState(createWidgetBoardState(nextSnapshot));
   }
 
   return {
     state,
     hasClipboard,
-    startCreateShapeDraft: (name: string, start: WidgetPoint): void => {
-      state.value = {
-        ...state.value,
-        draft: {
-          kind: 'creating-shape',
-          name,
-          start,
-          current: start
-        },
-        selection: []
-      };
-    },
-    updateDraftPoint: (point: WidgetPoint): void => {
-      if (state.value.draft?.kind !== 'creating-shape') {
-        return;
-      }
-
-      state.value = {
-        ...state.value,
-        draft: {
-          ...state.value.draft,
-          current: point
-        }
-      };
-    },
-    commitCreateShapeDraft: (style?: WidgetElementStyle): void => {
-      const { draft } = state.value;
-      if (draft?.kind !== 'creating-shape') {
-        return;
-      }
-
-      const schema = getWidgetElementSchema(draft.name);
-      if (!schema) {
-        state.value = {
-          ...state.value,
-          draft: undefined,
-          lastError: new Error(`找不到元素注册配置: ${draft.name}`)
-        };
-        return;
-      }
-
-      setState(
-        addWidgetShape(
-          {
-            ...state.value,
-            draft: undefined
-          },
-          {
-            id: createWidgetElementId(),
-            name: draft.name,
-            label: schema.label,
-            title: createElementTitle(draft.name, schema.label),
-            icon: schema.icon,
-            createAnchor: schema.createAnchor,
-            start: draft.start,
-            end: draft.current,
-            style: createInitialElementStyle(schema.style, style),
-            metadata: schema.metadata
-          }
-        )
-      );
-    },
-    clearDraft: (): void => {
-      state.value = {
-        ...state.value,
-        draft: undefined
-      };
-    },
-    undo: (): void => setState(undoWidgetBoard(state.value)),
-    redo: (): void => setState(redoWidgetBoard(state.value)),
-    moveElements: (changes: WidgetGeometryChange[]): void => setState(moveWidgetElements(state.value, changes)),
-    resizeElements: (changes: WidgetGeometryChange[]): void => {
-      // MoveableLayer 已按当前渲染上下文归一化尺寸，避免纯模型层按模板源码二次测量。
-      setState(resizeWidgetElements(state.value, changes, { normalizeSize: false }));
-    },
-    updateElementStyle: (elementId: string, style: WidgetElementStyleChange): void => setState(updateWidgetElementStyle(state.value, elementId, style)),
-    deleteSelection: (): void => setState(deleteWidgetSelection(state.value)),
-    copySelection: (): void => {
-      clipboard.value = copyWidgetSelection(state.value);
-      clipboardParentId.value = resolveSelectionParentId(state.value.selection);
-    },
-    pasteClipboard: (anchorPoint?: WidgetPoint): void => {
-      if (!clipboard.value.length) {
-        return;
-      }
-
-      const usedElementIds = new Set(flattenWidgetElementTree(state.value.elements).map((item: WidgetRenderTreeNode): string => item.element.id));
-      const parentId = resolvePasteParentId();
-      setState(
-        pasteWidgetElements(state.value, clipboard.value, {
-          anchorPoint,
-          parentId,
-          createElementId: (): string => {
-            const id = createUniqueWidgetElementId(usedElementIds);
-            usedElementIds.add(id);
-
-            return id;
-          }
-        })
-      );
-    },
-    groupSelection: (): void => setState(groupWidgetSelection(state.value, createWidgetElementId())),
-    ungroupSelection: (): void => setState(ungroupWidgetSelection(state.value)),
-    updateElementTitle: (elementId: string, title: string): void => setState(updateWidgetElementTitle(state.value, elementId, title)),
-    reorderElement: (elementId: string, action: WidgetLayerAction): void => setState(reorderWidgetElement(state.value, elementId, action)),
-    reorderSelection: (action: WidgetLayerAction): void => setState(reorderWidgetSelection(state.value, action)),
-    setSelectionLocked: (locked: boolean): void => setState(setWidgetSelectionLocked(state.value, locked)),
-    setSelection: (selection: string[]): void => {
-      state.value = { ...state.value, selection: normalizeWidgetElementSelection(state.value.elements, selection) };
-    },
-    reset: (nextSnapshot?: Partial<WidgetBoardSnapshot>): void => {
-      setState(createWidgetBoardState(nextSnapshot));
-    }
+    onStartShapeDraft,
+    onUpdateDraftPoint,
+    onCommitShapeDraft,
+    onClearDraft,
+    onUndo,
+    onRedo,
+    onMoveElements,
+    onResizeElements,
+    onDeleteSelection,
+    onCopySelection,
+    onPasteClipboard,
+    onGroupSelection,
+    onUngroupSelection,
+    onUpdateElementTitle,
+    onReorderSelection,
+    onSetSelectionLocked,
+    onSetSelection,
+    onReset
   };
 }

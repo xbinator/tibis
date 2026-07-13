@@ -21,7 +21,7 @@ interface UseWidgetInteractionReturn {
  */
 export function useWidgetInteraction(board: UseWidgetBoardReturn): UseWidgetInteractionReturn {
   return {
-    clearSelection: (): void => board.setSelection([]),
-    deleteSelection: (): void => board.deleteSelection()
+    clearSelection: (): void => board.onSetSelection([]),
+    deleteSelection: (): void => board.onDeleteSelection()
   };
 }

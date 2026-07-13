@@ -35,7 +35,7 @@
       :viewport="board.state.value.viewport"
       :viewport-size="viewportSize"
       @context-menu="handleWidgetContextMenu"
-      @move="board.moveElements"
+      @move="board.onMoveElements"
       @preview-end="handleMoveablePreviewEnd"
       @resize="handleMoveableResize"
       @resize-preview="handleMoveableGeometryPreview"
@@ -64,8 +64,8 @@
       :can-undo="canUndo"
       :can-redo="canRedo"
       @set-tool="setActiveTool"
-      @undo="board.undo"
-      @redo="board.redo"
+      @undo="board.onUndo"
+      @redo="board.onRedo"
       @zoom-in="viewport.zoomIn"
       @zoom-out="viewport.zoomOut"
       @reset-zoom="viewport.resetZoom"
@@ -356,7 +356,7 @@ function handleSelectionChange(selection: string[]): void {
  */
 function setBoardSelection(selection: string[]): void {
   activeElementId.value = null;
-  board.setSelection(selection);
+  board.onSetSelection(selection);
 }
 
 /**
@@ -426,7 +426,7 @@ function syncBoardSelectionFromSelectedTarget(target: WidgetSelectTarget): void 
   }
 
   activeElementId.value = null;
-  board.setSelection(getSelectionForElement(target.id));
+  board.onSetSelection(getSelectionForElement(target.id));
 }
 
 /**
@@ -731,7 +731,7 @@ function handleMoveablePreviewEnd(): void {
  * @param changes - 几何变更
  */
 function handleMoveableResize(changes: WidgetGeometryChange[]): void {
-  board.resizeElements(changes);
+  board.onResizeElements(changes);
   handleMoveablePreviewEnd();
 }
 
@@ -931,12 +931,12 @@ function cancelHandPan(): void {
  * @param tool - 目标工具
  */
 function setActiveTool(tool: string): void {
-  board.clearDraft();
+  board.onClearDraft();
   cancelHandPan();
   activeTool.value = tool;
 
   if (tool !== 'select') {
-    board.setSelection([]);
+    board.onSetSelection([]);
   }
 }
 
@@ -956,7 +956,7 @@ function handleWidgetContextMenu(payload: WidgetContextMenuPayload): void {
 
   const selection = getContextMenuSelectionForElement(payload.elementId);
   if (!isSameSelection(board.state.value.selection, selection)) {
-    board.setSelection(selection);
+    board.onSetSelection(selection);
   }
 
   contextMenuState.value = {
@@ -974,47 +974,47 @@ function handleWidgetContextMenu(payload: WidgetContextMenuPayload): void {
 function handleContextMenuCommand(command: string): void {
   switch (command) {
     case 'copy': {
-      board.copySelection();
+      board.onCopySelection();
       break;
     }
     case 'paste': {
-      board.pasteClipboard(contextMenuState.value.boardPoint);
+      board.onPasteClipboard(contextMenuState.value.boardPoint);
       break;
     }
     case 'lock': {
-      board.setSelectionLocked(true);
+      board.onSetSelectionLocked(true);
       break;
     }
     case 'unlock': {
-      board.setSelectionLocked(false);
+      board.onSetSelectionLocked(false);
       break;
     }
     case 'group': {
-      board.groupSelection();
+      board.onGroupSelection();
       break;
     }
     case 'ungroup': {
-      board.ungroupSelection();
+      board.onUngroupSelection();
       break;
     }
     case 'bringToFront': {
-      board.reorderSelection('bringToFront');
+      board.onReorderSelection('bringToFront');
       break;
     }
     case 'bringForward': {
-      board.reorderSelection('bringForward');
+      board.onReorderSelection('bringForward');
       break;
     }
     case 'sendBackward': {
-      board.reorderSelection('sendBackward');
+      board.onReorderSelection('sendBackward');
       break;
     }
     case 'sendToBack': {
-      board.reorderSelection('sendToBack');
+      board.onReorderSelection('sendToBack');
       break;
     }
     case 'delete': {
-      board.deleteSelection();
+      board.onDeleteSelection();
       break;
     }
     default: {
@@ -1031,9 +1031,9 @@ function handleContextMenuCommand(command: string): void {
  * @param point - 创建位置
  */
 function createElementAtPoint(name: string, point: WidgetPoint): void {
-  board.startCreateShapeDraft(name, point);
-  board.updateDraftPoint(point);
-  board.commitCreateShapeDraft(creationStyle.value);
+  board.onStartShapeDraft(name, point);
+  board.onUpdateDraftPoint(point);
+  board.onCommitShapeDraft(creationStyle.value);
   setActiveTool('select');
 }
 
@@ -1130,21 +1130,21 @@ function handleDirectDragEnd(event?: PointerEvent): void {
 
   if (!session.moved) {
     if (session.selectOnEnd) {
-      board.setSelection([session.id]);
+      board.onSetSelection([session.id]);
     }
     moveablePreviewChanges.value = [];
     hideMoveableDuringDirectDrag.value = false;
     return;
   }
 
-  board.moveElements([
+  board.onMoveElements([
     {
       id: session.id,
       position: session.currentPosition
     }
   ]);
   if (session.selectOnEnd) {
-    board.setSelection([session.id]);
+    board.onSetSelection([session.id]);
   }
   moveablePreviewChanges.value = [];
   hideMoveableDuringDirectDrag.value = false;
@@ -1227,7 +1227,7 @@ function handleElementSelect(id: string, event: PointerEvent): void {
 
   if (selectionChanged) {
     activeElementId.value = null;
-    board.setSelection(selection);
+    board.onSetSelection(selection);
   }
   if (selection.length === 1 && shouldStartDirectDrag(id, dragTargetId, selectionChanged)) {
     startDirectDrag(dragTargetId, event, selectionChanged);
@@ -1246,7 +1246,7 @@ function handleCanvasPointerdown(point: WidgetPoint, event: PointerEvent): void 
 
   const name = getActiveCreateName();
   if (name) {
-    board.startCreateShapeDraft(name, point);
+    board.onStartShapeDraft(name, point);
     return;
   }
 
@@ -1258,7 +1258,7 @@ function handleCanvasPointerdown(point: WidgetPoint, event: PointerEvent): void 
  * @param point - Widget坐标
  */
 function handleCanvasPointermove(point: WidgetPoint): void {
-  board.updateDraftPoint(point);
+  board.onUpdateDraftPoint(point);
 }
 
 /**
@@ -1271,8 +1271,8 @@ function handleCanvasPointerup(point: WidgetPoint): void {
     return;
   }
 
-  board.updateDraftPoint(point);
-  board.commitCreateShapeDraft(creationStyle.value);
+  board.onUpdateDraftPoint(point);
+  board.onCommitShapeDraft(creationStyle.value);
   setActiveTool('select');
 }
 
@@ -1286,7 +1286,7 @@ async function createElementFromClientPoint(name: string, clientPoint: WidgetPoi
   if (!schema) return;
 
   cancelDirectDrag();
-  board.clearDraft();
+  board.onClearDraft();
   const point = getBoardPointFromClient(clientPoint.x, clientPoint.y);
   if (!point) return;
 
@@ -1308,7 +1308,7 @@ function selectElementById(id: string, options: WidgetSelectElementByIdOptions =
   setActiveTool('select');
   const selection = getSelectionForElement(id);
   activeElementId.value = options.activateElement ? id : null;
-  board.setSelection(selection);
+  board.onSetSelection(selection);
 }
 
 /**
@@ -1325,35 +1325,35 @@ function selectElementsByIds(ids: string[]): void {
   cancelDirectDrag();
   setActiveTool('select');
   activeElementId.value = null;
-  board.setSelection(selection);
+  board.onSetSelection(selection);
 }
 
 /**
  * 复制当前Widget选区。
  */
 function copySelection(): void {
-  board.copySelection();
+  board.onCopySelection();
 }
 
 /**
  * 合并当前Widget选区。
  */
 function groupSelection(): void {
-  board.groupSelection();
+  board.onGroupSelection();
 }
 
 /**
  * 取消当前Widget选区中的组合。
  */
 function ungroupSelection(): void {
-  board.ungroupSelection();
+  board.onUngroupSelection();
 }
 
 /**
  * 删除当前Widget选区。
  */
 function deleteSelection(): void {
-  board.deleteSelection();
+  board.onDeleteSelection();
 }
 
 /**
@@ -1361,7 +1361,7 @@ function deleteSelection(): void {
  * @param action - 层级操作
  */
 function reorderSelection(action: WidgetLayerAction): void {
-  board.reorderSelection(action);
+  board.onReorderSelection(action);
 }
 
 /**
@@ -1443,7 +1443,7 @@ function canHandleWidgetShortcut(event: KeyboardEvent): boolean {
  * 选中Widget中的全部元素。
  */
 function selectAllWidgetElements(): void {
-  board.setSelection(board.state.value.elements.map((element: WidgetElement): string => element.id));
+  board.onSetSelection(board.state.value.elements.map((element: WidgetElement): string => element.id));
 }
 
 /**
@@ -1454,17 +1454,17 @@ function registerWidgetKeyboardShortcuts(): () => void {
   return registerShortcuts([
     {
       key: 'Ctrl+Z',
-      handler: board.undo,
+      handler: board.onUndo,
       guard: canHandleWidgetShortcut
     },
     {
       key: 'Ctrl+Shift+Z',
-      handler: board.redo,
+      handler: board.onRedo,
       guard: canHandleWidgetShortcut
     },
     {
       key: 'Ctrl+Y',
-      handler: board.redo,
+      handler: board.onRedo,
       guard: canHandleWidgetShortcut
     },
     {

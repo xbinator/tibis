@@ -264,10 +264,7 @@ export function useLayerActions(options: UseLayerActionsOptions): LayerActions {
    */
   async function copySingleElement(element: WidgetElement): Promise<void> {
     const copiedElement = createLayerCopyElement(element, session.data.value.elements);
-    session.data.value = {
-      ...session.data.value,
-      elements: insertLayerCopyAboveSource(session.data.value.elements, element.id, copiedElement)
-    };
+    session.data.value.elements = insertLayerCopyAboveSource(session.data.value.elements, element.id, copiedElement);
     selectedTarget.value = copiedElement;
     selectedElementIds.value = [copiedElement.id];
     await nextTick();
@@ -289,10 +286,7 @@ export function useLayerActions(options: UseLayerActionsOptions): LayerActions {
       return;
     }
 
-    session.data.value = {
-      ...session.data.value,
-      elements: insertLayerCopiesAboveSources(session.data.value.elements, elements, copiedElements)
-    };
+    session.data.value.elements = insertLayerCopiesAboveSources(session.data.value.elements, elements, copiedElements);
     selectedTarget.value = copiedElements.length === 1 ? copiedElements[0] : null;
     selectedElementIds.value = copiedElements.map((element: WidgetElement): string => element.id);
     await nextTick();
@@ -312,10 +306,7 @@ export function useLayerActions(options: UseLayerActionsOptions): LayerActions {
     const nextElements = removeEmptyWidgetGroups(result.elements);
     const deletedIds = collectRemovedElementIds(previousElements, nextElements);
 
-    session.data.value = {
-      ...session.data.value,
-      elements: nextElements
-    };
+    session.data.value.elements = nextElements;
 
     if (isWidgetElementTarget(selectedTarget.value) && deletedIds.has(selectedTarget.value.id)) {
       selectedTarget.value = session.data.value.metadata;
@@ -349,10 +340,7 @@ export function useLayerActions(options: UseLayerActionsOptions): LayerActions {
       return;
     }
 
-    session.data.value = {
-      ...session.data.value,
-      elements: compactedElements
-    };
+    session.data.value.elements = compactedElements;
 
     if (isWidgetElementTarget(selectedTarget.value) && removedIds.has(selectedTarget.value.id)) {
       selectedTarget.value = session.data.value.metadata;
@@ -374,10 +362,7 @@ export function useLayerActions(options: UseLayerActionsOptions): LayerActions {
       return;
     }
 
-    session.data.value = {
-      ...session.data.value,
-      elements: nextElements
-    };
+    session.data.value.elements = nextElements;
   }
 
   /**
@@ -396,10 +381,7 @@ export function useLayerActions(options: UseLayerActionsOptions): LayerActions {
       return;
     }
 
-    session.data.value = {
-      ...session.data.value,
-      elements: nextElements
-    };
+    session.data.value.elements = nextElements;
   }
 
   return {
