@@ -21,13 +21,25 @@ export interface WidgetRuntimeDisplaySize {
  * 运行态展示布局。
  */
 export interface WidgetRuntimeDisplayLayout {
-  /** 运行态展示盒子宽度，未设置时由宿主 CSS 决定 */
+  /** 响应式运行态展示盒子宽度，空内容时不设置 */
   width?: number;
   /** 运行态展示盒子高度 */
   height: number;
   /** 内容舞台缩放比例 */
   scale: number;
   /** 内容舞台在展示盒子中的偏移 */
+  stageOffset: WidgetPoint;
+}
+
+/**
+ * 运行态基础展示布局。
+ */
+interface WidgetRuntimeBaseLayout {
+  /** 响应式缩放前的基础展示盒子尺寸 */
+  size: WidgetSize;
+  /** 内容在基础展示盒子中的缩放比例 */
+  scale: number;
+  /** 内容舞台在基础展示盒子中的偏移 */
   stageOffset: WidgetPoint;
 }
 
@@ -77,25 +89,6 @@ function readRuntimeDisplaySize(value: WidgetData): WidgetRuntimeDisplaySize {
 }
 
 /**
- * 按宿主宽度等比压缩展示盒子。
- * @param box - 理想展示盒子
- * @param hostWidth - 宿主可用宽度
- * @returns 宿主约束后的展示盒子
- */
-function constrainDisplayBoxToHost(box: WidgetSize, hostWidth: number): WidgetSize {
-  if (!hostWidth || hostWidth >= box.width) {
-    return box;
-  }
-
-  const scale = hostWidth / box.width;
-
-  return {
-    width: hostWidth,
-    height: box.height * scale
-  };
-}
-
-/**
  * 创建居中舞台偏移。
  * @param box - 展示盒子
  * @param contentSize - 原始内容尺寸
@@ -106,6 +99,91 @@ function createCenteredStageOffset(box: WidgetSize, contentSize: WidgetSize, sca
   return {
     x: Math.max((box.width - contentSize.width * scale) / 2, 0),
     y: Math.max((box.height - contentSize.height * scale) / 2, 0)
+  };
+}
+
+/**
+ * 根据内容尺寸与 metadata 尺寸创建运行态基础展示布局。
+ * @param contentSize - 内容边界尺寸
+ * @param displaySize - metadata 展示尺寸
+ * @returns 响应式缩放前的基础展示布局
+ */
+function createRuntimeBaseLayout(contentSize: WidgetSize, displaySize: WidgetRuntimeDisplaySize): WidgetRuntimeBaseLayout {
+  const displayWidth = displaySize.width;
+  const displayHeight = displaySize.height;
+
+  if (displayWidth === undefined && displayHeight === undefined) {
+    return {
+      size: contentSize,
+      scale: 1,
+      stageOffset: { x: 0, y: 0 }
+    };
+  }
+
+  if (displayWidth !== undefined && displayHeight === undefined) {
+    const scale = displayWidth / contentSize.width;
+
+    return {
+      size: {
+        width: displayWidth,
+        height: contentSize.height * scale
+      },
+      scale,
+      stageOffset: { x: 0, y: 0 }
+    };
+  }
+
+  if (displayWidth === undefined && displayHeight !== undefined) {
+    const scale = displayHeight / contentSize.height;
+
+    return {
+      size: {
+        width: contentSize.width * scale,
+        height: displayHeight
+      },
+      scale,
+      stageOffset: { x: 0, y: 0 }
+    };
+  }
+
+  if (displayWidth !== undefined && displayHeight !== undefined) {
+    const size: WidgetSize = {
+      width: displayWidth,
+      height: displayHeight
+    };
+    const scale = Math.min(size.width / contentSize.width, size.height / contentSize.height);
+
+    return {
+      size,
+      scale,
+      stageOffset: createCenteredStageOffset(size, contentSize, scale)
+    };
+  }
+
+  return {
+    size: contentSize,
+    scale: 1,
+    stageOffset: { x: 0, y: 0 }
+  };
+}
+
+/**
+ * 按宿主宽度双向缩放运行态基础布局。
+ * @param baseLayout - 运行态基础展示布局
+ * @param hostWidth - 宿主可用宽度
+ * @returns 响应式运行态展示布局
+ */
+function createResponsiveRuntimeDisplayLayout(baseLayout: WidgetRuntimeBaseLayout, hostWidth: number): WidgetRuntimeDisplayLayout {
+  const responsiveScale = hostWidth > 0 ? hostWidth / baseLayout.size.width : 1;
+
+  return {
+    width: hostWidth > 0 ? hostWidth : baseLayout.size.width,
+    height: baseLayout.size.height * responsiveScale,
+    scale: baseLayout.scale * responsiveScale,
+    stageOffset: {
+      x: baseLayout.stageOffset.x * responsiveScale,
+      y: baseLayout.stageOffset.y * responsiveScale
+    }
   };
 }
 
@@ -131,70 +209,7 @@ function createRuntimeDisplayLayout(
     };
   }
 
-  const hostScale = hostWidth ? hostWidth / contentSize.width : 1;
-  const displayWidth = displaySize.width;
-  const displayHeight = displaySize.height;
-
-  if (displayWidth === undefined && displayHeight === undefined) {
-    return {
-      height: contentSize.height * hostScale,
-      scale: hostScale,
-      stageOffset: { x: 0, y: 0 }
-    };
-  }
-
-  if (displayWidth !== undefined && displayHeight === undefined) {
-    const idealScale = displayWidth / contentSize.width;
-    const displayBox = constrainDisplayBoxToHost(
-      {
-        width: displayWidth,
-        height: contentSize.height * idealScale
-      },
-      hostWidth
-    );
-    const scale = displayBox.width / contentSize.width;
-
-    return {
-      width: displayBox.width,
-      height: displayBox.height,
-      scale,
-      stageOffset: { x: 0, y: 0 }
-    };
-  }
-
-  if (displayWidth === undefined && displayHeight !== undefined) {
-    const heightScale = displayHeight / contentSize.height;
-    const scale = hostWidth ? Math.min(heightScale, hostScale) : heightScale;
-
-    return {
-      width: contentSize.width * scale,
-      height: contentSize.height * scale,
-      scale,
-      stageOffset: { x: 0, y: 0 }
-    };
-  }
-
-  if (displayWidth !== undefined && displayHeight !== undefined) {
-    const idealBox: WidgetSize = {
-      width: displayWidth,
-      height: displayHeight
-    };
-    const displayBox = constrainDisplayBoxToHost(idealBox, hostWidth);
-    const scale = Math.min(displayBox.width / contentSize.width, displayBox.height / contentSize.height);
-
-    return {
-      width: displayBox.width,
-      height: displayBox.height,
-      scale,
-      stageOffset: createCenteredStageOffset(displayBox, contentSize, scale)
-    };
-  }
-
-  return {
-    height: contentSize.height * hostScale,
-    scale: hostScale,
-    stageOffset: { x: 0, y: 0 }
-  };
+  return createResponsiveRuntimeDisplayLayout(createRuntimeBaseLayout(contentSize, displaySize), hostWidth);
 }
 
 /**

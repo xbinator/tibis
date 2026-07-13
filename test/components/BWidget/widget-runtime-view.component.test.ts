@@ -29,6 +29,28 @@ let observedResizeTargets: Element[] = [];
 let resizeObserverWidth = RUNTIME_CONTAINER_WIDTH;
 /** ResizeObserver 当前上报的测试高度。 */
 let resizeObserverHeight = RUNTIME_CONTAINER_HEIGHT;
+/** ResizeObserver 测试替身的尺寸触发器。 */
+let resizeObserverTriggers: Array<(width: number, height: number) => void> = [];
+
+/**
+ * 创建 ResizeObserver 测试条目。
+ * @param target - 尺寸变化目标
+ * @param width - 目标宽度
+ * @param height - 目标高度
+ * @returns ResizeObserver 测试条目
+ */
+function createResizeObserverEntry(target: Element, width: number, height: number): ResizeObserverEntry {
+  return {
+    target,
+    contentRect: DOMRect.fromRect({ width, height }),
+    contentBoxSize: [
+      {
+        inlineSize: width,
+        blockSize: height
+      }
+    ]
+  } as unknown as ResizeObserverEntry;
+}
 
 /**
  * ResizeObserver 测试替身。
@@ -37,12 +59,48 @@ class ResizeObserverMock {
   /** ResizeObserver 回调。 */
   private readonly callback: ResizeObserverCallbackLike;
 
+  /** 当前观察器监听的目标。 */
+  private readonly targets: Element[] = [];
+
   /**
    * 创建 ResizeObserver 测试替身。
    * @param callback - ResizeObserver 回调
    */
   public constructor(callback: ResizeObserverCallbackLike) {
     this.callback = callback;
+    resizeObserverTriggers.push((width: number, height: number): void => {
+      this.notify(width, height);
+    });
+  }
+
+  /**
+   * 重置已创建的观察器。
+   */
+  public static reset(): void {
+    resizeObserverTriggers = [];
+  }
+
+  /**
+   * 向全部观察目标发送新的容器尺寸。
+   * @param width - 新容器宽度
+   * @param height - 新容器高度
+   */
+  public static trigger(width: number, height: number): void {
+    resizeObserverWidth = width;
+    resizeObserverHeight = height;
+    resizeObserverTriggers.forEach((trigger: (nextWidth: number, nextHeight: number) => void): void => {
+      trigger(width, height);
+    });
+  }
+
+  /**
+   * 向当前观察器发送尺寸变化。
+   * @param width - 新容器宽度
+   * @param height - 新容器高度
+   */
+  private notify(width: number, height: number): void {
+    if (!this.targets.length) return;
+    this.callback(this.targets.map((target: Element): ResizeObserverEntry => createResizeObserverEntry(target, width, height)));
   }
 
   /**
@@ -51,22 +109,8 @@ class ResizeObserverMock {
    */
   public observe = (target: Element): void => {
     observedResizeTargets.push(target);
-
-    const entry = {
-      target,
-      contentRect: DOMRect.fromRect({
-        width: resizeObserverWidth,
-        height: resizeObserverHeight
-      }),
-      contentBoxSize: [
-        {
-          inlineSize: resizeObserverWidth,
-          blockSize: resizeObserverHeight
-        }
-      ]
-    } as unknown as ResizeObserverEntry;
-
-    this.callback([entry]);
+    this.targets.push(target);
+    this.callback([createResizeObserverEntry(target, resizeObserverWidth, resizeObserverHeight)]);
   };
 
   /** 停止监听目标元素。 */
@@ -503,6 +547,7 @@ describe('BWidgetRuntime', (): void => {
     observedResizeTargets = [];
     resizeObserverWidth = RUNTIME_CONTAINER_WIDTH;
     resizeObserverHeight = RUNTIME_CONTAINER_HEIGHT;
+    ResizeObserverMock.reset();
     vi.stubGlobal('ResizeObserver', ResizeObserverMock);
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback): number => {
       callback(0);
@@ -587,7 +632,7 @@ describe('BWidgetRuntime', (): void => {
     wrapper.unmount();
   });
 
-  it('uses metadata width as the runtime display width and derives height from content ratio', async (): Promise<void> => {
+  it('uses metadata width as the base display width before fitting the host width', async (): Promise<void> => {
     const dataItem = {
       ...createRuntimeWidgetData(),
       metadata: {
@@ -599,15 +644,15 @@ describe('BWidgetRuntime', (): void => {
     const stageViewport = wrapper.find('.b-widget-runtime__stage-viewport');
     const stage = wrapper.find('.b-widget-runtime__stage');
 
-    expect(root.attributes('style')).toContain('width: 320px');
-    expect(root.attributes('style')).toContain('height: 139.63636363636363px');
-    expect(stageViewport.attributes('style')).toContain('width: 320px');
-    expect(stageViewport.attributes('style')).toContain('height: 139.63636363636363px');
-    expect(stage.attributes('style')).toContain('scale(1.4545454545454546)');
+    expect(root.attributes('style')).not.toContain('width:');
+    expect(root.attributes('style')).toContain('height: 219.9272727272727px');
+    expect(stageViewport.attributes('style')).toContain('width: 504px');
+    expect(stageViewport.attributes('style')).toContain('height: 219.9272727272727px');
+    expect(stage.attributes('style')).toContain('scale(2.290909090909091)');
     wrapper.unmount();
   });
 
-  it('uses metadata height as the runtime display height and derives width from content ratio', async (): Promise<void> => {
+  it('uses metadata height as the base display height before fitting the host width', async (): Promise<void> => {
     const dataItem = {
       ...createRuntimeWidgetData(),
       metadata: {
@@ -619,11 +664,11 @@ describe('BWidgetRuntime', (): void => {
     const stageViewport = wrapper.find('.b-widget-runtime__stage-viewport');
     const stage = wrapper.find('.b-widget-runtime__stage');
 
-    expect(root.attributes('style')).toContain('width: 412.5px');
-    expect(root.attributes('style')).toContain('height: 180px');
-    expect(stageViewport.attributes('style')).toContain('width: 412.5px');
-    expect(stageViewport.attributes('style')).toContain('height: 180px');
-    expect(stage.attributes('style')).toContain('scale(1.875)');
+    expect(root.attributes('style')).not.toContain('width:');
+    expect(root.attributes('style')).toContain('height: 219.92727272727274px');
+    expect(stageViewport.attributes('style')).toContain('width: 504px');
+    expect(stageViewport.attributes('style')).toContain('height: 219.92727272727274px');
+    expect(stage.attributes('style')).toContain('scale(2.290909090909091)');
     wrapper.unmount();
   });
 
@@ -640,12 +685,12 @@ describe('BWidgetRuntime', (): void => {
     const stageViewport = wrapper.find('.b-widget-runtime__stage-viewport');
     const stage = wrapper.find('.b-widget-runtime__stage');
 
-    expect(root.attributes('style')).toContain('width: 320px');
-    expect(root.attributes('style')).toContain('height: 320px');
-    expect(stageViewport.attributes('style')).toContain('width: 320px');
-    expect(stageViewport.attributes('style')).toContain('height: 320px');
-    expect(stage.attributes('style')).toContain('top: 90.18181818181819px');
-    expect(stage.attributes('style')).toContain('scale(1.4545454545454546)');
+    expect(root.attributes('style')).not.toContain('width:');
+    expect(root.attributes('style')).toContain('height: 504px');
+    expect(stageViewport.attributes('style')).toContain('width: 504px');
+    expect(stageViewport.attributes('style')).toContain('height: 504px');
+    expect(stage.attributes('style')).toContain('top: 142.03636363636363px');
+    expect(stage.attributes('style')).toContain('scale(2.290909090909091)');
     wrapper.unmount();
   });
 
@@ -663,13 +708,52 @@ describe('BWidgetRuntime', (): void => {
     const stageViewport = wrapper.find('.b-widget-runtime__stage-viewport');
     const stage = wrapper.find('.b-widget-runtime__stage');
 
-    expect(root.attributes('style')).toContain('width: 160px');
-    expect(root.attributes('style')).toContain('max-width: 100%');
+    expect(root.attributes('style')).not.toContain('width:');
+    expect(root.attributes('style')).not.toContain('max-width:');
     expect(root.attributes('style')).toContain('height: 90px');
     expect(stageViewport.attributes('style')).toContain('width: 160px');
     expect(stageViewport.attributes('style')).toContain('height: 90px');
     expect(stage.attributes('style')).toContain('top: 10.090909090909093px');
     expect(stage.attributes('style')).toContain('scale(0.7272727272727273)');
+    wrapper.unmount();
+  });
+
+  it('scales configured runtime content down and back up with consecutive container resizes', async (): Promise<void> => {
+    const dataItem = {
+      ...createRuntimeWidgetData(),
+      metadata: {
+        width: 320,
+        height: 180
+      }
+    };
+    const wrapper = await mountRuntime(dataItem, createRenderContext('上海', 28));
+    const root = wrapper.find('.b-widget-runtime');
+    const stageViewport = wrapper.find('.b-widget-runtime__stage-viewport');
+    const stage = wrapper.find('.b-widget-runtime__stage');
+    const textNode = findNodeById(wrapper, 'text-1');
+    const initialTextNodeStyle = textNode.attributes('style');
+
+    expect(root.attributes('style')).not.toContain('width:');
+    expect(stageViewport.attributes('style')).toContain('width: 504px');
+    expect(stageViewport.attributes('style')).toContain('height: 283.5px');
+
+    ResizeObserverMock.trigger(160, 90);
+    await nextTick();
+
+    expect(stageViewport.attributes('style')).toContain('width: 160px');
+    expect(stageViewport.attributes('style')).toContain('height: 90px');
+    expect(stage.attributes('style')).toContain('top: 10.090909090909093px');
+    expect(stage.attributes('style')).toContain('scale(0.7272727272727273)');
+    expect(textNode.attributes('style')).toBe(initialTextNodeStyle);
+
+    ResizeObserverMock.trigger(640, 360);
+    await nextTick();
+
+    expect(stageViewport.attributes('style')).toContain('width: 640px');
+    expect(stageViewport.attributes('style')).toContain('height: 360px');
+    expect(stage.attributes('style')).toContain('top: 40.363636363636374px');
+    expect(stage.attributes('style')).toContain('scale(2.909090909090909)');
+    expect(textNode.attributes('style')).toBe(initialTextNodeStyle);
     wrapper.unmount();
   });
 

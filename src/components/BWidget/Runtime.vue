@@ -188,18 +188,9 @@ const runtimeElements = computed<WidgetRuntimeRenderableElement[]>(() =>
   )
 );
 /** 运行态根节点样式。 */
-const rootStyle = computed<CSSProperties>(() => {
-  const style: CSSProperties = {
-    height: `${runtimeDisplayLayout.value.height}px`
-  };
-
-  if (runtimeDisplayLayout.value.width !== undefined) {
-    style.width = `${runtimeDisplayLayout.value.width}px`;
-    style.maxWidth = '100%';
-  }
-
-  return style;
-});
+const rootStyle = computed<CSSProperties>(() => ({
+  height: `${runtimeDisplayLayout.value.height}px`
+}));
 /** 运行态舞台裁剪容器样式。 */
 const stageViewportStyle = computed<CSSProperties>(() => {
   const style: CSSProperties = {
