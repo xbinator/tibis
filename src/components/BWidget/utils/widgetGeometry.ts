@@ -6,7 +6,7 @@ import type { WidgetElement, WidgetPoint, WidgetShapeElement, WidgetSize, Widget
 import type { WidgetRenderContext } from 'types/widget';
 import { WIDGET_MIN_ZOOM, WIDGET_VIEWBOX_SIZE } from '../constants/viewport';
 import { getWidgetElementSchema } from '../elements';
-import { findElementTreeNode, flattenWidgetElementTree, type WidgetRenderTreeNode } from './widgetTree';
+import { flattenWidgetElementTree, type WidgetRenderTreeNode } from './widgetTree';
 
 /** Widget节点 DOM 查询选择器。 */
 const WIDGET_ELEMENT_TARGET_SELECTOR = '.b-widget-node';
