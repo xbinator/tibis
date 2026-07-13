@@ -9,7 +9,6 @@ import {
   clientDeltaToWidgetDelta,
   createWidgetElementCssTransform,
   createWidgetViewportForElements,
-  findWidgetShapeElement,
   getWidgetResponsiveViewBoxSize,
   getWidgetShapeRenderSize,
   projectClientPointToWidgetBoard,
@@ -17,6 +16,7 @@ import {
   registerWidgetElementTarget
 } from '@/components/BWidget/utils/widgetGeometry';
 import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
+import { findElementTreeNode } from '@/components/BWidget/utils/widgetTree';
 
 /**
  * 创建测试形状元素。
@@ -203,8 +203,8 @@ describe('widgetGeometry', (): void => {
   it('finds shape elements by id', (): void => {
     const elements: WidgetElement[] = [createShapeElement('node-1')];
 
-    expect(findWidgetShapeElement(elements, 'node-1')?.name).toBe('rect');
-    expect(findWidgetShapeElement(elements, 'missing-node')).toBeNull();
+    expect(findElementTreeNode(elements, 'node-1')?.element?.name).toBe('rect');
+    expect(findElementTreeNode(elements, 'missing-node')).toBeNull();
   });
 
   it('finds nested shape elements by id', (): void => {
@@ -216,7 +216,7 @@ describe('widgetGeometry', (): void => {
       }
     ];
 
-    expect(findWidgetShapeElement(elements, 'child-1')?.name).toBe('rect');
+    expect(findElementTreeNode(elements, 'child-1')?.element?.name).toBe('rect');
   });
 
   it('creates reusable transform strings', (): void => {

@@ -62,7 +62,7 @@ import { computed } from 'vue';
 import { isEqual } from 'lodash-es';
 import { useWidgetContext } from '@/components/BWidget/hooks/useWidgetContext';
 import type { WidgetBorderStyle, WidgetElement, WidgetElementStyle, WidgetElementStyleChange } from '@/components/BWidget/types';
-import { flattenWidgetElementTree, isSameWidgetElementParent, isWidgetGroupElement, type WidgetRenderTreeNode } from '@/components/BWidget/utils/widgetTree';
+import { flattenWidgetElementTree, isSameParent, isWidgetGroupElement, type WidgetRenderTreeNode } from '@/components/BWidget/utils/widgetTree';
 import ControlPanel from './DesignSetter/ControlPanel.vue';
 
 /**
@@ -145,7 +145,7 @@ const canEditSelection = computed<boolean>(
     widgetContext.widgetData.value !== undefined &&
     selectedElements.value.length > 1 &&
     selectedElements.value.length === widgetContext.selectedElementIds.value.length &&
-    isSameWidgetElementParent(widgetContext.widgetData.value.elements, widgetContext.selectedElementIds.value)
+    isSameParent(widgetContext.widgetData.value.elements, widgetContext.selectedElementIds.value)
 );
 
 /** 当前多选是否命中了组合元素。 */

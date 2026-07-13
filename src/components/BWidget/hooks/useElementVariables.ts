@@ -10,7 +10,7 @@ import { formatWidgetBindingPath, isWidgetBindingPathSegmentAllowed, parseWidget
 import { buildWidgetDataSchema } from '../utils/widgetDataSchema';
 import { readWidgetExecuteMethod } from '../utils/widgetExecuteMethod';
 import { collectWidgetLoopDataSourceOptions, resolveWidgetElementLoopVariableNames, type WidgetLoopDataSourceOption } from '../utils/widgetLoop';
-import { findWidgetElementTreeNode } from '../utils/widgetTree';
+import { findElementTreeNode } from '../utils/widgetTree';
 import { useWidgetContext } from './useWidgetContext';
 
 /** 变量路径标识符匹配表达式。 */
@@ -229,10 +229,10 @@ function readElementLoopConfig(widgetData: WidgetData | undefined, element: Widg
     return null;
   }
 
-  const currentNode = findWidgetElementTreeNode(widgetData.elements, element.id);
+  const currentNode = findElementTreeNode(widgetData.elements, element.id);
   const pathElements = currentNode
     ? currentNode.path
-        .map((elementId: string): WidgetElement | undefined => findWidgetElementTreeNode(widgetData.elements, elementId)?.element)
+        .map((elementId: string): WidgetElement | undefined => findElementTreeNode(widgetData.elements, elementId)?.element)
         .filter((item: WidgetElement | undefined): item is WidgetElement => item !== undefined)
     : [element];
   const loopContextElement = findNearestLoopContextElement(pathElements);

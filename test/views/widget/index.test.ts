@@ -1148,7 +1148,7 @@ describe('WidgetPage', (): void => {
 
     panelSidebar.vm.$emit('select-elements', [selectedElement]);
     await nextTick();
-    panelSidebar.vm.$emit('move-elements', ['node-1'], ['node-3'], 'before');
+    panelSidebar.vm.$emit('move-elements', { sourceIds: ['node-1'], targetIds: ['node-3'], position: 'before' });
     await nextTick();
 
     expect(widgetDataMock.value.elements.map((element: WidgetElement): string => element.id)).toEqual(['node-2', 'node-3', 'node-1']);

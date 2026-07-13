@@ -37,9 +37,9 @@ import {
   updateWidgetElementTitle
 } from '../utils/boardTransforms';
 import {
-  findWidgetElementTreeNode,
+  findElementTreeNode,
   flattenWidgetElementTree,
-  isSameWidgetElementParent,
+  isSameParent,
   isWidgetGroupElement,
   normalizeWidgetElementSelection,
   type WidgetRenderTreeNode
@@ -194,11 +194,11 @@ export function useWidgetBoard(snapshot?: Partial<WidgetBoardSnapshot>): UseWidg
    * @returns 同父级选区的父级 ID，顶层为 null
    */
   function resolveSelectionParentId(selection: string[]): string | null {
-    if (selection.length === 0 || !isSameWidgetElementParent(state.value.elements, selection)) {
+    if (selection.length === 0 || !isSameParent(state.value.elements, selection)) {
       return null;
     }
 
-    return findWidgetElementTreeNode(state.value.elements, selection[0])?.parentId ?? null;
+    return findElementTreeNode(state.value.elements, selection[0])?.parentId ?? null;
   }
 
   /**
@@ -208,7 +208,7 @@ export function useWidgetBoard(snapshot?: Partial<WidgetBoardSnapshot>): UseWidg
    */
   function resolveSelectionPasteParentId(selection: string[]): string | null {
     if (selection.length === 1) {
-      const selectedNode = findWidgetElementTreeNode(state.value.elements, selection[0]);
+      const selectedNode = findElementTreeNode(state.value.elements, selection[0]);
       if (!selectedNode) {
         return null;
       }
@@ -225,7 +225,7 @@ export function useWidgetBoard(snapshot?: Partial<WidgetBoardSnapshot>): UseWidg
    */
   function resolvePasteParentId(): string | null {
     const selectionParentId = state.value.selection.length > 0 ? resolveSelectionPasteParentId(state.value.selection) : clipboardParentId.value;
-    if (selectionParentId && !findWidgetElementTreeNode(state.value.elements, selectionParentId)) {
+    if (selectionParentId && !findElementTreeNode(state.value.elements, selectionParentId)) {
       return null;
     }
 

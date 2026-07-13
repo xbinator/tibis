@@ -88,7 +88,6 @@ import type {
   WidgetPoint,
   WidgetSelectElementByIdOptions,
   WidgetSelectTarget,
-  WidgetShapeElement,
   WidgetSize
 } from './types';
 import type { WidgetCanvasPointProjection } from './utils/widgetGeometry';
@@ -108,12 +107,12 @@ import { useWidgetInteraction } from './hooks/useWidgetInteraction';
 import { useWidgetViewport } from './hooks/useWidgetViewport';
 import WidgetCanvas from './renderers/WidgetCanvas.vue';
 import { createDefaultWidgetData } from './utils/widgetData';
-import { clientDeltaToWidgetDelta, createWidgetViewportForElements, findWidgetShapeElement, projectClientPointToWidgetBoard } from './utils/widgetGeometry';
+import { clientDeltaToWidgetDelta, createWidgetViewportForElements, projectClientPointToWidgetBoard } from './utils/widgetGeometry';
 import { readWidgetPreviewRenderContext } from './utils/widgetPreviewContext';
 import {
-  findWidgetElementTreeNode,
+  findElementTreeNode,
   flattenWidgetElementTree,
-  isSameWidgetElementParent,
+  isSameParent,
   isWidgetGroupElement,
   readWidgetElementChildren,
   type WidgetRenderTreeNode
@@ -236,7 +235,7 @@ const activeCreateCursor = computed<string | undefined>(() => (activeCreateSchem
 const contextMenuItems = computed<WidgetContextMenuEntry[]>(() => {
   const hasSelection = board.state.value.selection.length > 0;
   const selectedElements = board.state.value.selection
-    .map((elementId: string): WidgetElement | null => findWidgetElementTreeNode(board.state.value.elements, elementId)?.element ?? null)
+    .map((elementId: string): WidgetElement | null => findElementTreeNode(board.state.value.elements, elementId)?.element ?? null)
     .filter((element: WidgetElement | null): element is WidgetElement => element !== null);
   let lockEntry: WidgetContextMenuItem | null = null;
 
@@ -249,9 +248,9 @@ const contextMenuItems = computed<WidgetContextMenuEntry[]>(() => {
       lockEntry = { key: 'lock', label: '锁定', icon: 'lucide:lock' };
     }
   }
-  const canGroup = board.state.value.selection.length > 1 && isSameWidgetElementParent(board.state.value.elements, board.state.value.selection);
+  const canGroup = board.state.value.selection.length > 1 && isSameParent(board.state.value.elements, board.state.value.selection);
   const canUngroup = board.state.value.selection.some((elementId: string): boolean => {
-    const element = findWidgetElementTreeNode(board.state.value.elements, elementId)?.element;
+    const element = findElementTreeNode(board.state.value.elements, elementId)?.element;
 
     return element ? isWidgetGroupElement(element) : false;
   });
@@ -288,7 +287,7 @@ function createSelectedTargetFromSelection(selection: string[]): WidgetSelectTar
   if (selection.length === 0) return dataItem.value.metadata;
 
   if (activeElementId.value && selection.includes(activeElementId.value)) {
-    const activeElement = findWidgetElementTreeNode(dataItem.value.elements, activeElementId.value)?.element;
+    const activeElement = findElementTreeNode(dataItem.value.elements, activeElementId.value)?.element;
 
     if (activeElement) {
       return activeElement;
@@ -298,7 +297,7 @@ function createSelectedTargetFromSelection(selection: string[]): WidgetSelectTar
   if (selection.length > 1) return null;
 
   const selectedId = selection[0];
-  const element = selectedId ? findWidgetElementTreeNode(dataItem.value.elements, selectedId)?.element : null;
+  const element = selectedId ? findElementTreeNode(dataItem.value.elements, selectedId)?.element : null;
 
   return element ?? dataItem.value.metadata;
 }
@@ -366,7 +365,7 @@ function setBoardSelection(selection: string[]): void {
  * @returns 当前已选路径节点 ID，不存在时返回 null
  */
 function getSelectedPathElementId(id: string): string | null {
-  const node = findWidgetElementTreeNode(board.state.value.elements, id);
+  const node = findElementTreeNode(board.state.value.elements, id);
   if (!node) {
     return null;
   }
@@ -421,7 +420,7 @@ function syncBoardSelectionFromSelectedTarget(target: WidgetSelectTarget): void 
     return;
   }
 
-  const hasElement = findWidgetElementTreeNode(board.state.value.elements, target.id) !== null;
+  const hasElement = findElementTreeNode(board.state.value.elements, target.id) !== null;
   if (!hasElement) {
     return;
   }
@@ -458,7 +457,7 @@ function getContextMenuSelectionForElement(id: string): string[] {
     return [...board.state.value.selection];
   }
 
-  const node = findWidgetElementTreeNode(board.state.value.elements, id);
+  const node = findElementTreeNode(board.state.value.elements, id);
   const selectedIds = new Set(board.state.value.selection);
   if (node?.path.some((pathId: string): boolean => selectedIds.has(pathId))) {
     return [...board.state.value.selection];
@@ -734,15 +733,6 @@ function handleMoveablePreviewEnd(): void {
 function handleMoveableResize(changes: WidgetGeometryChange[]): void {
   board.resizeElements(changes);
   handleMoveablePreviewEnd();
-}
-
-/**
- * 通过元素 ID 读取形状元素。
- * @param id - 元素 ID
- * @returns 形状元素
- */
-function getShapeElementById(id: string): WidgetShapeElement | null {
-  return findWidgetShapeElement(board.state.value.elements, id);
 }
 
 /**
@@ -1174,7 +1164,7 @@ function handleDirectDragCancel(): void {
  * @param selectOnEnd - 是否在拖拽结束后选中
  */
 function startDirectDrag(id: string, event: PointerEvent, selectOnEnd: boolean): void {
-  const element = getShapeElementById(id);
+  const element = findElementTreeNode(board.state.value.elements, id)?.element ?? null;
   if (!element || isElementGeometryLocked(element)) {
     return;
   }
@@ -1309,7 +1299,7 @@ async function createElementFromClientPoint(name: string, clientPoint: WidgetPoi
  * @param options - 选中配置
  */
 function selectElementById(id: string, options: WidgetSelectElementByIdOptions = {}): void {
-  const hasElement = findWidgetElementTreeNode(board.state.value.elements, id) !== null;
+  const hasElement = findElementTreeNode(board.state.value.elements, id) !== null;
   if (!hasElement) {
     return;
   }

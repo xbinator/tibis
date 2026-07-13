@@ -24,17 +24,17 @@ import { createDefaultWidgetViewport, normalizeWidgetDataContract, type WidgetDa
 import { getWidgetShapeRenderSize } from './widgetGeometry';
 import { normalizeWidgetElementLoopConfig } from './widgetLoop';
 import {
-  findWidgetElementTreeNode,
+  findElementTreeNode,
   flattenWidgetElementTree,
-  getWidgetElementParentLocalPosition,
-  isSameWidgetElementParent,
+  getLocalPosition,
+  isSameParent,
   isWidgetGroupElement,
   normalizeWidgetElementSelection,
   readWidgetElementChildren,
   removeEmptyWidgetGroups,
-  removeWidgetElementFromTree,
-  replaceWidgetElementSiblingList,
-  updateWidgetElementInTree,
+  removeElementFromTree,
+  replaceSiblingList,
+  updateElementInTree,
   type WidgetElementTreeNode,
   type WidgetRenderTreeNode
 } from './widgetTree';
@@ -706,7 +706,7 @@ function applyGeometryChanges(
   const nextElements = cloneDeep(state.elements);
 
   for (const change of changes) {
-    const node = findWidgetElementTreeNode(nextElements, change.id);
+    const node = findElementTreeNode(nextElements, change.id);
     if (!node) {
       return withError(state, new Error(`找不到元素: ${change.id}`));
     }
@@ -908,12 +908,12 @@ export function resizeWidgetElements(state: WidgetBoardState, changes: WidgetGeo
  * @returns 新Widget状态
  */
 export function updateWidgetElementStyle(state: WidgetBoardState, elementId: string, style: WidgetElementStyleChange): WidgetBoardState {
-  const elementNode = findWidgetElementTreeNode(state.elements, elementId);
+  const elementNode = findElementTreeNode(state.elements, elementId);
   if (!elementNode) {
     return withError(state, new Error(`找不到元素: ${elementId}`));
   }
 
-  const nextElements = updateWidgetElementInTree(
+  const nextElements = updateElementInTree(
     state.elements,
     elementId,
     (element: WidgetShapeElement): WidgetShapeElement =>
@@ -946,7 +946,7 @@ export function setWidgetSelectionLocked(state: WidgetBoardState, locked: boolea
   }
 
   const nextElements = selection.reduce<WidgetShapeElement[]>((elements: WidgetShapeElement[], elementId: string): WidgetShapeElement[] => {
-    return updateWidgetElementInTree(elements, elementId, (element: WidgetShapeElement): WidgetShapeElement => {
+    return updateElementInTree(elements, elementId, (element: WidgetShapeElement): WidgetShapeElement => {
       const nextElement = cloneDeep(element);
       if (locked) {
         nextElement.locked = true;
@@ -980,7 +980,7 @@ export function deleteWidgetSelection(state: WidgetBoardState): WidgetBoardState
   }
 
   const nextElements = state.selection.reduce<WidgetShapeElement[]>((elements: WidgetShapeElement[], elementId: string): WidgetShapeElement[] => {
-    return removeWidgetElementFromTree(elements, elementId).elements;
+    return removeElementFromTree(elements, elementId).elements;
   }, state.elements);
 
   return withHistory(state, {
@@ -1018,7 +1018,7 @@ export function pasteWidgetElements(state: WidgetBoardState, elements: WidgetSha
   }
 
   const parentId = options.parentId ?? null;
-  const parentNode = parentId === null ? null : findWidgetElementTreeNode(state.elements, parentId);
+  const parentNode = parentId === null ? null : findElementTreeNode(state.elements, parentId);
   if (parentId !== null && !parentNode) {
     return withError(state, new Error(`找不到父级元素: ${parentId}`));
   }
@@ -1026,7 +1026,7 @@ export function pasteWidgetElements(state: WidgetBoardState, elements: WidgetSha
     return withError(state, new Error(`粘贴目标不是组合: ${parentId}`));
   }
 
-  const localAnchorPoint = options.anchorPoint ? getWidgetElementParentLocalPosition(state.elements, parentId, options.anchorPoint) : undefined;
+  const localAnchorPoint = options.anchorPoint ? getLocalPosition(state.elements, parentId, options.anchorPoint) : undefined;
   const delta = getPasteDelta(elements, {
     ...options,
     anchorPoint: localAnchorPoint
@@ -1050,7 +1050,7 @@ export function pasteWidgetElements(state: WidgetBoardState, elements: WidgetSha
   }
 
   const targetSiblings = parentNode ? readWidgetElementChildren(parentNode.element) : state.elements;
-  const nextElements = replaceWidgetElementSiblingList(state.elements, parentId, [...cloneDeep(targetSiblings), ...pastedElements]);
+  const nextElements = replaceSiblingList(state.elements, parentId, [...cloneDeep(targetSiblings), ...pastedElements]);
 
   return withHistory(state, {
     elements: nextElements,
@@ -1071,11 +1071,11 @@ export function groupWidgetSelection(state: WidgetBoardState, groupElementId: st
     return state;
   }
 
-  if (!isSameWidgetElementParent(state.elements, selection)) {
+  if (!isSameParent(state.elements, selection)) {
     return withError(state, new Error('只能组合相同父级下的元素'));
   }
 
-  const firstNode = findWidgetElementTreeNode(state.elements, selection[0]);
+  const firstNode = findElementTreeNode(state.elements, selection[0]);
   if (!firstNode) {
     return withError(state, new Error(`找不到元素: ${selection[0]}`));
   }
@@ -1108,7 +1108,7 @@ export function groupWidgetSelection(state: WidgetBoardState, groupElementId: st
 
     return siblings;
   }, []);
-  const nextElements = replaceWidgetElementSiblingList(state.elements, firstNode.parentId, nextSiblings);
+  const nextElements = replaceSiblingList(state.elements, firstNode.parentId, nextSiblings);
 
   return withHistory(state, {
     elements: nextElements,
@@ -1124,7 +1124,7 @@ export function groupWidgetSelection(state: WidgetBoardState, groupElementId: st
  */
 export function ungroupWidgetSelection(state: WidgetBoardState): WidgetBoardState {
   const groupNodes = state.selection
-    .map((elementId: string): WidgetElementTreeNode | null => findWidgetElementTreeNode(state.elements, elementId))
+    .map((elementId: string): WidgetElementTreeNode | null => findElementTreeNode(state.elements, elementId))
     .filter((node: WidgetElementTreeNode | null): node is WidgetElementTreeNode => node !== null && isWidgetGroupElement(node.element));
 
   if (groupNodes.length === 0) {
@@ -1134,7 +1134,7 @@ export function ungroupWidgetSelection(state: WidgetBoardState): WidgetBoardStat
   const nextSelection: string[] = [];
   let nextElements = cloneDeep(state.elements);
   groupNodes.forEach((groupNode: WidgetElementTreeNode): void => {
-    const currentGroupNode = findWidgetElementTreeNode(nextElements, groupNode.element.id);
+    const currentGroupNode = findElementTreeNode(nextElements, groupNode.element.id);
     if (!currentGroupNode) {
       return;
     }
@@ -1147,7 +1147,7 @@ export function ungroupWidgetSelection(state: WidgetBoardState): WidgetBoardStat
     const nextSiblings = currentGroupNode.siblings.flatMap((element: WidgetShapeElement): WidgetShapeElement[] =>
       element.id === currentGroupNode.element.id ? promotedChildren : [cloneDeep(element)]
     );
-    nextElements = replaceWidgetElementSiblingList(nextElements, currentGroupNode.parentId, nextSiblings);
+    nextElements = replaceSiblingList(nextElements, currentGroupNode.parentId, nextSiblings);
   });
 
   return withHistory(state, {
@@ -1165,12 +1165,12 @@ export function ungroupWidgetSelection(state: WidgetBoardState): WidgetBoardStat
  * @returns 新Widget状态
  */
 export function updateWidgetElementTitle(state: WidgetBoardState, elementId: string, title: string): WidgetBoardState {
-  const elementNode = findWidgetElementTreeNode(state.elements, elementId);
+  const elementNode = findElementTreeNode(state.elements, elementId);
   if (!elementNode) {
     return withError(state, new Error(`找不到元素: ${elementId}`));
   }
 
-  const nextElements = updateWidgetElementInTree(
+  const nextElements = updateElementInTree(
     state.elements,
     elementId,
     (element: WidgetShapeElement): WidgetShapeElement =>
@@ -1196,7 +1196,7 @@ export function updateWidgetElementTitle(state: WidgetBoardState, elementId: str
  * @returns 新Widget状态
  */
 export function reorderWidgetElement(state: WidgetBoardState, elementId: string, action: WidgetLayerAction): WidgetBoardState {
-  const elementNode = findWidgetElementTreeNode(state.elements, elementId);
+  const elementNode = findElementTreeNode(state.elements, elementId);
   if (!elementNode) {
     return withError(state, new Error(`找不到元素: ${elementId}`));
   }
@@ -1236,7 +1236,7 @@ export function reorderWidgetElement(state: WidgetBoardState, elementId: string,
       break;
     }
   }
-  const nextElements = replaceWidgetElementSiblingList(state.elements, elementNode.parentId, nextSiblings);
+  const nextElements = replaceSiblingList(state.elements, elementNode.parentId, nextSiblings);
 
   return withHistory(state, {
     elements: nextElements,
@@ -1252,15 +1252,15 @@ export function reorderWidgetElement(state: WidgetBoardState, elementId: string,
  * @returns 新Widget状态
  */
 export function reorderWidgetSelection(state: WidgetBoardState, action: WidgetLayerAction): WidgetBoardState {
-  const selection = state.selection.filter((elementId: string): boolean => findWidgetElementTreeNode(state.elements, elementId) !== null);
+  const selection = state.selection.filter((elementId: string): boolean => findElementTreeNode(state.elements, elementId) !== null);
   if (!selection.length) {
     return state;
   }
-  if (!isSameWidgetElementParent(state.elements, selection)) {
+  if (!isSameParent(state.elements, selection)) {
     return withError(state, new Error('只能调整相同父级下的元素层级'));
   }
 
-  const firstNode = findWidgetElementTreeNode(state.elements, selection[0]);
+  const firstNode = findElementTreeNode(state.elements, selection[0]);
   if (!firstNode) {
     return state;
   }
@@ -1292,7 +1292,7 @@ export function reorderWidgetSelection(state: WidgetBoardState, action: WidgetLa
       break;
     }
   }
-  const nextElements = replaceWidgetElementSiblingList(state.elements, firstNode.parentId, nextSiblings);
+  const nextElements = replaceSiblingList(state.elements, firstNode.parentId, nextSiblings);
 
   return withHistory(state, {
     elements: nextElements,

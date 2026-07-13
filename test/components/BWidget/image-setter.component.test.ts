@@ -77,9 +77,9 @@ function createWidgetData(element: WidgetElement): WidgetData {
     metadata: {
       previewContext: {
         input: {
-            imageUrl: 'https://example.com/input.png'
-          },
-          output: undefined,
+          imageUrl: 'https://example.com/input.png'
+        },
+        output: undefined,
         data: {}
       }
     },

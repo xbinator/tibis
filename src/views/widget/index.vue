@@ -11,10 +11,10 @@
       :selected-element-ids="selectedElementIds"
       :settings-width="settingsWidth"
       @save="handleSave"
-      @select-elements="handleSidebarElementsSelect"
-      @copy-elements="handleSidebarElementsCopy"
-      @delete-elements="handleSidebarElementsDelete"
-      @move-elements="handleSidebarElementsMove"
+      @select-elements="layer.select"
+      @copy-elements="layer.copy"
+      @delete-elements="layer.remove"
+      @move-elements="layer.move"
     />
 
     <section ref="canvasRef" class="widget-page__canvas">
@@ -22,9 +22,9 @@
         ref="widgetRef"
         :select="selectedTarget"
         :value="session.data.value"
-        @selection-change="handleSelectionUpdate"
-        @update:select="handleSelectUpdate"
-        @update:value="handleDataUpdate"
+        @selection-change="onSelectionUpdate"
+        @update:select="onSelectUpdate"
+        @update:value="onDataUpdate"
       />
     </section>
 
@@ -33,10 +33,10 @@
         v-model:value="session.data.value"
         v-model:select="selectedTarget"
         :selected-element-ids="selectedElementIds"
-        @element-command="handleSettingsElementCommand"
-        @multi-command="handleSettingsMultiCommand"
-        @multi-layout-change="handleSettingsMultiLayoutChange"
-        @multi-style-change="handleSettingsMultiStyleChange"
+        @element-command="(command) => onElementCommand({ command })"
+        @multi-command="(command) => onMultiCommand({ command })"
+        @multi-layout-change="onMultiLayoutChange"
+        @multi-style-change="onMultiStyleChange"
       />
     </BPanelSplitter>
   </main>
@@ -56,24 +56,22 @@ import { useSelection } from './hooks/useSelection';
 const widgetRef = ref<WidgetComponentRef>();
 const canvasRef = ref<HTMLElement | null>(null);
 const { session, settingsWidth, widgetPageStyle, handleSave } = usePageSession();
-const { selectedTarget, selectedElementIds, activeElementId, handleDataUpdate, handleSelectUpdate, handleSelectionUpdate } = useSelection({
+const { selectedTarget, selectedElementIds, activeElementId, onDataUpdate, onSelectUpdate, onSelectionUpdate } = useSelection({
   session,
   settingsWidth
 });
 
-useCanvasDrop({
-  canvasRef,
-  widgetRef
-});
+useCanvasDrop({ canvasRef, widgetRef });
 
-const { handleSidebarElementsSelect, handleSidebarElementsCopy, handleSidebarElementsDelete, handleSidebarElementsMove } = useLayerActions({
+// 创建侧栏图层操作处理器。
+const layer = useLayerActions({
   session,
   selectedTarget,
   selectedElementIds,
   widgetRef
 });
 
-const { handleSettingsElementCommand, handleSettingsMultiCommand, handleSettingsMultiLayoutChange, handleSettingsMultiStyleChange } = useMultiSelection({
+const { onMultiCommand, onElementCommand, onMultiLayoutChange, onMultiStyleChange } = useMultiSelection({
   session,
   selectedElementIds,
   widgetRef

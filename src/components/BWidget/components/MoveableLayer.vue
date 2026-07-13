@@ -89,7 +89,7 @@ import {
   projectClientPointToWidgetBoard,
   queryWidgetElementTarget
 } from '../utils/widgetGeometry';
-import { findWidgetElementTreeNode, flattenWidgetElementTree, type WidgetRenderTreeNode } from '../utils/widgetTree';
+import { findElementTreeNode, flattenWidgetElementTree, type WidgetRenderTreeNode } from '../utils/widgetTree';
 
 /**
  * Moveable 结束事件中的 DOM target。
@@ -269,7 +269,7 @@ function getTargetId(target?: Element): string | null {
  * @returns 业务元素
  */
 function getElementById(id: string): WidgetElement | undefined {
-  return findWidgetElementTreeNode(props.elements, id)?.element;
+  return findElementTreeNode(props.elements, id)?.element;
 }
 
 /**

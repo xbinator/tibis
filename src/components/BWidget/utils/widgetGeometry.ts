@@ -6,7 +6,7 @@ import type { WidgetElement, WidgetPoint, WidgetShapeElement, WidgetSize, Widget
 import type { WidgetRenderContext } from 'types/widget';
 import { WIDGET_MIN_ZOOM, WIDGET_VIEWBOX_SIZE } from '../constants/viewport';
 import { getWidgetElementSchema } from '../elements';
-import { findWidgetElementTreeNode, flattenWidgetElementTree, type WidgetRenderTreeNode } from './widgetTree';
+import { findElementTreeNode, flattenWidgetElementTree, type WidgetRenderTreeNode } from './widgetTree';
 
 /** Widget节点 DOM 查询选择器。 */
 const WIDGET_ELEMENT_TARGET_SELECTOR = '.b-widget-node';
@@ -289,16 +289,6 @@ export function queryWidgetElementTarget(root: ParentNode | null | undefined, id
     Array.from(root?.querySelectorAll(WIDGET_ELEMENT_TARGET_SELECTOR) ?? []).find((target: Element): boolean => widgetElementIdByTarget.get(target) === id) ??
     null
   );
-}
-
-/**
- * 通过元素 ID 查询形状元素。
- * @param elements - Widget元素列表
- * @param id - 元素 ID
- * @returns 形状元素
- */
-export function findWidgetShapeElement(elements: WidgetElement[], id: string): WidgetShapeElement | null {
-  return findWidgetElementTreeNode(elements, id)?.element ?? null;
 }
 
 /**

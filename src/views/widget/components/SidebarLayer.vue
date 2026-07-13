@@ -55,6 +55,7 @@
 </template>
 
 <script setup lang="ts">
+import type { LayerMovePayload } from '../hooks/useLayerActions';
 import type { WidgetLayerMovePosition } from '../utils/layerOrder';
 import type { CSSProperties } from 'vue';
 import { computed, ref } from 'vue';
@@ -118,7 +119,7 @@ const emit = defineEmits<{
   /** 删除一个或多个图层元素 */
   'delete-elements': [elements: WidgetElement[]];
   /** 移动一个或多个Widget图层展示项 */
-  'move-elements': [sourceElementIds: string[], targetElementIds: string[], position: WidgetLayerMovePosition];
+  'move-elements': [payload: LayerMovePayload];
 }>();
 
 /** 当前选中元素 ID 集合。 */
@@ -581,12 +582,11 @@ function handleDraggableMove(event: BDraggableMoveEvent<SidebarLayerEntry>): voi
   const targetEntry = afterParentTarget ?? insideParentTarget ?? event.targetItem;
   const targetElements = getEntryElements(targetEntry);
   const movePosition = resolveFinalLayerMovePosition(event, afterParentTarget, insideParentTarget);
-  emit(
-    'move-elements',
-    sourceElements.map((element: WidgetElement): string => element.id),
-    targetElements.map((element: WidgetElement): string => element.id),
-    movePosition
-  );
+  emit('move-elements', {
+    sourceIds: sourceElements.map((element: WidgetElement): string => element.id),
+    targetIds: targetElements.map((element: WidgetElement): string => element.id),
+    position: movePosition
+  });
 }
 </script>
 

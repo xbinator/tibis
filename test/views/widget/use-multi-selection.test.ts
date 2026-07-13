@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import type { WidgetElement } from '@/components/BWidget/types';
 import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
-import { findWidgetElementTreeNode } from '@/components/BWidget/utils/widgetTree';
+import { findElementTreeNode } from '@/components/BWidget/utils/widgetTree';
 import { mergeSelectedElementStyles, updateSelectedElementLayouts } from '@/views/widget/hooks/useMultiSelection';
 
 /**
@@ -47,10 +47,10 @@ describe('useMultiSelection', (): void => {
       height: 20
     });
 
-    expect(findWidgetElementTreeNode(nextElements, 'node-1')?.element.position).toEqual({ x: 5, y: 10 });
-    expect(findWidgetElementTreeNode(nextElements, 'node-1')?.element.size).toEqual({ width: 20, height: 20 });
-    expect(findWidgetElementTreeNode(nextElements, 'node-2')?.element.position).toEqual({ x: 10, y: 0 });
-    expect(findWidgetElementTreeNode(nextElements, 'node-2')?.element.size).toEqual({ width: 10, height: 20 });
+    expect(findElementTreeNode(nextElements, 'node-1')?.element.position).toEqual({ x: 5, y: 10 });
+    expect(findElementTreeNode(nextElements, 'node-1')?.element.size).toEqual({ width: 20, height: 20 });
+    expect(findElementTreeNode(nextElements, 'node-2')?.element.position).toEqual({ x: 10, y: 0 });
+    expect(findElementTreeNode(nextElements, 'node-2')?.element.size).toEqual({ width: 10, height: 20 });
   });
 
   it('merges style changes into selected elements only', (): void => {
@@ -61,10 +61,10 @@ describe('useMultiSelection', (): void => {
       fontSize: 16
     });
 
-    expect(findWidgetElementTreeNode(nextElements, 'node-1')?.element.style).toEqual({
+    expect(findElementTreeNode(nextElements, 'node-1')?.element.style).toEqual({
       color: '#111827',
       fontSize: 16
     });
-    expect(findWidgetElementTreeNode(nextElements, 'node-2')?.element.style).toEqual({});
+    expect(findElementTreeNode(nextElements, 'node-2')?.element.style).toEqual({});
   });
 });

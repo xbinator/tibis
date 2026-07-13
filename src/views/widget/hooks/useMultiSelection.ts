@@ -6,12 +6,7 @@ import type { WidgetMultiSelectLayoutChange } from '../types';
 import type { WidgetComponentRef } from './types';
 import type { Ref } from 'vue';
 import type { WidgetData, WidgetElement, WidgetElementStyleChange, WidgetLayerAction } from '@/components/BWidget/types';
-import {
-  flattenWidgetElementTree,
-  isSameWidgetElementParent,
-  updateWidgetElementInTree,
-  type WidgetRenderTreeNode
-} from '@/components/BWidget/utils/widgetTree';
+import { flattenWidgetElementTree, isSameParent, updateElementInTree, type WidgetRenderTreeNode } from '@/components/BWidget/utils/widgetTree';
 import type { UseFileSessionReturn } from '@/hooks/useFileSession';
 
 /**
@@ -51,17 +46,17 @@ export interface UseMultiSelectionOptions {
 }
 
 /**
- * Widget多选 hook 返回值。
+ * Widget多选 hook 返回值（扁平结构）。
  */
 export interface UseMultiSelectionReturn {
   /** 处理右侧多选快捷命令 */
-  handleSettingsMultiCommand: (command: SettingsMultiCommand) => void;
+  onMultiCommand: (payload: { command: SettingsMultiCommand }) => void;
   /** 处理右侧元素快捷命令 */
-  handleSettingsElementCommand: (command: SettingsElementCommand) => void;
+  onElementCommand: (payload: { command: SettingsElementCommand }) => void;
   /** 处理右侧多选布局变更 */
-  handleSettingsMultiLayoutChange: (layout: WidgetMultiSelectLayoutChange) => void;
+  onMultiLayoutChange: (layout: WidgetMultiSelectLayoutChange) => void;
   /** 处理右侧多选样式变更 */
-  handleSettingsMultiStyleChange: (style: WidgetElementStyleChange) => void;
+  onMultiStyleChange: (style: WidgetElementStyleChange) => void;
 }
 
 /**
@@ -173,7 +168,7 @@ export function getSelectedElementsInTree(elements: WidgetElement[], selectedIds
  * @returns 是否属于同一个直接父级
  */
 export function canEditMultiSelection(elements: WidgetElement[], selectedIds: Set<string>): boolean {
-  return selectedIds.size > 1 && isSameWidgetElementParent(elements, [...selectedIds]);
+  return selectedIds.size > 1 && isSameParent(elements, [...selectedIds]);
 }
 
 /**
@@ -202,7 +197,7 @@ export function updateSelectedElementLayouts(elements: WidgetElement[], selected
 
   return editableElements.reduce<WidgetElement[]>(
     (nextElements: WidgetElement[], element: WidgetElement): WidgetElement[] =>
-      updateWidgetElementInTree(
+      updateElementInTree(
         nextElements,
         element.id,
         (currentElement: WidgetElement): WidgetElement => transformElementByMultiSelectionBounds(currentElement, currentBounds, nextBounds)
@@ -221,7 +216,7 @@ export function updateSelectedElementLayouts(elements: WidgetElement[], selected
 export function mergeSelectedElementStyles(elements: WidgetElement[], selectedIds: Set<string>, style: WidgetElementStyleChange): WidgetElement[] {
   return getSelectedElementsInTree(elements, selectedIds).reduce<WidgetElement[]>(
     (nextElements: WidgetElement[], element: WidgetElement): WidgetElement[] =>
-      updateWidgetElementInTree(
+      updateElementInTree(
         nextElements,
         element.id,
         (currentElement: WidgetElement): WidgetElement => ({
@@ -246,9 +241,11 @@ export function useMultiSelection(options: UseMultiSelectionOptions): UseMultiSe
 
   /**
    * 处理右侧多选面板快捷操作。
-   * @param command - 快捷操作命令
+   * @param payload - 快捷操作命令参数
+   * @param payload.command - 快捷操作命令
    */
-  function handleSettingsMultiCommand(command: SettingsMultiCommand): void {
+  function handleSettingsMultiCommand(payload: { command: SettingsMultiCommand }): void {
+    const { command } = payload;
     switch (command) {
       case 'copy': {
         widgetRef.value?.copySelection();
@@ -275,9 +272,11 @@ export function useMultiSelection(options: UseMultiSelectionOptions): UseMultiSe
 
   /**
    * 处理右侧元素专属快捷操作。
-   * @param command - 快捷操作命令
+   * @param payload - 快捷操作命令参数
+   * @param payload.command - 快捷操作命令
    */
-  function handleSettingsElementCommand(command: SettingsElementCommand): void {
+  function handleSettingsElementCommand(payload: { command: SettingsElementCommand }): void {
+    const { command } = payload;
     if (command === 'ungroup') {
       widgetRef.value?.ungroupSelection();
     }
@@ -316,9 +315,9 @@ export function useMultiSelection(options: UseMultiSelectionOptions): UseMultiSe
   }
 
   return {
-    handleSettingsMultiCommand,
-    handleSettingsElementCommand,
-    handleSettingsMultiLayoutChange,
-    handleSettingsMultiStyleChange
+    onMultiCommand: handleSettingsMultiCommand,
+    onElementCommand: handleSettingsElementCommand,
+    onMultiLayoutChange: handleSettingsMultiLayoutChange,
+    onMultiStyleChange: handleSettingsMultiStyleChange
   };
 }

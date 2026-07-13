@@ -45,7 +45,7 @@
 </template>
 
 <script setup lang="ts">
-import type { WidgetLayerMovePosition } from '../utils/layerOrder';
+import type { LayerMovePayload } from '../hooks/useLayerActions';
 import type { CSSProperties } from 'vue';
 import { computed, onBeforeUnmount, ref } from 'vue';
 import type { WidgetData, WidgetElement } from '@/components/BWidget/types';
@@ -118,7 +118,7 @@ const emit = defineEmits<{
   /** 删除一个或多个侧栏图层元素 */
   'delete-elements': [elements: WidgetElement[]];
   /** 移动一个或多个侧栏图层元素 */
-  'move-elements': [sourceElementIds: string[], targetElementIds: string[], position: WidgetLayerMovePosition];
+  'move-elements': [payload: LayerMovePayload];
   /** 请求保存当前 Widget 文件（来自运行脚本编辑器 Ctrl+S） */
   save: [];
 }>();
@@ -251,8 +251,8 @@ function handleElementsDelete(elements: WidgetElement[]): void {
  * @param targetElementIds - 目标元素 ID 列表
  * @param position - 基于侧栏视觉顺序的插入位置
  */
-function handleElementsMove(sourceElementIds: string[], targetElementIds: string[], position: WidgetLayerMovePosition): void {
-  emit('move-elements', sourceElementIds, targetElementIds, position);
+function handleElementsMove(payload: LayerMovePayload): void {
+  emit('move-elements', payload);
 }
 
 onBeforeUnmount((): void => {

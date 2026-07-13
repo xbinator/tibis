@@ -406,7 +406,7 @@ describe('SidebarLayer selection', (): void => {
       nextList: []
     });
 
-    expect(wrapper.emitted('move-elements')?.[0]).toEqual([['node-3'], ['group-1'], 'inside']);
+    expect(wrapper.emitted('move-elements')?.[0]).toEqual([{ sourceIds: ['node-3'], targetIds: ['group-1'], position: 'inside' }]);
     wrapper.unmount();
   });
 
@@ -442,7 +442,7 @@ describe('SidebarLayer selection', (): void => {
       nextList: []
     });
 
-    expect(wrapper.emitted('move-elements')?.[0]).toEqual([['node-3'], ['group-1'], 'after']);
+    expect(wrapper.emitted('move-elements')?.[0]).toEqual([{ sourceIds: ['node-3'], targetIds: ['group-1'], position: 'after' }]);
     wrapper.unmount();
   });
 
@@ -477,7 +477,7 @@ describe('SidebarLayer selection', (): void => {
       nextList: []
     });
 
-    expect(wrapper.emitted('move-elements')?.[0]).toEqual([['node-3'], ['group-1'], 'inside']);
+    expect(wrapper.emitted('move-elements')?.[0]).toEqual([{ sourceIds: ['node-3'], targetIds: ['group-1'], position: 'inside' }]);
     wrapper.unmount();
   });
 
@@ -512,7 +512,7 @@ describe('SidebarLayer selection', (): void => {
       nextList: []
     });
 
-    expect(wrapper.emitted('move-elements')?.[0]).toEqual([['node-2'], ['group-1'], 'after']);
+    expect(wrapper.emitted('move-elements')?.[0]).toEqual([{ sourceIds: ['node-2'], targetIds: ['group-1'], position: 'after' }]);
     wrapper.unmount();
   });
 
@@ -547,7 +547,7 @@ describe('SidebarLayer selection', (): void => {
       nextList: []
     });
 
-    expect(wrapper.emitted('move-elements')?.[0]).toEqual([['node-3'], ['node-1'], 'after']);
+    expect(wrapper.emitted('move-elements')?.[0]).toEqual([{ sourceIds: ['node-3'], targetIds: ['node-1'], position: 'after' }]);
     wrapper.unmount();
   });
 

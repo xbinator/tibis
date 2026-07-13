@@ -105,7 +105,7 @@ export function flattenWidgetElementTree(
  * @param elementId - 目标元素 ID
  * @returns 命中节点信息，不存在时返回 null
  */
-export function findWidgetElementTreeNode(elements: WidgetElement[], elementId: string): WidgetElementTreeNode | null {
+export function findElementTreeNode(elements: WidgetElement[], elementId: string): WidgetElementTreeNode | null {
   /**
    * 递归查找当前层元素。
    * @param items - 当前层元素列表
@@ -157,7 +157,7 @@ export function normalizeWidgetElementSelection(elements: WidgetElement[], selec
       return;
     }
 
-    const node = findWidgetElementTreeNode(elements, elementId);
+    const node = findElementTreeNode(elements, elementId);
     if (!node) {
       return;
     }
@@ -181,7 +181,7 @@ export function normalizeWidgetElementSelection(elements: WidgetElement[], selec
  * @param update - 更新函数
  * @returns 更新后的元素树
  */
-export function updateWidgetElementInTree(elements: WidgetElement[], elementId: string, update: (element: WidgetElement) => WidgetElement): WidgetElement[] {
+export function updateElementInTree(elements: WidgetElement[], elementId: string, update: (element: WidgetElement) => WidgetElement): WidgetElement[] {
   return elements.map((element: WidgetElement): WidgetElement => {
     if (element.id === elementId) {
       return update(cloneDeep(element));
@@ -194,7 +194,7 @@ export function updateWidgetElementInTree(elements: WidgetElement[], elementId: 
 
     return {
       ...element,
-      children: updateWidgetElementInTree(children, elementId, update)
+      children: updateElementInTree(children, elementId, update)
     };
   });
 }
@@ -205,7 +205,7 @@ export function updateWidgetElementInTree(elements: WidgetElement[], elementId: 
  * @param elementId - 目标元素 ID
  * @returns 删除结果
  */
-export function removeWidgetElementFromTree(elements: WidgetElement[], elementId: string): WidgetTreeRemoveResult {
+export function removeElementFromTree(elements: WidgetElement[], elementId: string): WidgetTreeRemoveResult {
   let removed: WidgetElement | null = null;
 
   /**
@@ -275,7 +275,7 @@ export function removeEmptyWidgetGroups(elements: WidgetElement[]): WidgetElemen
  * @param elementId - 目标元素 ID
  * @returns 绝对坐标，不存在时返回 null
  */
-export function getWidgetElementAbsolutePosition(elements: WidgetElement[], elementId: string): WidgetPoint | null {
+export function getAbsolutePosition(elements: WidgetElement[], elementId: string): WidgetPoint | null {
   return flattenWidgetElementTree(elements).find((item: WidgetRenderTreeNode): boolean => item.element.id === elementId)?.absolutePosition ?? null;
 }
 
@@ -286,12 +286,12 @@ export function getWidgetElementAbsolutePosition(elements: WidgetElement[], elem
  * @param point - 画布绝对坐标
  * @returns 父级局部坐标，找不到父级时返回原坐标
  */
-export function getWidgetElementParentLocalPosition(elements: WidgetElement[], parentId: string | null, point: WidgetPoint): WidgetPoint {
+export function getLocalPosition(elements: WidgetElement[], parentId: string | null, point: WidgetPoint): WidgetPoint {
   if (parentId === null) {
     return { ...point };
   }
 
-  const parentPosition = getWidgetElementAbsolutePosition(elements, parentId);
+  const parentPosition = getAbsolutePosition(elements, parentId);
   if (!parentPosition) {
     return { ...point };
   }
@@ -309,12 +309,12 @@ export function getWidgetElementParentLocalPosition(elements: WidgetElement[], p
  * @param nextSiblings - 新同级元素列表
  * @returns 替换后的元素树
  */
-export function replaceWidgetElementSiblingList(elements: WidgetElement[], parentId: string | null, nextSiblings: WidgetElement[]): WidgetElement[] {
+export function replaceSiblingList(elements: WidgetElement[], parentId: string | null, nextSiblings: WidgetElement[]): WidgetElement[] {
   if (parentId === null) {
     return cloneDeep(nextSiblings);
   }
 
-  return updateWidgetElementInTree(
+  return updateElementInTree(
     elements,
     parentId,
     (element: WidgetElement): WidgetElement => ({
@@ -330,12 +330,12 @@ export function replaceWidgetElementSiblingList(elements: WidgetElement[], paren
  * @param elementIds - 目标元素 ID 列表
  * @returns 是否同属一个直接父级
  */
-export function isSameWidgetElementParent(elements: WidgetElement[], elementIds: string[]): boolean {
+export function isSameParent(elements: WidgetElement[], elementIds: string[]): boolean {
   if (elementIds.length === 0) {
     return false;
   }
 
-  const parentIds = elementIds.map((elementId: string): string | null | undefined => findWidgetElementTreeNode(elements, elementId)?.parentId);
+  const parentIds = elementIds.map((elementId: string): string | null | undefined => findElementTreeNode(elements, elementId)?.parentId);
   if (parentIds.some((parentId: string | null | undefined): boolean => parentId === undefined)) {
     return false;
   }

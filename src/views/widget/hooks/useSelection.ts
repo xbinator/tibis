@@ -5,7 +5,7 @@
 import type { ComputedRef, Ref } from 'vue';
 import { computed, ref, watch } from 'vue';
 import type { WidgetData, WidgetElement, WidgetSelectTarget } from '@/components/BWidget/types';
-import { findWidgetElementTreeNode } from '@/components/BWidget/utils/widgetTree';
+import { findElementTreeNode } from '@/components/BWidget/utils/widgetTree';
 import type { UseFileSessionReturn } from '@/hooks/useFileSession';
 
 /**
@@ -19,7 +19,31 @@ export interface UseSelectionOptions {
 }
 
 /**
- * Widget选区 hook 返回值。
+ * Widget选区状态命名空间。
+ */
+export interface SelectionState {
+  /** 当前右侧设置栏可编辑目标 */
+  selectedTarget: Ref<WidgetSelectTarget>;
+  /** 当前侧栏需要高亮的元素 ID 列表 */
+  selectedElementIds: Ref<string[]>;
+  /** 当前侧栏需要额外高亮的组合子元素 ID */
+  activeElementId: ComputedRef<string | null>;
+}
+
+/**
+ * Widget选区操作命名空间。
+ */
+export interface SelectionHandlers {
+  /** 处理Widget数据(value)回写，同步最新文档状态 */
+  handleDataUpdate: (data: WidgetData) => void;
+  /** 处理Widget内部编辑目标(target)更新 */
+  handleSelectUpdate: (target: WidgetSelectTarget) => void;
+  /** 处理Widget内部选区(selection)同步 */
+  handleSelectionUpdate: (selection: string[]) => void;
+}
+
+/**
+ * Widget选区 hook 返回值（扁平结构）。
  */
 export interface UseSelectionReturn {
   /** 当前右侧设置栏可编辑目标 */
@@ -29,11 +53,11 @@ export interface UseSelectionReturn {
   /** 当前侧栏需要额外高亮的组合子元素 ID */
   activeElementId: ComputedRef<string | null>;
   /** 处理Widget数据(value)回写，同步最新文档状态 */
-  handleDataUpdate: (data: WidgetData) => void;
+  onDataUpdate: (data: WidgetData) => void;
   /** 处理Widget内部编辑目标(target)更新 */
-  handleSelectUpdate: (target: WidgetSelectTarget) => void;
+  onSelectUpdate: (target: WidgetSelectTarget) => void;
   /** 处理Widget内部选区(selection)同步 */
-  handleSelectionUpdate: (selection: string[]) => void;
+  onSelectionUpdate: (selection: string[]) => void;
 }
 
 /**
@@ -59,7 +83,7 @@ export function useSelection(options: UseSelectionOptions): UseSelectionReturn {
       return null;
     }
 
-    return findWidgetElementTreeNode(session.data.value.elements, selectedTarget.value.id)?.parentId ? selectedTarget.value.id : null;
+    return findElementTreeNode(session.data.value.elements, selectedTarget.value.id)?.parentId ? selectedTarget.value.id : null;
   });
 
   /**
@@ -85,7 +109,7 @@ export function useSelection(options: UseSelectionOptions): UseSelectionReturn {
       return;
     }
 
-    const nextElement = findWidgetElementTreeNode(session.data.value.elements, selectedTarget.value.id)?.element;
+    const nextElement = findElementTreeNode(session.data.value.elements, selectedTarget.value.id)?.element;
     selectedTarget.value = nextElement ?? session.data.value.metadata;
   }
 
@@ -104,7 +128,7 @@ export function useSelection(options: UseSelectionOptions): UseSelectionReturn {
     }
 
     const selectedId = selection[0];
-    const selectedElement = selectedId ? findWidgetElementTreeNode(session.data.value.elements, selectedId)?.element : null;
+    const selectedElement = selectedId ? findElementTreeNode(session.data.value.elements, selectedId)?.element : null;
     if (selectedElement) {
       selectedTarget.value = selectedElement;
     }
@@ -161,8 +185,8 @@ export function useSelection(options: UseSelectionOptions): UseSelectionReturn {
     selectedTarget,
     selectedElementIds,
     activeElementId,
-    handleDataUpdate,
-    handleSelectUpdate,
-    handleSelectionUpdate
+    onDataUpdate: handleDataUpdate,
+    onSelectUpdate: handleSelectUpdate,
+    onSelectionUpdate: handleSelectionUpdate
   };
 }
