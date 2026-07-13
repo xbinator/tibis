@@ -335,6 +335,31 @@ import { debounce } from 'lodash-es'
 - 使用有意义的变量和函数命名
 - **所有函数、接口、复杂逻辑必须添加注释**，具体格式见[注释规范](#注释规范)
 
+### 函数命名规范
+- **函数名不超过 4 个单词**，通过精简修饰词（如去掉冗余的 `Widget` 前缀）控制在 4 词以内
+- ❌ **禁止**: 超过 4 个单词的长函数名
+- ✅ **推荐**: 使用简洁的动词 + 名词组合
+
+**错误示例**:
+```typescript
+// ❌ 6 个单词，过多
+function getWidgetElementParentLocalPosition() {}
+
+// ❌ 5 个单词
+function findWidgetElementTreeNode() {}
+function isSameWidgetElementParent() {}
+```
+
+**正确示例**:
+```typescript
+// ✅ 3 个单词
+function getLocalPosition() {}
+
+// ✅ 4 个单词
+function findElementTreeNode() {}
+function isSameParent() {}
+```
+
 ## Changelog 日志规范
 
 ### 改动记录要求
