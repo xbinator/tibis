@@ -27,13 +27,13 @@ export interface UseSelectionReturn {
   /** 当前侧栏需要高亮的元素 ID 列表 */
   selectedElementIds: Ref<string[]>;
   /** 当前侧栏需要额外高亮的组合子元素 ID */
-  activeSidebarElementId: ComputedRef<string | null>;
-  /** 处理Widget内部数据更新 */
-  handleWidgetDataUpdate: (data: WidgetData) => void;
-  /** 处理Widget内部设置目标更新 */
-  handleWidgetSelectUpdate: (target: WidgetSelectTarget) => void;
-  /** 处理Widget内部选区同步 */
-  handleWidgetSelectionChange: (selection: string[]) => void;
+  activeElementId: ComputedRef<string | null>;
+  /** 处理Widget数据(value)回写，同步最新文档状态 */
+  handleDataUpdate: (data: WidgetData) => void;
+  /** 处理Widget内部编辑目标(target)更新 */
+  handleSelectUpdate: (target: WidgetSelectTarget) => void;
+  /** 处理Widget内部选区(selection)同步 */
+  handleSelectionUpdate: (selection: string[]) => void;
 }
 
 /**
@@ -54,7 +54,7 @@ export function useSelection(options: UseSelectionOptions): UseSelectionReturn {
   const { session, settingsWidth } = options;
   const selectedTarget = ref<WidgetSelectTarget>(session.data.value.metadata);
   const selectedElementIds = ref<string[]>([]);
-  const activeSidebarElementId = computed<string | null>(() => {
+  const activeElementId = computed<string | null>(() => {
     if (!isWidgetElementTarget(selectedTarget.value)) {
       return null;
     }
@@ -115,26 +115,26 @@ export function useSelection(options: UseSelectionOptions): UseSelectionReturn {
    * @param target - Widget回传的设置目标
    * @returns 是否应忽略本次目标更新
    */
-  function shouldIgnoreWidgetSelectUpdate(target: WidgetSelectTarget): boolean {
+  function shouldIgnoreSelectUpdate(target: WidgetSelectTarget): boolean {
     return selectedElementIds.value.length > 0 && target !== null && !isWidgetElementTarget(target);
   }
 
   /**
-   * 处理Widget内部数据更新。
-   * @param data - 最新Widget数据
+   * 处理Widget数据(value)回写，并同步设置目标与选区状态。
+   * @param data - 最新Widget文档数据
    */
-  function handleWidgetDataUpdate(data: WidgetData): void {
+  function handleDataUpdate(data: WidgetData): void {
     session.data.value = data;
     syncSelectedTargetFromElementTree();
     syncSelectedTargetFromSelection(selectedElementIds.value);
   }
 
   /**
-   * 处理Widget内部设置目标更新。
-   * @param target - 最新设置目标
+   * 处理Widget编辑目标(target)更新，写入设置面板当前编辑对象。
+   * @param target - 最新编辑目标（页面配置或某个元素）
    */
-  function handleWidgetSelectUpdate(target: WidgetSelectTarget): void {
-    if (shouldIgnoreWidgetSelectUpdate(target)) {
+  function handleSelectUpdate(target: WidgetSelectTarget): void {
+    if (shouldIgnoreSelectUpdate(target)) {
       return;
     }
 
@@ -142,10 +142,10 @@ export function useSelection(options: UseSelectionOptions): UseSelectionReturn {
   }
 
   /**
-   * 处理Widget内部选区同步。
-   * @param selection - 当前Widget选区 ID 列表
+   * 处理Widget选区(selection)变更，同步选中元素列表与编辑目标。
+   * @param selection - 当前Widget选区元素 ID 列表
    */
-  function handleWidgetSelectionChange(selection: string[]): void {
+  function handleSelectionUpdate(selection: string[]): void {
     selectedElementIds.value = [...selection];
     syncSelectedTargetFromSelection(selection);
 
@@ -160,9 +160,9 @@ export function useSelection(options: UseSelectionOptions): UseSelectionReturn {
   return {
     selectedTarget,
     selectedElementIds,
-    activeSidebarElementId,
-    handleWidgetDataUpdate,
-    handleWidgetSelectUpdate,
-    handleWidgetSelectionChange
+    activeElementId,
+    handleDataUpdate,
+    handleSelectUpdate,
+    handleSelectionUpdate
   };
 }

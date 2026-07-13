@@ -6,7 +6,7 @@
   <main class="widget-page" tabindex="0" :style="widgetPageStyle" @blur="session.actions.onBlur">
     <PanelSidebar
       v-model:value="session.data.value"
-      :active-element-id="activeSidebarElementId"
+      :active-element-id="activeElementId"
       :elements="session.data.value.elements"
       :selected-element-ids="selectedElementIds"
       :settings-width="settingsWidth"
@@ -22,9 +22,9 @@
         ref="widgetRef"
         :select="selectedTarget"
         :value="session.data.value"
-        @selection-change="handleWidgetSelectionChange"
-        @update:select="handleWidgetSelectUpdate"
-        @update:value="handleWidgetDataUpdate"
+        @selection-change="handleSelectionUpdate"
+        @update:select="handleSelectUpdate"
+        @update:value="handleDataUpdate"
       />
     </section>
 
@@ -56,11 +56,10 @@ import { useSelection } from './hooks/useSelection';
 const widgetRef = ref<WidgetComponentRef>();
 const canvasRef = ref<HTMLElement | null>(null);
 const { session, settingsWidth, widgetPageStyle, handleSave } = usePageSession();
-const { selectedTarget, selectedElementIds, activeSidebarElementId, handleWidgetDataUpdate, handleWidgetSelectUpdate, handleWidgetSelectionChange } =
-  useSelection({
-    session,
-    settingsWidth
-  });
+const { selectedTarget, selectedElementIds, activeElementId, handleDataUpdate, handleSelectUpdate, handleSelectionUpdate } = useSelection({
+  session,
+  settingsWidth
+});
 
 useCanvasDrop({
   canvasRef,
