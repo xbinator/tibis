@@ -4,7 +4,7 @@
  */
 import type { SaveToDiskResult } from './useSavePolicy';
 import type { Ref } from 'vue';
-import { computed, nextTick, onScopeDispose, ref, watch } from 'vue';
+import { computed, nextTick, onScopeDispose, readonly, ref, watch } from 'vue';
 import { useClipboard } from '@/hooks/useClipboard';
 import { native } from '@/shared/platform';
 import type { File, FileChangeEvent } from '@/shared/platform/native/types';
@@ -62,6 +62,8 @@ export interface UseFileSessionReturn<TData> {
   fileState: Ref<FileSessionState>;
   /** 当前业务数据 */
   data: Ref<TData>;
+  /** 最近一次实际保存成功的文件内容 */
+  savedContent: Readonly<Ref<string>>;
   /** 当前文件标题 */
   currentTitle: Ref<string>;
   /** 文件操作 */
@@ -154,6 +156,7 @@ export function useFileSession<TData>(options: UseFileSessionOptions<TData>): Us
   const autoSave = useFileAutoSave(fileState, { recordType: options.recordType });
   const currentTitle = computed<string>(() => resolveFileTitle(fileState.value));
   let registeredWatchPath: string | null = null;
+  let saveDialogPromise: Promise<boolean> | null = null;
 
   /**
    * 读取当前会话应写入的最近记录类型。
@@ -249,17 +252,22 @@ export function useFileSession<TData>(options: UseFileSessionOptions<TData>): Us
   }
 
   /**
-   * 标记当前内容已保存。
+   * 将实际写盘内容设为保存基线，并保留写盘期间产生的新修改。
+   * @param content - 本次实际写盘的内容快照
    * @param savedAt - 保存时间
    */
-  async function markCurrentContentSaved(savedAt = Date.now()): Promise<void> {
-    savedContent.value = fileState.value.content;
-    tabsStore.clearDirty(options.fileId.value);
+  async function markCurrentContentSaved(content: string, savedAt = Date.now()): Promise<void> {
+    savedContent.value = content;
+    if (fileState.value.content === content) {
+      tabsStore.clearDirty(options.fileId.value);
+    } else {
+      tabsStore.setDirty(options.fileId.value);
+    }
     tabsStore.clearMissing(options.fileId.value);
     await filesStore.updateFile(options.fileId.value, {
       ...fileState.value,
       type: readRecordType(),
-      savedContent: fileState.value.content,
+      savedContent: content,
       savedAt
     });
   }
@@ -279,8 +287,9 @@ export function useFileSession<TData>(options: UseFileSessionOptions<TData>): Us
     }
 
     try {
-      await native.writeFile(filePath, fileState.value.content);
-      await markCurrentContentSaved();
+      const contentToSave = fileState.value.content;
+      await native.writeFile(filePath, contentToSave);
+      await markCurrentContentSaved(contentToSave);
       return { status: 'saved' };
     } catch (error: unknown) {
       return { status: 'failed', error: error instanceof Error ? error : new Error('save to disk failed') };
@@ -291,14 +300,15 @@ export function useFileSession<TData>(options: UseFileSessionOptions<TData>): Us
    * 通过保存对话框保存文件。
    * @returns 是否保存成功
    */
-  async function saveWithDialog(): Promise<boolean> {
+  async function performSaveWithDialog(): Promise<boolean> {
     if (serializationError.value) {
       return false;
     }
 
+    const contentToSave = fileState.value.content;
     const defaultPath = fileState.value.path || getDefaultSavePath(fileState.value);
     const saveOptions = { defaultPath };
-    const savedPath = await native.saveFile(fileState.value.content, undefined, saveOptions);
+    const savedPath = await native.saveFile(contentToSave, undefined, saveOptions);
     if (!savedPath) {
       return false;
     }
@@ -310,8 +320,23 @@ export function useFileSession<TData>(options: UseFileSessionOptions<TData>): Us
       name: name || fileState.value.name,
       ext: ext || fileState.value.ext
     };
-    await markCurrentContentSaved();
+    await markCurrentContentSaved(contentToSave);
     return true;
+  }
+
+  /**
+   * 通过单事务锁执行保存对话框，避免并发调用使用同一原生结果发布不同内容快照。
+   * @returns 是否保存成功
+   */
+  function saveWithDialog(): Promise<boolean> {
+    if (saveDialogPromise) {
+      return saveDialogPromise;
+    }
+
+    saveDialogPromise = performSaveWithDialog().finally((): void => {
+      saveDialogPromise = null;
+    });
+    return saveDialogPromise;
   }
 
   /**
@@ -391,7 +416,7 @@ export function useFileSession<TData>(options: UseFileSessionOptions<TData>): Us
     }
 
     const content = await readChangedContent(event);
-    if (content === null || content === fileState.value.content) {
+    if (content === null || content === savedContent.value) {
       return;
     }
 
@@ -554,6 +579,7 @@ export function useFileSession<TData>(options: UseFileSessionOptions<TData>): Us
   return {
     fileState,
     data,
+    savedContent: readonly(savedContent),
     currentTitle,
     actions: {
       onSave,

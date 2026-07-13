@@ -202,6 +202,65 @@ describe('useFileSession', (): void => {
     );
   });
 
+  it('keeps edits made during disk writing dirty and exposes the written content as the saved baseline', async (): Promise<void> => {
+    const initialData = { ...createWidgetData(), name: '初始名称' };
+    const writtenData = { ...createWidgetData(), name: '写盘名称' };
+    const pendingData = { ...createWidgetData(), name: '后续名称' };
+    const initialContent = JSON.stringify(initialData, null, 2);
+    const writtenContent = JSON.stringify(writtenData, null, 2);
+    const pendingContent = JSON.stringify(pendingData, null, 2);
+    let resolveWrite: (() => void) | null = null;
+
+    getFileByIdMock.mockResolvedValue({
+      type: 'widget',
+      id: 'widget-1',
+      path: '/tmp/widget.json',
+      name: 'board',
+      ext: 'json',
+      content: initialContent,
+      savedContent: initialContent
+    });
+    writeFileMock.mockImplementation(
+      (): Promise<void> =>
+        new Promise<void>((resolve) => {
+          resolveWrite = resolve;
+        })
+    );
+    const scope = effectScope();
+
+    await scope.run(async (): Promise<void> => {
+      const session = useFileSession<WidgetData>({
+        fileId: ref('widget-1'),
+        kind: 'widget',
+        recordType: 'widget',
+        defaultName: 'Untitled',
+        defaultExt: 'json',
+        defaultData: createWidgetData(),
+        routeName: 'widget',
+        fallbackRouteName: 'editor'
+      });
+
+      await flushPromises();
+      session.data.value = writtenData;
+      await nextTick();
+      clearDirtyMock.mockClear();
+      setDirtyMock.mockClear();
+
+      const savePromise = session.actions.onSave();
+      session.data.value = pendingData;
+      await nextTick();
+      resolveWrite?.();
+      await savePromise;
+
+      expect(writeFileMock).toHaveBeenCalledWith('/tmp/widget.json', writtenContent);
+      expect(session.savedContent.value).toBe(writtenContent);
+      expect(session.fileState.value.content).toBe(pendingContent);
+      expect(setDirtyMock).toHaveBeenCalledWith('widget-1');
+      expect(clearDirtyMock).not.toHaveBeenCalled();
+    });
+    scope.stop();
+  });
+
   it('does not mark stored widget JSON content dirty while loading', async (): Promise<void> => {
     const content = JSON.stringify(createWidgetData(), null, 2);
     getFileByIdMock.mockResolvedValue({
@@ -338,6 +397,62 @@ describe('useFileSession', (): void => {
     expect(saveFileMock.mock.calls[0]?.[2]).not.toHaveProperty('filters');
   });
 
+  it('reuses the pending save dialog transaction without publishing a later snapshot', async (): Promise<void> => {
+    const initialData = { ...createWidgetData(), name: '初始名称' };
+    const writtenData = { ...createWidgetData(), name: '写盘名称' };
+    const pendingData = { ...createWidgetData(), name: '后续名称' };
+    const initialContent = JSON.stringify(initialData, null, 2);
+    const writtenContent = JSON.stringify(writtenData, null, 2);
+    const pendingContent = JSON.stringify(pendingData, null, 2);
+    let resolveDialog: ((path: string | null) => void) | null = null;
+    const dialogPromise = new Promise<string | null>((resolve) => {
+      resolveDialog = resolve;
+    });
+
+    getFileByIdMock.mockResolvedValue({
+      type: 'widget',
+      id: 'widget-1',
+      path: null,
+      name: 'board',
+      ext: 'json',
+      content: initialContent,
+      savedContent: initialContent
+    });
+    saveFileMock.mockReturnValue(dialogPromise);
+    const scope = effectScope();
+
+    await scope.run(async (): Promise<void> => {
+      const session = useFileSession<WidgetData>({
+        fileId: ref('widget-1'),
+        kind: 'widget',
+        recordType: 'widget',
+        defaultName: 'Untitled',
+        defaultExt: 'json',
+        defaultData: createWidgetData(),
+        routeName: 'widget',
+        fallbackRouteName: 'editor'
+      });
+
+      await flushPromises();
+      session.data.value = writtenData;
+      await nextTick();
+
+      const firstSave = session.actions.onSaveAs();
+      session.data.value = pendingData;
+      await nextTick();
+      const secondSave = session.actions.onSaveAs();
+      resolveDialog?.('/tmp/widget.json');
+      await Promise.all([firstSave, secondSave]);
+
+      expect(saveFileMock).toHaveBeenCalledTimes(1);
+      expect(saveFileMock).toHaveBeenCalledWith(writtenContent, undefined, expect.any(Object));
+      expect(session.savedContent.value).toBe(writtenContent);
+      expect(session.fileState.value.content).toBe(pendingContent);
+      expect(setDirtyMock).toHaveBeenCalledWith('widget-1');
+    });
+    scope.stop();
+  });
+
   it('syncs text mode data changes into file content', async (): Promise<void> => {
     getFileByIdMock.mockResolvedValue(undefined);
     addFileMock.mockResolvedValue(undefined);
@@ -449,6 +564,56 @@ describe('useFileSession', (): void => {
       })
     );
     expect(routerPushMock).not.toHaveBeenCalled();
+  });
+
+  it('marks a matching local draft saved when the same content is written externally', async (): Promise<void> => {
+    const initialContent = JSON.stringify({ ...createWidgetData(), name: '初始名称' }, null, 2);
+    const draftData = { ...createWidgetData(), name: '外部保存名称' };
+    const draftContent = JSON.stringify(draftData, null, 2);
+    let fileChangedHandler: ((event: FileChangeEvent) => void) | null = null;
+    onFileChangedMock.mockImplementation((handler: (event: FileChangeEvent) => void): (() => void) => {
+      fileChangedHandler = handler;
+      return vi.fn();
+    });
+    getFileByIdMock.mockResolvedValue({
+      type: 'widget',
+      id: 'widget-1',
+      path: '/tmp/widget.json',
+      name: 'board',
+      ext: 'json',
+      content: initialContent,
+      savedContent: initialContent
+    });
+    const scope = effectScope();
+
+    await scope.run(async (): Promise<void> => {
+      const session = useFileSession<WidgetData>({
+        fileId: ref('widget-1'),
+        kind: 'widget',
+        recordType: 'widget',
+        defaultName: 'Untitled',
+        defaultExt: 'json',
+        defaultData: createWidgetData(),
+        routeName: 'widget',
+        fallbackRouteName: 'editor'
+      });
+
+      await flushPromises();
+      session.data.value = draftData;
+      await nextTick();
+      clearDirtyMock.mockClear();
+
+      fileChangedHandler?.({
+        type: 'change',
+        filePath: '/tmp/widget.json',
+        content: draftContent
+      });
+      await flushPromises();
+
+      expect(session.savedContent.value).toBe(draftContent);
+      expect(clearDirtyMock).toHaveBeenCalledWith('widget-1');
+    });
+    scope.stop();
   });
 
   it('does not write disk when widget serialization fails', async (): Promise<void> => {
