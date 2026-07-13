@@ -88,8 +88,8 @@ vi.mock('@/shared/platform', () => ({
   }
 }));
 
-vi.mock('@/views/webview/shared/hooks/useWebviewTabTitle', () => ({
-  useWebviewTabTitle: vi.fn()
+vi.mock('@/views/webview/shared/hooks/useTabTitle', () => ({
+  useTabTitle: vi.fn()
 }));
 
 vi.mock('@/views/webview/web/hooks/useScreenshot.ts', () => ({

@@ -443,7 +443,7 @@ git mv src/stores/tabs.ts src/stores/workspace/tabs.ts
 - `src/layouts/default/components/HeaderTabs.vue`
 - `src/layouts/default/hooks/useTabDragger.ts`
 - `src/layouts/default/hooks/useViewActive.ts`
-- `src/views/webview/shared/hooks/useWebviewTabTitle.ts`
+- `src/views/webview/shared/hooks/useTabTitle.ts`
 - `src/hooks/useOpenFile.ts`
 - `test/layouts/default/HeaderTabs.test.ts`
 - `test/stores/tabs.test.ts`

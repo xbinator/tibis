@@ -62,7 +62,7 @@ import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
 import { native } from '@/shared/platform';
 import { useRecentStore } from '@/stores/workspace/recent';
 import { resolveRuntimeThemeColors } from '@/theme';
-import { useWebviewTabTitle } from '@/views/webview/shared/hooks/useWebviewTabTitle';
+import { useTabTitle } from '@/views/webview/shared/hooks/useTabTitle';
 import type { WebviewElementSelection } from '@/views/webview/shared/types';
 import { normalizeWebviewUrl } from '@/views/webview/shared/utils/url';
 import AddressBar from './components/AddressBar.vue';
@@ -365,7 +365,7 @@ function ensureWebviewElement(): WebviewTag {
 
 ensureWebviewElement();
 
-useWebviewTabTitle({
+useTabTitle({
   routeFullPath,
   title: computed(() => webview.state.value.title)
 });

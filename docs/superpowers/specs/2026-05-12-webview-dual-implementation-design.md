@@ -42,7 +42,7 @@ src/views/webview/
 │   ├── components/
 │   │   └── AddressBar.vue
 │   ├── hooks/
-│   │   └── useWebviewTabTitle.ts
+│   │   └── useTabTitle.ts
 │   ├── types.ts
 │   └── utils/
 │       └── url.ts
@@ -112,7 +112,7 @@ interface WebviewPageState {
 - 标签页标题同步：监听状态中的 `title`，统一更新 `tabsStore`。
 - 加载条展示：只依赖 `isLoading` 和 `loadProgress`。
 
-`useWebviewTabTitle.ts` 的职责也需要明确：
+`useTabTitle.ts` 的职责也需要明确：
 
 - 当页面状态中的 `title` 变更时，更新当前 tab 标题。
 - keep-alive 的 `onDeactivated` 不清理标题，当前标题应保留给已缓存页面。

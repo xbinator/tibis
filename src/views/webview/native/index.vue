@@ -38,7 +38,7 @@ import { useRoute } from 'vue-router';
 import { useResizeObserver } from '@vueuse/core';
 import { native } from '@/shared/platform';
 import { hashString } from '@/shared/utils/hash';
-import { useWebviewTabTitle } from '@/views/webview/shared/hooks/useWebviewTabTitle';
+import { useTabTitle } from '@/views/webview/shared/hooks/useTabTitle';
 import { normalizeWebviewUrl } from '@/views/webview/shared/utils/url';
 import AddressBar from './components/AddressBar.vue';
 import { useNativeWebView } from './hooks/useNativeWebView';
@@ -95,7 +95,7 @@ async function handleSubmitUrl(value: string): Promise<void> {
 }
 
 useResizeObserver(webviewShellRef, updateBounds);
-useWebviewTabTitle({
+useTabTitle({
   routeFullPath: route.fullPath,
   title: computed(() => webview.state.value.title)
 });
