@@ -219,9 +219,9 @@ function createWeatherWidgetData(): WidgetData {
 function createWeatherRenderContext(): WidgetRenderContext {
   return {
     input: {
-        city: '上海'
-      },
-      output: undefined,
+      city: '上海'
+    },
+    output: undefined,
     data: {
       weather: {
         temperature: 28
@@ -483,10 +483,10 @@ describe('MessageBubble', (): void => {
         }
       },
       renderContext: {
-                input: {
+        input: {
           city: '上海'
         },
-          output: undefined,
+        output: undefined,
         data: {}
       }
     };
@@ -506,10 +506,10 @@ describe('MessageBubble', (): void => {
       createRuntimeChange(widgetPart, {
         reason: 'mount',
         renderContext: {
-                    input: {
+          input: {
             city: '上海'
           },
-            output: undefined,
+          output: undefined,
           isMounted: true,
           data: {
             weather: {
@@ -562,10 +562,10 @@ describe('MessageBubble', (): void => {
         }
       },
       renderContext: {
-                input: {
+        input: {
           city: '杭州'
         },
-          output: undefined,
+        output: undefined,
         data: {}
       }
     };
@@ -585,10 +585,10 @@ describe('MessageBubble', (): void => {
       createRuntimeChange(widgetPart, {
         reason: 'mount',
         renderContext: {
-                    input: {
+          input: {
             city: '杭州'
           },
-            output: undefined,
+          output: undefined,
           data: {
             weather: {
               temperature: 32
@@ -632,10 +632,10 @@ describe('MessageBubble', (): void => {
       createRuntimeChange(widgetPart, {
         reason: 'interaction',
         renderContext: {
-                    input: {
+          input: {
             city: '上海'
           },
-            output: undefined,
+          output: undefined,
           data: {
             weather: {
               temperature: 28
@@ -699,10 +699,10 @@ describe('MessageBubble', (): void => {
       createRuntimeChange(widgetPart, {
         reason: 'interaction',
         renderContext: {
-                    input: {
+          input: {
             city: '上海'
           },
-            output: undefined,
+          output: undefined,
           data: {
             weather: {
               temperature: 28
@@ -754,9 +754,9 @@ describe('MessageBubble', (): void => {
       ...staleWidgetPart,
       renderContext: {
         input: {
-            city: '上海'
-          },
-          output: undefined,
+          city: '上海'
+        },
+        output: undefined,
         data: {
           weather: {
             temperature: 35
@@ -790,10 +790,10 @@ describe('MessageBubble', (): void => {
       createRuntimeChange(latestWidgetPart, {
         reason: 'interaction',
         renderContext: {
-                    input: {
+          input: {
             city: '上海'
           },
-            output: undefined,
+          output: undefined,
           data: {
             weather: {
               temperature: 35
@@ -827,10 +827,10 @@ describe('MessageBubble', (): void => {
       widgetId: 'coffee',
       value: createWeatherWidgetData(),
       renderContext: {
-                input: {
+        input: {
           city: '上海'
         },
-          output: undefined,
+        output: undefined,
         data: {}
       }
     };
@@ -858,10 +858,10 @@ describe('MessageBubble', (): void => {
       createRuntimeChange(widgetPart, {
         reason: 'mount',
         renderContext: {
-                    input: {
+          input: {
             city: '上海'
           },
-            output: undefined,
+          output: undefined,
           data: {
             weather: {
               temperature: 33
@@ -1014,7 +1014,7 @@ describe('MessageBubble', (): void => {
       ...staleWidgetPart,
       renderContext: {
         input: {},
-          output: undefined,
+        output: undefined,
         data: {
           order: {
             message: '确认最新订单'
@@ -1090,6 +1090,34 @@ describe('MessageBubble', (): void => {
       ],
       otherText: ''
     });
+  });
+
+  it('locks question actions while the answer submission is in flight', async (): Promise<void> => {
+    let resolveSubmission: (() => void) | undefined;
+    const submission = new Promise<void>((resolve) => {
+      resolveSubmission = resolve;
+    });
+    const submitAction = vi.fn(() => submission);
+    const wrapper = mountMessageBubble(
+      createAssistantMessage({
+        content: '',
+        parts: [createQuestionToolPart()]
+      }),
+      submitAction
+    );
+
+    await wrapper.get('.choice-card__option-btn').trigger('click');
+    await wrapper.get('.choice-card__footer-right .b-button-stub:last-child').trigger('click');
+    const submitButton = wrapper.get('.choice-card__footer-right .b-button-stub:last-child');
+    await submitButton.trigger('click');
+    await nextTick();
+
+    expect(submitButton.attributes('disabled')).toBeDefined();
+    await submitButton.trigger('click');
+    expect(submitAction).toHaveBeenCalledTimes(1);
+
+    resolveSubmission?.();
+    await flushPromises();
   });
 
   it('renders open_widget tool parts with widget runtime items', (): void => {
@@ -1253,10 +1281,10 @@ describe('MessageBubble', (): void => {
         {
           reason: 'mount',
           renderContext: {
-                        input: {
+            input: {
               city: '上海'
             },
-              output: undefined,
+            output: undefined,
             data: {
               weather: {
                 temperature: 29

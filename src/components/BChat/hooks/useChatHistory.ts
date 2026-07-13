@@ -6,6 +6,16 @@ import type { Message } from '../utils/types';
 import type { ChatMessageHistoryCursor } from 'types/chat';
 import { ref } from 'vue';
 import { useChatSessionStore } from '@/stores/chat/session';
+import { userChoice } from '../utils/messageHelper';
+
+/**
+ * 归一化从持久化层读取的消息状态。
+ * @param loadedMessages - 持久化消息
+ * @returns 可直接展示的消息
+ */
+function normalizeLoadedMessages(loadedMessages: Message[]): Message[] {
+  return loadedMessages.map(userChoice.normalizePendingState);
+}
 
 /**
  * 聊天历史加载 hook
@@ -36,7 +46,7 @@ export function useChatHistory() {
    * @param loadedMessages - 已加载消息
    */
   function setLoadedMessages(loadedMessages: Message[]): void {
-    messages.value = loadedMessages;
+    messages.value = normalizeLoadedMessages(loadedMessages);
     hasMoreHistory.value = loadedMessages.length > 0;
   }
 
@@ -82,7 +92,7 @@ export function useChatHistory() {
       hasMoreHistory.value = historyMessages.length > 0;
       if (!historyMessages.length) return;
 
-      messages.value = [...historyMessages, ...messages.value];
+      messages.value = [...normalizeLoadedMessages(historyMessages), ...messages.value];
     } finally {
       historyLoading.value = false;
     }

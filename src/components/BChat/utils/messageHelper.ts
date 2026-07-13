@@ -19,6 +19,7 @@ import type { ChatMessageCompactionPart } from 'types/chat-runtime';
 import type { WidgetDisplayPayload } from 'types/widget';
 import dayjs from 'dayjs';
 import { nanoid } from 'nanoid';
+import { isPendingUserChoicePart } from '@/ai/chat/policies/pendingInteraction';
 import { OPEN_WIDGET_TOOL_NAME } from '@/ai/tools/builtin/WidgetTool';
 import { isWidgetDisplayPayload } from '@/shared/widget/protocol';
 import { asyncTo } from '@/utils/asyncTo';
@@ -97,7 +98,6 @@ type LatestCompressionBoundary =
     };
 
 /** 兼容历史消息与新工具实现的用户提问工具名称。 */
-const ASK_USER_QUESTION_TOOL_NAMES = new Set(['ask_user_choice', 'ask_user_question', 'question']);
 /** 旧压缩记忆召回的最大数量。 */
 const MAX_RECALLED_COMPRESSION_MEMORY_COUNT = 2;
 /** Shell 命令实时输出最多保留片段数量。 */
@@ -393,10 +393,21 @@ export const create = {
 // ─── find / submit —— 用户选择题流程 ─────────────────────────────────────────
 
 export function isAwaitingUserChoiceResult(part: ChatMessagePart): part is ChatMessageToolPart & { result: AIToolExecutionAwaitingUserInputResult } {
-  return part.type === 'tool' && ASK_USER_QUESTION_TOOL_NAMES.has(part.toolName) && part.result?.status === 'awaiting_user_input';
+  return isPendingUserChoicePart(part);
 }
 
 export const userChoice = {
+  /**
+   * 将等待用户选择的消息归一化为未完成的 loading 状态。
+   * @param sourceMessage - 待归一化消息
+   * @returns 状态一致的消息
+   */
+  normalizePendingState(sourceMessage: Message): Message {
+    if (!sourceMessage.parts.some(isAwaitingUserChoiceResult)) return sourceMessage;
+    if (sourceMessage.loading === true && sourceMessage.finished === false) return sourceMessage;
+    return { ...sourceMessage, loading: true, finished: false };
+  },
+
   /**
    * 将最后一个等待用户输入的问题标记为已取消。
    * @param sourceMessages - 待更新的消息列表

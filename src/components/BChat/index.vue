@@ -9,7 +9,7 @@
         ref="conversationRef"
         v-model:messages="messages"
         :loading="loading"
-        :disabled="!loading"
+        :disabled="messageInteractionDisabled"
         :on-load-history="handleLoadHistory"
         :can-rollback="rollbackController.canRollback"
         :submit-action="chatSubmitter.submit"
@@ -90,6 +90,7 @@ import type { ChatRuntimeContextUsageSnapshot } from 'types/chat-runtime';
 import { computed, h, onUnmounted, provide, ref, toRef, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import type { ContextUsageBudgetSnapshot } from '@@/shared/ai/context/usageBudget.ts';
+import { findPendingInteraction } from '@/ai/chat/policies/pendingInteraction';
 import type { ChatSessionUIEvent } from '@/ai/chat/sessionEvents';
 import BTextEditor from '@/components/BText/Editor.vue';
 import { useChatActorSystem } from '@/hooks/useChatActorSystem';
@@ -241,6 +242,12 @@ const chatSessionActor = useChatSessionActor({
   activeSessionId,
   actorSystem: chatActorSystem,
   onUIEvent: (event: ChatSessionUIEvent): void => handleSessionUIEvent(event)
+});
+watch(messages, (loadedMessages: Message[]): void => {
+  const sessionId = activeSessionId.value;
+  if (!sessionId) return;
+  const interaction = findPendingInteraction(loadedMessages, sessionId);
+  if (interaction) chatSessionActor.recoverInteraction(interaction);
 });
 /** Todo 面板状态和回退恢复能力。 */
 const { currentSessionTodos, todoPanelVisible, todoPanelDismissed, restoreTodoSnapshotsForMessages } = useTodoPanel({ activeSessionId });
@@ -418,6 +425,12 @@ const {
   cancel: handleCancel,
   rollback: handleRollback
 } = workflow;
+/** 消息级交互仅在对应领域状态允许时开放。 */
+const messageInteractionDisabled = computed<boolean>(() => {
+  const sessionId = activeSessionId.value;
+  const pendingInteraction = sessionId ? findPendingInteraction(messages.value, sessionId) : null;
+  return pendingInteraction ? !chatSessionActor.waitingForUser.value : !loading.value;
+});
 
 /** 上下文窗口用量 hook（空闲态用 API 上报值，流式中用估算器）。 */
 const { usedTokens, snapshot: contextUsageSnapshot } = useContextUsage({ messages, contextWindow, selectedModel, streaming: loading });

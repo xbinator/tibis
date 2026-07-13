@@ -3,6 +3,7 @@
  * @description 单个用户 Turn 与主 Agent 的 XState 定义。
  */
 import type { ChatIntent, ChatWorkflowError } from '../types';
+import type { AgentWaitingInteraction } from './agentMachine';
 import type { ActorRefFrom } from 'xstate';
 import { assign, enqueueActions, setup } from 'xstate';
 import { agentMachine } from './agentMachine';
@@ -30,9 +31,10 @@ export interface TurnMachineContext extends TurnMachineInput {
 /** Turn machine 领域事件。 */
 export type TurnMachineEvent =
   | { type: 'turn.prepared'; request: Record<string, unknown> }
-  | { type: 'turn.recovered'; runtimeId: string; waiting: boolean }
+  | { type: 'turn.recovered'; runtimeId: string; interaction?: AgentWaitingInteraction }
   | { type: 'turn.waiting' }
   | { type: 'turn.resume' }
+  | { type: 'turn.userChoiceSubmissionFailed' }
   | { type: 'turn.interactionResolved' }
   | { type: 'turn.cancel' }
   | { type: 'turn.cancelled' }
@@ -49,7 +51,7 @@ export const turnMachine = setup({
   },
   actors: { agentMachine },
   guards: {
-    isRecoveredWaiting: ({ event }): boolean => event.type === 'turn.recovered' && event.waiting
+    isRecoveredWaiting: ({ event }): boolean => event.type === 'turn.recovered' && event.interaction !== undefined
   },
   actions: {
     assignPreparedRequestAndPrimaryAgent: assign({
@@ -75,12 +77,17 @@ export const turnMachine = setup({
       if (event.type !== 'turn.recovered') return;
       if (!context.primaryAgentRef) return;
       enqueue.sendTo(context.primaryAgentRef, { type: 'runtime.started', runtimeId: event.runtimeId });
-      if (event.waiting) {
-        enqueue.sendTo(context.primaryAgentRef, { type: 'runtime.userChoiceRequired', runtimeId: event.runtimeId, interaction: 'confirmation' });
+      if (event.interaction) {
+        enqueue.sendTo(context.primaryAgentRef, { type: 'runtime.userChoiceRequired', runtimeId: event.runtimeId, interaction: event.interaction });
       }
     }),
     cancelPrimaryAgent: enqueueActions(({ context, enqueue }): void => {
       if (context.primaryAgentRef) enqueue.sendTo(context.primaryAgentRef, { type: 'agent.cancel' });
+    }),
+    restorePrimaryAgentUserChoice: enqueueActions(({ context, enqueue }): void => {
+      const runtimeId = context.primaryAgentRef?.getSnapshot().context.runtimeId;
+      if (!context.primaryAgentRef || !runtimeId) return;
+      enqueue.sendTo(context.primaryAgentRef, { type: 'runtime.userChoiceRequired', runtimeId, interaction: 'userChoice' });
     }),
     assignError: assign({
       error: ({ event }): ChatWorkflowError | undefined => (event.type === 'turn.failed' ? event.error : undefined)
@@ -107,6 +114,10 @@ export const turnMachine = setup({
         ],
         'turn.prepared': { target: 'running', actions: 'assignPreparedRequestAndPrimaryAgent' },
         'turn.waiting': 'waiting',
+        'turn.userChoiceSubmissionFailed': {
+          target: 'waiting',
+          actions: 'restorePrimaryAgentUserChoice'
+        },
         'turn.failed': { target: 'failed', actions: 'assignError' },
         'turn.cancel': { target: 'cancelling', actions: 'cancelPrimaryAgent' }
       }
@@ -115,6 +126,10 @@ export const turnMachine = setup({
       tags: ['busy', 'abortable'],
       on: {
         'turn.waiting': 'waiting',
+        'turn.userChoiceSubmissionFailed': {
+          target: 'waiting',
+          actions: 'restorePrimaryAgentUserChoice'
+        },
         'turn.cancel': { target: 'cancelling', actions: 'cancelPrimaryAgent' },
         'turn.completed': 'completed',
         'turn.failed': { target: 'failed', actions: 'assignError' }

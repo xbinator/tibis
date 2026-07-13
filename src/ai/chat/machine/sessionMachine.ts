@@ -2,6 +2,7 @@
  * @file sessionMachine.ts
  * @description 单会话聊天编排的 XState 定义。
  */
+import type { PendingInteraction } from '../policies/pendingInteraction';
 import type { ChatIntent, ChatSubmitInput, ChatWorkflowError } from '../types';
 import type { AIUserChoiceAnswerData } from 'types/chat';
 import type { ChatRuntimeRecoverySnapshot } from 'types/chat-runtime';
@@ -31,6 +32,8 @@ export interface SessionMachineContext extends SessionMachineInput {
   rollbackTargetMessageId?: string;
   /** 当前流程错误 */
   error?: ChatWorkflowError;
+  /** 当前可恢复的用户交互。 */
+  pendingInteraction?: PendingInteraction;
 }
 
 /**
@@ -38,12 +41,14 @@ export interface SessionMachineContext extends SessionMachineInput {
  */
 export type SessionMachineEvent =
   | { type: 'session.recoverRuntime'; snapshot: ChatRuntimeRecoverySnapshot }
+  | { type: 'session.recoverInteraction'; interaction: PendingInteraction }
   | { type: 'session.submit'; input: ChatSubmitInput }
   | { type: 'session.regenerate'; targetMessageId: string }
   | { type: 'session.userChoiceSubmitted'; answer: AIUserChoiceAnswerData }
+  | { type: 'session.userChoiceSubmissionFailed'; error: ChatWorkflowError }
   | { type: 'session.prepared' }
   | { type: 'session.preparationFailed'; error: ChatWorkflowError }
-  | { type: 'session.userChoiceRequired' }
+  | { type: 'session.userChoiceRequired'; interaction?: PendingInteraction }
   | { type: 'session.interactionResolved' }
   | { type: 'session.completed' }
   | { type: 'session.failed'; error: ChatWorkflowError }
@@ -74,6 +79,9 @@ function readNewTurnIntent(event: SessionMachineEvent): ChatIntent | undefined {
   }
   if (event.type === 'session.recoverRuntime') {
     return { type: 'recover', runtimeId: event.snapshot.runtimeId };
+  }
+  if (event.type === 'session.recoverInteraction') {
+    return { type: 'recover', runtimeId: event.interaction.runtimeId };
   }
 
   return undefined;
@@ -118,6 +126,7 @@ export const sessionMachine = setup({
         });
         return turnRef;
       },
+      pendingInteraction: ({ event }): PendingInteraction | undefined => (event.type === 'session.recoverInteraction' ? event.interaction : undefined),
       error: (): undefined => undefined
     }),
     resumeTurn: assign({
@@ -149,13 +158,41 @@ export const sessionMachine = setup({
     restoreTurnWaiting: enqueueActions(({ context, enqueue }): void => {
       if (context.turnRef) enqueue.sendTo(context.turnRef, { type: 'turn.waiting' });
     }),
+    restoreTurnUserChoice: enqueueActions(({ context, enqueue }): void => {
+      if (context.turnRef) enqueue.sendTo(context.turnRef, { type: 'turn.userChoiceSubmissionFailed' });
+    }),
     hydrateRecoveredTurn: enqueueActions(({ context, event, enqueue }): void => {
-      if (event.type !== 'session.recoverRuntime' || !context.turnRef) return;
+      if (!context.turnRef) return;
+      if (event.type === 'session.recoverInteraction') {
+        enqueue.sendTo(context.turnRef, {
+          type: 'turn.recovered',
+          runtimeId: event.interaction.runtimeId,
+          interaction: 'userChoice'
+        });
+        return;
+      }
+      if (event.type !== 'session.recoverRuntime') return;
       enqueue.sendTo(context.turnRef, {
         type: 'turn.recovered',
         runtimeId: event.snapshot.runtimeId,
-        waiting: event.snapshot.pendingRequests.some((request): boolean => request.type === 'confirmation')
+        interaction: event.snapshot.pendingRequests.some((request): boolean => request.type === 'confirmation') ? 'confirmation' : undefined
       });
+    }),
+    markInteractionSubmitting: assign({
+      pendingInteraction: ({ context }): PendingInteraction | undefined =>
+        context.pendingInteraction ? { ...context.pendingInteraction, status: 'submitting' } : undefined
+    }),
+    restoreInteractionPending: assign({
+      pendingInteraction: ({ context }): PendingInteraction | undefined =>
+        context.pendingInteraction ? { ...context.pendingInteraction, status: 'pending' } : undefined
+    }),
+    markInteractionResolved: assign({
+      pendingInteraction: ({ context }): PendingInteraction | undefined =>
+        context.pendingInteraction ? { ...context.pendingInteraction, status: 'resolved' } : undefined
+    }),
+    capturePendingInteraction: assign({
+      pendingInteraction: ({ context, event }): PendingInteraction | undefined =>
+        event.type === 'session.userChoiceRequired' ? event.interaction ?? context.pendingInteraction : context.pendingInteraction
     }),
     assignRollbackTarget: assign({
       rollbackTargetMessageId: ({ event }): string | undefined => (event.type === 'session.rollbackRequested' ? event.targetMessageId : undefined)
@@ -165,7 +202,8 @@ export const sessionMachine = setup({
     }),
     clearActiveTurn: assign({
       turnRef: (): undefined => undefined,
-      intent: (): undefined => undefined
+      intent: (): undefined => undefined,
+      pendingInteraction: (): undefined => undefined
     }),
     clearRollback: assign({
       rollbackTargetMessageId: (): undefined => undefined
@@ -179,6 +217,10 @@ export const sessionMachine = setup({
     idle: {
       tags: ['acceptsInput'],
       on: {
+        'session.recoverInteraction': {
+          target: 'waitingForUser',
+          actions: ['startNewTurn', 'hydrateRecoveredTurn']
+        },
         'session.recoverRuntime': [
           {
             target: 'waitingForUser',
@@ -214,19 +256,23 @@ export const sessionMachine = setup({
       on: {
         'session.prepared': {
           target: 'running',
-          actions: 'notifyTurnPrepared'
+          actions: ['notifyTurnPrepared', 'markInteractionResolved']
         },
         'session.preparationFailed': [
           {
             target: 'waitingForUser',
             guard: 'isContinueIntent',
-            actions: ['assignError', 'restoreTurnWaiting']
+            actions: ['assignError', 'restoreTurnWaiting', 'restoreInteractionPending']
           },
           {
             target: 'idle',
             actions: ['assignError', 'notifyTurnFailed', 'clearActiveTurn']
           }
         ],
+        'session.userChoiceSubmissionFailed': {
+          target: 'waitingForUser',
+          actions: ['assignError', 'restoreTurnUserChoice', 'restoreInteractionPending']
+        },
         'session.cancelRequested': {
           target: 'cancelling',
           actions: 'notifyTurnCancel'
@@ -238,7 +284,11 @@ export const sessionMachine = setup({
       on: {
         'session.userChoiceRequired': {
           target: 'waitingForUser',
-          actions: 'notifyTurnWaiting'
+          actions: ['notifyTurnWaiting', 'capturePendingInteraction']
+        },
+        'session.userChoiceSubmissionFailed': {
+          target: 'waitingForUser',
+          actions: ['assignError', 'restoreTurnUserChoice', 'restoreInteractionPending']
         },
         'session.completed': {
           target: 'idle',
@@ -263,7 +313,7 @@ export const sessionMachine = setup({
       on: {
         'session.userChoiceSubmitted': {
           target: 'preparing',
-          actions: ['resumeTurn', 'notifyTurnResume']
+          actions: ['resumeTurn', 'notifyTurnResume', 'markInteractionSubmitting']
         },
         'session.interactionResolved': {
           target: 'running',

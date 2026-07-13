@@ -11,8 +11,8 @@ import type {
   ChatRuntimeMessageDeletedEvent,
   ChatRuntimeMessageEvent
 } from 'types/chat-runtime';
-import { createPinia, setActivePinia } from 'pinia';
 import { effectScope } from 'vue';
+import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createChatActorSystem } from '@/ai/chat/actorSystem';
 import { useChatRuntimeEvents } from '@/hooks/useChatRuntimeEvents';
@@ -169,7 +169,7 @@ describe('useChatRuntimeEvents', (): void => {
       request: { toolName: 'write_file', title: '写入文件', description: '是否写入？', riskLevel: 'write' }
     });
     expect(visibleEvents).toHaveBeenCalledWith(expect.objectContaining({ type: 'confirmationRequested' }));
-    runtimeListeners.complete?.(createEventBase());
+    runtimeListeners.complete?.({ ...createEventBase(), reason: 'completed' });
 
     expect(agent?.getSnapshot().matches('completed')).toBe(true);
     expect(session.getSnapshot().matches('idle')).toBe(true);
@@ -207,6 +207,51 @@ describe('useChatRuntimeEvents', (): void => {
     const visibleEvents = vi.fn();
     system.subscribeSessionEvents('session-1', visibleEvents);
     expect(visibleEvents).toHaveBeenCalledWith(expect.objectContaining({ type: 'confirmationRequested' }));
+    scope.stop();
+    system.stop();
+  });
+
+  it('keeps the Turn waiting when Runtime completion explicitly requests user input', (): void => {
+    const system = createChatActorSystem();
+    system.start();
+    const session = system.ensureSession('session-1');
+    session.send({
+      type: 'session.submit',
+      input: { messageId: 'user-1', createdAt: '2026-07-13T00:00:00.000Z', content: 'hello', parts: [] }
+    });
+    session.send({ type: 'session.prepared' });
+    const turn = session.getSnapshot().context.turnRef;
+    const agent = turn?.getSnapshot().context.primaryAgentRef;
+    system.registerRuntime(
+      { sessionId: 'session-1', turnId: turn?.getSnapshot().context.turnId as string, agentId: 'primary', runtimeId: 'runtime-1' },
+      { tools: [], getToolContext: () => undefined, handleBridgeRequest: async (): Promise<unknown> => undefined }
+    );
+    system.send({ type: 'runtime.event', runtimeId: 'runtime-1', event: { type: 'runtime.started', runtimeId: 'runtime-1' } });
+    const visibleEvents = vi.fn();
+    system.subscribeSessionEvents('session-1', visibleEvents);
+    const scope = effectScope();
+    scope.run((): void => useChatRuntimeEvents(system));
+
+    runtimeListeners.complete?.({
+      ...createEventBase(),
+      reason: 'awaiting_user_input',
+      interaction: {
+        type: 'userChoice',
+        status: 'pending',
+        sessionId: 'session-1',
+        messageId: 'assistant-1',
+        runtimeId: 'runtime-1',
+        agentId: 'primary',
+        toolCallId: 'tool-call-question',
+        questionId: 'question-1'
+      }
+    });
+
+    expect(session.getSnapshot().matches('waitingForUser')).toBe(true);
+    expect(session.getSnapshot().context.pendingInteraction).toMatchObject({ questionId: 'question-1', status: 'pending' });
+    expect(agent?.getSnapshot().matches('waiting')).toBe(true);
+    expect(visibleEvents).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'runtimeCompleted' }));
+    expect(system.getRuntimeCapabilities('runtime-1')).toBeUndefined();
     scope.stop();
     system.stop();
   });

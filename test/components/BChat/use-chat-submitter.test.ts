@@ -5,7 +5,7 @@
 import { ref } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
 import { useChatSubmitter } from '@/components/BChat/hooks/useChatSubmitter';
-import type { AdaptedUserMessageInput, MessagePartUpdateInput, SubmitAction } from '@/components/BChat/utils/submitAction';
+import { createUserChoice, type AdaptedUserMessageInput, type MessagePartUpdateInput, type SubmitAction } from '@/components/BChat/utils/submitAction';
 import type { Message } from '@/components/BChat/utils/types';
 
 /**
@@ -53,6 +53,44 @@ function createMessagePartUpdateAction(input: MessagePartUpdateInput): SubmitAct
 }
 
 describe('useChatSubmitter', (): void => {
+  it('shares one in-flight user-choice submission across duplicate actions', async (): Promise<void> => {
+    let resolveSubmission: ((result: { runtimeId: string; sessionId: string }) => void) | undefined;
+    const submission = new Promise<{ runtimeId: string; sessionId: string }>((resolve) => {
+      resolveSubmission = resolve;
+    });
+    const submitUserChoice = vi.fn(() => submission);
+    const startRuntime = vi.fn((): string => 'runtime-choice');
+    const submitter = useChatSubmitter({
+      isWorkflowBusy: () => true,
+      messages: ref<Message[]>([]),
+      getSessionId: () => 'session-1',
+      getActiveRuntimeId: () => 'runtime-question',
+      resolveRuntimeRequestConfig: vi.fn(),
+      prepareRuntimeRequest: vi.fn().mockResolvedValue({
+        config: { contextWindow: 12_000 },
+        rendererTools: [],
+        editMemoryExposed: false
+      }),
+      startRuntime,
+      submitUserChoice,
+      sendRuntimeUserMessage: vi.fn(),
+      submitRuntimeMessagePart: vi.fn(),
+      updateSessionMessage: vi.fn()
+    });
+    const action = createUserChoice({ questionId: 'question-1', toolCallId: 'tool-call-question', answers: ['yes'] });
+
+    const firstSubmission = submitter.submit(action);
+    const duplicateSubmission = submitter.submit(action);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(startRuntime).toHaveBeenCalledTimes(1);
+    expect(submitUserChoice).toHaveBeenCalledTimes(1);
+
+    resolveSubmission?.({ runtimeId: 'runtime-choice', sessionId: 'session-1' });
+    await Promise.all([firstSubmission, duplicateSubmission]);
+  });
+
   it('sends adapted user messages while the Session workflow accepts input', async (): Promise<void> => {
     const sendRuntimeUserMessage = vi.fn<(_input: AdaptedUserMessageInput) => Promise<void>>(() => Promise.resolve());
     const input = createAdaptedUserMessageInput();

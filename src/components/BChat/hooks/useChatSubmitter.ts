@@ -65,11 +65,13 @@ interface UseChatSubmitterReturn {
  * @returns 统一提交能力
  */
 export function useChatSubmitter(options: UseChatSubmitterOptions): UseChatSubmitterReturn {
+  let userChoiceSubmission: Promise<void> | null = null;
+
   /**
-   * 续跑一个等待中的助手任务。
+   * 执行一次等待中助手任务的续跑。
    * @param answer - 用户选择答案
    */
-  async function continueAssistantTurn(answer: AIUserChoiceAnswerData): Promise<void> {
+  async function performAssistantTurnContinuation(answer: AIUserChoiceAnswerData): Promise<void> {
     let runtimeId: string | undefined;
     try {
       const sessionId = options.getSessionId();
@@ -101,6 +103,25 @@ export function useChatSubmitter(options: UseChatSubmitterOptions): UseChatSubmi
     } catch (error) {
       options.onContinueFailed?.(error, runtimeId);
       throw error;
+    }
+  }
+
+  /**
+   * 续跑一个等待中的助手任务；并发调用共享同一个提交 Promise。
+   * @param answer - 用户选择答案
+   */
+  async function continueAssistantTurn(answer: AIUserChoiceAnswerData): Promise<void> {
+    if (userChoiceSubmission) {
+      await userChoiceSubmission;
+      return;
+    }
+
+    const submission = performAssistantTurnContinuation(answer);
+    userChoiceSubmission = submission;
+    try {
+      await submission;
+    } finally {
+      if (userChoiceSubmission === submission) userChoiceSubmission = null;
     }
   }
 

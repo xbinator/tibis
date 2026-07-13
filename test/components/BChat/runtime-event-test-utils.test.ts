@@ -33,7 +33,8 @@ describe('runtime-event-test-utils', (): void => {
       runtimeId: 'runtime-1',
       sessionId: 'session-1',
       clientId: 'bchat',
-      agentId: 'default'
+      agentId: 'default',
+      reason: 'completed'
     });
 
     expect(onMessageUpdated).toHaveBeenCalledWith(expect.objectContaining({ runtimeId: 'runtime-1' }));

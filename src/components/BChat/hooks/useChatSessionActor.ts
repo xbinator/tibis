@@ -7,6 +7,7 @@ import type { ComputedRef, Ref, ShallowRef } from 'vue';
 import { computed, onScopeDispose, shallowRef, watch } from 'vue';
 import type { ChatActorSystem } from '@/ai/chat/actorSystem';
 import type { SessionMachineEvent } from '@/ai/chat/machine/sessionMachine';
+import type { PendingInteraction } from '@/ai/chat/policies/pendingInteraction';
 import type { ChatSessionUIEvent } from '@/ai/chat/sessionEvents';
 import type { ChatSubmitInput, ChatWorkflowError } from '@/ai/chat/types';
 
@@ -39,12 +40,16 @@ export interface UseChatSessionActorReturn {
   loading: ComputedRef<boolean>;
   /** 当前 Session 是否等待用户 */
   waitingForUser: ComputedRef<boolean>;
+  /** 当前 Session 的可恢复交互。 */
+  pendingInteraction: ComputedRef<PendingInteraction | undefined>;
   /** 当前 Primary Agent Runtime ID */
   activeRuntimeId: ComputedRef<string | undefined>;
   /** 提交用户消息 */
   submit: (input: ChatSubmitInput) => void;
   /** 提交用户选择 */
   continueWithAnswer: (answer: AIUserChoiceAnswerData) => void;
+  /** 从持久化消息恢复用户交互。 */
+  recoverInteraction: (interaction: PendingInteraction) => void;
   /** 请求重新生成 */
   regenerate: (targetMessageId: string) => void;
   /** 请求取消 */
@@ -59,6 +64,8 @@ export interface UseChatSessionActorReturn {
   markPrepared: () => void;
   /** 报告 Runtime 准备失败 */
   markPreparationFailed: (error: ChatWorkflowError) => void;
+  /** 报告用户选择续跑启动失败。 */
+  markUserChoiceSubmissionFailed: (error: ChatWorkflowError) => void;
   /** 报告 Runtime 完成 */
   markCompleted: () => void;
   /** 报告 Runtime 失败 */
@@ -134,6 +141,17 @@ export function useChatSessionActor(options: UseChatSessionActorOptions): UseCha
     send({ type: 'session.userChoiceSubmitted', answer });
   }
 
+  /**
+   * 仅在当前 Session 空闲时恢复持久化交互。
+   * @param interaction - 待恢复交互
+   */
+  function recoverInteraction(interaction: PendingInteraction): void {
+    if (interaction.sessionId !== options.activeSessionId.value) return;
+    const activeSessionRef = sessionRef.value ?? options.actorSystem.ensureSession(interaction.sessionId);
+    if (!activeSessionRef.getSnapshot().matches('idle')) return;
+    activeSessionRef.send({ type: 'session.recoverInteraction', interaction });
+  }
+
   /** 请求重新生成。 */
   function regenerate(targetMessageId: string): void {
     send({ type: 'session.regenerate', targetMessageId });
@@ -159,11 +177,13 @@ export function useChatSessionActor(options: UseChatSessionActorOptions): UseCha
     snapshot,
     loading: computed<boolean>(() => snapshot.value?.hasTag('busy') ?? false),
     waitingForUser: computed<boolean>(() => snapshot.value?.hasTag('waitingForUser') ?? false),
+    pendingInteraction: computed<PendingInteraction | undefined>(() => snapshot.value?.context.pendingInteraction),
     activeRuntimeId: computed<string | undefined>(
       () => snapshot.value?.context.turnRef?.getSnapshot().context.primaryAgentRef?.getSnapshot().context.runtimeId
     ),
     submit,
     continueWithAnswer,
+    recoverInteraction,
     regenerate,
     cancel,
     compact,
@@ -171,6 +191,7 @@ export function useChatSessionActor(options: UseChatSessionActorOptions): UseCha
     send,
     markPrepared: (): void => send({ type: 'session.prepared' }),
     markPreparationFailed: (error: ChatWorkflowError): void => send({ type: 'session.preparationFailed', error }),
+    markUserChoiceSubmissionFailed: (error: ChatWorkflowError): void => send({ type: 'session.userChoiceSubmissionFailed', error }),
     markCompleted: (): void => send({ type: 'session.completed' }),
     markFailed: (error: ChatWorkflowError): void => send({ type: 'session.failed', error }),
     markRuntimeCancelled: (): void => send({ type: 'session.runtimeCancelled' }),

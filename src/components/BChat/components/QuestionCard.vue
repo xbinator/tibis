@@ -13,7 +13,14 @@
       </div>
 
       <!-- 补充信息输入 -->
-      <input v-if="isSupplementaryStep" v-model="otherText" class="choice-card__other" type="text" placeholder="请输入补充信息..." :disabled="disabled" />
+      <input
+        v-if="isSupplementaryStep"
+        v-model="otherText"
+        class="choice-card__other"
+        type="text"
+        placeholder="请输入补充信息..."
+        :disabled="interactionDisabled"
+      />
 
       <!-- 问题选项 -->
       <div v-else class="choice-card__options">
@@ -22,7 +29,7 @@
           :key="option.value"
           class="choice-card__option-btn"
           :class="{ 'choice-card__option-btn--selected': currentSelectedValues.includes(option.value) }"
-          :disabled="disabled || isCurrentOptionDisabled(option.value)"
+          :disabled="interactionDisabled || isCurrentOptionDisabled(option.value)"
           type="button"
           @click="handleButtonClick(option.value)"
         >
@@ -35,10 +42,10 @@
         <span v-if="totalSteps > 1" class="choice-card__indicator">{{ currentStep + 1 }} / {{ totalSteps }}</span>
 
         <div class="choice-card__footer-right">
-          <BButton size="small" type="secondary" :disabled="disabled" @click="handleCancel">取消</BButton>
-          <BButton v-if="currentStep > 0" size="small" type="secondary" :disabled="disabled" @click="handlePrev">上一步</BButton>
-          <BButton v-if="isSupplementaryStep" size="small" :disabled="disabled" @click="handleSubmit">提交</BButton>
-          <BButton v-else size="small" :disabled="!canSubmitCurrentQuestion || disabled" @click="handleNext">下一步</BButton>
+          <BButton size="small" type="secondary" :disabled="interactionDisabled" @click="handleCancel">取消</BButton>
+          <BButton v-if="currentStep > 0" size="small" type="secondary" :disabled="interactionDisabled" @click="handlePrev">上一步</BButton>
+          <BButton v-if="isSupplementaryStep" size="small" :disabled="interactionDisabled" @click="handleSubmit">提交</BButton>
+          <BButton v-else size="small" :disabled="!canSubmitCurrentQuestion || interactionDisabled" @click="handleNext">下一步</BButton>
         </div>
       </div>
     </div>
@@ -76,6 +83,10 @@ const selectedValuesByQuestion = ref<string[][]>([]);
 const otherText = ref('');
 /** 当前步骤：0 ~ questionItems.length-1 为问题步骤，questionItems.length 为补充信息步骤 */
 const currentStep = ref(0);
+/** 当前答案是否正在提交。 */
+const submitting = ref(false);
+/** 外部禁用或提交中都禁止继续操作。 */
+const interactionDisabled = computed<boolean>(() => props.disabled || submitting.value);
 
 /** 展开后的所有问题项（兼容单问题和多问题结构） */
 const questionItems = computed<AIAwaitingUserChoiceItem[]>(() => props.question.questions ?? [props.question]);
@@ -102,6 +113,28 @@ watch(
   },
   { immediate: true }
 );
+
+watch(
+  (): readonly [string, string] => [props.question.questionId, props.question.toolCallId],
+  (): void => {
+    submitting.value = false;
+  }
+);
+
+/**
+ * 提交一次用户选择并在失败后恢复可操作状态。
+ * @param action - 用户选择提交动作
+ */
+async function submitChoice(action: SubmitAction): Promise<void> {
+  if (interactionDisabled.value || !props.submitAction) return;
+  submitting.value = true;
+  try {
+    await props.submitAction(action);
+  } catch (error: unknown) {
+    submitting.value = false;
+    throw error;
+  }
+}
 
 /**
  * 获取指定问题当前选中的值。
@@ -183,8 +216,8 @@ function handlePrev(): void {
 /**
  * 取消操作：提交空答案。
  */
-function handleCancel(): void {
-  props.submitAction?.(
+async function handleCancel(): Promise<void> {
+  await submitChoice(
     createUserChoice({
       questionId: props.question.questionId,
       toolCallId: props.question.toolCallId,
@@ -198,13 +231,13 @@ function handleCancel(): void {
 /**
  * 提交当前用户答案。
  */
-function handleSubmit(): void {
+async function handleSubmit(): Promise<void> {
   const questionAnswers = questionItems.value.map((item, index) => ({
     question: item.question,
     answers: [...getSelectedValues(index)]
   }));
 
-  props.submitAction?.(
+  await submitChoice(
     createUserChoice({
       questionId: props.question.questionId,
       toolCallId: props.question.toolCallId,

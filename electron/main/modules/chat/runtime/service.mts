@@ -15,7 +15,7 @@ import type {
   ChatRuntimeStreamExecutor
 } from './types.mjs';
 import type { AIServiceError, AIToolExecutionResult, AIUsage } from 'types/ai';
-import type { ChatMessageRecord } from 'types/chat';
+import type { ChatMessageRecord, ChatPendingInteraction } from 'types/chat';
 import type {
   ChatRuntimeAbortInput,
   ChatRuntimeAutoNameInput,
@@ -25,6 +25,7 @@ import type {
   ChatRuntimeCompactInput,
   ChatRuntimeCompactResult,
   ChatRuntimeConfirmationDecision,
+  ChatRuntimeCompletionReason,
   ChatRuntimeContinueInput,
   ChatRuntimeContextUsageSnapshot,
   ChatRuntimeRecoverySnapshot,
@@ -270,11 +271,43 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   }
 
   /**
+   * 判断 assistant 是否正暂停等待用户输入。
+   * @param message - assistant 消息
+   * @returns 是否存在等待用户输入的工具结果
+   */
+  function isAssistantAwaitingUserInput(message: ChatMessageRecord): boolean {
+    return message.parts.some((part) => part.type === 'tool' && part.result?.status === 'awaiting_user_input');
+  }
+
+  /**
+   * 将等待用户输入的消息转换为可恢复交互。
+   * @param runtime - 产生交互的 Runtime
+   * @param message - 等待用户输入的 assistant 消息
+   * @returns 可恢复交互，不存在等待片段时返回 null
+   */
+  function createPendingInteraction(runtime: ActiveChatRuntime, message: ChatMessageRecord): ChatPendingInteraction | null {
+    const part = message.parts.find((messagePart) => messagePart.type === 'tool' && messagePart.result?.status === 'awaiting_user_input');
+    if (!part || part.type !== 'tool' || part.result?.status !== 'awaiting_user_input') return null;
+    return {
+      type: 'userChoice',
+      status: 'pending',
+      sessionId: runtime.sessionId,
+      messageId: message.id,
+      runtimeId: runtime.runtimeId,
+      agentId: runtime.agentId,
+      toolCallId: part.toolCallId,
+      questionId: part.result.data.questionId
+    };
+  }
+
+  /**
    * 完成 runtime 并释放 session 写入锁。
    * @param runtime - 需要完成的 runtime
    * @param usage - Provider 返回的 usage
+   * @param reason - Runtime 成功完成或暂停等待用户
    */
-  function completeRuntime(runtime: ActiveChatRuntime, usage?: AIUsage): void {
+  function completeRuntime(runtime: ActiveChatRuntime, usage?: AIUsage, reason: ChatRuntimeCompletionReason = 'completed'): void {
+    const assistantMessage = activeAssistantMessages.get(runtime.runtimeId);
     runtime.status = 'completed';
     activeRuntimes.delete(runtime.runtimeId);
     activeAssistantMessages.delete(runtime.runtimeId);
@@ -282,14 +315,30 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     confirmationRequests.rejectRuntime(runtime.runtimeId, 'Runtime completed');
     bridgeRequests.rejectRuntime(runtime.runtimeId, 'Runtime completed');
     locks.releaseWritingLock({ sessionId: runtime.sessionId, runtimeId: runtime.runtimeId });
-    emit('chat:runtime:complete', {
+    if (reason === 'awaiting_user_input' && assistantMessage) {
+      emit('chat:runtime:message-updated', {
+        runtimeId: runtime.runtimeId,
+        sessionId: runtime.sessionId,
+        clientId: runtime.clientId,
+        agentId: runtime.agentId,
+        parentRuntimeId: runtime.parentRuntimeId,
+        message: assistantMessage
+      });
+    }
+    const completeEventBase = {
       runtimeId: runtime.runtimeId,
       sessionId: runtime.sessionId,
       clientId: runtime.clientId,
       agentId: runtime.agentId,
       parentRuntimeId: runtime.parentRuntimeId,
       usage
-    });
+    };
+    const interaction = assistantMessage ? createPendingInteraction(runtime, assistantMessage) : null;
+    if (reason === 'awaiting_user_input' && interaction) {
+      emit('chat:runtime:complete', { ...completeEventBase, reason, interaction });
+      return;
+    }
+    emit('chat:runtime:complete', { ...completeEventBase, reason: 'completed' });
   }
 
   /**
@@ -301,6 +350,8 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     if (!activeRuntimes.has(runtime.runtimeId)) return;
 
     await messageWriter.updateMessage(message);
+    // 等待用户的消息只能在 completeRuntime 释放会话写锁后对 renderer 可见。
+    if (message.loading === true && message.finished === false && isAssistantAwaitingUserInput(message)) return;
     emit('chat:runtime:message-updated', {
       runtimeId: runtime.runtimeId,
       sessionId: runtime.sessionId,
@@ -396,23 +447,20 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   }
 
   /**
-   * 判断 assistant 是否正暂停等待用户输入。
-   * @param message - assistant 消息
-   * @returns 是否存在等待用户输入的工具结果
-   */
-  function isAssistantAwaitingUserInput(message: ChatMessageRecord): boolean {
-    return message.parts.some((part) => part.type === 'tool' && part.result?.status === 'awaiting_user_input');
-  }
-
-  /**
-   * 在所有模型续轮结束后兜底标记 assistant 消息完成。
+   * 在所有模型续轮结束后维持等待态或兜底标记 assistant 消息完成。
    * @param runtime - runtime 状态
    * @param assistantMessage - assistant 草稿消息
    * @param usage - 汇总后的 provider usage
    */
   async function finishAssistantMessageIfNeeded(runtime: ActiveChatRuntime, assistantMessage: ChatMessageRecord, usage: AIUsage | undefined): Promise<void> {
+    if (isAssistantAwaitingUserInput(assistantMessage)) {
+      if (assistantMessage.loading === true && assistantMessage.finished === false) return;
+      assistantMessage.loading = true;
+      assistantMessage.finished = false;
+      await updateAssistantMessage(runtime, assistantMessage);
+      return;
+    }
     if (assistantMessage.finished === true) return;
-    if (isAssistantAwaitingUserInput(assistantMessage)) return;
 
     assistantMessage.loading = false;
     assistantMessage.finished = true;
@@ -718,7 +766,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     const usage = await executeRuntimeStreamRounds(runtime, replaySourceMessages, replayUserMessage, assistantMessage);
     await compactAfterProviderUsageIfNeeded(runtime, replaySourceMessages, assistantMessage, usage);
     await pruneOldToolOutputsIfNeeded(runtime, replaySourceMessages, assistantMessage);
-    completeRuntime(runtime, usage);
+    completeRuntime(runtime, usage, isAssistantAwaitingUserInput(assistantMessage) ? 'awaiting_user_input' : 'completed');
     return true;
   }
 
@@ -747,7 +795,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       const accumulatedUsage = await executeRuntimeStreamRounds(runtime, sourceMessages, userMessage, assistantMessage);
       await compactAfterProviderUsageIfNeeded(runtime, sourceMessages, assistantMessage, accumulatedUsage);
       await pruneOldToolOutputsIfNeeded(runtime, sourceMessages, assistantMessage);
-      completeRuntime(runtime, accumulatedUsage);
+      completeRuntime(runtime, accumulatedUsage, isAssistantAwaitingUserInput(assistantMessage) ? 'awaiting_user_input' : 'completed');
     } catch (error) {
       if (!activeRuntimes.has(runtime.runtimeId)) return;
 

@@ -144,7 +144,13 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
   const preflightLoading = ref<boolean>(false);
   let operationSequence = 0;
   let compactAbortHandler: (() => void) | null = null;
-  const loading = computed<boolean>(() => preflightLoading.value || options.sessionActor.loading.value);
+  const loading = computed<boolean>(
+    () =>
+      preflightLoading.value ||
+      options.sessionActor.loading.value ||
+      options.sessionActor.waitingForUser.value ||
+      userChoice.findPending(options.messages.value) !== null
+  );
 
   /** 开始新的 renderer 工作流操作并使旧异步准备结果失效。 */
   function beginOperation(): number {
@@ -385,14 +391,17 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
     startRuntime: runtimeLauncher.start,
     finishRuntimeStart: runtimeLauncher.finish,
     onContinueFailed: (error: unknown, runtimeId?: string): void => {
-      if (runtimeId) options.actorSystem.unregisterRuntime(runtimeId);
       const workflowError = {
         code: 'runtime_start_failed',
         message: error instanceof Error ? error.message : '继续生成失败',
         cause: error
       } as const;
-      if (runtimeId) options.sessionActor.markFailed(workflowError);
-      else options.sessionActor.markPreparationFailed(workflowError);
+      if (runtimeId) {
+        options.sessionActor.markUserChoiceSubmissionFailed(workflowError);
+        options.actorSystem.unregisterRuntime(runtimeId);
+      } else {
+        options.sessionActor.markPreparationFailed(workflowError);
+      }
     },
     submitUserChoice: chatRuntime.submitUserChoice,
     sendRuntimeUserMessage,
@@ -472,7 +481,7 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
     const runtimeId = options.sessionActor.activeRuntimeId.value;
     if (!runtimeId) return false;
     const address = options.actorSystem.actor.getSnapshot().context.runtimeRoutes.get(runtimeId);
-    return !address || address.sessionId === options.activeSessionId.value;
+    return address?.sessionId === options.activeSessionId.value;
   }
 
   /** 中止当前 Chat 或 Compact Runtime。 */
@@ -543,7 +552,7 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
   /** 处理切回会话时重放的待确认交互。 */
   async function handleSessionUIEvent(event: ChatSessionUIEvent): Promise<void> {
     if (event.type === 'messageCreated' || event.type === 'messageUpdated') {
-      const nextMessage = event.event.message as Message;
+      const nextMessage = userChoice.normalizePendingState(event.event.message as Message);
       const index = options.messages.value.findIndex((message): boolean => message.id === nextMessage.id);
       if (index < 0) options.messages.value.push(nextMessage);
       else options.messages.value.splice(index, 1, { ...options.messages.value[index], ...nextMessage });

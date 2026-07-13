@@ -9,6 +9,32 @@ import { createChatActorSystem } from '@/ai/chat/actorSystem';
 import { useChatSessionActor } from '@/components/BChat/hooks/useChatSessionActor';
 
 describe('useChatSessionActor', (): void => {
+  it('recovers a persisted interaction only while the Session is idle', (): void => {
+    const actorSystem = createChatActorSystem();
+    actorSystem.start();
+    const activeSessionId = ref<string | null>('session-a');
+    const scope = effectScope();
+    const hook = scope.run(() => useChatSessionActor({ activeSessionId, actorSystem }));
+    if (!hook) throw new Error('Session Actor hook was not created');
+
+    hook.recoverInteraction({
+      type: 'userChoice',
+      status: 'pending',
+      sessionId: 'session-a',
+      messageId: 'assistant-question',
+      runtimeId: 'runtime-question',
+      agentId: 'primary',
+      toolCallId: 'tool-call-question',
+      questionId: 'question-1'
+    });
+
+    expect(hook.waitingForUser.value).toBe(true);
+    expect(hook.pendingInteraction.value).toMatchObject({ questionId: 'question-1', status: 'pending' });
+
+    scope.stop();
+    actorSystem.stop();
+  });
+
   it('switches subscriptions without stopping a background Session', async (): Promise<void> => {
     const actorSystem = createChatActorSystem();
     actorSystem.start();

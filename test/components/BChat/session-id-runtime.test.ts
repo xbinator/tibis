@@ -352,6 +352,10 @@ const BTextEditorStub = defineComponent({
 const InputToolbarStub = defineComponent({
   name: 'InputToolbar',
   props: {
+    loading: {
+      type: Boolean,
+      default: false
+    },
     contextUsage: {
       type: Object,
       default: undefined
@@ -381,6 +385,10 @@ const ConversationViewStub = defineComponent({
     submitAction: {
       type: Function,
       default: undefined
+    },
+    disabled: {
+      type: Boolean,
+      default: false
     }
   },
   emits: ['regenerate', 'rollback'],
@@ -777,28 +785,26 @@ describe('BChat sessionId runtime', (): void => {
 
   it('routes Runtime events emitted before the start IPC resolves', async (): Promise<void> => {
     let resolveStart: ((result: ChatRuntimeHandlerResult<ChatRuntimeStartResult>) => void) | undefined;
-    electronAPIMock.chatRuntimeSend.mockImplementation(
-      (input: ChatRuntimeSendInput): Promise<ChatRuntimeHandlerResult<ChatRuntimeStartResult>> => {
-        runtimeListeners.messageCreated?.({
-          runtimeId: input.runtimeId,
+    electronAPIMock.chatRuntimeSend.mockImplementation((input: ChatRuntimeSendInput): Promise<ChatRuntimeHandlerResult<ChatRuntimeStartResult>> => {
+      runtimeListeners.messageCreated?.({
+        runtimeId: input.runtimeId,
+        sessionId: input.sessionId ?? 'session-active',
+        clientId: input.clientId,
+        agentId: input.agentId,
+        message: {
+          id: input.userMessageId ?? 'user-early',
           sessionId: input.sessionId ?? 'session-active',
-          clientId: input.clientId,
-          agentId: input.agentId,
-          message: {
-            id: input.userMessageId ?? 'user-early',
-            sessionId: input.sessionId ?? 'session-active',
-            role: 'user',
-            content: input.content,
-            parts: [{ id: 'part-early', type: 'text', text: input.content }],
-            createdAt: input.userMessageCreatedAt ?? '2026-07-11T00:00:00.000Z',
-            finished: true
-          }
-        });
-        return new Promise((resolve) => {
-          resolveStart = resolve;
-        });
-      }
-    );
+          role: 'user',
+          content: input.content,
+          parts: [{ id: 'part-early', type: 'text', text: input.content }],
+          createdAt: input.userMessageCreatedAt ?? '2026-07-11T00:00:00.000Z',
+          finished: true
+        }
+      });
+      return new Promise((resolve) => {
+        resolveStart = resolve;
+      });
+    });
     const wrapper = mountBChat('session-active');
     await flushPromises();
 
@@ -806,9 +812,7 @@ describe('BChat sessionId runtime', (): void => {
     wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
     await flushPromises();
 
-    expect(wrapper.findComponent(ConversationViewStub).props('messages')).toEqual([
-      expect.objectContaining({ role: 'user', content: 'early event' })
-    ]);
+    expect(wrapper.findComponent(ConversationViewStub).props('messages')).toEqual([expect.objectContaining({ role: 'user', content: 'early event' })]);
     const [input] = electronAPIMock.chatRuntimeSend.mock.calls[0] as [ChatRuntimeSendInput];
     resolveStart?.({ ok: true, data: { runtimeId: input.runtimeId, sessionId: 'session-active' } });
     await flushPromises();
@@ -1199,14 +1203,12 @@ describe('BChat sessionId runtime', (): void => {
   it('can abort the renderer-allocated runtime while the start IPC is still pending', async (): Promise<void> => {
     let resolveStart: ((result: ChatRuntimeHandlerResult<ChatRuntimeStartResult>) => void) | undefined;
     let startInput: ChatRuntimeSendInput | undefined;
-    electronAPIMock.chatRuntimeSend.mockImplementation(
-      (input: ChatRuntimeSendInput): Promise<ChatRuntimeHandlerResult<ChatRuntimeStartResult>> => {
-        startInput = input;
-        return new Promise((resolve) => {
-          resolveStart = resolve;
-        });
-      }
-    );
+    electronAPIMock.chatRuntimeSend.mockImplementation((input: ChatRuntimeSendInput): Promise<ChatRuntimeHandlerResult<ChatRuntimeStartResult>> => {
+      startInput = input;
+      return new Promise((resolve) => {
+        resolveStart = resolve;
+      });
+    });
     const wrapper = mountBChat('session-active');
     await flushPromises();
 
@@ -1270,18 +1272,6 @@ describe('BChat sessionId runtime', (): void => {
     const wrapper = mountBChat('session-active');
     await flushPromises();
 
-    wrapper.findComponent(BTextEditorStub).vm.$emit('update:value', '下一轮');
-    await flushPromises();
-    wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
-    await flushPromises();
-    const [sendInput] = electronAPIMock.chatRuntimeSend.mock.calls.at(-1) as [ChatRuntimeSendInput];
-    emitRuntimeEvent(runtimeListeners, 'complete', {
-      runtimeId: sendInput.runtimeId,
-      sessionId: 'session-active',
-      clientId: 'bchat',
-      agentId: 'primary'
-    });
-    await flushPromises();
     wrapper.findComponent(InputToolbarStub).vm.$emit('abort');
     await flushPromises();
 
@@ -1365,6 +1355,11 @@ describe('BChat sessionId runtime', (): void => {
     chatStoreMock.getSessionMessages.mockResolvedValueOnce([userMessage, assistantMessage]).mockResolvedValueOnce([]);
     const wrapper = mountBChat('session-active');
     await flushPromises();
+
+    const visibleAssistant = (wrapper.findComponent(ConversationViewStub).props('messages') as Message[]).find((message) => message.id === 'assistant-choice');
+    expect(visibleAssistant).toMatchObject({ loading: true, finished: false });
+    expect(wrapper.findComponent(ConversationViewStub).props('disabled')).toBe(false);
+    expect(wrapper.findComponent(InputToolbarStub).props('loading')).toBe(true);
 
     await submitConversationAction(wrapper, createUserChoice(answer));
     await flushPromises();

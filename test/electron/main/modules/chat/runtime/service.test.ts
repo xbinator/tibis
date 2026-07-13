@@ -81,6 +81,32 @@ function createMessageRecord(id: string, role: ChatMessageRecord['role'], conten
 }
 
 /**
+ * 创建等待用户回答的 Question 工具片段。
+ * @returns 等待用户输入的工具片段
+ */
+function createAwaitingUserChoicePart(): ChatMessagePart {
+  return {
+    id: 'part-awaiting-question',
+    type: 'tool',
+    toolCallId: 'tool-call-question',
+    toolName: 'question',
+    status: 'done',
+    input: { question: '继续吗？' },
+    result: {
+      toolName: 'question',
+      status: 'awaiting_user_input',
+      data: {
+        questionId: 'question-1',
+        toolCallId: 'tool-call-question',
+        question: '继续吗？',
+        mode: 'single',
+        options: [{ label: '继续', value: 'yes' }]
+      }
+    }
+  };
+}
+
+/**
  * 创建收集 runtime 事件的 emitter。
  * @returns 事件列表与 emitter
  */
@@ -1032,45 +1058,28 @@ describe('chat runtime service shell', (): void => {
   it('keeps assistant message unfinished when the stream pauses for user choice', async (): Promise<void> => {
     const collector = createEventCollector();
     const updatedMessages: ChatMessageRecord[] = [];
+    let isRuntimeActiveWhenQuestionPublished: boolean | undefined;
+    let service: ReturnType<typeof createChatRuntimeService>;
+
+    /** 捕获事件并记录 Question 首次发布时旧 Runtime 是否仍占用会话。 */
+    function emit<TName extends keyof ChatRuntimeEventMap>(name: TName, payload: ChatRuntimeEventMap[TName]): void {
+      if (name === 'chat:runtime:message-updated') {
+        const event = payload as ChatRuntimeEventMap['chat:runtime:message-updated'];
+        const isAwaitingUserInput = event.message.parts.some((part) => part.type === 'tool' && part.result?.status === 'awaiting_user_input');
+        if (isAwaitingUserInput) isRuntimeActiveWhenQuestionPublished = service.getActiveRuntime(event.runtimeId) !== undefined;
+      }
+      collector.emit(name, payload);
+    }
+
     const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage }, updateAssistant) => {
-      assistantMessage.parts = [
-        {
-          id: 'part0091',
-          type: 'tool',
-          toolCallId: 'tool-call-question',
-          toolName: 'question',
-          status: 'done',
-          input: {
-            question: '确认下单生椰拿铁，实付 9.9?',
-            mode: 'single',
-            options: [
-              { label: '确认下单!', value: 'confirm' },
-              { label: '再想想...', value: 'cancel' }
-            ]
-          },
-          result: {
-            toolName: 'question',
-            status: 'awaiting_user_input',
-            data: {
-              questionId: 'question-1',
-              toolCallId: 'tool-call-question',
-              question: '确认下单生椰拿铁，实付 9.9?',
-              mode: 'single',
-              options: [
-                { label: '确认下单!', value: 'confirm' },
-                { label: '再想想...', value: 'cancel' }
-              ]
-            }
-          }
-        }
-      ];
+      assistantMessage.parts = [createAwaitingUserChoicePart()];
       assistantMessage.loading = false;
-      assistantMessage.finished = false;
+      assistantMessage.finished = true;
       await updateAssistant(assistantMessage);
       return {};
     });
-    const service = createChatRuntimeService({
-      emit: collector.emit,
+    service = createChatRuntimeService({
+      emit,
       createMessageId: (role) => `${role}-message-1`,
       now: () => '2026-06-19T00:00:00.000Z',
       messageReader: createNoopMessageReader(),
@@ -1088,7 +1097,7 @@ describe('chat runtime service shell', (): void => {
 
     expect(updatedMessages.at(-1)).toMatchObject({
       id: 'assistant-message-1',
-      loading: false,
+      loading: true,
       finished: false,
       parts: [
         {
@@ -1103,10 +1112,71 @@ describe('chat runtime service shell', (): void => {
         }
       ]
     });
+    expect(isRuntimeActiveWhenQuestionPublished).toBe(false);
     expect(collector.events).toContainEqual(
       expect.objectContaining({
         name: 'chat:runtime:complete',
-        payload: expect.objectContaining({ runtimeId: result.runtimeId })
+        payload: expect.objectContaining({
+          runtimeId: result.runtimeId,
+          reason: 'awaiting_user_input',
+          interaction: {
+            type: 'userChoice',
+            status: 'pending',
+            sessionId: 'session-1',
+            messageId: 'assistant-message-1',
+            runtimeId: result.runtimeId,
+            agentId: 'agent-1',
+            toolCallId: 'tool-call-question',
+            questionId: 'question-1'
+          }
+        })
+      })
+    );
+  });
+
+  it('fails an awaiting user choice when the runtime errors before pausing', async (): Promise<void> => {
+    const collector = createEventCollector();
+    const updatedMessages: ChatMessageRecord[] = [];
+    const service = createChatRuntimeService({
+      emit: collector.emit,
+      createMessageId: (role) => `${role}-message-1`,
+      now: () => '2026-07-13T00:00:00.000Z',
+      messageReader: createNoopMessageReader(),
+      messageWriter: {
+        addMessage: (): void => undefined,
+        updateMessage: (message) => {
+          updatedMessages.push({ ...message, parts: message.parts.map((part) => ({ ...part })) });
+        }
+      },
+      streamExecutor: async ({ assistantMessage }, updateAssistant) => {
+        assistantMessage.parts.push(createAwaitingUserChoicePart());
+        assistantMessage.loading = true;
+        assistantMessage.finished = false;
+        await updateAssistant(assistantMessage);
+        throw new Error('暂停前持久化失败');
+      }
+    });
+
+    const result = await service.send(createInput());
+    await flushRuntimeTasks();
+
+    expect(updatedMessages.at(-1)).toMatchObject({
+      loading: false,
+      finished: true,
+      parts: [
+        expect.objectContaining({
+          result: {
+            toolName: 'question',
+            status: 'failure',
+            error: { code: 'EXECUTION_FAILED', message: '暂停前持久化失败' }
+          }
+        })
+      ]
+    });
+    expect(collector.events).toContainEqual(
+      expect.objectContaining({
+        name: 'chat:runtime:complete',
+        payload: expect.objectContaining({ runtimeId: result.runtimeId, reason: 'completed' })
       })
     );
   });
@@ -2492,6 +2562,52 @@ describe('chat runtime service shell', (): void => {
       loading: false,
       finished: true,
       parts: []
+    });
+
+    streamDeferred.resolve();
+  });
+
+  it('cancels an awaiting user choice when its active runtime is aborted', async (): Promise<void> => {
+    const streamDeferred = createDeferred();
+    const updatedMessages: ChatMessageRecord[] = [];
+    const service = createChatRuntimeService({
+      emit: vi.fn(),
+      createMessageId: (role) => `${role}-message-1`,
+      now: () => '2026-07-13T00:00:00.000Z',
+      messageReader: createNoopMessageReader(),
+      messageWriter: {
+        addMessage: (): void => undefined,
+        updateMessage: (message) => {
+          updatedMessages.push({ ...message, parts: message.parts.map((part) => ({ ...part })) });
+        }
+      },
+      streamExecutor: async ({ assistantMessage }, updateAssistant) => {
+        assistantMessage.parts.push(createAwaitingUserChoicePart());
+        assistantMessage.loading = true;
+        assistantMessage.finished = false;
+        await updateAssistant(assistantMessage);
+        await streamDeferred.promise;
+        return {};
+      }
+    });
+
+    const result = await service.send(createInput());
+    await flushRuntimeTasks();
+    await service.abort({ runtimeId: result.runtimeId });
+
+    expect(updatedMessages.at(-1)).toMatchObject({
+      loading: false,
+      finished: true,
+      parts: [
+        expect.objectContaining({
+          status: 'done',
+          result: {
+            toolName: 'question',
+            status: 'cancelled',
+            error: { code: 'USER_CANCELLED', message: '用户中止了操作' }
+          }
+        })
+      ]
     });
 
     streamDeferred.resolve();

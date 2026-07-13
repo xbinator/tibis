@@ -27,9 +27,12 @@ function failPendingToolParts(message: ChatMessageRecord, error: AIServiceError)
   let hasFailedToolPart = false;
 
   for (const part of message.parts) {
-    if (part.type !== 'tool' || part.status === 'done') continue;
+    if (part.type !== 'tool') continue;
 
     const toolPart = part as ChatMessageToolPart;
+    const isAwaitingUserInput = toolPart.result?.status === 'awaiting_user_input';
+    if (toolPart.status === 'done' && !isAwaitingUserInput) continue;
+
     toolPart.status = 'done';
     toolPart.result = {
       toolName: toolPart.toolName,
@@ -65,9 +68,12 @@ export function markAssistantMessageFailed(message: ChatMessageRecord, error: AI
  */
 export function finalizeToolPartsAsCancelled(message: ChatMessageRecord): void {
   for (const part of message.parts) {
-    if (part.type !== 'tool' || part.status === 'done') continue;
+    if (part.type !== 'tool') continue;
 
     const toolPart = part as ChatMessageToolPart;
+    const isAwaitingUserInput = toolPart.result?.status === 'awaiting_user_input';
+    if (toolPart.status === 'done' && !isAwaitingUserInput) continue;
+
     toolPart.status = 'done';
     toolPart.result = {
       toolName: toolPart.toolName,

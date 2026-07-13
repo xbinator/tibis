@@ -101,6 +101,45 @@ describe('sessionMachine', (): void => {
     expect(actor.getSnapshot().context.turnRef).toBeDefined();
   });
 
+  it('hydrates a persisted pending interaction into the waiting Actor hierarchy', (): void => {
+    const actor = createActor(sessionMachine, { input: { sessionId: 'session-1' } });
+    actor.start();
+    actor.send({
+      type: 'session.recoverInteraction',
+      interaction: {
+        type: 'userChoice',
+        status: 'pending',
+        sessionId: 'session-1',
+        messageId: 'assistant-question',
+        runtimeId: 'runtime-question',
+        agentId: 'primary',
+        toolCallId: 'tool-call-question',
+        questionId: 'question-1'
+      }
+    });
+
+    const snapshot = actor.getSnapshot();
+    const agentRef = snapshot.context.turnRef?.getSnapshot().context.primaryAgentRef;
+    const agentSnapshot = agentRef?.getSnapshot();
+    expect(snapshot.matches('waitingForUser')).toBe(true);
+    expect(snapshot.context.pendingInteraction).toMatchObject({ questionId: 'question-1', status: 'pending' });
+    expect(agentSnapshot?.matches('waiting')).toBe(true);
+    expect(agentSnapshot?.context.interaction).toBe('userChoice');
+
+    actor.send({
+      type: 'session.userChoiceSubmitted',
+      answer: { questionId: 'question-1', toolCallId: 'tool-call-question', answers: ['yes'] }
+    });
+    expect(actor.getSnapshot().context.pendingInteraction?.status).toBe('submitting');
+
+    actor.send({ type: 'session.prepared' });
+    expect(actor.getSnapshot().context.pendingInteraction?.status).toBe('resolved');
+    actor.send({ type: 'session.userChoiceSubmissionFailed', error: { code: 'runtime_start_failed', message: 'retry later' } });
+    expect(actor.getSnapshot().matches('waitingForUser')).toBe(true);
+    expect(actor.getSnapshot().context.pendingInteraction?.status).toBe('pending');
+    expect(agentRef?.getSnapshot().matches('waiting')).toBe(true);
+  });
+
   it('resumes the same Runtime after a confirmation is resolved', (): void => {
     const actor = createActor(sessionMachine, { input: { sessionId: 'session-1' } });
     actor.start();

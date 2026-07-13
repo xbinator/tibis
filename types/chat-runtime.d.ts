@@ -15,6 +15,7 @@ import type {
 } from './ai';
 import type {
   AIUserChoiceAnswerData,
+  ChatPendingInteraction,
   ChatMessagePartBase,
   ChatMessageConfirmationCustomInputConfig,
   ChatMessageFilePartInput,
@@ -509,11 +510,29 @@ export interface ChatRuntimeErrorEvent extends ChatRuntimeEventBase {
   error: AIServiceError;
 }
 
+/** Runtime 完成原因。 */
+export type ChatRuntimeCompletionReason = 'completed' | 'awaiting_user_input';
+
 /** Runtime complete event. */
-export interface ChatRuntimeCompleteEvent extends ChatRuntimeEventBase {
-  /** Optional usage reported by provider. */
-  usage?: AIUsage;
-}
+export type ChatRuntimeCompleteEvent = ChatRuntimeEventBase &
+  (
+    | {
+        /** Runtime 正常完成。 */
+        reason: Extract<ChatRuntimeCompletionReason, 'completed'>;
+        /** 正常完成不携带待处理交互。 */
+        interaction?: never;
+        /** Optional usage reported by provider. */
+        usage?: AIUsage;
+      }
+    | {
+        /** Runtime 已释放资源并暂停等待用户输入。 */
+        reason: Extract<ChatRuntimeCompletionReason, 'awaiting_user_input'>;
+        /** 等待中的持久化交互。 */
+        interaction: ChatPendingInteraction;
+        /** Optional usage reported by provider. */
+        usage?: AIUsage;
+      }
+  );
 
 /** Runtime event payload map. */
 export interface ChatRuntimeEventMap {

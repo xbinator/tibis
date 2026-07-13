@@ -25,6 +25,30 @@ function createAssistantMessage(): ChatMessageRecord {
 }
 
 describe('runtime stream message parts', (): void => {
+  it('does not change assistant loading when appending an awaiting tool result', (): void => {
+    const message = createAssistantMessage();
+    message.loading = false;
+
+    appendToolResult(message, {
+      type: 'tool-result',
+      toolCallId: 'tool-call-question',
+      toolName: 'question',
+      result: {
+        toolName: 'question',
+        status: 'awaiting_user_input',
+        data: {
+          questionId: 'question-1',
+          toolCallId: 'tool-call-question',
+          question: '继续吗？',
+          mode: 'single',
+          options: [{ label: '继续', value: 'yes' }]
+        }
+      }
+    });
+
+    expect(message).toMatchObject({ loading: false, finished: false });
+  });
+
   it('keeps open_widget result as a tool part without appending widget part', (): void => {
     const message = createAssistantMessage();
     const widgetValue = {
@@ -46,9 +70,9 @@ describe('runtime stream message parts', (): void => {
           value: widgetValue,
           renderContext: {
             input: {
-                city: '上海'
-              },
-              output: undefined,
+              city: '上海'
+            },
+            output: undefined,
             data: {}
           },
           execution: { status: 'success', output: undefined }

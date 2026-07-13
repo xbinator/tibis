@@ -115,6 +115,8 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
           allToolsContinueable = allToolsContinueable && shouldContinueAfterToolResult(toolResult);
           anyToolStopped = anyToolStopped || shouldStopStreamAfterToolResult(toolResult);
           isWaitingForUserInput = isWaitingForUserInput || toolResult.status === 'awaiting_user_input';
+          assistantMessage.loading = toolResult.status === 'awaiting_user_input';
+          assistantMessage.finished = false;
 
           await updateAssistant(assistantMessage);
           if (anyToolStopped) break;
@@ -125,6 +127,8 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
         allToolsContinueable = allToolsContinueable && shouldContinueAfterToolResult(chunk.result);
         anyToolStopped = anyToolStopped || shouldStopStreamAfterToolResult(chunk.result);
         isWaitingForUserInput = isWaitingForUserInput || chunk.result.status === 'awaiting_user_input';
+        assistantMessage.loading = chunk.result.status === 'awaiting_user_input';
+        assistantMessage.finished = false;
         await updateAssistant(assistantMessage);
         if (anyToolStopped) break;
       }

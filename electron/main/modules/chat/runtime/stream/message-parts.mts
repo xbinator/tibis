@@ -144,7 +144,6 @@ export function appendToolResult(message: ChatMessageRecord, chunk: RuntimeToolR
   const toolPart = ensureToolPart(message, chunk.toolCallId, chunk.toolName);
   toolPart.status = 'done';
   toolPart.result = chunk.result;
-  message.loading = false;
   message.finished = false;
 }
 

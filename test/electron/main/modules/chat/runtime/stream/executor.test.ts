@@ -770,7 +770,7 @@ describe('runtime stream executor', (): void => {
           }
         }
       ],
-      loading: false,
+      loading: true,
       finished: false
     });
   });
@@ -854,7 +854,7 @@ describe('runtime stream executor', (): void => {
           }
         }
       ],
-      loading: false,
+      loading: true,
       finished: false
     });
   });

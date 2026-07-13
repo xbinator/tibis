@@ -16,6 +16,29 @@ export type ChatSessionType = 'assistant';
  */
 export type ChatMessageRole = 'user' | 'system' | 'assistant' | 'error' | 'compression' | 'interrupt';
 
+/** 持久化用户交互状态。 */
+export type ChatPendingInteractionStatus = 'pending' | 'submitting' | 'resolved' | 'cancelled' | 'failed';
+
+/** 可跨刷新恢复的用户选择交互。 */
+export interface ChatPendingInteraction {
+  /** 交互类型。 */
+  type: 'userChoice';
+  /** 当前交互状态。 */
+  status: ChatPendingInteractionStatus;
+  /** 所属会话 ID。 */
+  sessionId: string;
+  /** 承载交互的 assistant 消息 ID。 */
+  messageId: string;
+  /** 产生交互的 Runtime ID。 */
+  runtimeId: string;
+  /** 产生交互的 Agent ID。 */
+  agentId: string;
+  /** 工具调用 ID。 */
+  toolCallId: string;
+  /** Question 业务 ID。 */
+  questionId: string;
+}
+
 /**
  * 压缩消息状态
  */

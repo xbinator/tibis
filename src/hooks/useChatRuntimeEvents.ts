@@ -6,6 +6,7 @@ import type { AIServiceError, AIToolExecutionError, AIToolExecutionResult } from
 import type {
   ChatRuntimeBridgeRequestEvent,
   ChatRuntimeBridgeResult,
+  ChatRuntimeCompleteEvent,
   ChatRuntimeConfirmationRequestEvent,
   ChatRuntimeErrorEvent,
   ChatRuntimeEventBase,
@@ -145,12 +146,14 @@ export function useChatRuntimeEvents(actorSystem: ChatActorSystem): void {
 
   /** 发布 Runtime 消息新增事件。 */
   function handleMessageCreated(event: ChatRuntimeMessageEvent): void {
-    if (shouldHandle(event)) actorSystem.emitSessionEvent(event.sessionId, { type: 'messageCreated', event });
+    if (!shouldHandle(event)) return;
+    actorSystem.emitSessionEvent(event.sessionId, { type: 'messageCreated', event });
   }
 
   /** 发布 Runtime 消息更新事件。 */
   function handleMessageUpdated(event: ChatRuntimeMessageEvent): void {
-    if (shouldHandle(event)) actorSystem.emitSessionEvent(event.sessionId, { type: 'messageUpdated', event });
+    if (!shouldHandle(event)) return;
+    actorSystem.emitSessionEvent(event.sessionId, { type: 'messageUpdated', event });
   }
 
   /** 发布 Runtime 消息删除事件。 */
@@ -159,8 +162,18 @@ export function useChatRuntimeEvents(actorSystem: ChatActorSystem): void {
   }
 
   /** 完成目标 Agent 并释放 Runtime。 */
-  function handleComplete(event: ChatRuntimeEventBase): void {
+  function handleComplete(event: ChatRuntimeCompleteEvent): void {
     if (!shouldHandle(event)) return;
+    if (event.reason === 'awaiting_user_input') {
+      actorSystem.send({
+        type: 'runtime.event',
+        runtimeId: event.runtimeId,
+        event: { type: 'runtime.userChoiceRequired', runtimeId: event.runtimeId, interaction: 'userChoice' }
+      });
+      actorSystem.sendToSession(event.sessionId, { type: 'session.userChoiceRequired', interaction: event.interaction });
+      actorSystem.unregisterRuntime(event.runtimeId);
+      return;
+    }
     actorSystem.emitSessionEvent(event.sessionId, { type: 'runtimeCompleted', event });
     actorSystem.send({ type: 'runtime.event', runtimeId: event.runtimeId, event: { type: 'runtime.completed', runtimeId: event.runtimeId } });
     actorSystem.sendToSession(event.sessionId, { type: 'session.completed' });
