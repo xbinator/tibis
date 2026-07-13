@@ -9,6 +9,7 @@ import { WIDGET_DEFAULT_ELEMENT_STYLE } from '../../constants/style';
  * 矩形元素注册配置。
  */
 export const rectElementSchema: WidgetElementSchema = {
+  role: 'basic',
   name: 'rect',
   label: '矩形',
   icon: 'lucide:square',

@@ -25,6 +25,7 @@ export interface WidgetTextElementMetadata extends WidgetMetadata {
  * 通过泛型参数声明专属元数据类型，metadata 字段在写入时即获得 WidgetTextElementMetadata 校验。
  */
 export const textElementSchema: WidgetElementSchema<WidgetTextElementMetadata> = {
+  role: 'basic',
   name: 'text',
   label: '文本',
   icon: 'lucide:type',

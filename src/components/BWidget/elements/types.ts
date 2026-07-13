@@ -2,6 +2,7 @@
  * @file types.ts
  * @description BWidget 元素注册、创建与渲染配置类型。
  */
+import type { WidgetElementRole } from './roles';
 import type { WidgetElementCreateAnchor, WidgetElementStyle, WidgetMetadata, WidgetShapeElement, WidgetSize } from '../types';
 import type { WidgetRenderContext } from 'types/widget';
 
@@ -43,6 +44,8 @@ export interface WidgetElementResizeConfig {
  * @template TMetadata - 元素自定义元数据类型，必须扩展 WidgetMetadata
  */
 export interface WidgetElementSchema<TMetadata extends WidgetMetadata = WidgetMetadata> {
+  /** 元素所属工具分类角色 */
+  role: WidgetElementRole;
   /** 元素名称 */
   name: string;
   /** 元素显示名称 */

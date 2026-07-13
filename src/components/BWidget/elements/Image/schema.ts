@@ -42,6 +42,7 @@ export const WIDGET_IMAGE_FIT_OPTIONS: { label: string; value: WidgetImageFit }[
  * 通过泛型参数声明专属元数据类型，metadata 字段在写入时即获得 WidgetImageElementMetadata 校验。
  */
 export const imageElementSchema: WidgetElementSchema<WidgetImageElementMetadata> = {
+  role: 'basic',
   name: 'image',
   label: '图片',
   icon: 'lucide:image',

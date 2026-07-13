@@ -62,6 +62,7 @@ export interface WidgetButtonElementMetadata extends WidgetMetadata {
  * 按钮元素注册配置。
  */
 export const buttonElementSchema: WidgetElementSchema<WidgetButtonElementMetadata> = {
+  role: 'interaction',
   name: 'button',
   label: '按钮',
   icon: 'lucide:mouse-pointer-click',
