@@ -89,6 +89,10 @@ vi.mock('@/shared/logger', () => ({
   logger: loggerMock
 }));
 
+vi.mock('@/utils/logger', () => ({
+  default: loggerMock
+}));
+
 vi.mock('ant-design-vue', async (importOriginal) => {
   const actual = await importOriginal<typeof import('ant-design-vue')>();
   return { ...actual, message: messageMock };
@@ -276,6 +280,8 @@ function mountWidgetSettingsPage(): VueWrapper {
         AInput: AInputStub,
         ATextarea: ATextareaStub,
         BIcon: BIconStub,
+        BDropdown: true,
+        BDropdownMenu: true,
         APagination: true,
         BPagination: true,
         ASwitch: true
@@ -672,7 +678,7 @@ describe('WidgetSettingsPage', (): void => {
     await flushPromises();
   });
 
-  it('does not render a widget delete action for now', async (): Promise<void> => {
+  it('does not render the legacy inline widget delete action', async (): Promise<void> => {
     nativeMock.readWorkspaceDirectory.mockResolvedValue({
       entries: [{ name: 'weather', type: 'directory' }]
     });

@@ -3,7 +3,7 @@
   @description 小组件列表项行组件，展示单个小组件的名称、描述及启用开关。
 -->
 <template>
-  <div class="widget-settings__item-row" role="button" tabindex="0" @click="handleOpen">
+  <div class="widget-settings__item-row" role="button" tabindex="0" @click="handleOpenWidget">
     <div class="widget-settings__item-icon">{{ initial }}</div>
     <div class="widget-settings__item-info">
       <div class="widget-settings__item-name">
@@ -17,14 +17,27 @@
     </div>
     <div class="widget-settings__item-actions" @click.stop>
       <ASwitch :checked="widget.enabled" size="small" :disabled="!!widget.parseError" @change="handleToggle" />
+      <BDropdown placement="bottomRight" :disabled="deleting">
+        <BButton type="ghost" size="small" square icon="lucide:settings" title="小组件设置" aria-label="小组件设置" :disabled="deleting" />
+        <template #overlay>
+          <BDropdownMenu :options="dropdownOptions" :width="120" />
+        </template>
+      </BDropdown>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { Icon } from '@iconify/vue';
-import type { WidgetDefinition } from '@/ai/widget';
+import { message } from 'ant-design-vue';
+import { parseWidgetJson, type WidgetDefinition } from '@/ai/widget';
+import type { DropdownOption } from '@/components/BDropdown/type';
+import { useOpenFile } from '@/hooks/useOpenFile';
+import { native } from '@/shared/platform';
+import { useWidgetStore } from '@/stores/ai/widget';
+import logger from '@/utils/logger';
+import { Modal } from '@/utils/modal';
 
 /**
  * 小组件列表项属性。
@@ -35,13 +48,10 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-
-const emit = defineEmits<{
-  /** 切换小组件启用状态 */
-  toggle: [id: string];
-  /** 打开小组件只读详情 */
-  open: [id: string];
-}>();
+const store = useWidgetStore();
+const { openWidgetFile } = useOpenFile();
+/** 当前小组件是否正在执行删除流程。 */
+const deleting = ref(false);
 
 /** 小组件名称首字母，用于图标展示。 */
 const initial = computed<string>(() => props.widget.name.charAt(0).toUpperCase());
@@ -49,18 +59,115 @@ const initial = computed<string>(() => props.widget.name.charAt(0).toUpperCase()
 const description = computed<string>(() => props.widget.description || props.widget.filePath);
 
 /**
- * 打开小组件详情。
+ * 从磁盘读取最新小组件定义，避免使用过期的 Store 缓存打开编辑器。
+ * @returns 最新小组件定义，读取失败时返回当前定义
  */
-function handleOpen(): void {
-  emit('open', props.widget.id);
+async function readLatestWidgetDefinition(): Promise<WidgetDefinition> {
+  try {
+    const { content } = await native.readFile(props.widget.filePath);
+    const latestWidget: WidgetDefinition = {
+      ...parseWidgetJson(content, props.widget.filePath),
+      enabled: props.widget.enabled
+    };
+
+    store.upsertWidget(latestWidget);
+    return latestWidget;
+  } catch (error: unknown) {
+    logger.warn('Read latest widget failed:', error);
+    return props.widget;
+  }
+}
+
+/**
+ * 使用磁盘最新定义打开小组件编辑器。
+ */
+async function handleOpenWidget(): Promise<void> {
+  if (deleting.value) {
+    return;
+  }
+
+  try {
+    const latestWidget = await readLatestWidgetDefinition();
+    await openWidgetFile(latestWidget);
+  } catch (error: unknown) {
+    logger.error('Open widget editor failed:', error);
+    message.error('无法打开小组件编辑器');
+  }
 }
 
 /**
  * 切换小组件启用状态。
  */
 function handleToggle(): void {
-  emit('toggle', props.widget.id);
+  store.toggleWidget(props.widget.id);
 }
+
+/**
+ * 获取小组件资源目录。
+ * @returns 小组件配置文件所在目录
+ */
+function getWidgetDirectoryPath(): string {
+  const separatorIndex = props.widget.filePath.lastIndexOf('/');
+
+  return separatorIndex > 0 ? props.widget.filePath.slice(0, separatorIndex) : props.widget.filePath;
+}
+
+/**
+ * 将当前小组件的整个资源目录移入系统回收站，并刷新 Store。
+ */
+async function handleDeleteWidget(): Promise<void> {
+  if (deleting.value) {
+    return;
+  }
+
+  // 删除锁覆盖确认弹窗和文件操作，避免快速重复点击生成多个确认流程。
+  deleting.value = true;
+  let movedToTrash = false;
+  try {
+    const [, confirmed] = await Modal.delete(`确定要删除小组件 "${props.widget.name}" 吗？整个目录及其中的附属文件都会移入系统回收站。`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    await native.trashFile(getWidgetDirectoryPath());
+    movedToTrash = true;
+    await store.rescan();
+    message.success(`小组件 "${props.widget.name}" 已删除`);
+  } catch (error: unknown) {
+    // 目录已移入回收站时只提示刷新失败，避免误导用户重复删除。
+    if (movedToTrash) {
+      logger.warn('Refresh widgets after deletion failed:', error);
+      message.warning(`小组件 "${props.widget.name}" 已移入回收站，但列表刷新失败`);
+    } else {
+      logger.error('Delete widget failed:', error);
+      const reason = error instanceof Error ? error.message : String(error);
+      message.error(`删除小组件 "${props.widget.name}" 失败：${reason}`);
+    }
+  } finally {
+    deleting.value = false;
+  }
+}
+
+/** 小组件设置菜单。 */
+const dropdownOptions = computed<DropdownOption[]>(() => [
+  {
+    type: 'item',
+    value: 'edit',
+    label: '编辑',
+    disabled: deleting.value,
+    onClick: handleOpenWidget
+  },
+  { type: 'divider' },
+  {
+    type: 'item',
+    value: 'delete',
+    label: '删除',
+    danger: true,
+    disabled: deleting.value,
+    onClick: handleDeleteWidget
+  }
+]);
 </script>
 
 <style scoped lang="less">
@@ -123,6 +230,9 @@ function handleToggle(): void {
 }
 
 .widget-settings__item-actions {
+  display: flex;
   flex-shrink: 0;
+  gap: 4px;
+  align-items: center;
 }
 </style>

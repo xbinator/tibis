@@ -18,37 +18,49 @@
     </div>
     <div class="skill-settings__item-actions" @click.stop>
       <ASwitch :checked="skill.enabled" size="small" :disabled="!!skill.parseError" @change="handleToggle" />
+      <BDropdown placement="bottomRight" :disabled="deleting">
+        <BButton type="ghost" size="small" square icon="lucide:settings" title="技能设置" aria-label="技能设置" :disabled="deleting" />
+        <template #overlay>
+          <BDropdownMenu :options="dropdownOptions" :width="120" />
+        </template>
+      </BDropdown>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
+import { message } from 'ant-design-vue';
 import type { SkillDefinition } from '@/ai/skill/types';
+import type { DropdownOption } from '@/components/BDropdown/type';
+import { useOpenFile } from '@/hooks/useOpenFile';
+import { native } from '@/shared/platform';
+import { useSkillStore } from '@/stores/ai/skill';
+import logger from '@/utils/logger';
+import { Modal } from '@/utils/modal';
 
 /**
- * Skill 列表项行组件
- * @props skill - Skill 定义对象
- * @emits toggle - 切换启用状态时触发，参数为 skill name
+ * Skill 列表项属性。
  */
-const props = defineProps<{
+interface Props {
   /** Skill 定义对象 */
   skill: SkillDefinition;
-}>();
+}
 
-const emit = defineEmits<{
-  /** 切换 Skill 启用状态 */
-  (e: 'toggle', name: string): void;
-  /** 打开 Skill 只读详情 */
-  (e: 'open', name: string): void;
-}>();
+const props = defineProps<Props>();
+const router = useRouter();
+const store = useSkillStore();
+const { openFileByPath } = useOpenFile();
+/** 当前 Skill 是否正在执行删除流程。 */
+const deleting = ref(false);
 
 /** Skill 名称首字母大写，用于图标展示。 */
 const initial = computed(() => props.skill.name.charAt(0).toUpperCase());
 
 /** 展示用描述，移除开头的双引号。 */
-const description = computed(() => {
+const description = computed<string>(() => {
   const desc = props.skill.description;
   return desc.startsWith('"') ? desc.slice(1) : desc;
 });
@@ -57,15 +69,93 @@ const description = computed(() => {
  * 打开 Skill 只读详情。
  */
 function handleOpen(): void {
-  emit('open', props.skill.name);
+  router.push({ name: 'skill-detail', params: { name: props.skill.name } });
 }
 
 /**
  * 切换 Skill 启用状态。
  */
 function handleToggle(): void {
-  emit('toggle', props.skill.name);
+  store.toggleSkill(props.skill.name);
 }
+
+/**
+ * 在 Markdown 编辑器中打开当前 Skill 的入口文件。
+ */
+async function handleEditSkill(): Promise<void> {
+  if (deleting.value) {
+    return;
+  }
+
+  try {
+    const openedFile = await openFileByPath(props.skill.filePath);
+
+    if (!openedFile) {
+      message.error(`无法打开技能 "${props.skill.name}" 的 SKILL.md`);
+    }
+  } catch (error: unknown) {
+    logger.error('Open SKILL.md failed:', error);
+    const reason = error instanceof Error ? error.message : String(error);
+    message.error(`无法打开技能 "${props.skill.name}" 的 SKILL.md：${reason}`);
+  }
+}
+
+/**
+ * 将当前 Skill 的整个资源目录移入系统回收站，并刷新 Store。
+ */
+async function handleDeleteSkill(): Promise<void> {
+  if (deleting.value) {
+    return;
+  }
+
+  // 删除锁覆盖确认弹窗和文件操作，避免快速重复点击生成多个确认流程。
+  deleting.value = true;
+  let movedToTrash = false;
+  try {
+    const [, confirmed] = await Modal.delete(`确定要删除技能 "${props.skill.name}" 吗？整个目录及其中的附属文件都会移入系统回收站。`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    await native.trashFile(props.skill.dirPath);
+    movedToTrash = true;
+    await store.rescan();
+    message.success(`技能 "${props.skill.name}" 已删除`);
+  } catch (error: unknown) {
+    // 目录已移入回收站时只提示刷新失败，避免误导用户重复删除。
+    if (movedToTrash) {
+      logger.warn('Refresh skills after deletion failed:', error);
+      message.warning(`技能 "${props.skill.name}" 已移入回收站，但列表刷新失败`);
+    } else {
+      logger.error('Delete Skill failed:', error);
+      const reason = error instanceof Error ? error.message : String(error);
+      message.error(`删除技能 "${props.skill.name}" 失败：${reason}`);
+    }
+  } finally {
+    deleting.value = false;
+  }
+}
+
+/** Skill 设置菜单。 */
+const dropdownOptions = computed<DropdownOption[]>(() => [
+  {
+    type: 'item',
+    value: 'edit',
+    label: '编辑',
+    disabled: deleting.value,
+    onClick: handleEditSkill
+  },
+  { type: 'divider' },
+  {
+    type: 'item',
+    value: 'delete',
+    label: '删除',
+    danger: true,
+    disabled: deleting.value,
+    onClick: handleDeleteSkill
+  }
+]);
 </script>
 
 <style scoped lang="less">
@@ -132,6 +222,7 @@ function handleToggle(): void {
 .skill-settings__item-actions {
   display: flex;
   flex-shrink: 0;
+  gap: 4px;
   align-items: center;
 }
 </style>

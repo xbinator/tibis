@@ -168,19 +168,33 @@ function RenderAlertModal({ content, title, width, confirmText }: Omit<ConfirmMo
 function RenderConfirmModal({ content, title, width, confirmText, cancelText, danger }: ConfirmModalOptions): Promise<[boolean, boolean]> {
   return new Promise((resolve) => {
     let instance: ModalInstance;
+    let settled = false;
 
-    const onConfirm = (): void => {
-      resolve([false, true]);
+    /**
+     * 完成确认流程并关闭弹窗，避免关闭事件与按钮事件重复结算。
+     * @param result - 取消与确认状态
+     */
+    const finish = (result: [boolean, boolean]): void => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      resolve(result);
       instance.close();
     };
+
+    const onConfirm = (): void => {
+      finish([false, true]);
+    };
     const onCancel = (): void => {
-      resolve([true, false]);
-      instance.close();
+      finish([true, false]);
     };
 
     instance = createModalInstance((controlProps) =>
       h(RenderModal, {
         ...controlProps,
+        onClose: onCancel,
         title,
         width,
         content: () => <div style={{ marginBottom: '16px', userSelect: 'text' }}>{content}</div>,

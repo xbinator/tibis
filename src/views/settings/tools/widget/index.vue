@@ -18,7 +18,7 @@
       </div>
 
       <div v-for="widget in pagedWidgets" :key="widget.filePath" class="widget-settings__item">
-        <WidgetItemRow :widget="widget" @toggle="store.toggleWidget" @open="handleOpenWidget" />
+        <WidgetItemRow :widget="widget" />
       </div>
 
       <SettingsPagination v-model:current="currentPage" :total="store.widgets.length" :page-size="PAGE_SIZE" />
@@ -31,11 +31,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { parseWidgetJson, type WidgetDefinition } from '@/ai/widget';
-import { useOpenFile } from '@/hooks/useOpenFile';
+import type { WidgetDefinition } from '@/ai/widget';
 import { native } from '@/shared/platform';
 import type { ReadWorkspaceDirectoryOptions } from '@/shared/platform/native/types';
 import { useWidgetStore } from '@/stores/ai/widget';
+import logger from '@/utils/logger';
 import SettingsPage from '@/views/settings/_components/SettingsPage.vue';
 import SettingsPagination from '@/views/settings/_components/SettingsPagination.vue';
 import SettingsSection from '@/views/settings/_components/SettingsSection.vue';
@@ -49,7 +49,6 @@ const PAGE_SIZE = 8;
 const route = useRoute();
 const router = useRouter();
 const store = useWidgetStore();
-const { openWidgetFile } = useOpenFile();
 /** 是否正在初始化扫描。 */
 const initializing = ref(false);
 /** 创建弹窗开关。 */
@@ -97,30 +96,9 @@ async function initWidgetStore(): Promise<void> {
       readWorkspaceDirectory: (options: ReadWorkspaceDirectoryOptions) => native.readWorkspaceDirectory(options)
     });
   } catch (error: unknown) {
-    console.error('Widget settings initialization failed:', error);
+    logger.error('Widget settings initialization failed:', error);
   } finally {
     initializing.value = false;
-  }
-}
-
-/**
- * 从磁盘读取最新小组件定义，避免设置页使用过期的 store 缓存打开编辑器。
- * @param widget - 当前列表中的小组件定义
- * @returns 最新小组件定义，读取失败时返回原定义
- */
-async function readLatestWidgetDefinition(widget: WidgetDefinition): Promise<WidgetDefinition> {
-  try {
-    const { content } = await native.readFile(widget.filePath);
-    const latestWidget = {
-      ...parseWidgetJson(content, widget.filePath),
-      enabled: widget.enabled
-    };
-
-    store.upsertWidget(latestWidget);
-    return latestWidget;
-  } catch (error: unknown) {
-    console.error('Read latest widget failed:', error);
-    return widget;
   }
 }
 
@@ -129,26 +107,6 @@ async function readLatestWidgetDefinition(widget: WidgetDefinition): Promise<Wid
  */
 function openCreateModal(): void {
   createModalOpen.value = true;
-}
-
-/**
- * 跳转到小组件编辑页。
- * @param id - 小组件 ID
- */
-function handleOpenWidget(id: string): void {
-  const widget = store.getWidgetById(id);
-
-  if (!widget) {
-    return;
-  }
-
-  readLatestWidgetDefinition(widget)
-    .then(async (latestWidget: WidgetDefinition): Promise<void> => {
-      await openWidgetFile(latestWidget);
-    })
-    .catch((error: unknown): void => {
-      console.error('Open widget editor failed:', error);
-    });
 }
 
 watch(
@@ -163,7 +121,7 @@ watch(
 
 onMounted((): void => {
   initWidgetStore().catch((error: unknown): void => {
-    console.error('Widget settings initialization failed:', error);
+    logger.error('Widget settings initialization failed:', error);
   });
 });
 </script>

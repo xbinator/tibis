@@ -19,7 +19,7 @@
       </div>
 
       <div v-for="skill in pagedSkills" :key="skill.filePath" class="skill-settings__item">
-        <SkillItemRow :skill="skill" @toggle="store.toggleSkill" @open="handleOpenSkill" />
+        <SkillItemRow :skill="skill" />
       </div>
 
       <!-- 分页 -->
@@ -34,6 +34,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import type { SkillDefinition } from '@/ai/skill/types';
 import { useSkillStore } from '@/stores/ai/skill';
 import SettingsPage from '@/views/settings/_components/SettingsPage.vue';
 import SettingsPagination from '@/views/settings/_components/SettingsPagination.vue';
@@ -70,7 +71,7 @@ const currentPage = computed<number>({
 const totalPages = computed<number>(() => Math.max(1, Math.ceil(store.skills.length / PAGE_SIZE)));
 
 /** 当前页的 skill 列表。 */
-const pagedSkills = computed(() => {
+const pagedSkills = computed<SkillDefinition[]>((): SkillDefinition[] => {
   const start = (currentPage.value - 1) * PAGE_SIZE;
   return store.skills.slice(start, start + PAGE_SIZE);
 });
@@ -78,21 +79,13 @@ const pagedSkills = computed(() => {
 /** 当技能列表收缩导致当前页码越界时，自动回退到最后一页。 */
 watch(
   [currentPage, totalPages],
-  ([page, pages]) => {
+  ([page, pages]: [number, number]): void => {
     if (page > pages) {
       currentPage.value = pages;
     }
   },
   { immediate: true }
 );
-
-/**
- * 跳转到 Skill 详情页。
- * @param name - Skill 名称
- */
-function handleOpenSkill(name: string): void {
-  router.push({ name: 'skill-detail', params: { name } });
-}
 </script>
 
 <style scoped lang="less">

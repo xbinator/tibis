@@ -52,10 +52,16 @@ const Menu = defineComponent({
 
     const menuWidth = computed<string>(() => (typeof props.width === 'number' ? `${props.width}px` : props.width));
 
+    /**
+     * 渲染菜单项的默认内容，自定义菜单插槽存在时由插槽完全接管。
+     * @param record - 当前菜单项配置
+     * @returns 菜单项内容节点
+     */
     function renderMenuContent(record: DropdownOptionItem): VNodeChild {
       return (
         slots.menu?.({ record }) ?? (
           <div class="b-dropdown-menu-item-label">
+            {record.icon ? <BIcon class="b-dropdown-menu-item-icon" icon={record.icon} size={record.iconSize} /> : null}
             <BTruncateText text={record.label} />
             {record.checked ? <BIcon class="b-dropdown-menu-item-check" icon="lucide:check" size={14} /> : null}
           </div>
@@ -206,6 +212,10 @@ export default Menu;
   gap: 6px;
   align-items: center;
   min-width: 0;
+}
+
+.b-dropdown-menu-item-icon {
+  flex-shrink: 0;
 }
 
 .b-dropdown-menu-item-check {
