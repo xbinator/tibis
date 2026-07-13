@@ -645,10 +645,10 @@ describe('BWidgetRuntime', (): void => {
     const stage = wrapper.find('.b-widget-runtime__stage');
 
     expect(root.attributes('style')).not.toContain('width:');
-    expect(root.attributes('style')).toContain('height: 219.9272727272727px');
-    expect(stageViewport.attributes('style')).toContain('width: 504px');
-    expect(stageViewport.attributes('style')).toContain('height: 219.9272727272727px');
-    expect(stage.attributes('style')).toContain('scale(2.290909090909091)');
+    expect(root.attributes('style')).toContain('height: 139.63636363636363px');
+    expect(stageViewport.attributes('style')).toContain('width: 320px');
+    expect(stageViewport.attributes('style')).toContain('height: 139.63636363636363px');
+    expect(stage.attributes('style')).toContain('scale(1.4545454545454546)');
     wrapper.unmount();
   });
 
@@ -665,10 +665,10 @@ describe('BWidgetRuntime', (): void => {
     const stage = wrapper.find('.b-widget-runtime__stage');
 
     expect(root.attributes('style')).not.toContain('width:');
-    expect(root.attributes('style')).toContain('height: 219.92727272727274px');
-    expect(stageViewport.attributes('style')).toContain('width: 504px');
-    expect(stageViewport.attributes('style')).toContain('height: 219.92727272727274px');
-    expect(stage.attributes('style')).toContain('scale(2.290909090909091)');
+    expect(root.attributes('style')).toContain('height: 180px');
+    expect(stageViewport.attributes('style')).toContain('width: 412.5px');
+    expect(stageViewport.attributes('style')).toContain('height: 180px');
+    expect(stage.attributes('style')).toContain('scale(1.875)');
     wrapper.unmount();
   });
 
@@ -686,11 +686,11 @@ describe('BWidgetRuntime', (): void => {
     const stage = wrapper.find('.b-widget-runtime__stage');
 
     expect(root.attributes('style')).not.toContain('width:');
-    expect(root.attributes('style')).toContain('height: 504px');
-    expect(stageViewport.attributes('style')).toContain('width: 504px');
-    expect(stageViewport.attributes('style')).toContain('height: 504px');
-    expect(stage.attributes('style')).toContain('top: 142.03636363636363px');
-    expect(stage.attributes('style')).toContain('scale(2.290909090909091)');
+    expect(root.attributes('style')).toContain('height: 320px');
+    expect(stageViewport.attributes('style')).toContain('width: 320px');
+    expect(stageViewport.attributes('style')).toContain('height: 320px');
+    expect(stage.attributes('style')).toContain('top: 90.18181818181819px');
+    expect(stage.attributes('style')).toContain('scale(1.4545454545454546)');
     wrapper.unmount();
   });
 
@@ -718,7 +718,7 @@ describe('BWidgetRuntime', (): void => {
     wrapper.unmount();
   });
 
-  it('scales configured runtime content down and back up with consecutive container resizes', async (): Promise<void> => {
+  it('scales configured runtime content down and restores it with consecutive container resizes', async (): Promise<void> => {
     const dataItem = {
       ...createRuntimeWidgetData(),
       metadata: {
@@ -734,8 +734,8 @@ describe('BWidgetRuntime', (): void => {
     const initialTextNodeStyle = textNode.attributes('style');
 
     expect(root.attributes('style')).not.toContain('width:');
-    expect(stageViewport.attributes('style')).toContain('width: 504px');
-    expect(stageViewport.attributes('style')).toContain('height: 283.5px');
+    expect(stageViewport.attributes('style')).toContain('width: 320px');
+    expect(stageViewport.attributes('style')).toContain('height: 180px');
 
     ResizeObserverMock.trigger(160, 90);
     await nextTick();
@@ -749,10 +749,10 @@ describe('BWidgetRuntime', (): void => {
     ResizeObserverMock.trigger(640, 360);
     await nextTick();
 
-    expect(stageViewport.attributes('style')).toContain('width: 640px');
-    expect(stageViewport.attributes('style')).toContain('height: 360px');
-    expect(stage.attributes('style')).toContain('top: 40.363636363636374px');
-    expect(stage.attributes('style')).toContain('scale(2.909090909090909)');
+    expect(stageViewport.attributes('style')).toContain('width: 320px');
+    expect(stageViewport.attributes('style')).toContain('height: 180px');
+    expect(stage.attributes('style')).toContain('top: 20.181818181818187px');
+    expect(stage.attributes('style')).toContain('scale(1.4545454545454546)');
     expect(textNode.attributes('style')).toBe(initialTextNodeStyle);
     wrapper.unmount();
   });

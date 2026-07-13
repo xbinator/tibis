@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 让 `BWidgetRuntime` 始终以宿主实时宽度双向等比缩放，容器缩小后能够重新放大，并自动计算展示高度。
+**Goal:** 让 `BWidgetRuntime` 在空间充足时保持 metadata 设定尺寸，空间不足时等比缩小，并在空间恢复后放大回设定尺寸。
 
-**Architecture:** 将运行态根节点固定为宿主宽度测量边界，删除由布局结果反向写入根节点宽度的反馈环。`useRuntimeLayout` 先计算 metadata 对应的基础展示盒子，再按当前宿主宽度统一缩放基础盒子、内容比例和舞台偏移。
+**Architecture:** 将运行态根节点固定为宿主宽度测量边界，删除由布局结果反向写入根节点宽度的反馈环。`useRuntimeLayout` 先计算 metadata 对应的基础展示盒子；配置有效 metadata 尺寸时按 `min(hostWidth / baseWidth, 1)` 缩放基础盒子、内容比例和舞台偏移，未配置时继续填满宿主宽度。Hook 内部最终只保留 metadata 读取、纯布局计算和响应式包装三个函数，避免单步骤 helper 造成阅读跳转。
 
 **Tech Stack:** Vue 3 Composition API、TypeScript、VueUse `ResizeObserver`、Vitest、Vue Test Utils、Less。
 
@@ -44,10 +44,10 @@ expect(runtimeDisplayLayout.value).toEqual({
 viewportSize.value = { width: 640, height: 0 };
 
 expect(runtimeDisplayLayout.value).toEqual({
-  width: 640,
-  height: 360,
-  scale: 3.2,
-  stageOffset: { x: 0, y: 20 }
+  width: 320,
+  height: 180,
+  scale: 1.6,
+  stageOffset: { x: 0, y: 10 }
 });
 ```
 
@@ -57,7 +57,7 @@ expect(runtimeDisplayLayout.value).toEqual({
 
 Run: `pnpm exec vitest run test/components/BWidget/use-runtime-layout.test.ts`
 
-Expected: FAIL；当前布局会把 `320 × 180` 视为最大展示盒子，宿主宽度为 `640` 时仍返回 `320 × 180`。
+Expected: FAIL；错误布局会在宿主宽度为 `640` 时返回 `640 × 360`，超过设定的 `320 × 180`。
 
 - [ ] **Step 3: 实现基础展示盒子和响应式比例**
 
@@ -72,12 +72,16 @@ interface WidgetRuntimeBaseLayout {
 
 function createResponsiveRuntimeDisplayLayout(
   baseLayout: WidgetRuntimeBaseLayout,
-  hostWidth: number
+  hostWidth: number,
+  constrainToBaseSize: boolean
 ): WidgetRuntimeDisplayLayout {
-  const responsiveScale = hostWidth > 0 ? hostWidth / baseLayout.size.width : 1;
+  const hostScale = hostWidth > 0 ? hostWidth / baseLayout.size.width : 1;
+  const responsiveScale = constrainToBaseSize ? Math.min(hostScale, 1) : hostScale;
+  const availableWidth = hostWidth > 0 ? hostWidth : baseLayout.size.width;
+  const displayWidth = constrainToBaseSize ? Math.min(availableWidth, baseLayout.size.width) : availableWidth;
 
   return {
-    width: baseLayout.size.width * responsiveScale,
+    width: displayWidth,
     height: baseLayout.size.height * responsiveScale,
     scale: baseLayout.scale * responsiveScale,
     stageOffset: {
@@ -88,7 +92,7 @@ function createResponsiveRuntimeDisplayLayout(
 }
 ```
 
-基础展示盒子继续保留四种 metadata 语义；最终响应式比例允许大于 `1`，不再调用只允许缩小的 `constrainDisplayBoxToHost`。
+基础展示盒子继续保留四种 metadata 语义；配置有效 metadata 尺寸时最终响应式比例不超过 `1`，未配置 metadata 时仍允许按宿主宽度放大内容。
 
 - [ ] **Step 4: 运行 Hook 测试并确认通过**
 
@@ -130,7 +134,8 @@ class ResizeObserverMock {
 
 ```typescript
 expect(root.attributes('style')).not.toContain('width:');
-expect(stageViewport.attributes('style')).toContain('width: 504px');
+expect(stageViewport.attributes('style')).toContain('width: 320px');
+expect(stageViewport.attributes('style')).toContain('height: 180px');
 
 ResizeObserverMock.trigger(160, 90);
 await nextTick();
@@ -139,17 +144,17 @@ expect(stageViewport.attributes('style')).toContain('height: 90px');
 
 ResizeObserverMock.trigger(640, 360);
 await nextTick();
-expect(stageViewport.attributes('style')).toContain('width: 640px');
-expect(stageViewport.attributes('style')).toContain('height: 360px');
+expect(stageViewport.attributes('style')).toContain('width: 320px');
+expect(stageViewport.attributes('style')).toContain('height: 180px');
 ```
 
-同步更新已有 metadata 宽高测试：实际展示宽度改为当前宿主宽度，基础盒子比例、`contain` 居中和无变形语义保持不变。
+同步更新已有 metadata 宽高测试：空间充足时保持设定尺寸，空间不足时缩小，基础盒子比例、`contain` 居中和无变形语义保持不变。
 
 - [ ] **Step 3: 运行组件测试并确认失败**
 
 Run: `pnpm exec vitest run test/components/BWidget/widget-runtime-view.component.test.ts`
 
-Expected: FAIL；当前根样式仍写入固定像素宽度，而且 metadata 展示盒子不会放大到 `640px`。
+Expected: FAIL；错误实现会让 metadata 展示盒子超过设定尺寸放大到 `640px`。
 
 - [ ] **Step 4: 修改 Runtime 根节点样式职责**
 
@@ -179,7 +184,7 @@ Expected: PASS。
 在当天日志的 `Changed` 或 `Fixed` 小节记录：
 
 ```markdown
-- 修复 BWidget 运行态配置展示宽高后只能随宿主缩小、无法重新放大的问题；运行态内容现在按宿主实时宽度双向等比缩放并自动计算高度。
+- 修复 BWidget 运行态配置展示宽高后只能随宿主缩小、无法恢复设定尺寸的问题；运行态内容现在会在空间不足时等比缩小，并在空间恢复后放大回设定尺寸。
 ```
 
 - [ ] **Step 2: 运行目标测试**
@@ -209,3 +214,129 @@ Expected: exit code 0。
 Run: `git diff --check && git status --short`
 
 Expected: 无空白错误；只显示本计划、设计文档、运行态布局实现、测试和当天 changelog 的预期修改。不要暂存或提交文件。
+
+### Task 4: 合并过度拆分的运行态布局函数
+
+**Files:**
+- Modify: `src/components/BWidget/hooks/useRuntimeLayout.ts`
+- Modify: `test/components/BWidget/use-runtime-layout.test.ts`
+- Modify: `changelog/2026-07-13.md`
+
+- [ ] **Step 1: 编写失败的源码结构测试**
+
+在 `test/components/BWidget/use-runtime-layout.test.ts` 读取 Hook 源码，约束已确认移除的单步骤 helper 和中间类型：
+
+```typescript
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+it('keeps runtime layout calculation in three focused functions', (): void => {
+  const source = readFileSync(resolve(process.cwd(), 'src/components/BWidget/hooks/useRuntimeLayout.ts'), 'utf8');
+
+  expect(source).not.toContain('function normalizeRuntimeDisplaySizeValue');
+  expect(source).not.toContain('function createCenteredStageOffset');
+  expect(source).not.toContain('function createRuntimeBaseLayout');
+  expect(source).not.toContain('function createResponsiveRuntimeDisplayLayout');
+  expect(source).not.toContain('interface WidgetRuntimeBaseLayout');
+});
+```
+
+- [ ] **Step 2: 运行结构测试并确认失败**
+
+Run: `pnpm exec vitest run test/components/BWidget/use-runtime-layout.test.ts -t "three focused functions"`
+
+Expected: FAIL，源码仍包含上述 helper 和中间类型。
+
+- [ ] **Step 3: 合并 metadata 归一化函数**
+
+删除 `normalizeRuntimeDisplaySizeValue`，在 `readRuntimeDisplaySize` 中一次读取并归一化两个字段：
+
+```typescript
+function readRuntimeDisplaySize(value: WidgetData): WidgetRuntimeDisplaySize {
+  const width = value.metadata.width;
+  const height = value.metadata.height;
+
+  return {
+    width: isNumber(width) && isFiniteNumber(width) && width > 0 ? width : undefined,
+    height: isNumber(height) && isFiniteNumber(height) && height > 0 ? height : undefined
+  };
+}
+```
+
+- [ ] **Step 4: 将布局计算合并为一条线性流程**
+
+删除 `WidgetRuntimeBaseLayout`、`createCenteredStageOffset`、`createRuntimeBaseLayout` 和 `createResponsiveRuntimeDisplayLayout`，在 `createRuntimeDisplayLayout` 中依次计算基础尺寸、基础缩放、宿主约束和最终结果：
+
+```typescript
+function createRuntimeDisplayLayout(
+  contentSize: WidgetSize,
+  displaySize: WidgetRuntimeDisplaySize,
+  hostWidth: number,
+  hasRenderableElements: boolean
+): WidgetRuntimeDisplayLayout {
+  if (!hasRenderableElements || !contentSize.width || !contentSize.height) {
+    return {
+      height: contentSize.height,
+      scale: 1,
+      stageOffset: { x: 0, y: 0 }
+    };
+  }
+
+  // 1. 根据 metadata 创建基础展示盒子；缺失的单边按内容比例推导。
+  const widthScale = displaySize.width === undefined ? Number.POSITIVE_INFINITY : displaySize.width / contentSize.width;
+  const heightScale = displaySize.height === undefined ? Number.POSITIVE_INFINITY : displaySize.height / contentSize.height;
+  const calculatedBaseScale = Math.min(widthScale, heightScale);
+  const baseScale = isFiniteNumber(calculatedBaseScale) ? calculatedBaseScale : 1;
+  const baseWidth = displaySize.width ?? contentSize.width * baseScale;
+  const baseHeight = displaySize.height ?? contentSize.height * baseScale;
+  const baseOffset = {
+    x: Math.max((baseWidth - contentSize.width * baseScale) / 2, 0),
+    y: Math.max((baseHeight - contentSize.height * baseScale) / 2, 0)
+  };
+
+  // 2. 配置 metadata 时不超过基础展示盒子；未配置时继续填满宿主宽度。
+  const constrainToBaseSize = displaySize.width !== undefined || displaySize.height !== undefined;
+  const hostScale = hostWidth > 0 ? hostWidth / baseWidth : 1;
+  const responsiveScale = constrainToBaseSize ? Math.min(hostScale, 1) : hostScale;
+  const availableWidth = hostWidth > 0 ? hostWidth : baseWidth;
+  const displayWidth = constrainToBaseSize ? Math.min(availableWidth, baseWidth) : availableWidth;
+
+  return {
+    width: displayWidth,
+    height: baseHeight * responsiveScale,
+    scale: baseScale * responsiveScale,
+    stageOffset: {
+      x: baseOffset.x * responsiveScale,
+      y: baseOffset.y * responsiveScale
+    }
+  };
+}
+```
+
+- [ ] **Step 5: 运行结构与行为测试**
+
+Run: `pnpm exec vitest run test/components/BWidget/use-runtime-layout.test.ts test/components/BWidget/widget-runtime-view.component.test.ts`
+
+Expected: 两个测试文件共 45 项全部 PASS，所有尺寸断言保持不变。
+
+- [ ] **Step 6: 更新 changelog 并运行静态检查**
+
+在 `changelog/2026-07-13.md` 的 `Changed` 小节增加：
+
+```markdown
+- 简化 BWidget 运行态布局 Hook，将过度拆分的基础盒子、缩放和偏移 helper 合并为线性纯布局计算，保持现有展示尺寸行为不变。
+```
+
+Run: `pnpm exec eslint src/components/BWidget/hooks/useRuntimeLayout.ts test/components/BWidget/use-runtime-layout.test.ts --ext .ts`
+
+Expected: exit code 0。
+
+Run: `pnpm exec tsc --noEmit`
+
+Expected: exit code 0。
+
+- [ ] **Step 7: 检查最终差异**
+
+Run: `git diff --check && git status --short`
+
+Expected: 无空白错误，不暂存、不提交任何文件。

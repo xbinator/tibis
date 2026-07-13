@@ -2,6 +2,8 @@
  * @file use-runtime-layout.test.ts
  * @description 验证 BWidget 运行态展示布局随宿主宽度双向等比缩放。
  */
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { ComputedRef, Ref } from 'vue';
 import { computed, ref } from 'vue';
 import { describe, expect, it } from 'vitest';
@@ -58,7 +60,17 @@ function createRuntimeLayoutTestContext(options: RuntimeLayoutTestOptions = {}):
 }
 
 describe('useRuntimeLayout', (): void => {
-  it('scales a configured display box down and back up with the host width', (): void => {
+  it('keeps runtime layout calculation in three focused functions', (): void => {
+    const source = readFileSync(resolve(process.cwd(), 'src/components/BWidget/hooks/useRuntimeLayout.ts'), 'utf8');
+
+    expect(source).not.toContain('function normalizeRuntimeDisplaySizeValue');
+    expect(source).not.toContain('function createCenteredStageOffset');
+    expect(source).not.toContain('function createRuntimeBaseLayout');
+    expect(source).not.toContain('function createResponsiveRuntimeDisplayLayout');
+    expect(source).not.toContain('interface WidgetRuntimeBaseLayout');
+  });
+
+  it('scales a configured display box down and restores it without exceeding the configured size', (): void => {
     const { viewportSize, runtimeDisplayLayout } = createRuntimeLayoutTestContext({
       metadata: {
         width: 320,
@@ -85,10 +97,10 @@ describe('useRuntimeLayout', (): void => {
     viewportSize.value = { width: 640, height: 0 };
 
     expect(runtimeDisplayLayout.value).toEqual({
-      width: 640,
-      height: 360,
-      scale: 3.2,
-      stageOffset: { x: 0, y: 20 }
+      width: 320,
+      height: 180,
+      scale: 1.6,
+      stageOffset: { x: 0, y: 10 }
     });
   });
 
@@ -103,30 +115,30 @@ describe('useRuntimeLayout', (): void => {
     });
   });
 
-  it('uses configured width as the base size before fitting the host width', (): void => {
+  it('keeps configured width when the host is wider', (): void => {
     const { runtimeDisplayLayout } = createRuntimeLayoutTestContext({
       metadata: { width: 320 },
       hostWidth: 640
     });
 
     expect(runtimeDisplayLayout.value).toEqual({
-      width: 640,
-      height: 320,
-      scale: 3.2,
+      width: 320,
+      height: 160,
+      scale: 1.6,
       stageOffset: { x: 0, y: 0 }
     });
   });
 
-  it('uses configured height as the base size before fitting the host width', (): void => {
+  it('keeps configured height when the host is wider than its derived width', (): void => {
     const { runtimeDisplayLayout } = createRuntimeLayoutTestContext({
       metadata: { height: 180 },
       hostWidth: 720
     });
 
     expect(runtimeDisplayLayout.value).toEqual({
-      width: 720,
-      height: 360,
-      scale: 3.6,
+      width: 360,
+      height: 180,
+      scale: 1.8,
       stageOffset: { x: 0, y: 0 }
     });
   });
