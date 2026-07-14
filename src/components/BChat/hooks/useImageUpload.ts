@@ -2,7 +2,7 @@
  * @file useImageUpload.ts
  * @description 图片上传状态管理 hook，管理图片校验、草稿操作和纯图片摘要生成
  */
-import type { ToastOptions } from '../components/InteractionContainer/types';
+import type { InteractionAPI } from '../components/InteractionContainer/types';
 import type { ChatMessageFile } from 'types/chat';
 import type { Ref } from 'vue';
 import { createChatImageFile, isImageFile } from '@/components/BChat/utils/imageUtils';
@@ -39,8 +39,8 @@ interface UseImageUploadOptions {
   supportsVision: Ref<boolean>;
   /** 草稿输入 hook 的图片相关接口 */
   inputEvents: ChatInputForImage;
-  /** 显示 Toast 提示 */
-  showToast: (options: ToastOptions) => void;
+  /** 交互容器 API */
+  interactionAPI: InteractionAPI;
 }
 
 /**
@@ -49,7 +49,7 @@ interface UseImageUploadOptions {
  * @returns 图片上传状态和操作方法
  */
 export function useImageUpload(options: UseImageUploadOptions) {
-  const { supportsVision, inputEvents, showToast } = options;
+  const { supportsVision, inputEvents, interactionAPI } = options;
 
   /**
    * 判断当前是否允许接收图片。
@@ -101,7 +101,7 @@ export function useImageUpload(options: UseImageUploadOptions) {
       const nextImages: ChatMessageFile[] = await Promise.all(imageFiles.map((file) => createChatImageFile(file)));
       inputEvents.addImages(nextImages);
     } catch (error) {
-      showToast({ type: 'error', content: error instanceof Error ? error.message : '图片处理失败' });
+      interactionAPI.showToast({ type: 'error', content: error instanceof Error ? error.message : '图片处理失败' });
     }
   }
 

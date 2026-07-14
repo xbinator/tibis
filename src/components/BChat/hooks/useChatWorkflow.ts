@@ -18,6 +18,7 @@ import { createRegenerationSlice } from '@/ai/chat/policies/regeneration';
 import { getRuntimeConfirmationGrantScope } from '@/ai/chat/policies/runtimeConfirmation';
 import type { ChatSessionUIEvent } from '@/ai/chat/sessionEvents';
 import { getElectronAPI, unwrap } from '@/shared/platform/electron-api';
+import { useChatSessionStore } from '@/stores/chat/session';
 import { useToolPermissionStore } from '@/stores/chat/toolPermission';
 import { buildUserInputParts } from '../utils/filePartParser';
 import { create, userChoice } from '../utils/messageHelper';
@@ -69,10 +70,6 @@ interface UseChatWorkflowOptions {
   fetchAllPriorHistory: (sessionId: string) => Promise<Message[]>;
   /** 替换 renderer 当前消息 */
   setLoadedMessages: (messages: Message[]) => void;
-  /** 持久化会话完整消息 */
-  persistMessages: (sessionId: string, messages: Message[]) => Promise<void>;
-  /** 更新单条会话消息 */
-  updateSessionMessage: (sessionId: string | undefined, message: Message) => Promise<void>;
   /** 恢复输入草稿 */
   restoreInput: (message: Message) => void;
   /** 清空输入草稿 */
@@ -139,6 +136,7 @@ interface RuntimeUserMessageSendInput {
  * @returns 可直接绑定到页面事件的工作流 API
  */
 export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflowReturn {
+  const chatStore = useChatSessionStore();
   const toolPermissionStore = useToolPermissionStore();
   const rollbackIgnoredRuntimeIds = new Set<string>();
   const preflightLoading = ref<boolean>(false);
@@ -216,7 +214,7 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
       content: error.message,
       visibleMessages: options.messages.value,
       fetchAllPriorHistory: options.fetchAllPriorHistory,
-      persistMessages: options.persistMessages,
+      persistMessages: chatStore.setSessionMessages,
       setLoadedMessages: options.setLoadedMessages,
       afterMessagesUpdated: async (): Promise<void> => {
         await nextTick();
@@ -244,7 +242,7 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
     const sessionId = options.activeSessionId.value;
     if (!sessionId) return;
     const historyMessages = await options.fetchAllPriorHistory(sessionId);
-    await options.persistMessages(sessionId, [...historyMessages, ...nextMessages]);
+    await chatStore.setSessionMessages(sessionId, [...historyMessages, ...nextMessages]);
   }
 
   /** 启动指定 assistant 消息的重新生成。 */
@@ -362,7 +360,7 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
           visibleMessages: options.messages.value,
           precedingMessage: pendingUserMessage,
           fetchAllPriorHistory: options.fetchAllPriorHistory,
-          persistMessages: options.persistMessages,
+          persistMessages: chatStore.setSessionMessages,
           setLoadedMessages: options.setLoadedMessages,
           afterMessagesUpdated: async (): Promise<void> => {
             await nextTick();
@@ -406,14 +404,14 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
     submitUserChoice: chatRuntime.submitUserChoice,
     sendRuntimeUserMessage,
     submitRuntimeMessagePart: chatRuntime.submitMessagePart,
-    updateSessionMessage: options.updateSessionMessage
+    updateSessionMessage: chatStore.updateSessionMessage
   });
 
   const rollbackController = useRollback({
     messages: options.messages,
     getSessionId: (): string | undefined => options.activeSessionId.value ?? undefined,
     fetchAllPriorHistory: options.fetchAllPriorHistory,
-    persistMessages: options.persistMessages,
+    persistMessages: chatStore.setSessionMessages,
     invalidateCompressionRecords: async (recordIds: string[]): Promise<void> => {
       for (const recordId of recordIds) {
         // eslint-disable-next-line no-await-in-loop
@@ -469,7 +467,7 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
 
     const visibleMessages = [...nextMessages, create.interruptMessage(cancelledAssistantMessage)];
     const historyMessages = await options.fetchAllPriorHistory(sessionId);
-    await options.persistMessages(sessionId, [...historyMessages, ...visibleMessages]);
+    await chatStore.setSessionMessages(sessionId, [...historyMessages, ...visibleMessages]);
     options.setLoadedMessages(visibleMessages);
     await nextTick();
     options.scrollToBottom();

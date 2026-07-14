@@ -39,7 +39,7 @@
  * @description Prompt 编辑器主组件，基于 CodeMirror 6 实现
  */
 import type { ChipResolver } from './extensions/variableChip';
-import type { SlashCommandOption, Variable, FileMentionOption, BTextEditorProps as Props } from './types';
+import type { SlashCommandOption, Variable, FileMentionOption, BTextEditorExpose, BTextEditorProps as Props } from './types';
 import type { FlatVariable, VisibleVariable } from './utils/variables';
 import type { Extension } from '@codemirror/state';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
@@ -497,8 +497,8 @@ onBeforeUnmount(() => {
   destroyEditor();
 });
 
-defineExpose({
-  focus: (options?: { moveToEnd?: boolean }) => {
+defineExpose<BTextEditorExpose>({
+  focus: (options?: { moveToEnd?: boolean }): void => {
     if (!instance.value) return;
     instance.value.focus();
     if (options?.moveToEnd) {
@@ -514,12 +514,12 @@ defineExpose({
     const selection = lastSelection.value ?? instance.value.state.selection;
     return selection.main.head;
   },
-  saveCursorPosition: () => {
+  saveCursorPosition: (): void => {
     if (instance.value) {
       lastSelection.value = instance.value.state.selection;
     }
   },
-  insertTextAtCursor: (text: string) => {
+  insertTextAtCursor: (text: string): void => {
     if (!instance.value) return;
 
     instance.value.focus();
@@ -534,7 +534,7 @@ defineExpose({
 
     lastSelection.value = null;
   },
-  replaceTextRange: (from: number, to: number, text: string) => {
+  replaceTextRange: (from: number, to: number, text: string): void => {
     if (!instance.value) return;
 
     instance.value.focus();
@@ -544,7 +544,7 @@ defineExpose({
       selection: { anchor: insertEnd }
     });
   },
-  getText: () => {
+  getText: (): string => {
     return instance.value?.state.doc.toString() ?? '';
   }
 });

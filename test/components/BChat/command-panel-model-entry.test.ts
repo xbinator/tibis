@@ -12,7 +12,7 @@ describe('BChat command panel model entry', (): void => {
     expect(chatSource).toContain("import { useCommandPanelStore } from '@/stores/ui/commandPanel';");
     expect(chatSource).toContain('const commandPanelStore = useCommandPanelStore();');
     expect(chatSource).toContain('commandPanelStore.openModel({');
-    expect(chatSource).toContain('onClose: () => promptEditorRef.value?.focus()');
+    expect(chatSource).toContain('onClose: (): void => promptEditorRef.value?.focus()');
     expect(chatSource).not.toContain('<BCommandPanel');
     expect(chatSource).not.toContain("import BCommandPanel from '@/components/BCommandPanel/index.vue';");
     expect(chatSource).not.toContain("import BModelSelect from '@/components/BModel/select.vue';");

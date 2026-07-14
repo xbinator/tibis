@@ -1520,6 +1520,27 @@ describe('BChat sessionId runtime', (): void => {
     await flushPromises();
   });
 
+  it('does not switch to a completed branch after the active session changes', async (): Promise<void> => {
+    const assistantMessage = createAssistantMessage();
+    const branchedSession = createSession('session-branch', '原标题');
+    let resolveBranch: ((session: ChatSession) => void) | undefined;
+    chatStoreMock.branchSession.mockReturnValue(
+      new Promise<ChatSession>((resolve): void => {
+        resolveBranch = resolve;
+      })
+    );
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+
+    wrapper.findComponent(ConversationViewStub).vm.$emit('branch', assistantMessage);
+    await wrapper.setProps({ sessionId: 'session-other' });
+    await flushPromises();
+    resolveBranch?.(branchedSession);
+    await flushPromises();
+
+    expect(wrapper.emitted('session-created')).toBeUndefined();
+  });
+
   it('shows an error without switching when branch creation fails', async (): Promise<void> => {
     const assistantMessage = createAssistantMessage();
     chatStoreMock.branchSession.mockRejectedValue(new Error('分支创建失败'));

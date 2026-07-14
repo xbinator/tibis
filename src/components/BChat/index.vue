@@ -94,6 +94,7 @@ import type { ContextUsageBudgetSnapshot } from '@@/shared/ai/context/usageBudge
 import { findPendingInteraction } from '@/ai/chat/policies/pendingInteraction';
 import type { ChatSessionUIEvent } from '@/ai/chat/sessionEvents';
 import BTextEditor from '@/components/BText/Editor.vue';
+import type { BTextEditorExpose } from '@/components/BText/types';
 import { useChatActorSystem } from '@/hooks/useChatActorSystem';
 import { useNavigate } from '@/hooks/useNavigate';
 import { useProviderStore } from '@/stores/ai/provider';
@@ -125,6 +126,11 @@ import { useUsagePanel } from './hooks/useUsagePanel';
 import { createChatConfirmationController } from './utils/confirmationController';
 import { userChoice } from './utils/messageHelper';
 
+/**
+ * 输入编辑器组件实例与对外公开方法。
+ */
+type EditorInstance = InstanceType<typeof BTextEditor> & BTextEditorExpose;
+
 const [, bem] = createNamespace('chat');
 
 const props = withDefaults(defineProps<BChatProps>(), {
@@ -153,26 +159,18 @@ provide('interaction', interactionAPI);
 /** 通用文件打开导航能力 */
 const { openFile, openWebview } = useNavigate();
 /** 输入编辑器实例。 */
-const promptEditorRef = ref<InstanceType<typeof BTextEditor>>();
-/** 聚焦输入编辑器。 */
-function focusInput(options?: { moveToEnd?: boolean }): void {
-  promptEditorRef.value?.focus?.(options);
-}
+const promptEditorRef = ref<EditorInstance>();
+/** 文件拖拽容器引用。 */
+const containerRef = ref<HTMLElement | null>(null);
 /** 输入区域状态与交互能力。 */
 const composer = useChatComposer({
-  showToast: interactionAPI.showToast,
-  openFile,
-  editor: {
-    focus: focusInput,
-    saveCursorPosition: (): void => promptEditorRef.value?.saveCursorPosition(),
-    getCursorPosition: (): number => promptEditorRef.value?.getCursorPosition() ?? 0,
-    replaceTextRange: (from: number, to: number, text: string): void => promptEditorRef.value?.replaceTextRange(from, to, text),
-    insertTextAtCursor: (text: string): void => promptEditorRef.value?.insertTextAtCursor(text)
-  }
+  containerRef,
+  promptEditorRef,
+  interactionAPI,
+  openFile
 });
 const {
-  // @ts-ignore
-  containerRef,
+  focusInput,
   imageUpload,
   fileReference,
   canSubmit,
@@ -193,7 +191,7 @@ const commandPanelStore = useCommandPanelStore();
 /** Provider 数据源。 */
 const providerStore = useProviderStore();
 /** 是否存在至少一个已启用的模型，用于「去配置」点击分支。 */
-const hasAvailableModels = computed<boolean>(() => providerStore.availableModels.length > 0);
+const hasAvailableModels = computed<boolean>((): boolean => providerStore.availableModels.length > 0);
 /** 对话视图引用 */
 const conversationRef = ref<InstanceType<typeof ConversationView>>();
 /** 当前正在创建会话分支的助手消息 ID，用于底层拦截重复请求。 */
@@ -259,7 +257,7 @@ const { currentSessionTodos, todoPanelVisible, todoPanelDismissed, restoreTodoSn
 const { workspaceRoot, getActiveTools, syncAIResources, getSkillContentHashes, openDraft, openFileByPath } = useRuntimeTools({
   messages,
   confirm: confirmationController.createAdapter(),
-  getSessionId: () => activeSessionId.value ?? undefined,
+  getSessionId: (): string | undefined => activeSessionId.value ?? undefined,
   openWebview
 });
 
@@ -287,7 +285,7 @@ function handleConfirmationSheetAction(action: ChatMessageConfirmationAction): v
  * @param snapshot - 主进程 runtime 上下文用量快照
  * @returns renderer 上下文用量快照
  */
-function toContextUsageBudgetSnapshot(snapshot: ChatRuntimeContextUsageSnapshot): ContextUsageBudgetSnapshot {
+function toUsageBudgetSnapshot(snapshot: ChatRuntimeContextUsageSnapshot): ContextUsageBudgetSnapshot {
   return {
     usedTokens: snapshot.estimatedInputTokens,
     contextWindow: snapshot.contextWindow,
@@ -315,7 +313,7 @@ async function handleRuntimeComplete(nextMessage: Message): Promise<void> {
 
   if (!snapshot) return;
 
-  scheduleAutoName(snapshot, () => workflowLoading.value);
+  scheduleAutoName(snapshot, (): boolean => workflowLoading.value);
 }
 
 /**
@@ -323,14 +321,14 @@ async function handleRuntimeComplete(nextMessage: Message): Promise<void> {
  */
 function openModelCommandPanel(): void {
   commandPanelStore.openModel({
-    onClose: () => promptEditorRef.value?.focus()
+    onClose: (): void => promptEditorRef.value?.focus()
   });
 }
 
 /**
  * 显示"未找到模型配置"的 Toast 提示，引导用户去配置页。
  */
-function showNoModelConfigToast(): void {
+function showNoModelToast(): void {
   interactionAPI.showToast({
     id: 'no-model-config-toast',
     content: h('div', [
@@ -339,7 +337,7 @@ function showNoModelConfigToast(): void {
         'span',
         {
           class: 'text-primary underline cursor-pointer',
-          onClick: () => {
+          onClick: (): void => {
             // 始终先关闭当前 Toast，避免与后续打开的对话框视觉堆叠
             removeToast('no-model-config-toast');
             if (hasAvailableModels.value) {
@@ -365,7 +363,7 @@ const chatServiceConfig = useChatServiceConfig();
 /** Runtime 请求配置解析 hook。 */
 const { resolveRuntimeSystemPrompt, resolveRuntimeTavilyConfig, resolveRuntimeMcpRequestConfig } = useRuntimeConfig();
 /** Runtime 请求准备与纯策略适配 hook。 */
-const { prepareRuntimeRequest, resolveRuntimeRequestConfig: resolveChatRuntimeRequestConfig } = useRuntimeRequestConfig({
+const { prepareRuntimeRequest, resolveRuntimeRequestConfig } = useRuntimeRequestConfig({
   contextWindow,
   workspaceRoot,
   resolveServiceConfig: chatServiceConfig.resolveServiceConfig,
@@ -375,7 +373,7 @@ const { prepareRuntimeRequest, resolveRuntimeRequestConfig: resolveChatRuntimeRe
   resolveRuntimeSystemPrompt,
   resolveRuntimeTavilyConfig,
   resolveRuntimeMcpRequestConfig,
-  onMissingServiceConfig: showNoModelConfigToast
+  onMissingServiceConfig: showNoModelToast
 });
 
 /** 当前应用级 Runtime Bridge 请求处理器。 */
@@ -391,28 +389,26 @@ const workflow = useChatWorkflow({
   sessionActor: chatSessionActor,
   getActiveTools,
   prepareRuntimeRequest,
-  resolveRuntimeRequestConfig: resolveChatRuntimeRequestConfig,
+  resolveRuntimeRequestConfig,
   handleBridgeRequest: handleRuntimeBridgeRequest,
   confirmationController,
   ensureActiveSession,
   fetchAllPriorHistory,
   setLoadedMessages,
-  persistMessages: (sessionId: string, nextMessages: Message[]): Promise<void> => chatStore.setSessionMessages(sessionId, nextMessages),
-  updateSessionMessage: (sessionId: string | undefined, nextMessage: Message): Promise<void> => chatStore.updateSessionMessage(sessionId, nextMessage),
   restoreInput: inputEvents.restoreFromMessage,
   clearInput: inputEvents.clear,
   focusInput,
   scrollToBottom: (): void => conversationRef.value?.scrollToBottom({ behavior: 'auto' }),
   onRuntimeComplete: handleRuntimeComplete,
   onContextUsageUpdated: (snapshot: ChatRuntimeContextUsageSnapshot): void => {
-    runtimeContextUsageSnapshot.value = toContextUsageBudgetSnapshot(snapshot);
+    runtimeContextUsageSnapshot.value = toUsageBudgetSnapshot(snapshot);
   },
-  onModelNotFound: showNoModelConfigToast,
+  onModelNotFound: showNoModelToast,
   showRuntimeError: (message: string): void => interactionAPI.showToast({ type: 'error', content: message }),
   restoreTodoSnapshots: restoreTodoSnapshotsForMessages
 });
 handleSessionUIEvent = (event: ChatSessionUIEvent): void => {
-  workflow.handleSessionUIEvent(event).catch((error: unknown) => {
+  workflow.handleSessionUIEvent(event).catch((error: unknown): void => {
     interactionAPI.showToast({ type: 'error', content: error instanceof Error ? error.message : '处理确认请求失败' });
   });
 };
@@ -430,7 +426,7 @@ const {
   rollback: handleRollback
 } = workflow;
 /** 消息级交互仅在对应领域状态允许时开放。 */
-const messageInteractionDisabled = computed<boolean>(() => {
+const messageInteractionDisabled = computed<boolean>((): boolean => {
   const sessionId = activeSessionId.value;
   const pendingInteraction = sessionId ? findPendingInteraction(messages.value, sessionId) : null;
   return pendingInteraction ? !chatSessionActor.waitingForUser.value : !loading.value;
@@ -439,7 +435,9 @@ const messageInteractionDisabled = computed<boolean>(() => {
 /** 上下文窗口用量 hook（空闲态用 API 上报值，流式中用估算器）。 */
 const { usedTokens, snapshot: contextUsageSnapshot } = useContextUsage({ messages, contextWindow, selectedModel, streaming: loading });
 /** 当前展示给工具栏的上下文窗口用量快照。 */
-const displayedContextUsageSnapshot = computed<ContextUsageBudgetSnapshot>(() => runtimeContextUsageSnapshot.value ?? contextUsageSnapshot.value);
+const displayedContextUsageSnapshot = computed<ContextUsageBudgetSnapshot>(
+  (): ContextUsageBudgetSnapshot => runtimeContextUsageSnapshot.value ?? contextUsageSnapshot.value
+);
 
 watch(
   loading,
@@ -472,6 +470,8 @@ async function handleBranch(message: Message): Promise<void> {
     return;
   }
 
+  // 用户已主动切换会话时保留新分支，但不再抢回当前会话焦点。
+  if (activeSessionId.value !== sourceSessionId) return;
   emit('session-created', session);
 }
 
@@ -497,12 +497,12 @@ function handleModelChange(model: { providerId: string; modelId: string }): void
 /** 斜杠命令处理 hook */
 const { handleSlashCommand } = useSlashCommands({
   openModelSelector: openModelCommandPanel,
-  openUsagePanel: () => usagePanel.openPanel(activeSessionId.value ?? undefined),
+  openUsagePanel: (): Promise<void> => usagePanel.openPanel(activeSessionId.value ?? undefined),
   createNewSession: createDraftSession,
-  clearInput: () => inputEvents.clear(),
+  clearInput: inputEvents.clear,
   compactContext: handleCompactContext,
-  isBusy: () => loading.value,
-  onBusyCommandRejected: (commandId: string) => {
+  isBusy: (): boolean => loading.value,
+  onBusyCommandRejected: (commandId: string): void => {
     if (commandId === 'compact') {
       interactionAPI.showToast({ content: '当前消息仍在生成中，请先停止或等待完成', type: 'info' });
     }
@@ -510,7 +510,7 @@ const { handleSlashCommand } = useSlashCommands({
 });
 
 /** 组件卸载时清理 */
-onUnmounted(() => {
+onUnmounted((): void => {
   workflow.dispose();
   confirmationController.dispose();
 });

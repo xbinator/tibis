@@ -2,10 +2,11 @@
  * @file useChatComposer.ts
  * @description 聚合 BChat 输入编辑器、附件、文件引用、模型与语音输入能力。
  */
-import type { ToastOptions } from '../components/InteractionContainer/types';
+import type { InteractionAPI } from '../components/InteractionContainer/types';
 import type { ComputedRef, Ref } from 'vue';
-import { computed, onMounted, ref } from 'vue';
-import type { FileMentionOption } from '@/components/BText/types';
+import { computed, onMounted } from 'vue';
+import type BTextEditor from '@/components/BText/Editor.vue';
+import type { BTextEditorExpose, FileMentionOption } from '@/components/BText/types';
 import { useFileDrop } from '@/hooks/useFileDrop';
 import type { OpenFileOptions } from '@/hooks/useNavigate';
 import { useFilesStore } from '@/stores/workspace/files';
@@ -18,34 +19,28 @@ import { useModelSelection } from './useModelSelection';
 import { useVoiceInput } from './useVoiceInput';
 
 /**
+ * 输入编辑器组件实例与对外公开方法。
+ */
+type EditorInstance = InstanceType<typeof BTextEditor> & BTextEditorExpose;
+
+/**
  * Chat Composer hook 依赖项。
  */
 interface UseChatComposerOptions {
-  /** 显示交互提示 */
-  showToast: (options: ToastOptions) => void;
+  /** 文件拖拽容器引用 */
+  containerRef: Ref<HTMLElement | null>;
+  /** 交互容器 API */
+  interactionAPI: InteractionAPI;
   /** 在编辑器中打开文件 */
   openFile: (options: OpenFileOptions) => Promise<void>;
-  /** 输入编辑器命令适配器 */
-  editor: {
-    /** 聚焦编辑器 */
-    focus: (options?: { moveToEnd?: boolean }) => void;
-    /** 保存光标位置 */
-    saveCursorPosition: () => void;
-    /** 读取光标位置 */
-    getCursorPosition: () => number;
-    /** 替换文本范围 */
-    replaceTextRange: (from: number, to: number, text: string) => void;
-    /** 在光标位置插入文本 */
-    insertTextAtCursor: (text: string) => void;
-  };
+  /** 输入编辑器组件引用 */
+  promptEditorRef: Ref<EditorInstance | undefined>;
 }
 
 /**
  * Chat Composer hook 返回值。
  */
 interface UseChatComposerReturn {
-  /** 文件拖拽容器 */
-  containerRef: Ref<HTMLElement | undefined>;
   /** 聚焦输入编辑器 */
   focusInput: (options?: { moveToEnd?: boolean }) => void;
   /** 草稿输入状态与操作 */
@@ -80,12 +75,39 @@ interface UseChatComposerReturn {
  * @returns 输入区域状态和事件 API
  */
 export function useChatComposer(options: UseChatComposerOptions): UseChatComposerReturn {
-  const containerRef = ref<HTMLElement>();
   const filesStore = useFilesStore();
 
   /** 聚焦输入编辑器。 */
   function focusInput(focusOptions?: { moveToEnd?: boolean }): void {
-    options.editor.focus(focusOptions);
+    options.promptEditorRef.value?.focus(focusOptions);
+  }
+
+  /** 保存输入编辑器光标位置。 */
+  function saveCursorPosition(): void {
+    options.promptEditorRef.value?.saveCursorPosition();
+  }
+
+  /** 读取输入编辑器光标位置。 */
+  function getCursorPosition(): number {
+    return options.promptEditorRef.value?.getCursorPosition() ?? 0;
+  }
+
+  /**
+   * 替换输入编辑器文本范围。
+   * @param from - 起始偏移
+   * @param to - 结束偏移
+   * @param text - 替换文本
+   */
+  function replaceTextRange(from: number, to: number, text: string): void {
+    options.promptEditorRef.value?.replaceTextRange(from, to, text);
+  }
+
+  /**
+   * 在当前光标处插入输入文本。
+   * @param text - 插入文本
+   */
+  function insertTextAtCursor(text: string): void {
+    options.promptEditorRef.value?.insertTextAtCursor(text);
   }
 
   /** 打开输入框内的文件引用。 */
@@ -104,23 +126,23 @@ export function useChatComposer(options: UseChatComposerOptions): UseChatCompose
   const promptChipResolver = createFileRefChipResolver(handleOpenPromptFileReference);
   const input = useChatInput({ focusInput });
   const model = useModelSelection();
-  const imageUpload = useImageUpload({ supportsVision: model.supportsVision, inputEvents: input, showToast: options.showToast });
+  const imageUpload = useImageUpload({ supportsVision: model.supportsVision, inputEvents: input, interactionAPI: options.interactionAPI });
   const fileReference = useFileReference({
-    insertTextAtCursor: options.editor.insertTextAtCursor,
-    saveCursorPosition: options.editor.saveCursorPosition,
+    insertTextAtCursor,
+    saveCursorPosition,
     focusInput
   });
-  const canSubmit = computed<boolean>(() => !input.isEmpty() || input.hasImages());
+  const canSubmit = computed<boolean>((): boolean => !input.isEmpty() || input.hasImages());
 
   const { handleVoiceStart, handleVoicePartial, handleVoiceComplete } = useVoiceInput({
     editor: {
-      saveCursorPosition: options.editor.saveCursorPosition,
-      getCursorPosition: options.editor.getCursorPosition,
-      replaceTextRange: options.editor.replaceTextRange,
-      insertTextAtCursor: options.editor.insertTextAtCursor
+      saveCursorPosition,
+      getCursorPosition,
+      replaceTextRange,
+      insertTextAtCursor
     },
     showEmptyTranscriptionToast: (): void => {
-      options.showToast({ content: '语音转写结果为空，请重试', type: 'error' });
+      options.interactionAPI.showToast({ content: '语音转写结果为空，请重试', type: 'error' });
     }
   });
 
@@ -135,16 +157,16 @@ export function useChatComposer(options: UseChatComposerOptions): UseChatCompose
     if (otherFiles.length > 0) {
       const tokenText = fileReference.onPasteFiles(otherFiles);
       if (tokenText) {
-        options.editor.insertTextAtCursor(tokenText);
+        insertTextAtCursor(tokenText);
       }
     }
   }
 
-  const { isDragging: isContainerDragActive } = useFileDrop({ targetRef: containerRef, onDropFiles: handleInputDropFiles });
+  const { isDragging: isContainerDragActive } = useFileDrop({ targetRef: options.containerRef, onDropFiles: handleInputDropFiles });
   const fileMentionOptions = computed<FileMentionOption[]>(() =>
     (filesStore.recentFiles ?? [])
       .filter((file): boolean => file.ext.toLowerCase() === 'md')
-      .map((file) => ({ id: file.id, name: file.name, path: file.path, ext: file.ext }))
+      .map((file): FileMentionOption => ({ id: file.id, name: file.name, path: file.path, ext: file.ext }))
   );
 
   /** 记录文件提及选择，实际 token 已由编辑器写入草稿。 */
@@ -158,7 +180,6 @@ export function useChatComposer(options: UseChatComposerOptions): UseChatCompose
   });
 
   return {
-    containerRef,
     focusInput,
     input,
     model,

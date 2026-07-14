@@ -151,3 +151,21 @@ export interface BTextEditorProps {
   /** ESC 键取消回调，用于中止流式输出等场景 */
   onCancel?: () => void;
 }
+
+/**
+ * BTextEditor 对外暴露的方法。
+ */
+export interface BTextEditorExpose {
+  /** 聚焦编辑器，可选移动到末尾 */
+  focus: (options?: { moveToEnd?: boolean }) => void;
+  /** 读取当前光标位置 */
+  getCursorPosition: () => number;
+  /** 保存当前光标位置 */
+  saveCursorPosition: () => void;
+  /** 在当前光标位置插入文本 */
+  insertTextAtCursor: (text: string) => void;
+  /** 替换指定文本范围 */
+  replaceTextRange: (from: number, to: number, text: string) => void;
+  /** 读取编辑器文本 */
+  getText: () => string;
+}
