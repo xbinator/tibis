@@ -3,8 +3,9 @@
  * @description AI 主进程服务返回值封装测试。
  */
 import type { AIProvider } from '../../../../../electron/main/modules/ai/types.mjs';
-import type { AIInvokeResult } from 'types/ai';
-import { describe, expect, it } from 'vitest';
+import type { ModelMessage } from 'ai';
+import type { AICreateOptions, AIInvokeResult } from 'types/ai';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AlibabaProvider } from '../../../../../electron/main/modules/ai/providers/alibaba.mjs';
 import { DeepSeekProvider } from '../../../../../electron/main/modules/ai/providers/deepseek.mjs';
 import { GLMProvider } from '../../../../../electron/main/modules/ai/providers/glm.mjs';
@@ -12,7 +13,42 @@ import { MiMoProvider } from '../../../../../electron/main/modules/ai/providers/
 import { MiniMaxProvider } from '../../../../../electron/main/modules/ai/providers/minimax.mjs';
 import { MoonshotProvider } from '../../../../../electron/main/modules/ai/providers/moonshot.mjs';
 import { VolcengineProvider } from '../../../../../electron/main/modules/ai/providers/volcengine.mjs';
-import { createAIInvokeResult } from '../../../../../electron/main/modules/ai/service.mjs';
+import { aiService, createAIInvokeResult } from '../../../../../electron/main/modules/ai/service.mjs';
+
+/** AI SDK 外部调用边界 mock。 */
+const aiSdkMocks = vi.hoisted(() => ({
+  generateText: vi.fn(),
+  isStepCount: vi.fn((count: number): { count: number } => ({ count })),
+  streamText: vi.fn()
+}));
+
+/** AI 服务日志边界 mock。 */
+const logMocks = vi.hoisted(() => ({
+  error: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn()
+}));
+
+vi.mock('ai', async (importOriginal: <T = unknown>() => Promise<T>): Promise<Record<string, unknown>> => {
+  const actual = await importOriginal<typeof import('ai')>();
+
+  return {
+    ...actual,
+    generateText: aiSdkMocks.generateText,
+    isStepCount: aiSdkMocks.isStepCount,
+    streamText: aiSdkMocks.streamText
+  };
+});
+
+vi.mock('../../../../../electron/main/modules/logger/service.mjs', (): { log: typeof logMocks } => ({ log: logMocks }));
+
+/** AI 服务测试创建选项。 */
+const AI_CREATE_OPTIONS: AICreateOptions = {
+  providerType: 'openai',
+  providerId: 'openai-test',
+  providerName: 'OpenAI Test',
+  apiKey: 'test-key'
+};
 
 /** AI 文本生成结果夹具类型。 */
 type GenerateTextResultFixture = Parameters<typeof createAIInvokeResult>[0];
@@ -53,6 +89,101 @@ function createStructuredResult(): GenerateTextResultFixture {
     }
   };
 }
+
+/**
+ * 创建空的 AI SDK 事件流。
+ * @returns 不产生事件的异步流
+ */
+async function* createEmptyStream(): AsyncGenerator<never, void, undefined> {
+  yield* [];
+}
+
+describe('AI SDK 7 service integration', (): void => {
+  beforeEach((): void => {
+    vi.clearAllMocks();
+    vi.spyOn(aiService.aiProvider, 'create').mockReturnValue({} as ReturnType<typeof aiService.aiProvider.create>);
+    vi.spyOn(aiService.aiProvider, 'createProviderOptions').mockReturnValue(undefined);
+  });
+
+  afterEach((): void => {
+    vi.restoreAllMocks();
+  });
+
+  it('passes trusted system messages with v7 instructions', async (): Promise<void> => {
+    const messages: ModelMessage[] = [
+      { role: 'system', content: 'Compressed project context.' },
+      { role: 'user', content: 'Continue the task.' }
+    ];
+    aiSdkMocks.generateText.mockResolvedValue({
+      text: 'Generated response',
+      usage: { inputTokens: 3, outputTokens: 2, totalTokens: 5 }
+    });
+
+    const [error] = await aiService.generateText(AI_CREATE_OPTIONS, {
+      modelId: 'gpt-test',
+      system: 'Follow the workspace rules.',
+      messages
+    });
+
+    expect(error).toBeUndefined();
+    expect(aiSdkMocks.generateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        instructions: 'Follow the workspace rules.',
+        allowSystemInMessages: true,
+        messages
+      })
+    );
+    expect(aiSdkMocks.generateText).not.toHaveBeenCalledWith(expect.objectContaining({ system: expect.anything() }));
+  });
+
+  it('uses the v7 step-count stop condition for executable tools', async (): Promise<void> => {
+    aiSdkMocks.generateText.mockResolvedValue({
+      text: 'Search result',
+      usage: { inputTokens: 4, outputTokens: 3, totalTokens: 7 }
+    });
+
+    const [error] = await aiService.generateText(AI_CREATE_OPTIONS, {
+      modelId: 'gpt-test',
+      prompt: 'Search the web.',
+      tavily: { enabled: true, apiKey: 'tavily-test-key' }
+    });
+
+    expect(error).toBeUndefined();
+    expect(aiSdkMocks.isStepCount).toHaveBeenCalledWith(5);
+    expect(aiSdkMocks.generateText).toHaveBeenCalledWith(expect.objectContaining({ stopWhen: { count: 5 } }));
+  });
+
+  it('preserves final-step usage for generated text', async (): Promise<void> => {
+    aiSdkMocks.generateText.mockResolvedValue({
+      text: 'Final answer',
+      usage: { inputTokens: 12, outputTokens: 8, totalTokens: 20 },
+      finalStep: {
+        usage: { inputTokens: 7, outputTokens: 5, totalTokens: 12 }
+      }
+    });
+
+    const [error, result] = await aiService.generateText(AI_CREATE_OPTIONS, {
+      modelId: 'gpt-test',
+      prompt: 'Use tools and answer.'
+    });
+
+    expect(error).toBeUndefined();
+    expect(result?.usage).toEqual({ inputTokens: 7, outputTokens: 5, totalTokens: 12 });
+  });
+
+  it('returns the v7 full event stream', async (): Promise<void> => {
+    const stream = createEmptyStream();
+    aiSdkMocks.streamText.mockReturnValue({ stream });
+
+    const [error, result] = await aiService.streamText(AI_CREATE_OPTIONS, {
+      modelId: 'gpt-test',
+      prompt: 'Stream a response.'
+    });
+
+    expect(error).toBeUndefined();
+    expect(result?.stream).toBe(stream);
+  });
+});
 
 describe('createAIInvokeResult', (): void => {
   it('does not read SDK output when no structured output was requested', (): void => {

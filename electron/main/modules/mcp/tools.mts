@@ -6,6 +6,9 @@ import type { ToolExecutionOptions, ToolSet } from 'ai';
 import type { AIMCPRequestConfig, MCPDiscoveredToolSnapshot, MCPServerConfig, MCPToolSettings, MCPToolSelector } from 'types/ai';
 import { jsonSchema, tool } from 'ai';
 
+/** 不声明工具专属 context 时可消费的 AI SDK 执行选项。 */
+type ContextlessToolOptions = Omit<ToolExecutionOptions<unknown>, 'context'>;
+
 /**
  * MCP 工具执行请求。
  */
@@ -21,7 +24,7 @@ export interface MCPToolExecuteRequest {
 /**
  * MCP 工具执行函数。
  */
-export type MCPToolExecutor = (request: MCPToolExecuteRequest, options?: ToolExecutionOptions) => Promise<unknown>;
+export type MCPToolExecutor = (request: MCPToolExecuteRequest, options?: ContextlessToolOptions) => Promise<unknown>;
 
 /**
  * 判断 server 配置是否完整到可以参与工具暴露（仅检查配置完整性，不检查运行时连接状态）。
@@ -144,7 +147,7 @@ export function createMcpSdkTools(exposedTools: MCPDiscoveredToolSnapshot[], exe
             additionalProperties: true
           }
         ),
-        execute: async (input: unknown, options: ToolExecutionOptions) =>
+        execute: async (input: unknown, options: ContextlessToolOptions) =>
           executeTool(
             {
               serverId: exposedTool.serverId,

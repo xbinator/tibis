@@ -4,7 +4,7 @@
  */
 import type { FlexibleSchema, ToolExecutionOptions, ToolSet } from 'ai';
 import type { AICreateOptions, AIRequestOptions, AIInvokeResult, AIStreamResult, AIServiceError, AIUsage, MCPDiscoveredToolSnapshot } from 'types/ai';
-import { generateText, jsonSchema, Output, stepCountIs, streamText, tool } from 'ai';
+import { generateText, isStepCount, jsonSchema, Output, streamText, tool } from 'ai';
 import { log } from '../logger/service.mjs';
 import { connectMcpServer, executeMcpTool, getMcpDiscoveryCache } from '../mcp/session.mjs';
 import { createMcpSdkTools, resolveMcpExposedTools } from '../mcp/tools.mjs';
@@ -18,6 +18,9 @@ const TAVILY_API_BASE_URL = 'https://api.tavily.com';
 
 /** Tavily API 端点。 */
 type TavilyEndpoint = '/search' | '/extract';
+
+/** 不声明工具专属 context 时可消费的 AI SDK 执行选项。 */
+type ContextlessToolOptions = Omit<ToolExecutionOptions<unknown>, 'context'>;
 
 /** Tavily 搜索深度。 */
 type TavilySearchDepth = 'basic' | 'advanced';
@@ -300,7 +303,7 @@ function createTavilySearchTool(apiKey: string) {
   return tool({
     description: 'Search the web for real-time, AI-optimized information using Tavily Search.',
     inputSchema: createTavilySearchInputSchema(),
-    execute: async (input: TavilySearchInput, options: ToolExecutionOptions) => {
+    execute: async (input: TavilySearchInput, options: ContextlessToolOptions) => {
       return postTavilyJson('/search', apiKey, createTavilySearchRequest(input), options.abortSignal);
     }
   });
@@ -336,7 +339,7 @@ function createTavilyExtractTool(apiKey: string) {
   return tool({
     description: 'Extract clean, structured content from a single URL. Returns parsed content in markdown or text format, optimized for AI consumption.',
     inputSchema,
-    execute: async ({ url, extractDepth, query }: TavilyExtractSingleUrlInput, options: ToolExecutionOptions) => {
+    execute: async ({ url, extractDepth, query }: TavilyExtractSingleUrlInput, options: ContextlessToolOptions) => {
       const request: TavilyExtractRequest = {
         urls: [url],
         extract_depth: extractDepth ?? TAVILY_EXTRACT_DEFAULTS.extractDepth,
@@ -492,13 +495,21 @@ function toOutput(output: AIRequestOptions['output']) {
   return Output.object({ schema: jsonSchema(output.schema), name: output.name, description: output.description });
 }
 
+/** AI SDK 文本生成末步结果的最小可读形状。 */
+interface GenerateTextStepLike {
+  /** 末步 token 使用量。 */
+  readonly usage?: Partial<AIUsage> | null;
+}
+
 /** AI SDK 文本生成结果的最小可读形状。 */
 interface GenerateTextResultLike {
   /** 生成文本。 */
   readonly text: string;
   /** 结构化输出，未请求结构化输出时访问可能抛出 AI SDK 错误。 */
   readonly output?: unknown;
-  /** token 使用量。 */
+  /** AI SDK 7 末步结果，用于保持 v6 usage 语义。 */
+  readonly finalStep?: GenerateTextStepLike;
+  /** 顶层 token 使用量；AI SDK 7 中为所有步骤累计值。 */
   readonly usage?: Partial<AIUsage> | null;
 }
 
@@ -509,7 +520,7 @@ interface GenerateTextResultLike {
  * @returns 主进程 AI 调用结果
  */
 export function createAIInvokeResult(result: GenerateTextResultLike, includeStructuredOutput: boolean): AIInvokeResult {
-  const { inputTokens = 0, outputTokens = 0, totalTokens = 0 } = result.usage ?? {};
+  const { inputTokens = 0, outputTokens = 0, totalTokens = 0 } = result.finalStep?.usage ?? result.usage ?? {};
   const invokeResult: AIInvokeResult = {
     text: result.text,
     usage: { inputTokens, outputTokens, totalTokens }
@@ -580,12 +591,14 @@ class AIService {
   private async buildBaseOptions(createOptions: AICreateOptions, request: AIRequestOptions) {
     return {
       model: this.createModel(createOptions, request.modelId),
-      system: appendMcpToolInstructions(request.system, request.mcp),
+      instructions: appendMcpToolInstructions(request.system, request.mcp),
       temperature: request.temperature,
       maxOutputTokens: request.maxOutputTokens,
       providerOptions: this.aiProvider.createProviderOptions(createOptions.providerType, request),
       tools: await toSdkTools(request.tools, request.tavily, request.mcp),
-      ...(hasTavilyHttpTools(request.tavily) || hasMcpSdkTools(request.mcp) ? { stopWhen: stepCountIs(5) } : {})
+      // 压缩边界的 system 消息由 Tibis 内部生成并持久化，保留其原始消息位置以维持上下文语义。
+      ...(request.messages ? { allowSystemInMessages: true } : {}),
+      ...(hasTavilyHttpTools(request.tavily) || hasMcpSdkTools(request.mcp) ? { stopWhen: isStepCount(5) } : {})
     };
   }
 
@@ -646,7 +659,7 @@ class AIService {
         ? streamText({ ...baseOptions, messages: request.messages })
         : streamText({ ...baseOptions, prompt: request.prompt ?? '' });
 
-      return [undefined, { stream: result.fullStream }];
+      return [undefined, { stream: result.stream }];
     } catch (error) {
       return this.handleError('streamText', error, createOptions.providerType);
     }

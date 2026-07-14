@@ -38,7 +38,7 @@ Tibis 是一款基于 Electron + Vue 3 + TypeScript 的桌面端 Markdown 编辑
 | 拖拽排序 | @atlaskit/pragmatic-drag-and-drop |
 | 画布交互 | moveable + selecto + vue3-moveable + vue3-infinite-viewer |
 | 流程图 | @vue-flow/core（BJsonViewer 图形视图） |
-| AI SDK | Vercel AI SDK v6（`ai` + @ai-sdk/*） |
+| AI SDK | Vercel AI SDK v7（`ai` + @ai-sdk/*，Node.js ≥ 22，ESM-only） |
 | MCP 协议 | @modelcontextprotocol/sdk |
 | 数据库 | better-sqlite3（主进程本地数据库） |
 | 安全存储 | electron-store（API Key 加密存储） |
