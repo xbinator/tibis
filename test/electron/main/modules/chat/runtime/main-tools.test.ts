@@ -5,7 +5,11 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { MainToolBridgeRequest, MainToolsDependencies } from '../../../../../../electron/main/modules/chat/runtime/tools/types.mjs';
+import type {
+  MainToolBridgeRequest,
+  MainToolConfirmationRequest,
+  MainToolsDependencies
+} from '../../../../../../electron/main/modules/chat/runtime/tools/types.mjs';
 import type { ActiveChatRuntime } from '../../../../../../electron/main/modules/chat/runtime/types.mjs';
 import { describe, expect, it, vi } from 'vitest';
 import { createMainToolExecutor } from '../../../../../../electron/main/modules/chat/runtime/tools/index.mjs';
@@ -827,6 +831,664 @@ describe('createMainToolExecutor', (): void => {
     } finally {
       await fs.rm(tempRoot, { recursive: true, force: true });
     }
+  });
+
+  it('creates nested real files directly on disk without renderer bridge', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      const targetPath = path.join(workspaceRoot, 'reports', 'daily.md');
+      await fs.mkdir(workspaceRoot);
+      const confirmationRequests: MainToolConfirmationRequest[] = [];
+      const requestBridge = vi.fn(async () => ({ status: 'success' as const, data: { path: targetPath, content: '# Daily' } }));
+      const executeMainTool = createMainToolExecutor({
+        now: () => '2026-07-14T00:00:00.000Z',
+        requestBridge,
+        async requestConfirmation(input: MainToolConfirmationRequest): Promise<{ approved: true }> {
+          confirmationRequests.push(input);
+          return { approved: true };
+        }
+      });
+
+      const result = await executeMainTool({
+        runtime: { ...runtime, workspaceRoot },
+        toolCallId: 'tool-call-write-nested-1',
+        toolName: 'write_file',
+        input: { path: 'reports/daily.md', content: '# Daily' }
+      });
+
+      expect(result).toMatchObject({ toolName: 'write_file', status: 'success', data: { path: targetPath, created: true } });
+      await expect(fs.readFile(targetPath, 'utf8')).resolves.toBe('# Daily');
+      expect(confirmationRequests[0]?.request.description).toContain('父目录');
+      expect(requestBridge).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('overwrites existing real files directly on disk without renderer bridge', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      const targetPath = path.join(workspaceRoot, 'report.md');
+      await fs.mkdir(workspaceRoot);
+      await fs.writeFile(targetPath, 'old content', 'utf8');
+      const requestBridge = vi.fn(async () => ({ status: 'success' as const, data: { path: targetPath, content: 'new content' } }));
+      const executeMainTool = createMainToolExecutor({
+        now: () => '2026-07-14T00:00:00.000Z',
+        requestBridge,
+        async requestConfirmation() {
+          return { approved: true };
+        }
+      });
+
+      const result = await executeMainTool({
+        runtime: { ...runtime, workspaceRoot },
+        toolCallId: 'tool-call-write-existing-1',
+        toolName: 'write_file',
+        input: { path: 'report.md', content: 'new content' }
+      });
+
+      expect(result).toMatchObject({ toolName: 'write_file', status: 'success', data: { path: targetPath, created: false } });
+      await expect(fs.readFile(targetPath, 'utf8')).resolves.toBe('new content');
+      expect(requestBridge).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('edits existing real files from disk without renderer bridge', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      const targetPath = path.join(workspaceRoot, 'report.md');
+      await fs.mkdir(workspaceRoot);
+      await fs.writeFile(targetPath, 'before value', 'utf8');
+      const requestBridge = vi.fn(async () => ({ status: 'success' as const, data: { path: targetPath, content: 'before value' } }));
+      const executeMainTool = createMainToolExecutor({
+        now: () => '2026-07-14T00:00:00.000Z',
+        requestBridge,
+        async requestConfirmation() {
+          return { approved: true };
+        }
+      });
+
+      const result = await executeMainTool({
+        runtime: { ...runtime, workspaceRoot },
+        toolCallId: 'tool-call-edit-existing-1',
+        toolName: 'edit_file',
+        input: { path: 'report.md', oldString: 'before', newString: 'after' }
+      });
+
+      expect(result).toMatchObject({ toolName: 'edit_file', status: 'success', data: { path: targetPath, content: 'after value', replacedCount: 1 } });
+      await expect(fs.readFile(targetPath, 'utf8')).resolves.toBe('after value');
+      expect(requestBridge).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('classifies an existing file symlink by its real write destination', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      const outsideRoot = path.join(tempRoot, 'outside');
+      const outsideFile = path.join(outsideRoot, 'report.md');
+      const linkedFile = path.join(workspaceRoot, 'linked-report.md');
+      await fs.mkdir(workspaceRoot);
+      await fs.mkdir(outsideRoot);
+      await fs.writeFile(outsideFile, 'before value', 'utf8');
+      await fs.symlink(outsideFile, linkedFile);
+      const realOutsideFile = await fs.realpath(outsideFile);
+      const confirmationRequests: MainToolConfirmationRequest[] = [];
+      const requestBridge = vi.fn(async (): Promise<{ status: 'success'; data: Record<string, unknown> }> => ({ status: 'success', data: {} }));
+      const executeMainTool = createMainToolExecutor({
+        now: (): string => '2026-07-14T00:00:00.000Z',
+        requestBridge,
+        async requestConfirmation(input: MainToolConfirmationRequest): Promise<{ approved: true }> {
+          confirmationRequests.push(input);
+          return { approved: true };
+        }
+      });
+
+      const result = await executeMainTool({
+        runtime: { ...runtime, workspaceRoot },
+        toolCallId: 'tool-call-edit-file-symlink-1',
+        toolName: 'edit_file',
+        input: { path: 'linked-report.md', oldString: 'before', newString: 'after' }
+      });
+
+      expect(result).toMatchObject({ toolName: 'edit_file', status: 'success', data: { path: realOutsideFile, content: 'after value' } });
+      expect(confirmationRequests).toHaveLength(1);
+      expect(confirmationRequests[0]?.request).toMatchObject({ riskLevel: 'dangerous' });
+      expect(confirmationRequests[0]?.request.description).toContain(realOutsideFile);
+      await expect(fs.readFile(outsideFile, 'utf8')).resolves.toBe('after value');
+      const linkedFileStats = await fs.lstat(linkedFile);
+      expect(linkedFileStats.isSymbolicLink()).toBe(true);
+      expect(requestBridge).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('does not write the old destination when a file symlink is retargeted during confirmation', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      const outsideRoot = path.join(tempRoot, 'outside');
+      const firstOutsideFile = path.join(outsideRoot, 'first.md');
+      const secondOutsideFile = path.join(outsideRoot, 'second.md');
+      const linkedFile = path.join(workspaceRoot, 'linked-report.md');
+      await fs.mkdir(workspaceRoot);
+      await fs.mkdir(outsideRoot);
+      await fs.writeFile(firstOutsideFile, 'before first', 'utf8');
+      await fs.writeFile(secondOutsideFile, 'before second', 'utf8');
+      await fs.symlink(firstOutsideFile, linkedFile);
+      const requestBridge = vi.fn(async (): Promise<{ status: 'success'; data: Record<string, unknown> }> => ({ status: 'success', data: {} }));
+      const executeMainTool = createMainToolExecutor({
+        now: (): string => '2026-07-14T00:00:00.000Z',
+        requestBridge,
+        async requestConfirmation(): Promise<{ approved: true }> {
+          await fs.unlink(linkedFile);
+          await fs.symlink(secondOutsideFile, linkedFile);
+          return { approved: true };
+        }
+      });
+
+      const result = await executeMainTool({
+        runtime: { ...runtime, workspaceRoot },
+        toolCallId: 'tool-call-edit-retargeted-symlink-1',
+        toolName: 'edit_file',
+        input: { path: 'linked-report.md', oldString: 'before', newString: 'after' }
+      });
+
+      expect(result).toMatchObject({ toolName: 'edit_file', status: 'failure', error: { code: 'STALE_CONTEXT' } });
+      await expect(fs.readFile(firstOutsideFile, 'utf8')).resolves.toBe('before first');
+      await expect(fs.readFile(secondOutsideFile, 'utf8')).resolves.toBe('before second');
+      await expect(fs.realpath(linkedFile)).resolves.toBe(await fs.realpath(secondOutsideFile));
+      expect(requestBridge).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('classifies a new file below a directory symlink by its real destination', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      const outsideRoot = path.join(tempRoot, 'outside');
+      const linkedRoot = path.join(workspaceRoot, 'linked-outside');
+      await fs.mkdir(workspaceRoot);
+      await fs.mkdir(outsideRoot);
+      await fs.symlink(outsideRoot, linkedRoot, process.platform === 'win32' ? 'junction' : 'dir');
+      const realOutsideRoot = await fs.realpath(outsideRoot);
+      const realOutsideFile = path.join(realOutsideRoot, 'nested', 'report.md');
+      const confirmationRequests: MainToolConfirmationRequest[] = [];
+      const requestBridge = vi.fn(async (): Promise<{ status: 'success'; data: Record<string, unknown> }> => ({ status: 'success', data: {} }));
+      const executeMainTool = createMainToolExecutor({
+        now: (): string => '2026-07-14T00:00:00.000Z',
+        requestBridge,
+        async requestConfirmation(input: MainToolConfirmationRequest): Promise<{ approved: true }> {
+          confirmationRequests.push(input);
+          return { approved: true };
+        }
+      });
+
+      const result = await executeMainTool({
+        runtime: { ...runtime, workspaceRoot },
+        toolCallId: 'tool-call-write-directory-symlink-1',
+        toolName: 'write_file',
+        input: { path: 'linked-outside/nested/report.md', content: 'outside content' }
+      });
+
+      expect(result).toMatchObject({ toolName: 'write_file', status: 'success', data: { path: realOutsideFile, content: 'outside content', created: true } });
+      expect(confirmationRequests).toHaveLength(1);
+      expect(confirmationRequests[0]?.request).toMatchObject({ riskLevel: 'dangerous' });
+      expect(confirmationRequests[0]?.request.description).toContain(realOutsideFile);
+      await expect(fs.readFile(realOutsideFile, 'utf8')).resolves.toBe('outside content');
+      expect(requestBridge).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('does not create missing real files through edit_file', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      const targetPath = path.join(workspaceRoot, 'missing.md');
+      await fs.mkdir(workspaceRoot);
+      const requestBridge = vi.fn(async () => ({ status: 'success' as const, data: { path: targetPath, content: 'before value' } }));
+      const executeMainTool = createMainToolExecutor({
+        now: () => '2026-07-14T00:00:00.000Z',
+        requestBridge,
+        async requestConfirmation() {
+          return { approved: true };
+        }
+      });
+
+      const result = await executeMainTool({
+        runtime: { ...runtime, workspaceRoot },
+        toolCallId: 'tool-call-edit-missing-1',
+        toolName: 'edit_file',
+        input: { path: 'missing.md', oldString: 'before', newString: 'after' }
+      });
+
+      expect(result).toMatchObject({ toolName: 'edit_file', status: 'failure', error: { code: 'EXECUTION_FAILED' } });
+      await expect(fs.stat(targetPath)).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(requestBridge).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('does not create parent directories when a real write is cancelled', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      const parentPath = path.join(workspaceRoot, 'reports');
+      await fs.mkdir(workspaceRoot);
+      const requestBridge = vi.fn(async () => ({ status: 'failure' as const, error: { code: 'EDITOR_UNAVAILABLE' as const, message: 'no editor' } }));
+      const executeMainTool = createMainToolExecutor({
+        now: () => '2026-07-14T00:00:00.000Z',
+        requestBridge,
+        async requestConfirmation() {
+          return { approved: false };
+        }
+      });
+
+      const result = await executeMainTool({
+        runtime: { ...runtime, workspaceRoot },
+        toolCallId: 'tool-call-write-cancelled-1',
+        toolName: 'write_file',
+        input: { path: 'reports/daily.md', content: '# Daily' }
+      });
+
+      expect(result).toMatchObject({ toolName: 'write_file', status: 'cancelled' });
+      await expect(fs.stat(parentPath)).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(requestBridge).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps real file content unchanged when an edit is cancelled', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      const targetPath = path.join(workspaceRoot, 'report.md');
+      await fs.mkdir(workspaceRoot);
+      await fs.writeFile(targetPath, 'before value', 'utf8');
+      const requestBridge = vi.fn(async () => ({ status: 'failure' as const, error: { code: 'EDITOR_UNAVAILABLE' as const, message: 'no editor' } }));
+      const executeMainTool = createMainToolExecutor({
+        now: () => '2026-07-14T00:00:00.000Z',
+        requestBridge,
+        async requestConfirmation() {
+          return { approved: false };
+        }
+      });
+
+      const result = await executeMainTool({
+        runtime: { ...runtime, workspaceRoot },
+        toolCallId: 'tool-call-edit-cancelled-1',
+        toolName: 'edit_file',
+        input: { path: 'report.md', oldString: 'before', newString: 'after' }
+      });
+
+      expect(result).toMatchObject({ toolName: 'edit_file', status: 'cancelled' });
+      await expect(fs.readFile(targetPath, 'utf8')).resolves.toBe('before value');
+      expect(requestBridge).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('does not overwrite a file created while write confirmation is pending', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      const targetPath = path.join(workspaceRoot, 'report.md');
+      await fs.mkdir(workspaceRoot);
+      const requestBridge = vi.fn(async (): Promise<{ status: 'success'; data: Record<string, unknown> }> => ({ status: 'success', data: {} }));
+      const executeMainTool = createMainToolExecutor({
+        now: (): string => '2026-07-14T00:00:00.000Z',
+        requestBridge,
+        async requestConfirmation(): Promise<{ approved: true }> {
+          await fs.writeFile(targetPath, 'created elsewhere', 'utf8');
+          return { approved: true };
+        }
+      });
+
+      const result = await executeMainTool({
+        runtime: { ...runtime, workspaceRoot },
+        toolCallId: 'tool-call-write-created-during-confirmation-1',
+        toolName: 'write_file',
+        input: { path: 'report.md', content: 'tool content' }
+      });
+
+      expect(result).toMatchObject({ toolName: 'write_file', status: 'failure', error: { code: 'STALE_CONTEXT' } });
+      await expect(fs.readFile(targetPath, 'utf8')).resolves.toBe('created elsewhere');
+      expect(requestBridge).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('does not follow a parent symlink created while write confirmation is pending', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      const outsideRoot = path.join(tempRoot, 'outside');
+      const linkedParent = path.join(workspaceRoot, 'pending');
+      const outsideFile = path.join(outsideRoot, 'report.md');
+      await fs.mkdir(workspaceRoot);
+      await fs.mkdir(outsideRoot);
+      const requestBridge = vi.fn(async (): Promise<{ status: 'success'; data: Record<string, unknown> }> => ({ status: 'success', data: {} }));
+      const executeMainTool = createMainToolExecutor({
+        now: (): string => '2026-07-14T00:00:00.000Z',
+        requestBridge,
+        async requestConfirmation(): Promise<{ approved: true }> {
+          await fs.symlink(outsideRoot, linkedParent, process.platform === 'win32' ? 'junction' : 'dir');
+          return { approved: true };
+        }
+      });
+
+      const result = await executeMainTool({
+        runtime: { ...runtime, workspaceRoot },
+        toolCallId: 'tool-call-write-parent-symlink-during-confirmation-1',
+        toolName: 'write_file',
+        input: { path: 'pending/report.md', content: 'tool content' }
+      });
+
+      expect(result).toMatchObject({ toolName: 'write_file', status: 'failure', error: { code: 'STALE_CONTEXT' } });
+      await expect(fs.stat(outsideFile)).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(requestBridge).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('does not replace a broken symlink created while write confirmation is pending', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      const targetPath = path.join(workspaceRoot, 'report.md');
+      const missingTarget = path.join(tempRoot, 'missing-target.md');
+      await fs.mkdir(workspaceRoot);
+      const requestBridge = vi.fn(async (): Promise<{ status: 'success'; data: Record<string, unknown> }> => ({ status: 'success', data: {} }));
+      const executeMainTool = createMainToolExecutor({
+        now: (): string => '2026-07-14T00:00:00.000Z',
+        requestBridge,
+        async requestConfirmation(): Promise<{ approved: true }> {
+          await fs.symlink(missingTarget, targetPath);
+          return { approved: true };
+        }
+      });
+
+      const result = await executeMainTool({
+        runtime: { ...runtime, workspaceRoot },
+        toolCallId: 'tool-call-write-broken-symlink-during-confirmation-1',
+        toolName: 'write_file',
+        input: { path: 'report.md', content: 'tool content' }
+      });
+
+      expect(result).toMatchObject({ toolName: 'write_file', status: 'failure', error: { code: 'STALE_CONTEXT' } });
+      const targetStats = await fs.lstat(targetPath);
+      expect(targetStats.isSymbolicLink()).toBe(true);
+      await expect(fs.readlink(targetPath)).resolves.toBe(missingTarget);
+      expect(requestBridge).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('does not overwrite a file modified while write confirmation is pending', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      const targetPath = path.join(workspaceRoot, 'report.md');
+      await fs.mkdir(workspaceRoot);
+      await fs.writeFile(targetPath, 'confirmed content', 'utf8');
+      const requestBridge = vi.fn(async (): Promise<{ status: 'success'; data: Record<string, unknown> }> => ({ status: 'success', data: {} }));
+      const executeMainTool = createMainToolExecutor({
+        now: (): string => '2026-07-14T00:00:00.000Z',
+        requestBridge,
+        async requestConfirmation(): Promise<{ approved: true }> {
+          await fs.writeFile(targetPath, 'modified elsewhere', 'utf8');
+          return { approved: true };
+        }
+      });
+
+      const result = await executeMainTool({
+        runtime: { ...runtime, workspaceRoot },
+        toolCallId: 'tool-call-write-modified-during-confirmation-1',
+        toolName: 'write_file',
+        input: { path: 'report.md', content: 'tool content' }
+      });
+
+      expect(result).toMatchObject({ toolName: 'write_file', status: 'failure', error: { code: 'STALE_CONTEXT' } });
+      await expect(fs.readFile(targetPath, 'utf8')).resolves.toBe('modified elsewhere');
+      expect(requestBridge).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('does not overwrite a file modified while edit confirmation is pending', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      const targetPath = path.join(workspaceRoot, 'report.md');
+      await fs.mkdir(workspaceRoot);
+      await fs.writeFile(targetPath, 'before value', 'utf8');
+      const requestBridge = vi.fn(async (): Promise<{ status: 'success'; data: Record<string, unknown> }> => ({ status: 'success', data: {} }));
+      const executeMainTool = createMainToolExecutor({
+        now: (): string => '2026-07-14T00:00:00.000Z',
+        requestBridge,
+        async requestConfirmation(): Promise<{ approved: true }> {
+          await fs.writeFile(targetPath, 'modified elsewhere', 'utf8');
+          return { approved: true };
+        }
+      });
+
+      const result = await executeMainTool({
+        runtime: { ...runtime, workspaceRoot },
+        toolCallId: 'tool-call-edit-modified-during-confirmation-1',
+        toolName: 'edit_file',
+        input: { path: 'report.md', oldString: 'before', newString: 'after' }
+      });
+
+      expect(result).toMatchObject({ toolName: 'edit_file', status: 'failure', error: { code: 'STALE_CONTEXT' } });
+      await expect(fs.readFile(targetPath, 'utf8')).resolves.toBe('modified elsewhere');
+      expect(requestBridge).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('does not recreate a file deleted while edit confirmation is pending', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      const targetPath = path.join(workspaceRoot, 'report.md');
+      await fs.mkdir(workspaceRoot);
+      await fs.writeFile(targetPath, 'before value', 'utf8');
+      const requestBridge = vi.fn(async (): Promise<{ status: 'success'; data: Record<string, unknown> }> => ({ status: 'success', data: {} }));
+      const executeMainTool = createMainToolExecutor({
+        now: (): string => '2026-07-14T00:00:00.000Z',
+        requestBridge,
+        async requestConfirmation(): Promise<{ approved: true }> {
+          await fs.unlink(targetPath);
+          return { approved: true };
+        }
+      });
+
+      const result = await executeMainTool({
+        runtime: { ...runtime, workspaceRoot },
+        toolCallId: 'tool-call-edit-deleted-during-confirmation-1',
+        toolName: 'edit_file',
+        input: { path: 'report.md', oldString: 'before', newString: 'after' }
+      });
+
+      expect(result).toMatchObject({ toolName: 'edit_file', status: 'failure', error: { code: 'STALE_CONTEXT' } });
+      await expect(fs.stat(targetPath)).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(requestBridge).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('serializes concurrent edits before revalidating the confirmed file version', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      const targetPath = path.join(workspaceRoot, 'report.md');
+      await fs.mkdir(workspaceRoot);
+      await fs.writeFile(targetPath, 'first second', 'utf8');
+      let confirmationCount = 0;
+      let releaseConfirmations = (): void => undefined;
+      const confirmationsReady = new Promise<void>((resolve): void => {
+        releaseConfirmations = (): void => resolve();
+      });
+      const requestBridge = vi.fn(async (): Promise<{ status: 'success'; data: Record<string, unknown> }> => ({ status: 'success', data: {} }));
+      const executeMainTool = createMainToolExecutor({
+        now: (): string => '2026-07-14T00:00:00.000Z',
+        requestBridge,
+        async requestConfirmation(): Promise<{ approved: true }> {
+          confirmationCount += 1;
+          if (confirmationCount === 2) releaseConfirmations();
+          await confirmationsReady;
+          return { approved: true };
+        }
+      });
+
+      const results = await Promise.all([
+        executeMainTool({
+          runtime: { ...runtime, workspaceRoot },
+          toolCallId: 'tool-call-edit-concurrent-first-1',
+          toolName: 'edit_file',
+          input: { path: 'report.md', oldString: 'first', newString: 'FIRST' }
+        }),
+        executeMainTool({
+          runtime: { ...runtime, workspaceRoot },
+          toolCallId: 'tool-call-edit-concurrent-second-1',
+          toolName: 'edit_file',
+          input: { path: 'report.md', oldString: 'second', newString: 'SECOND' }
+        })
+      ]);
+
+      expect(results.map((result): string => result.status).sort()).toEqual(['failure', 'success']);
+      expect(results.find((result): boolean => result.status === 'failure')).toMatchObject({ error: { code: 'STALE_CONTEXT' } });
+      await expect(fs.readFile(targetPath, 'utf8')).resolves.toSatisfy((content: string): boolean => content === 'FIRST second' || content === 'first SECOND');
+      expect(requestBridge).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps write_file unsaved targets on the renderer bridge', async (): Promise<void> => {
+    const bridgeRequests: MainToolBridgeRequest[] = [];
+    const unsavedPath = 'unsaved://draft-1/note.md';
+    const executeMainTool = createMainToolExecutor({
+      now: () => '2026-07-14T00:00:00.000Z',
+      async requestBridge(input: MainToolBridgeRequest) {
+        bridgeRequests.push(input);
+        return {
+          status: 'success',
+          data: {
+            path: unsavedPath,
+            content: input.kind === 'file-content-snapshot' ? 'draft before' : 'draft after'
+          }
+        };
+      },
+      async requestConfirmation() {
+        return { approved: true };
+      }
+    });
+
+    const result = await executeMainTool({
+      runtime,
+      toolCallId: 'tool-call-write-unsaved-1',
+      toolName: 'write_file',
+      input: { path: unsavedPath, content: 'draft after' }
+    });
+
+    expect(result).toMatchObject({ toolName: 'write_file', status: 'success', data: { path: unsavedPath, content: 'draft after', created: false } });
+    expect(bridgeRequests.map((request): string => request.kind)).toEqual(['file-content-snapshot', 'write-file-content']);
+    expect(bridgeRequests[1]).toEqual({
+      runtimeId: 'runtime-1',
+      toolCallId: 'tool-call-write-unsaved-1',
+      kind: 'write-file-content',
+      payload: { path: unsavedPath, content: 'draft after' }
+    });
+  });
+
+  it('keeps edit_file unsaved targets on the renderer bridge', async (): Promise<void> => {
+    const bridgeRequests: MainToolBridgeRequest[] = [];
+    const unsavedPath = 'unsaved://draft-1/note.md';
+    const executeMainTool = createMainToolExecutor({
+      now: () => '2026-07-14T00:00:00.000Z',
+      async requestBridge(input: MainToolBridgeRequest) {
+        bridgeRequests.push(input);
+        return {
+          status: 'success',
+          data: {
+            path: unsavedPath,
+            content: input.kind === 'file-content-snapshot' ? 'before value' : 'after value'
+          }
+        };
+      },
+      async requestConfirmation() {
+        return { approved: true };
+      }
+    });
+
+    const result = await executeMainTool({
+      runtime,
+      toolCallId: 'tool-call-edit-unsaved-1',
+      toolName: 'edit_file',
+      input: { path: unsavedPath, oldString: 'before', newString: 'after' }
+    });
+
+    expect(result).toMatchObject({ toolName: 'edit_file', status: 'success', data: { path: unsavedPath, content: 'after value', replacedCount: 1 } });
+    expect(bridgeRequests.map((request): string => request.kind)).toEqual(['file-content-snapshot', 'write-file-content']);
+    expect(bridgeRequests[1]).toEqual({
+      runtimeId: 'runtime-1',
+      toolCallId: 'tool-call-edit-unsaved-1',
+      kind: 'write-file-content',
+      payload: { path: unsavedPath, content: 'after value' }
+    });
+  });
+
+  it('keeps no-workspace relative writes as unsaved drafts', async (): Promise<void> => {
+    const bridgeRequests: MainToolBridgeRequest[] = [];
+    const unsavedPath = 'unsaved://draft-1/note.md';
+    const executeMainTool = createMainToolExecutor({
+      now: () => '2026-07-14T00:00:00.000Z',
+      async requestBridge(input: MainToolBridgeRequest) {
+        bridgeRequests.push(input);
+        return {
+          status: 'success',
+          data: {
+            file: { type: 'file', id: 'draft-1', path: null, name: 'note', ext: 'md', content: '# Note' },
+            unsavedPath
+          }
+        };
+      },
+      async requestConfirmation() {
+        return { approved: true };
+      }
+    });
+
+    const result = await executeMainTool({
+      runtime,
+      toolCallId: 'tool-call-write-draft-1',
+      toolName: 'write_file',
+      input: { path: 'note.md', content: '# Note' }
+    });
+
+    expect(result).toMatchObject({ toolName: 'write_file', status: 'success', data: { path: unsavedPath, content: '# Note', created: true } });
+    expect(bridgeRequests.map((request): string => request.kind)).toEqual(['open-draft']);
   });
 
   it('blocks open_resource relative file paths that escape the workspace before bridge dispatch', async (): Promise<void> => {

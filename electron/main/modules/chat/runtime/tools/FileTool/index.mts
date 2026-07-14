@@ -3,6 +3,7 @@
  * @description ChatRuntime 主进程文件工具。
  */
 import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import type { ChatRuntimeMainToolExecutionInput } from '../../types.mjs';
 import type {
   MainToolsDependencies,
@@ -13,9 +14,11 @@ import type {
   RuntimeReadTarget,
   RuntimeReadDirectoryInput,
   RuntimeReadFileInput,
-  RuntimeWriteFileInput
+  RuntimeWriteFileInput,
+  RuntimeWriteTarget
 } from '../types.mjs';
 import type { AIToolExecutionResult } from 'types/ai';
+import { writeFile as writeFileAtomically } from 'atomically';
 import { readWorkspaceDirectory, readWorkspaceFile } from '../../../../workspace/read.mjs';
 import {
   CREATE_DOCUMENT_TOOL_NAME,
@@ -43,6 +46,12 @@ import {
 import { isRecord, isRuntimeFileContentSnapshot, isRuntimeOpenDraftResult } from '../guards.mjs';
 import { isRuntimePathInsideWorkspace, isRuntimeTrustedHomeReadPath, resolveRuntimeReadTarget, resolveRuntimeWriteTarget } from '../paths.mjs';
 import { createBridgeFailureResult, createMainToolCancelledResult, createMainToolFailureResult, createMainToolSuccessResult } from '../results.mjs';
+
+/** 真实文件写入队列，覆盖确认后的重新验证与原子写入阶段。 */
+const runtimeFileWriteQueues = new Map<string, Promise<void>>();
+
+/** 真实磁盘写入目标。 */
+type RuntimeFileWriteTarget = Extract<RuntimeWriteTarget, { type: 'file' }>;
 
 /**
  * 判断工具是否属于文件工具模块。
@@ -260,11 +269,145 @@ async function readExistingRuntimeFile(filePath: string): Promise<{ exists: bool
   } catch (error) {
     const nodeError = error as { code?: unknown };
     if (nodeError.code === 'ENOENT') {
-      return { exists: false, content: '' };
+      try {
+        await fs.lstat(filePath);
+      } catch (linkError) {
+        const nodeLinkError = linkError as { code?: unknown };
+        if (nodeLinkError.code === 'ENOENT') {
+          return { exists: false, content: '' };
+        }
+
+        throw linkError;
+      }
+
+      throw new Error('目标路径是无法访问的符号链接');
     }
 
     throw error;
   }
+}
+
+/**
+ * 解析已有目标或最近存在父目录的真实路径。
+ * @param filePath - 词法规范化后的目标路径
+ * @returns 不再经过原始符号链接的真实写入路径
+ */
+async function resolveRuntimeWritePath(filePath: string): Promise<string> {
+  const resolvedPath = path.resolve(filePath);
+  try {
+    return await fs.realpath(resolvedPath);
+  } catch (error) {
+    const nodeError = error as { code?: unknown };
+    const parentPath = path.dirname(resolvedPath);
+    if (nodeError.code !== 'ENOENT' || parentPath === resolvedPath) {
+      throw error;
+    }
+
+    const realParentPath = await resolveRuntimeWritePath(parentPath);
+    return path.join(realParentPath, path.basename(resolvedPath));
+  }
+}
+
+/**
+ * 解析真实写入目的地并复核工作区边界。
+ * @param target - 词法解析后的真实文件目标
+ * @param workspaceRoot - 当前工作区根目录
+ * @returns 真实写入目标
+ */
+async function resolveRuntimeWriteDestination(target: RuntimeFileWriteTarget, workspaceRoot: string | undefined): Promise<RuntimeFileWriteTarget> {
+  const realFilePath = await resolveRuntimeWritePath(target.filePath);
+  const realWorkspaceRoot = workspaceRoot ? await fs.realpath(workspaceRoot) : undefined;
+  const realPathOutsideWorkspace = realWorkspaceRoot ? !isRuntimePathInsideWorkspace(realFilePath, realWorkspaceRoot) : false;
+  const outsideWorkspace = target.outsideWorkspace || realPathOutsideWorkspace;
+  const displayPath = !target.outsideWorkspace && realPathOutsideWorkspace ? realFilePath : target.filePath;
+
+  return { type: 'file', filePath: displayPath, sourcePath: target.filePath, writePath: realFilePath, outsideWorkspace };
+}
+
+/**
+ * 判断磁盘文件是否仍与确认前快照一致。
+ * @param expectedFile - 确认前文件状态
+ * @param currentFile - 当前磁盘文件状态
+ * @returns 文件存在状态和内容是否都未变化
+ */
+function isRuntimeFileUnchanged(
+  expectedFile: { exists: boolean; content: string },
+  currentFile: { exists: boolean; content: string }
+): boolean {
+  return expectedFile.exists === currentFile.exists && (!expectedFile.exists || expectedFile.content === currentFile.content);
+}
+
+/**
+ * 检查当前磁盘状态是否仍匹配确认前文件快照。
+ * @param filePath - 实际磁盘写入路径
+ * @param expectedFile - 确认前文件状态
+ * @returns 当前状态可读取且与快照一致时返回 true
+ */
+async function matchesRuntimeFileSnapshot(filePath: string, expectedFile: { exists: boolean; content: string }): Promise<boolean> {
+  try {
+    const currentFile = await readExistingRuntimeFile(filePath);
+    return isRuntimeFileUnchanged(expectedFile, currentFile);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 获取跨平台稳定的真实文件写入锁键。
+ * @param filePath - 已解析的真实文件路径
+ * @returns 写入锁键
+ */
+function getRuntimeLockKey(filePath: string): string {
+  const normalizedPath = path.normalize(filePath);
+  return process.platform === 'win32' ? normalizedPath.toLowerCase() : normalizedPath;
+}
+
+/**
+ * 判断原始请求路径是否仍指向确认前解析的真实目的地。
+ * @param sourcePath - 用户输入经词法解析后的原始磁盘路径
+ * @param expectedPath - 确认前解析的真实写入路径
+ * @returns 当前真实目的地是否未变化
+ */
+async function isRuntimePathCurrent(sourcePath: string, expectedPath: string): Promise<boolean> {
+  const currentPath = await resolveRuntimeWritePath(sourcePath);
+  return getRuntimeLockKey(currentPath) === getRuntimeLockKey(expectedPath);
+}
+
+/**
+ * 串行执行同一路径确认后的重新验证与写入。
+ * @param filePath - 已解析的真实文件路径
+ * @param task - 需要串行执行的异步任务
+ * @returns 任务执行结果
+ */
+async function withRuntimeFileLock<T>(filePath: string, task: () => Promise<T>): Promise<T> {
+  const lockKey = getRuntimeLockKey(filePath);
+  const previousTask = runtimeFileWriteQueues.get(lockKey) ?? Promise.resolve();
+  let releaseTask = (): void => undefined;
+  const currentTask = new Promise<void>((resolve): void => {
+    releaseTask = (): void => resolve();
+  });
+  const queuedTask = previousTask.catch((): void => undefined).then((): Promise<void> => currentTask);
+  runtimeFileWriteQueues.set(lockKey, queuedTask);
+
+  await previousTask.catch((): void => undefined);
+  try {
+    return await task();
+  } finally {
+    releaseTask();
+    if (runtimeFileWriteQueues.get(lockKey) === queuedTask) {
+      runtimeFileWriteQueues.delete(lockKey);
+    }
+  }
+}
+
+/**
+ * 将完整 UTF-8 文本原子写入真实文件。
+ * @param filePath - 目标文件路径
+ * @param content - 完整文件内容
+ * @returns 写入完成后返回
+ */
+async function writeRuntimeFile(filePath: string, content: string): Promise<void> {
+  await writeFileAtomically(filePath, content, { encoding: 'utf8' });
 }
 
 /**
@@ -637,8 +780,17 @@ async function executeWriteFileTool(input: ChatRuntimeMainToolExecutionInput, de
   const normalizedInput = normalizeRuntimeWriteFileInput(input.input);
   if ('status' in normalizedInput) return normalizedInput;
 
-  const target = resolveRuntimeWriteTarget(normalizedInput.filePath, input.runtime.workspaceRoot);
+  let target = resolveRuntimeWriteTarget(normalizedInput.filePath, input.runtime.workspaceRoot);
   if ('status' in target) return target;
+
+  if (target.type === 'file') {
+    try {
+      target = await resolveRuntimeWriteDestination(target, input.runtime.workspaceRoot);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '解析文件真实路径失败';
+      return createMainToolFailureResult(input.toolName, 'EXECUTION_FAILED', message);
+    }
+  }
 
   if (target.type === 'draft') {
     const decision = await deps.requestConfirmation({
@@ -702,13 +854,18 @@ async function executeWriteFileTool(input: ChatRuntimeMainToolExecutionInput, de
   }
 
   let existingFile: { exists: boolean; content: string };
+  const writePath = target.writePath ?? target.filePath;
+  const sourcePath = target.sourcePath ?? target.filePath;
   try {
-    existingFile = await readExistingRuntimeFile(target.filePath);
+    existingFile = await readExistingRuntimeFile(writePath);
   } catch (error) {
     const message = error instanceof Error ? error.message : '读取文件失败';
     return createMainToolFailureResult(input.toolName, 'EXECUTION_FAILED', message);
   }
 
+  const writeAction = existingFile.exists ? 'AI 请求覆盖本地文件' : 'AI 请求创建本地文件';
+  const outsideWarning = target.outsideWorkspace ? '\n该文件不在当前工作区内，请确认是否允许。' : '';
+  const parentWarning = existingFile.exists ? '' : '\n目标父目录不存在时将一并创建。';
   const decision = await deps.requestConfirmation({
     runtimeId: input.runtime.runtimeId,
     toolCallId: input.toolCallId,
@@ -716,29 +873,26 @@ async function executeWriteFileTool(input: ChatRuntimeMainToolExecutionInput, de
       toolCallId: input.toolCallId,
       toolName: WRITE_FILE_TOOL_NAME,
       title: existingFile.exists ? 'AI 想要覆盖本地文件' : 'AI 想要创建本地文件',
-      description: target.outsideWorkspace
-        ? `${existingFile.exists ? 'AI 请求覆盖本地文件' : 'AI 请求创建本地文件'}：${target.filePath}\n该文件不在当前工作区内，请确认是否允许。`
-        : `${existingFile.exists ? 'AI 请求覆盖本地文件' : 'AI 请求创建本地文件'}：${target.filePath}`,
+      description: `${writeAction}：${target.filePath}${outsideWarning}${parentWarning}`,
       riskLevel: target.outsideWorkspace || existingFile.exists ? 'dangerous' : 'write',
       ...(existingFile.exists ? { beforeText: existingFile.content, afterText: normalizedInput.content } : { afterText: normalizedInput.content })
     }
   });
   if (!decision.approved) return createMainToolCancelledResult(input.toolName);
 
-  const bridgeResult = await deps.requestBridge({
-    runtimeId: input.runtime.runtimeId,
-    toolCallId: input.toolCallId,
-    kind: 'write-file-content',
-    payload: { path: target.filePath, content: normalizedInput.content, workspaceRoot: input.runtime.workspaceRoot }
-  });
-  if (bridgeResult.status === 'success') {
-    return createMainToolSuccessResult(WRITE_FILE_TOOL_NAME, { path: target.filePath, content: normalizedInput.content, created: !existingFile.exists });
-  }
-  if (bridgeResult.error.code !== 'EDITOR_UNAVAILABLE') return createBridgeFailureResult(input.toolName, bridgeResult.error);
-
   try {
-    await fs.writeFile(target.filePath, normalizedInput.content, 'utf-8');
-    return createMainToolSuccessResult(WRITE_FILE_TOOL_NAME, { path: target.filePath, content: normalizedInput.content, created: !existingFile.exists });
+    return await withRuntimeFileLock(writePath, async (): Promise<AIToolExecutionResult> => {
+      if (!(await isRuntimePathCurrent(sourcePath, writePath))) {
+        return createMainToolFailureResult(input.toolName, 'STALE_CONTEXT', '文件真实路径在确认期间发生变化，请重新确认后再重试');
+      }
+
+      if (!(await matchesRuntimeFileSnapshot(writePath, existingFile))) {
+        return createMainToolFailureResult(input.toolName, 'STALE_CONTEXT', '文件在确认期间发生变化，请先重新读取后再重试');
+      }
+
+      await writeRuntimeFile(writePath, normalizedInput.content);
+      return createMainToolSuccessResult(WRITE_FILE_TOOL_NAME, { path: target.filePath, content: normalizedInput.content, created: !existingFile.exists });
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : '写入文件失败';
     return createMainToolFailureResult(input.toolName, 'EXECUTION_FAILED', message);
@@ -755,8 +909,18 @@ async function executeEditFileTool(input: ChatRuntimeMainToolExecutionInput, dep
   const normalizedInput = normalizeRuntimeEditFileInput(input.input);
   if ('status' in normalizedInput) return normalizedInput;
 
-  const target = resolveRuntimeWriteTarget(normalizedInput.filePath, input.runtime.workspaceRoot);
+  let target = resolveRuntimeWriteTarget(normalizedInput.filePath, input.runtime.workspaceRoot);
   if ('status' in target) return target;
+
+  if (target.type === 'file') {
+    try {
+      target = await resolveRuntimeWriteDestination(target, input.runtime.workspaceRoot);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '解析文件真实路径失败';
+      return createMainToolFailureResult(input.toolName, 'EXECUTION_FAILED', message);
+    }
+  }
+
   if (target.type === 'draft') {
     return createMainToolFailureResult(
       input.toolName,
@@ -767,27 +931,27 @@ async function executeEditFileTool(input: ChatRuntimeMainToolExecutionInput, dep
 
   let currentPath = target.filePath;
   let currentContent = '';
-  const snapshotResult = await deps.requestBridge({
-    runtimeId: input.runtime.runtimeId,
-    toolCallId: input.toolCallId,
-    kind: 'file-content-snapshot',
-    payload: { path: target.filePath, workspaceRoot: input.runtime.workspaceRoot }
-  });
-  if (snapshotResult.status === 'success') {
+  if (target.type === 'unsaved') {
+    const snapshotResult = await deps.requestBridge({
+      runtimeId: input.runtime.runtimeId,
+      toolCallId: input.toolCallId,
+      kind: 'file-content-snapshot',
+      payload: { path: target.filePath }
+    });
+    if (snapshotResult.status === 'failure') return createBridgeFailureResult(input.toolName, snapshotResult.error);
     if (!isRuntimeFileContentSnapshot(snapshotResult.data)) return createMainToolFailureResult(input.toolName, 'INVALID_INPUT', '文件内容快照格式无效');
     currentPath = snapshotResult.data.path;
     currentContent = snapshotResult.data.content;
-  } else if (snapshotResult.error.code === 'EDITOR_UNAVAILABLE') {
+  } else {
+    const writePath = target.writePath ?? target.filePath;
     try {
-      const currentFile = await readExistingRuntimeFile(target.filePath);
+      const currentFile = await readExistingRuntimeFile(writePath);
       if (!currentFile.exists) return createMainToolFailureResult(input.toolName, 'EXECUTION_FAILED', '文件或目录不存在或无法访问');
       currentContent = currentFile.content;
     } catch (error) {
       const message = error instanceof Error ? error.message : '读取文件失败';
       return createMainToolFailureResult(input.toolName, 'EXECUTION_FAILED', message);
     }
-  } else {
-    return createBridgeFailureResult(input.toolName, snapshotResult.error);
   }
 
   const matchCount = countRuntimeOccurrences(currentContent, normalizedInput.oldString);
@@ -815,20 +979,32 @@ async function executeEditFileTool(input: ChatRuntimeMainToolExecutionInput, dep
   });
   if (!decision.approved) return createMainToolCancelledResult(input.toolName);
 
-  const bridgeResult = await deps.requestBridge({
-    runtimeId: input.runtime.runtimeId,
-    toolCallId: input.toolCallId,
-    kind: 'write-file-content',
-    payload: { path: target.filePath, content: nextFile.content, workspaceRoot: input.runtime.workspaceRoot }
-  });
-  if (bridgeResult.status === 'success') {
+  if (target.type === 'unsaved') {
+    const bridgeResult = await deps.requestBridge({
+      runtimeId: input.runtime.runtimeId,
+      toolCallId: input.toolCallId,
+      kind: 'write-file-content',
+      payload: { path: target.filePath, content: nextFile.content }
+    });
+    if (bridgeResult.status === 'failure') return createBridgeFailureResult(input.toolName, bridgeResult.error);
     return createMainToolSuccessResult(EDIT_FILE_TOOL_NAME, { path: currentPath, content: nextFile.content, replacedCount: nextFile.replacedCount });
   }
-  if (bridgeResult.error.code !== 'EDITOR_UNAVAILABLE') return createBridgeFailureResult(input.toolName, bridgeResult.error);
 
   try {
-    await fs.writeFile(target.filePath, nextFile.content, 'utf-8');
-    return createMainToolSuccessResult(EDIT_FILE_TOOL_NAME, { path: currentPath, content: nextFile.content, replacedCount: nextFile.replacedCount });
+    const writePath = target.writePath ?? target.filePath;
+    const sourcePath = target.sourcePath ?? target.filePath;
+    return await withRuntimeFileLock(writePath, async (): Promise<AIToolExecutionResult> => {
+      if (!(await isRuntimePathCurrent(sourcePath, writePath))) {
+        return createMainToolFailureResult(input.toolName, 'STALE_CONTEXT', '文件真实路径在确认期间发生变化，请重新确认后再重试');
+      }
+
+      if (!(await matchesRuntimeFileSnapshot(writePath, { exists: true, content: currentContent }))) {
+        return createMainToolFailureResult(input.toolName, 'STALE_CONTEXT', '文件在确认期间发生变化，请先重新读取后再重试');
+      }
+
+      await writeRuntimeFile(writePath, nextFile.content);
+      return createMainToolSuccessResult(EDIT_FILE_TOOL_NAME, { path: currentPath, content: nextFile.content, replacedCount: nextFile.replacedCount });
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : '修改文件失败';
     return createMainToolFailureResult(input.toolName, 'EXECUTION_FAILED', message);

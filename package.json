@@ -56,6 +56,7 @@
     "@standard-schema/spec": "^1.1.0",
     "ai": "^6.0.182",
     "asynckit": "^0.4.0",
+    "atomically": "2.1.1",
     "better-sqlite3": "^12.10.0",
     "call-bind-apply-helpers": "^1.0.2",
     "chokidar": "^5.0.0",

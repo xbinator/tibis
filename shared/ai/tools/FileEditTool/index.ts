@@ -14,7 +14,8 @@ export const editFileToolRegistryEntry = {
   exposure: 'default-writable',
   definition: {
     name: EDIT_FILE_TOOL_NAME,
-    description: '按精确字符串匹配修改本地文本文件或未保存草稿。执行前会向用户展示确认信息。',
+    description:
+      '在已有文本文件或未保存草稿中执行精确字符串替换，并保留其他内容。通常先用 read_file 获取准确的 oldString；文件不存在、原文未命中或存在未授权的多处匹配时会失败。真实文件会直接持久化到磁盘。',
     source: 'builtin',
     riskLevel: 'write',
     requiresActiveDocument: false,
@@ -22,7 +23,7 @@ export const editFileToolRegistryEntry = {
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '文件路径，支持相对工作区路径、绝对路径或未保存草稿虚拟路径。' },
+        path: { type: 'string', description: '已有文件路径，支持工作区相对路径、POSIX/Windows 绝对路径或 unsaved:// 未保存草稿路径。' },
         oldString: { type: 'string', description: '待替换的原始文本。' },
         newString: { type: 'string', description: '替换后的文本。' },
         replaceAll: { type: 'boolean', description: '是否替换全部匹配项，默认 false。' }

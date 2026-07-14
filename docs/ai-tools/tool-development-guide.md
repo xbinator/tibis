@@ -227,6 +227,21 @@ export const TOOL_REGISTRY = [
 
 bridge 不是第二套工具运行时，只是主进程向 renderer 请求 UI 状态或 UI 动作的受控 RPC。
 
+#### 文件内容读写边界
+
+文件工具必须先区分真实文件路径与 `unsaved://` 草稿路径：
+
+- `write_file` 和 `edit_file` 对真实文件只在主进程读取与写入磁盘，不通过 bridge 查询或修改编辑器内容。
+- 真实文件写操作只有在磁盘持久化完成后才能返回成功。
+- `write_file` 使用 `atomically.writeFile()` 创建缺失的父目录并原子写入完整内容。
+- `edit_file` 从磁盘读取已有文件，完成精确替换后使用同一原子写入能力写回；目标不存在时失败。
+- 用户确认后必须重新验证真实文件的存在状态和内容；确认期间发生变化时返回 `STALE_CONTEXT`，不能覆盖新版本或重新创建被删除的编辑目标。
+- 同一真实路径的“重新验证 + 原子写入”阶段必须串行执行，避免并发工具调用互相覆盖。
+- 写入前解析目标或最近存在父目录的 `realpath`，保留原始词法路径，并在确认后重新解析该路径以验证真实目的地未变化；符号链接把目的地导向工作区外时，按工作区外真实路径展示并使用 `dangerous` 风险确认。
+- `unsaved://` 没有磁盘文件，继续通过 `file-content-snapshot` 和 `write-file-content` bridge 更新草稿。
+
+文件是否已在编辑器打开不影响真实路径工具的执行分支。编辑器对外部磁盘变化的响应属于文件监听与冲突协调职责，不能作为文件工具宣称磁盘写入成功的前提。
+
 ### 7. 更新分发入口
 
 如果使用已有执行分组，通常只需要在该分组的 `is<Group>Tool` 和 `execute<Group>Tool` 中接入。
@@ -395,6 +410,9 @@ export async function executeExampleTool(input: ChatRuntimeMainToolExecutionInpu
 - schema 是否和输入归一化一致？
 - 主进程执行结果是否使用 `tools/results.mts` helper？
 - 写操作、工作区外路径、危险读取是否有确认？
+- 真实文件写工具是否只在磁盘持久化完成后返回成功？
+- 真实文件写工具是否在确认后重新验证版本，并按真实目的地复核符号链接边界？
+- `unsaved://` 是否作为草稿例外通过 bridge 处理？
 - bridge 失败是否返回稳定错误，而不是抛出到 runtime 外层？
 - 结果是否可结构化克隆？
 - 是否补测试？

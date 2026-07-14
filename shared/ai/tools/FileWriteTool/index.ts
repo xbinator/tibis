@@ -14,7 +14,8 @@ export const writeFileToolRegistryEntry = {
   exposure: 'default-writable',
   definition: {
     name: WRITE_FILE_TOOL_NAME,
-    description: '创建或覆盖本地文本文件或未保存草稿。执行前会向用户展示确认信息。',
+    description:
+      '将完整内容写入目标，用于创建新文件或有意完整覆盖已有文件；局部修改请使用 edit_file。真实文件会直接持久化到磁盘，并在创建新文件时创建缺失的父目录；unsaved:// 只更新草稿。',
     source: 'builtin',
     riskLevel: 'write',
     requiresActiveDocument: false,
@@ -22,7 +23,7 @@ export const writeFileToolRegistryEntry = {
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '文件路径，支持相对工作区路径、绝对路径或未保存草稿虚拟路径。' },
+        path: { type: 'string', description: '文件路径，支持工作区相对路径、POSIX/Windows 绝对路径或 unsaved:// 未保存草稿路径。' },
         content: { type: 'string', description: '新的完整文件内容。' }
       },
       required: ['path', 'content'],

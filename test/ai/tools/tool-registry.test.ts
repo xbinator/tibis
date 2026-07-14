@@ -17,9 +17,12 @@ import {
 } from '../../../shared/ai/tools/FileReadTool/index.js';
 import { writeFileToolRegistryEntry } from '../../../shared/ai/tools/FileWriteTool/index.js';
 import {
+  EDIT_FILE_TOOL_NAME,
   OPERATE_WEBPAGE_TOOL_NAME,
   OPEN_RESOURCE_TOOL_NAME,
+  READ_DIRECTORY_TOOL_NAME,
   TOOL_REGISTRY,
+  WRITE_FILE_TOOL_NAME,
   getToolDefinitionByName,
   getToolNamesByExposure,
   getToolNamesByRuntimeGroup
@@ -161,5 +164,31 @@ describe('toolRegistry', (): void => {
     expect(getToolNamesByExposure('conditional-writable')).toEqual(
       expect.arrayContaining(['add_mcp_server', 'update_mcp_server', 'remove_mcp_server', 'refresh_mcp_discovery', 'operate_webpage'])
     );
+  });
+
+  it('requires paths for direct file and directory reads', (): void => {
+    const readFileDefinition = getToolDefinitionByName(READ_FILE_TOOL_NAME);
+    const readDirectoryDefinition = getToolDefinitionByName(READ_DIRECTORY_TOOL_NAME);
+
+    expect(readFileDefinition?.parameters.required).toContain('path');
+    expect(readDirectoryDefinition?.parameters.required).toContain('path');
+  });
+
+  it('describes the selection boundary between file tools', (): void => {
+    const readFileDescription = String(getToolDefinitionByName(READ_FILE_TOOL_NAME)?.description);
+    const readDirectoryDescription = String(getToolDefinitionByName(READ_DIRECTORY_TOOL_NAME)?.description);
+    const writeFileDescription = String(getToolDefinitionByName(WRITE_FILE_TOOL_NAME)?.description);
+    const editFileDescription = String(getToolDefinitionByName(EDIT_FILE_TOOL_NAME)?.description);
+
+    expect(readFileDescription).toContain('edit_file');
+    expect(readDirectoryDescription).toContain('glob');
+    expect(readDirectoryDescription).toContain('read_file');
+    expect(writeFileDescription).toContain('完整');
+    expect(writeFileDescription).toContain('父目录');
+    expect(writeFileDescription).toContain('磁盘');
+    expect(writeFileDescription).toContain('edit_file');
+    expect(editFileDescription).toContain('精确');
+    expect(editFileDescription).toContain('read_file');
+    expect(editFileDescription).toContain('磁盘');
   });
 });

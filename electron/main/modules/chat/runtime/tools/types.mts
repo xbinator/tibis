@@ -253,8 +253,12 @@ export type RuntimeWriteTarget =
   | {
       /** 目标类型。 */
       type: 'file';
-      /** 规范化文件路径。 */
+      /** 用于确认和结果展示的规范化文件路径。 */
       filePath: string;
+      /** 用户输入经词法解析后的原始磁盘路径。 */
+      sourcePath?: string;
+      /** 解析符号链接后的实际磁盘写入路径。 */
+      writePath?: string;
       /** 是否位于工作区外。 */
       outsideWorkspace: boolean;
     }
