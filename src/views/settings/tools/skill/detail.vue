@@ -90,11 +90,7 @@ function handleCopyPath(): void {
  * 当无历史记录（如直接通过 URL 进入、刷新详情页）时回退到列表路由。
  */
 function handleGoBack(): void {
-  if (window.history.length > 1) {
-    router.back();
-  } else {
-    router.push({ name: 'skill-list' });
-  }
+  router.push({ name: 'skill-list' });
 }
 </script>
 
