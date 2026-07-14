@@ -1,0 +1,4 @@
+interface:
+  display_name: "Developing Widget"
+  short_description: "Create complete, validated Tibis Widget packages"
+  default_prompt: "Use $developing-widget to create a complete Tibis Widget directory from my requirements."

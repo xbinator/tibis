@@ -1,0 +1,29 @@
+{
+  "name": "widget-template",
+  "description": "A minimal Tibis Widget package template.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "dataSchema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "execute": {
+    "enabled": true,
+    "description": "Prepare Widget data.",
+    "code": "export default class Component extends Widget {\n  /**\n   * 大模型调用 open_widget 时先执行。\n   * - this.$input：只读入参，例如 this.$input.city。\n   * - return 的值会成为 this.$output。\n   */\n   onExecute() {\n\n   }\n\n  /**\n   * 小组件展示后执行。\n   * - this.$output 是 onExecute 的返回值；失败或未返回时为 undefined。\n   * - 可以在这里把 this.$output 写入可绑定的数据字段。\n   */\n  onMounted() {\n\n  }\n}\n"
+  },
+  "metadata": {
+    "width": 360,
+    "height": 240
+  },
+  "elements": []
+}
