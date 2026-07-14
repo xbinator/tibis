@@ -413,15 +413,7 @@ describe('WidgetSettingsPage', (): void => {
     expect(savedContent.execute).toEqual(defaultExecute);
     expect(savedContent).not.toHaveProperty('type');
     expect(savedContent).not.toHaveProperty('version');
-    expect(JSON.parse(createAndOpenMock.mock.calls[0]?.[0].content ?? '{}')).not.toHaveProperty('type');
-    expect(JSON.parse(createAndOpenMock.mock.calls[0]?.[0].content ?? '{}')).not.toHaveProperty('version');
-    expect(createAndOpenMock.mock.calls[0]?.[0]).toMatchObject({
-      type: 'widget',
-      id: 'widget-weather',
-      path: '/Users/test/.tibis/widgets/weather/widget.json',
-      name: 'weather',
-      ext: 'json'
-    });
+    expect(createAndOpenMock).not.toHaveBeenCalled();
     expect(routerPushMock).toHaveBeenCalledWith({ name: 'widget', params: { id: 'widget-weather' } });
   });
 
@@ -549,76 +541,31 @@ describe('WidgetSettingsPage', (): void => {
     await wrapper.find('.widget-settings__item-row').trigger('click');
     await flushPromises();
 
-    const createdFile = createAndOpenMock.mock.calls[0]?.[0];
-    const createdContent = JSON.parse(createdFile?.content ?? '{}') as Record<string, unknown>;
-
-    expect(createdFile).toMatchObject({
-      type: 'widget',
-      id: 'widget-weather',
-      path: '/Users/test/.tibis/widgets/weather/widget.json',
-      name: 'weather',
-      ext: 'json'
-    });
-    expect(createdContent).toMatchObject({
-      name: '天气',
-      description: '查询指定城市天气'
-    });
-    expect(createdContent).not.toHaveProperty('type');
-    expect(createdContent).not.toHaveProperty('version');
+    expect(createAndOpenMock).not.toHaveBeenCalled();
     expect(routerPushMock).toHaveBeenCalledWith({ name: 'widget', params: { id: 'widget-weather' } });
   });
 
-  it('opens the latest widget json from disk when the settings store is stale', async (): Promise<void> => {
+  it('delegates latest widget disk loading to the editor page', async (): Promise<void> => {
     nativeMock.readWorkspaceDirectory.mockResolvedValue({
       entries: [{ name: 'weather', type: 'directory' }]
     });
-    nativeMock.readFile
-      .mockResolvedValueOnce({
-        content: JSON.stringify({
-          name: '天气旧版',
-          description: '旧描述'
-        }),
-        name: 'weather',
-        ext: 'json'
-      })
-      .mockResolvedValueOnce({
-        content: JSON.stringify({
-          name: '天气新版',
-          description: '新描述',
-          elements: [
-            {
-              id: 'text-1',
-              name: 'text',
-              label: '文本',
-              icon: 'lucide:type',
-              title: '文本节点',
-              position: { x: 12, y: 24 },
-              size: { width: 120, height: 48 },
-              rotation: 0,
-              style: {},
-              metadata: {}
-            }
-          ]
-        }),
-        name: 'weather',
-        ext: 'json'
-      });
+    nativeMock.readFile.mockResolvedValue({
+      content: JSON.stringify({
+        name: '天气旧版',
+        description: '旧描述'
+      }),
+      name: 'weather',
+      ext: 'json'
+    });
     const wrapper = mountWidgetSettingsPage();
 
     await flushPromises();
     await wrapper.find('.widget-settings__item-row').trigger('click');
     await flushPromises();
 
-    const createdFile = createAndOpenMock.mock.calls[0]?.[0];
-    const createdContent = JSON.parse(createdFile?.content ?? '{}') as Record<string, unknown>;
-    const createdElements = createdContent.elements as unknown[];
-
-    expect(nativeMock.readFile).toHaveBeenLastCalledWith('/Users/test/.tibis/widgets/weather/widget.json');
-    expect(createdContent.name).toBe('天气新版');
-    expect(createdContent.description).toBe('新描述');
-    expect(createdContent).not.toHaveProperty('type');
-    expect(createdContent).not.toHaveProperty('version');
-    expect(createdElements).toHaveLength(1);
+    expect(nativeMock.readFile).toHaveBeenCalledTimes(1);
+    expect(createAndOpenMock).not.toHaveBeenCalled();
+    expect(routerPushMock).toHaveBeenCalledWith({ name: 'widget', params: { id: 'widget-weather' } });
     wrapper.unmount();
   });
 
@@ -769,7 +716,7 @@ describe('WidgetSettingsPage', (): void => {
   });
 
   it('keeps a persisted widget when opening the editor fails', async (): Promise<void> => {
-    createAndOpenMock.mockRejectedValue(new Error('open failed'));
+    routerPushMock.mockRejectedValueOnce(new Error('open failed'));
     const wrapper = mountWidgetSettingsPage();
 
     await flushPromises();

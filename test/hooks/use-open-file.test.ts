@@ -3,7 +3,6 @@
  * @description 验证统一文件打开入口按最近记录类型路由。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { useOpenFile } from '@/hooks/useOpenFile';
 
 const routerPushMock = vi.hoisted(() => vi.fn());
@@ -92,37 +91,34 @@ describe('useOpenFile', (): void => {
     expect(routerPushMock).toHaveBeenCalledWith({ name: 'editor', params: { id: 'json-1' } });
   });
 
-  it('opens an installed widget definition through the shared widget file session', async (): Promise<void> => {
+  it('creates markdown records without deciding the saved content baseline', async (): Promise<void> => {
     createAndOpenMock.mockResolvedValue({
-      type: 'widget',
-      id: 'widget-weather',
-      path: '/tmp/widgets/weather/widget.json',
-      name: 'weather',
-      ext: 'json',
-      content: '{"name":"天气"}',
-      savedContent: '{"name":"天气"}'
+      type: 'file',
+      id: 'file-1',
+      path: null,
+      name: 'Untitled',
+      ext: 'md',
+      content: ''
     });
 
-    const { openWidgetFile } = useOpenFile();
-    await openWidgetFile({
-      id: 'weather',
-      name: '天气',
-      description: '查询天气',
-      data: { ...createDefaultWidgetData('weather'), name: '天气', description: '查询天气' },
-      filePath: '/tmp/widgets/weather/widget.json',
-      enabled: true,
-      parsedAt: 1
-    });
+    const { createNewFile } = useOpenFile();
+    await createNewFile();
 
     expect(createAndOpenMock).toHaveBeenCalledWith({
-      type: 'widget',
-      id: 'widget-weather',
-      path: '/tmp/widgets/weather/widget.json',
-      name: 'weather',
-      ext: 'json',
-      content: expect.stringContaining('"name": "天气"'),
-      savedContent: expect.stringContaining('"name": "天气"')
+      type: 'file',
+      id: expect.any(String),
+      path: null,
+      name: 'Untitled',
+      ext: 'md',
+      content: ''
     });
+  });
+
+  it('navigates to an installed widget without creating a content record', async (): Promise<void> => {
+    const { openWidgetFile } = useOpenFile();
+    await openWidgetFile('weather');
+
+    expect(createAndOpenMock).not.toHaveBeenCalled();
     expect(routerPushMock).toHaveBeenCalledWith({ name: 'widget', params: { id: 'widget-weather' } });
   });
 });

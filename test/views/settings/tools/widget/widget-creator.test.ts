@@ -9,7 +9,6 @@ import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import JSZip from 'jszip';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { WidgetDefinition } from '@/ai/widget';
 import type { WidgetData } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { createDefaultWidgetExecuteMethod } from '@/components/BWidget/utils/widgetExecuteMethod';
@@ -30,7 +29,7 @@ interface DirectoryInstallRequestSnapshot {
 /** 目录安装 mock。 */
 const installDirectoryMock = vi.hoisted(() => vi.fn<(options: DirectoryInstallRequestSnapshot) => Promise<void>>());
 /** 创建后打开 Widget mock。 */
-const openWidgetFileMock = vi.hoisted(() => vi.fn<(widget: WidgetDefinition) => Promise<unknown>>());
+const openWidgetFileMock = vi.hoisted(() => vi.fn<(widgetId: string) => Promise<void>>());
 /** 原生平台 mock。 */
 const nativeMock = vi.hoisted(() => ({
   getHomeDir: vi.fn<() => Promise<string>>()
@@ -284,7 +283,7 @@ describe('WidgetCreator', (): void => {
   beforeEach((): void => {
     setActivePinia(createPinia());
     installDirectoryMock.mockReset().mockResolvedValue(undefined);
-    openWidgetFileMock.mockReset().mockResolvedValue({});
+    openWidgetFileMock.mockReset().mockResolvedValue(undefined);
     nativeMock.getHomeDir.mockReset().mockResolvedValue('/home/test');
     loggerMock.error.mockReset().mockResolvedValue(undefined);
     loggerMock.info.mockReset().mockResolvedValue(undefined);
@@ -306,7 +305,7 @@ describe('WidgetCreator', (): void => {
     expect(readInstallRequest()).toMatchObject({ targetDir: '/home/test/.tibis/widgets/weather_01', conflictStrategy: 'reject' });
     expect(readInstalledWidgetData()).toMatchObject({ name: '天气', description: '查询指定城市天气' });
     expect(useWidgetStore().getWidgetById('weather_01')).toMatchObject({ name: '天气', description: '查询指定城市天气' });
-    expect(openWidgetFileMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'weather_01', name: '天气' }));
+    expect(openWidgetFileMock).toHaveBeenCalledWith('weather_01');
     expect(wrapper.emitted('update:open')?.at(-1)).toEqual([false]);
   });
 

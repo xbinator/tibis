@@ -5,8 +5,6 @@
 
 import { useRouter } from 'vue-router';
 import { customAlphabet } from 'nanoid';
-import type { WidgetDefinition } from '@/ai/widget';
-import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { native } from '@/shared/platform';
 import type { StoredDocumentRecord } from '@/shared/storage/files/types';
 import { useFilesStore } from '@/stores/workspace/files';
@@ -42,10 +40,8 @@ interface OpenFileActions {
   openNativeFile: () => Promise<StoredDocumentRecord | null>;
   /** 创建新的 Markdown 文件 */
   createNewFile: () => Promise<StoredDocumentRecord>;
-  /** 创建新的 Widget 文件 */
-  createNewWidgetFile: () => Promise<StoredDocumentRecord>;
   /** 打开已安装的 Widget 文件 */
-  openWidgetFile: (widget: WidgetDefinition) => Promise<StoredDocumentRecord>;
+  openWidgetFile: (widgetId: string) => Promise<void>;
 }
 
 /**
@@ -171,8 +167,7 @@ export function useOpenFile(): OpenFileActions {
       path: null,
       name: 'Untitled',
       ext: 'md',
-      content: '',
-      savedContent: ''
+      content: ''
     });
 
     await router.push({ name: 'editor', params: { id: createdFile.id } });
@@ -180,46 +175,12 @@ export function useOpenFile(): OpenFileActions {
   }
 
   /**
-   * 创建一个新的未保存 Widget 文件并打开。
-   * @returns 创建后的文件记录
+   * 打开已安装小组件对应的 Widget 文件会话。
+   * @param widgetId - 已安装小组件 ID
    */
-  async function createNewWidgetFile(): Promise<StoredDocumentRecord> {
-    const dataItem = createDefaultWidgetData();
-    const content = JSON.stringify(dataItem, null, 2);
-    const createdFile = await filesStore.createAndOpen({
-      type: 'widget',
-      id: createFileId(),
-      path: null,
-      name: 'Untitled',
-      ext: 'json',
-      content,
-      savedContent: content
-    });
-
-    await router.push(resolveFileRoute(createdFile));
-    return createdFile;
+  async function openWidgetFile(widgetId: string): Promise<void> {
+    await router.push({ name: 'widget', params: { id: `widget-${widgetId}` } });
   }
 
-  /**
-   * 将已安装小组件定义作为 Widget 文件会话打开。
-   * @param widget - 已安装小组件定义
-   * @returns 打开的文件记录
-   */
-  async function openWidgetFile(widget: WidgetDefinition): Promise<StoredDocumentRecord> {
-    const content = JSON.stringify(widget.data, null, 2);
-    const openedFile = await filesStore.createAndOpen({
-      type: 'widget',
-      id: `widget-${widget.id}`,
-      path: widget.filePath,
-      name: widget.id,
-      ext: 'json',
-      content,
-      savedContent: content
-    });
-
-    await router.push({ name: 'widget', params: { id: openedFile.id } });
-    return openedFile;
-  }
-
-  return { openFile, openFileById, openFileByPath, openNativeFile, createNewFile, createNewWidgetFile, openWidgetFile };
+  return { openFile, openFileById, openFileByPath, openNativeFile, createNewFile, openWidgetFile };
 }

@@ -12,10 +12,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WidgetData, WidgetElement, WidgetElementLoopConfig, WidgetSelectTarget } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
-import { emitter } from '@/utils/emitter';
 import WidgetPage from '@/views/widget/index.vue';
 
-const addTabMock = vi.hoisted(() => vi.fn());
 const onSaveMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const onSaveAsMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const onRenameMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
@@ -27,6 +25,9 @@ const ungroupSelectionMock = vi.hoisted(() => vi.fn());
 const deleteSelectionMock = vi.hoisted(() => vi.fn());
 const reorderSelectionMock = vi.hoisted(() => vi.fn());
 const nanoidMock = vi.hoisted(() => vi.fn<() => string>());
+const reloadMock = vi.hoisted(() => vi.fn<() => Promise<void>>());
+const isLoadingMock = vi.hoisted((): { value: boolean; __v_isRef: true } => ({ value: false, __v_isRef: true }));
+const loadErrorMock = vi.hoisted((): { value: string | null; __v_isRef: true } => ({ value: null, __v_isRef: true }));
 const widgetDataMock = vi.hoisted((): { value: WidgetData } => ({
   value: {
     name: '',
@@ -67,14 +68,19 @@ vi.mock('vue-router', () => ({
   })
 }));
 
-vi.mock('@/stores/workspace/tabs', () => ({
-  useTabsStore: () => ({
-    addTab: addTabMock
-  })
-}));
-
-vi.mock('@/hooks/useFileSession', () => ({
-  useFileSession: () => ({
+vi.mock('@/views/widget/hooks/useSession', () => ({
+  useSession: () => ({
+    fileId: {
+      value: 'widget-1',
+      __v_isRef: true
+    },
+    isActive: {
+      value: true,
+      __v_isRef: true
+    },
+    isLoading: isLoadingMock,
+    loadError: loadErrorMock,
+    reload: reloadMock,
     currentTitle: {
       value: 'board.json',
       __v_isRef: true
@@ -250,7 +256,6 @@ function flushPromises(): Promise<void> {
 
 describe('WidgetPage', (): void => {
   beforeEach((): void => {
-    addTabMock.mockClear();
     onSaveMock.mockClear();
     onSaveAsMock.mockClear();
     onRenameMock.mockClear();
@@ -261,31 +266,28 @@ describe('WidgetPage', (): void => {
     ungroupSelectionMock.mockClear();
     deleteSelectionMock.mockClear();
     reorderSelectionMock.mockClear();
+    reloadMock.mockReset().mockResolvedValue(undefined);
+    isLoadingMock.value = false;
+    loadErrorMock.value = null;
     nanoidMock.mockReset();
     widgetDataMock.value = createDefaultWidgetData();
   });
 
-  it('adds the widget file tab with resolved file title', (): void => {
-    const wrapper = shallowMount(WidgetPage, {
-      global: {
-        stubs: {
-          BWidget: true,
-          Icon: true
-        }
-      }
-    });
+  it('uses the unified Widget session entry', (): void => {
+    const source = readFileSync('src/views/widget/index.vue', 'utf-8');
+    const sessionSource = readFileSync('src/views/widget/hooks/useSession.ts', 'utf-8');
 
-    expect(addTabMock).toHaveBeenCalledWith({
-      id: 'widget-1',
-      path: '/widget/widget-1',
-      title: 'board.json',
-      cacheKey: 'widget:widget-1'
-    });
-
-    wrapper.unmount();
+    expect(source).toContain("import { useSession } from './hooks/useSession';");
+    expect(source).toContain('const settingsWidth = ref(300);');
+    expect(source).toContain("'--widget-page-settings-width':");
+    expect(source).toContain('settingsWidth.value');
+    expect(source).not.toContain('usePageSession');
+    expect(sessionSource).not.toContain('settingsWidth');
+    expect(sessionSource).not.toContain('widgetPageStyle');
   });
 
-  it('handles global file menu events while active', async (): Promise<void> => {
+  it('does not render the Widget editor while the file session is loading', (): void => {
+    isLoadingMock.value = true;
     const wrapper = shallowMount(WidgetPage, {
       global: {
         stubs: {
@@ -295,15 +297,8 @@ describe('WidgetPage', (): void => {
       }
     });
 
-    emitter.emit('file:save');
-    emitter.emit('file:saveAs');
-    emitter.emit('file:rename');
-    await flushPromises();
-
-    expect(onSaveMock).toHaveBeenCalledTimes(1);
-    expect(onSaveAsMock).toHaveBeenCalledTimes(1);
-    expect(onRenameMock).toHaveBeenCalledTimes(1);
-
+    expect(wrapper.findComponent({ name: 'BWidget' }).exists()).toBe(false);
+    expect(wrapper.find('.widget-page__state').text()).toContain('正在加载');
     wrapper.unmount();
   });
 

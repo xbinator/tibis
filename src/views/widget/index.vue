@@ -4,58 +4,82 @@
 -->
 <template>
   <main class="widget-page" tabindex="0" :style="widgetPageStyle" @blur="session.actions.onBlur">
-    <PanelSidebar
-      v-model:value="session.data.value"
-      :active-element-id="activeElementId"
-      :elements="session.data.value.elements"
-      :selected-element-ids="selectedElementIds"
-      :settings-width="settingsWidth"
-      @save="handleSave"
-      @select-elements="layer.select"
-      @copy-elements="layer.copy"
-      @delete-elements="layer.remove"
-      @move-elements="layer.move"
-    />
+    <section v-if="session.isLoading.value" class="widget-page__state" role="status">正在加载 Widget...</section>
 
-    <section ref="canvasRef" class="widget-page__canvas">
-      <BWidget
-        ref="widgetRef"
-        :select="selectedTarget"
-        :value="session.data.value"
-        @selection-change="onSelectionUpdate"
-        @update:select="onSelectUpdate"
-        @update:value="onDataUpdate"
-      />
+    <section v-else-if="session.loadError.value" class="widget-page__state" role="alert">
+      <p>{{ session.loadError.value }}</p>
+      <button class="widget-page__retry" type="button" @click="session.reload">重新加载</button>
     </section>
 
-    <BPanelSplitter v-model:size="settingsWidth" class="widget-page__settings" position="left" :min-width="220" :max-width="320">
-      <PanelSettings
+    <template v-else>
+      <PanelSidebar
         v-model:value="session.data.value"
-        v-model:select="selectedTarget"
+        :active-element-id="activeElementId"
+        :elements="session.data.value.elements"
         :selected-element-ids="selectedElementIds"
-        @element-command="(command) => onElementCommand({ command })"
-        @multi-command="(command) => onMultiCommand({ command })"
-        @multi-layout-change="onMultiLayoutChange"
-        @multi-style-change="onMultiStyleChange"
+        :settings-width="settingsWidth"
+        @save="session.actions.onSave"
+        @select-elements="layer.select"
+        @copy-elements="layer.copy"
+        @delete-elements="layer.remove"
+        @move-elements="layer.move"
       />
-    </BPanelSplitter>
+
+      <section ref="canvasRef" class="widget-page__canvas">
+        <BWidget
+          ref="widgetRef"
+          :select="selectedTarget"
+          :value="session.data.value"
+          @selection-change="onSelectionUpdate"
+          @update:select="onSelectUpdate"
+          @update:value="onDataUpdate"
+        />
+      </section>
+
+      <BPanelSplitter v-model:size="settingsWidth" class="widget-page__settings" position="left" :min-width="220" :max-width="320">
+        <PanelSettings
+          v-model:value="session.data.value"
+          v-model:select="selectedTarget"
+          :selected-element-ids="selectedElementIds"
+          @element-command="(command) => onElementCommand({ command })"
+          @multi-command="(command) => onMultiCommand({ command })"
+          @multi-layout-change="onMultiLayoutChange"
+          @multi-style-change="onMultiStyleChange"
+        />
+      </BPanelSplitter>
+    </template>
   </main>
 </template>
 
 <script setup lang="ts">
 import type { WidgetComponentRef } from './hooks/types';
-import { ref } from 'vue';
+import type { CSSProperties } from 'vue';
+import { computed, ref } from 'vue';
 import PanelSettings from './components/PanelSettings.vue';
 import PanelSidebar from './components/PanelSidebar.vue';
 import { useCanvasDrop } from './hooks/useCanvasDrop';
 import { useLayerActions } from './hooks/useLayerActions';
 import { useMultiSelection } from './hooks/useMultiSelection';
-import { usePageSession } from './hooks/usePageSession';
 import { useSelection } from './hooks/useSelection';
+import { useSession } from './hooks/useSession';
+
+/**
+ * Widget 页面根节点样式变量。
+ */
+type WidgetPageStyle = CSSProperties & {
+  /** 右侧设置覆盖面板宽度，用于画布内浮动控件避让。 */
+  '--widget-page-settings-width': string;
+};
 
 const widgetRef = ref<WidgetComponentRef>();
 const canvasRef = ref<HTMLElement | null>(null);
-const { session, settingsWidth, widgetPageStyle, handleSave } = usePageSession();
+const session = useSession();
+const settingsWidth = ref(300);
+const widgetPageStyle = computed<WidgetPageStyle>(
+  (): WidgetPageStyle => ({
+    '--widget-page-settings-width': `${settingsWidth.value}px`
+  })
+);
 const { selectedTarget, selectedElementIds, activeElementId, onDataUpdate, onSelectUpdate, onSelectionUpdate } = useSelection({
   session,
   settingsWidth
@@ -101,6 +125,29 @@ const { onMultiCommand, onElementCommand, onMultiLayoutChange, onMultiStyleChang
   min-width: 0;
   height: 100%;
   min-height: 0;
+}
+
+.widget-page__state {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  color: var(--text-secondary);
+}
+
+.widget-page__retry {
+  padding: 6px 14px;
+  color: var(--text-primary);
+  cursor: pointer;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+
+  &:hover {
+    background: var(--bg-tertiary);
+  }
 }
 
 .widget-page__settings {

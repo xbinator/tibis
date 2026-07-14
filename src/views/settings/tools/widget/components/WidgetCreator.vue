@@ -370,7 +370,7 @@ async function handleConfirm(): Promise<void> {
     store.upsertWidget(createdWidget);
     visible.value = false;
 
-    const [openEditorError] = await asyncTo(openWidgetFile(createdWidget));
+    const [openEditorError] = await asyncTo(openWidgetFile(createdWidget.id));
     if (openEditorError) {
       await logger.warn(`[widget-install] open-editor-failed resource=${widgetId} error=${formatDirectoryInstallError(openEditorError)}`);
       message.warning(`小组件 "${widgetName}" 创建成功，但打开编辑器失败`);

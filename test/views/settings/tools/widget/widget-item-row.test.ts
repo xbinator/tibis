@@ -15,12 +15,11 @@ import { useWidgetStore } from '@/stores/ai/widget';
 import WidgetItemRow from '@/views/settings/tools/widget/components/WidgetItemRow.vue';
 
 /** Widget 编辑器打开 mock。 */
-const openWidgetFileMock = vi.hoisted(() => vi.fn<(widget: WidgetDefinition) => Promise<{ id: string }>>());
+const openWidgetFileMock = vi.hoisted(() => vi.fn<(widgetId: string) => Promise<void>>());
 /** 删除确认 mock。 */
 const deleteConfirmMock = vi.hoisted(() => vi.fn<() => Promise<[boolean, boolean]>>());
 /** 原生平台 mock。 */
 const nativeMock = vi.hoisted(() => ({
-  readFile: vi.fn<(path: string) => Promise<{ content: string }>>(),
   trashFile: vi.fn<(path: string) => Promise<void>>()
 }));
 /** 消息反馈 mock。 */
@@ -66,13 +65,6 @@ const widget: WidgetDefinition = {
   enabled: true,
   parsedAt: 1
 };
-
-/** 磁盘中的最新 Widget JSON。 */
-const latestWidgetContent = JSON.stringify({
-  ...createDefaultWidgetData('weather'),
-  name: '最新天气',
-  description: '磁盘中的最新描述'
-});
 
 /** 直接渲染触发器与浮层的下拉菜单测试替身。 */
 const BDropdownStub = defineComponent({
@@ -173,28 +165,25 @@ describe('WidgetItemRow', (): void => {
     setActivePinia(createPinia());
     openWidgetFileMock.mockReset();
     deleteConfirmMock.mockReset();
-    nativeMock.readFile.mockReset();
     nativeMock.trashFile.mockReset();
     messageMock.error.mockReset();
     messageMock.success.mockReset();
     messageMock.warning.mockReset();
     loggerMock.error.mockReset();
     loggerMock.warn.mockReset();
-    openWidgetFileMock.mockResolvedValue({ id: 'widget-weather' });
+    openWidgetFileMock.mockResolvedValue(undefined);
     deleteConfirmMock.mockResolvedValue([false, true]);
-    nativeMock.readFile.mockResolvedValue({ content: latestWidgetContent });
     nativeMock.trashFile.mockResolvedValue(undefined);
   });
 
-  it('opens the latest Widget and toggles state without parent events', async (): Promise<void> => {
+  it('opens the Widget by id and toggles state without parent events', async (): Promise<void> => {
     const wrapper = mountRow();
 
     await wrapper.trigger('click');
     await flushPromises();
     await wrapper.findComponent({ name: 'ASwitch' }).trigger('click');
 
-    expect(nativeMock.readFile).toHaveBeenCalledWith(widget.filePath);
-    expect(openWidgetFileMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'weather', name: '最新天气', enabled: true }));
+    expect(openWidgetFileMock).toHaveBeenCalledWith('weather');
     expect(useWidgetStore().getWidgetById('weather')?.enabled).toBe(false);
     expect(wrapper.emitted('open')).toBeUndefined();
     expect(wrapper.emitted('toggle')).toBeUndefined();
@@ -206,25 +195,14 @@ describe('WidgetItemRow', (): void => {
     });
   });
 
-  it('opens the latest Widget from the edit menu without a parent event', async (): Promise<void> => {
+  it('opens the Widget from the edit menu without a parent event', async (): Promise<void> => {
     const wrapper = mountRow();
     const [edit] = readItems(wrapper);
 
     await edit?.onClick?.();
 
-    expect(openWidgetFileMock).toHaveBeenCalledWith(expect.objectContaining({ name: '最新天气' }));
+    expect(openWidgetFileMock).toHaveBeenCalledWith('weather');
     expect(wrapper.emitted('edit')).toBeUndefined();
-  });
-
-  it('falls back to the current Widget when reading the latest file fails', async (): Promise<void> => {
-    nativeMock.readFile.mockRejectedValue(new Error('EACCES'));
-    const wrapper = mountRow();
-    const [edit] = readItems(wrapper);
-
-    await edit?.onClick?.();
-
-    expect(loggerMock.warn).toHaveBeenCalledWith('Read latest widget failed:', expect.any(Error));
-    expect(openWidgetFileMock).toHaveBeenCalledWith(expect.objectContaining({ name: '天气' }));
   });
 
   it('logs and reports a Widget editor open failure', async (): Promise<void> => {

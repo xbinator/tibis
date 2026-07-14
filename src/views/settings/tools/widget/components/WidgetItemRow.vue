@@ -31,7 +31,7 @@
 import { computed, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import { message } from 'ant-design-vue';
-import { parseWidgetJson, type WidgetDefinition } from '@/ai/widget';
+import type { WidgetDefinition } from '@/ai/widget';
 import type { DropdownOption } from '@/components/BDropdown/type';
 import { useOpenFile } from '@/hooks/useOpenFile';
 import { native } from '@/shared/platform';
@@ -59,27 +59,7 @@ const initial = computed<string>(() => props.widget.name.charAt(0).toUpperCase()
 const description = computed<string>(() => props.widget.description || props.widget.filePath);
 
 /**
- * 从磁盘读取最新小组件定义，避免使用过期的 Store 缓存打开编辑器。
- * @returns 最新小组件定义，读取失败时返回当前定义
- */
-async function readLatestWidgetDefinition(): Promise<WidgetDefinition> {
-  try {
-    const { content } = await native.readFile(props.widget.filePath);
-    const latestWidget: WidgetDefinition = {
-      ...parseWidgetJson(content, props.widget.filePath),
-      enabled: props.widget.enabled
-    };
-
-    store.upsertWidget(latestWidget);
-    return latestWidget;
-  } catch (error: unknown) {
-    logger.warn('Read latest widget failed:', error);
-    return props.widget;
-  }
-}
-
-/**
- * 使用磁盘最新定义打开小组件编辑器。
+ * 打开小组件编辑器，正文由目标页面文件会话从磁盘加载。
  */
 async function handleOpenWidget(): Promise<void> {
   if (deleting.value) {
@@ -87,8 +67,7 @@ async function handleOpenWidget(): Promise<void> {
   }
 
   try {
-    const latestWidget = await readLatestWidgetDefinition();
-    await openWidgetFile(latestWidget);
+    await openWidgetFile(props.widget.id);
   } catch (error: unknown) {
     logger.error('Open widget editor failed:', error);
     message.error('无法打开小组件编辑器');
