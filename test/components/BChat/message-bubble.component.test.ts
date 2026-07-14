@@ -410,7 +410,7 @@ describe('MessageBubble', (): void => {
   it('emits branch clicks without owning request loading state', async (): Promise<void> => {
     const message = createAssistantMessage();
     const wrapper = mountMessageBubble(message);
-    const branchButton = wrapper.findAllComponents(BButtonStub).find((button): boolean => button.props('icon') === 'lucide:git-branch-plus');
+    const branchButton = wrapper.findAllComponents(BButtonStub).find((button): boolean => button.props('icon') === 'lucide:git-branch');
 
     expect(branchButton).toBeDefined();
 
