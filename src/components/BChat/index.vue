@@ -14,6 +14,7 @@
         :can-rollback="rollbackController.canRollback"
         :submit-action="chatSubmitter.submit"
         @edit="handleChatEdit"
+        @branch="handleBranch"
         @regenerate="handleChatRegenerate"
         @rollback="handleRollback"
       >
@@ -98,6 +99,7 @@ import { useNavigate } from '@/hooks/useNavigate';
 import { useProviderStore } from '@/stores/ai/provider';
 import { useChatSessionStore } from '@/stores/chat/session';
 import { useCommandPanelStore } from '@/stores/ui/commandPanel';
+import { asyncTo } from '@/utils/asyncTo';
 import { createNamespace } from '@/utils/namespace';
 import ConfirmationSheet from './components/ConfirmationSheet.vue';
 import ConversationView from './components/ConversationView.vue';
@@ -194,6 +196,8 @@ const providerStore = useProviderStore();
 const hasAvailableModels = computed<boolean>(() => providerStore.availableModels.length > 0);
 /** 对话视图引用 */
 const conversationRef = ref<InstanceType<typeof ConversationView>>();
+/** 当前正在创建会话分支的助手消息 ID，用于底层拦截重复请求。 */
+const branchingMessageId = ref<string>();
 /** 确认控制器，管理工具调用的用户确认流程 */
 const confirmationController = createChatConfirmationController();
 /** 用量面板 hook */
@@ -449,6 +453,26 @@ watch(
 /** 恢复指定消息到输入编辑器。 */
 function handleChatEdit(nextMessage: Message): void {
   inputEvents.restoreFromMessage(nextMessage);
+}
+
+/**
+ * 从目标助手消息创建独立会话分支。
+ * @param message - 目标助手消息
+ */
+async function handleBranch(message: Message): Promise<void> {
+  const sourceSessionId = activeSessionId.value;
+  if (!sourceSessionId || branchingMessageId.value) return;
+
+  branchingMessageId.value = message.id;
+  const [error, session] = await asyncTo(chatStore.branchSession(sourceSessionId, message.id));
+  branchingMessageId.value = undefined;
+
+  if (error) {
+    interactionAPI.showToast({ type: 'error', content: error.message || '创建会话分支失败' });
+    return;
+  }
+
+  emit('session-created', session);
 }
 
 /**

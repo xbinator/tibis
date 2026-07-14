@@ -275,6 +275,7 @@ const electronAPI: ElectronAPI = {
 
   chatSessionList: (type, pagination?) => ipcRenderer.invoke('chat:session:list', type, pagination),
   chatSessionCreate: (session) => ipcRenderer.invoke('chat:session:create', session),
+  chatSessionBranch: (sourceSessionId, targetMessageId) => ipcRenderer.invoke('chat:session:branch', sourceSessionId, targetMessageId),
   chatSessionUpdateTitle: (sessionId, title) => ipcRenderer.invoke('chat:session:updateTitle', sessionId, title),
   chatSessionDelete: (sessionId) => ipcRenderer.invoke('chat:session:delete', sessionId),
   chatSessionUsageGet: (sessionId) => ipcRenderer.invoke('chat:session:usage:get', sessionId),

@@ -2,13 +2,15 @@
  * @file session.test.ts
  * @description 聊天会话 store 消息草稿恢复与单条更新测试。
  */
-import type { ChatMessageRecord } from 'types/chat';
+import type { ChatMessageRecord, ChatSession } from 'types/chat';
+import type { ChatHandlerResult } from 'types/electron-api';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HARD_INTERRUPTED_ASSISTANT_MESSAGE } from '@/components/BChat/utils/interruptedDraftRecovery';
 import { useChatSessionStore } from '@/stores/chat/session';
 
 const mockElectronAPI = vi.hoisted(() => ({
+  chatSessionBranch: vi.fn<(sourceSessionId: string, targetMessageId: string) => Promise<ChatHandlerResult<ChatSession>>>(),
   chatMessageList: vi.fn<(sessionId: string) => Promise<{ ok: true; data: ChatMessageRecord[] }>>(),
   chatMessageAdd: vi.fn<(message: ChatMessageRecord) => Promise<{ ok: true; data: void }>>(),
   chatMessageUpdate: vi.fn<(message: ChatMessageRecord) => Promise<{ ok: true; data: void }>>()
@@ -17,7 +19,7 @@ const mockElectronAPI = vi.hoisted(() => ({
 vi.mock('@/shared/platform/electron-api', () => ({
   getElectronAPI: vi.fn(() => mockElectronAPI),
   unwrap: vi.fn(<T>(result: { ok: true; data: T } | { ok: false; error: string; code: string }): T => {
-    if (!result.ok) throw new Error(result.error);
+    if (!result.ok) throw Object.assign(new Error(result.error), { code: result.code });
     return result.data;
   })
 }));
@@ -42,6 +44,7 @@ function createInterruptedAssistantRecord(): ChatMessageRecord {
 describe('useChatSessionStore', () => {
   beforeEach((): void => {
     setActivePinia(createPinia());
+    mockElectronAPI.chatSessionBranch.mockReset();
     mockElectronAPI.chatMessageList.mockReset();
     mockElectronAPI.chatMessageAdd.mockReset();
     mockElectronAPI.chatMessageUpdate.mockReset();
@@ -87,5 +90,33 @@ describe('useChatSessionStore', () => {
         finished: true
       })
     );
+  });
+
+  it('creates a session branch through the Electron API', async (): Promise<void> => {
+    const store = useChatSessionStore();
+    const branchedSession: ChatSession = {
+      id: 'session-branch',
+      type: 'assistant',
+      title: '原标题',
+      createdAt: '2026-07-14T12:00:00.000Z',
+      updatedAt: '2026-07-14T12:00:00.000Z',
+      lastMessageAt: '2026-07-14T12:00:00.000Z'
+    };
+    mockElectronAPI.chatSessionBranch.mockResolvedValue({ ok: true, data: branchedSession });
+
+    const result = await store.branchSession('session-source', 'assistant-1');
+
+    expect(mockElectronAPI.chatSessionBranch).toHaveBeenCalledWith('session-source', 'assistant-1');
+    expect(result).toEqual(branchedSession);
+  });
+
+  it('throws the Electron branch error without returning a partial session', async (): Promise<void> => {
+    const store = useChatSessionStore();
+    mockElectronAPI.chatSessionBranch.mockResolvedValue({ ok: false, error: '分支写入失败', code: 'SQLITE_CONSTRAINT' });
+
+    await expect(store.branchSession('session-source', 'assistant-1')).rejects.toMatchObject({
+      message: '分支写入失败',
+      code: 'SQLITE_CONSTRAINT'
+    });
   });
 });

@@ -16,6 +16,7 @@
             :can-rollback="canRollback"
             :submit-action="submitAction"
             @edit="$emit('edit', item)"
+            @branch="handleBranch"
             @regenerate="$emit('regenerate', item)"
             @rollback="$emit('rollback', item)"
           />
@@ -76,12 +77,21 @@ const props = withDefaults(defineProps<Props>(), {
   submitAction: undefined
 });
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'edit', message: Message): void;
+  (e: 'branch', message: Message): void;
   (e: 'regenerate', message: Message): void;
   (e: 'load-history'): void;
   (e: 'rollback', message: Message): void;
 }>();
+
+/**
+ * 将消息气泡的分支请求传递给聊天容器。
+ * @param message - 目标助手消息
+ */
+function handleBranch(message: Message): void {
+  emit('branch', message);
+}
 
 const { isBackBottom, scrollToBottom, pauseBackBottomHideTimer, resumeBackBottomHideTimer } = useChatScroll({
   keepBackBottomVisible: toRef(props, 'loading'),

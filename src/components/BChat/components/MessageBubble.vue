@@ -48,6 +48,7 @@
     <!-- 助手消息工具栏 -->
     <div v-if="showAssistantToolbar" :class="bem('toolbar')">
       <BButton type="text" size="small" square icon="lucide:copy" @click="handleCopy(message)" />
+      <BButton type="text" size="small" square tooltip="创建分支" icon="lucide:git-branch-plus" @click="$emit('branch', message)" />
       <BButton square type="text" size="small" icon="lucide:refresh-cw" @click="$emit('regenerate', message)" />
     </div>
 
@@ -115,6 +116,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'edit', message: Message): void;
+  (e: 'branch', message: Message): void;
   (e: 'regenerate', message: Message): void;
   (e: 'rollback', message: Message): void;
 }>();

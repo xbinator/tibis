@@ -22,7 +22,7 @@ function wrapHandler<T>(fn: (...args: unknown[]) => T): (...args: unknown[]) => 
 }
 
 export function registerChatHandlers(): void {
-  // ── Session (5 个) ──
+  // ── Session (6 个) ──
   ipcMain.handle(
     'chat:session:list',
     wrapHandler((_event, type, pagination?) => {
@@ -33,6 +33,12 @@ export function registerChatHandlers(): void {
     'chat:session:create',
     wrapHandler((_event, session) => {
       chatSessionManager.createSession(session as ChatSession);
+    })
+  );
+  ipcMain.handle(
+    'chat:session:branch',
+    wrapHandler((_event, sourceSessionId, targetMessageId) => {
+      return chatSessionManager.branchSession(sourceSessionId as string, targetMessageId as string);
     })
   );
   ipcMain.handle(

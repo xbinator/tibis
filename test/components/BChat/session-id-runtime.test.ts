@@ -18,6 +18,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BuildMemoryContextOptions } from '@/ai/memory/types';
+import type { ToastItem } from '@/components/BChat/components/InteractionContainer/types';
 import BChat from '@/components/BChat/index.vue';
 import { type AdaptedUserMessageInput, type SubmitAction, createUserChoice } from '@/components/BChat/utils/submitAction';
 import type { Message } from '@/components/BChat/utils/types';
@@ -32,6 +33,7 @@ import { emitRuntimeEvent, resetRuntimeEventListeners, type RuntimeEventListener
 
 const chatStoreMock = vi.hoisted(() => ({
   createSession: vi.fn<(type: 'assistant', options: { title: string }) => Promise<ChatSession>>(),
+  branchSession: vi.fn<(sourceSessionId: string, targetMessageId: string) => Promise<ChatSession>>(),
   addSessionMessage: vi.fn<(sessionId: string | null, message: Message) => Promise<void>>(),
   updateSessionMessage: vi.fn<(sessionId: string | null | undefined, message: Message) => Promise<void>>(),
   setSessionMessages: vi.fn<(sessionId: string | null | undefined, messages: Message[]) => Promise<void>>(),
@@ -391,7 +393,7 @@ const ConversationViewStub = defineComponent({
       default: false
     }
   },
-  emits: ['regenerate', 'rollback'],
+  emits: ['branch', 'regenerate', 'rollback'],
   setup(_props, { expose, slots }) {
     expose({
       scrollToBottom: conversationViewMockState.scrollToBottom
@@ -596,6 +598,7 @@ describe('BChat sessionId runtime', (): void => {
     setActivePinia(createPinia());
     localStorage.clear();
     chatStoreMock.createSession.mockReset();
+    chatStoreMock.branchSession.mockReset();
     chatStoreMock.addSessionMessage.mockReset();
     chatStoreMock.updateSessionMessage.mockReset();
     chatStoreMock.setSessionMessages.mockReset();
@@ -1478,6 +1481,68 @@ describe('BChat sessionId runtime', (): void => {
     );
     const [continueInput] = electronAPIMock.chatRuntimeContinue.mock.calls[0] as [ChatRuntimeContinueInput];
     expect(continueInput.messages).toEqual([expect.objectContaining({ id: 'user-regenerate', role: 'user' })]);
+  });
+
+  it('creates a branch from the target assistant message and switches through the existing session event', async (): Promise<void> => {
+    const assistantMessage = createAssistantMessage();
+    const branchedSession = createSession('session-branch', '原标题');
+    chatStoreMock.branchSession.mockResolvedValue(branchedSession);
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+
+    wrapper.findComponent(ConversationViewStub).vm.$emit('branch', assistantMessage);
+    await flushPromises();
+
+    expect(chatStoreMock.branchSession).toHaveBeenCalledWith('session-active', assistantMessage.id);
+    expect(wrapper.emitted('session-created')?.[0]?.[0]).toEqual(branchedSession);
+  });
+
+  it('ignores duplicate branch events while the request is pending', async (): Promise<void> => {
+    const assistantMessage = createAssistantMessage();
+    const branchedSession = createSession('session-branch', '原标题');
+    let resolveBranch: ((session: ChatSession) => void) | undefined;
+    chatStoreMock.branchSession.mockReturnValue(
+      new Promise<ChatSession>((resolve): void => {
+        resolveBranch = resolve;
+      })
+    );
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+    const conversationView = wrapper.findComponent(ConversationViewStub);
+
+    conversationView.vm.$emit('branch', assistantMessage);
+    conversationView.vm.$emit('branch', assistantMessage);
+    await wrapper.vm.$nextTick();
+
+    expect(chatStoreMock.branchSession).toHaveBeenCalledTimes(1);
+
+    resolveBranch?.(branchedSession);
+    await flushPromises();
+  });
+
+  it('shows an error without switching when branch creation fails', async (): Promise<void> => {
+    const assistantMessage = createAssistantMessage();
+    chatStoreMock.branchSession.mockRejectedValue(new Error('分支创建失败'));
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+
+    wrapper.findComponent(ConversationViewStub).vm.$emit('branch', assistantMessage);
+    await flushPromises();
+
+    const toastQueue = wrapper.findComponent({ name: 'InteractionContainer' }).props('toastQueue') as ToastItem[];
+    expect(wrapper.emitted('session-created')).toBeUndefined();
+    expect(toastQueue).toEqual([expect.objectContaining({ type: 'error', content: '分支创建失败' })]);
+  });
+
+  it('does not create a branch when there is no active session', async (): Promise<void> => {
+    const assistantMessage = createAssistantMessage();
+    const wrapper = mountBChat(null);
+    await flushPromises();
+
+    wrapper.findComponent(ConversationViewStub).vm.$emit('branch', assistantMessage);
+    await flushPromises();
+
+    expect(chatStoreMock.branchSession).not.toHaveBeenCalled();
   });
 
   it('uses the last source user message as memory selection when regenerating', async (): Promise<void> => {

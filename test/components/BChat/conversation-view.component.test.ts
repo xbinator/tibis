@@ -34,6 +34,7 @@ vi.mock('@/components/BChat/components/MessageBubble.vue', () => ({
         default: undefined
       }
     },
+    emits: ['branch'],
     template: [
       '<div class="message-bubble">',
       '{{ message.parts[0]?.status ?? message.role }}:',
@@ -320,6 +321,28 @@ describe('ConversationView', (): void => {
     await messageBubbleSubmitAction(submitAction);
 
     expect(submitActionHandler).toHaveBeenCalledWith(submitAction);
+  });
+
+  it('forwards the bubble branch event', async (): Promise<void> => {
+    const message = createAssistantMessage(createQuestionToolPart('done'));
+    const wrapper = mount(ConversationViewForTest, {
+      props: {
+        messages: [message],
+        loading: false,
+        disabled: false
+      },
+      global: {
+        stubs: {
+          BIcon: true
+        }
+      }
+    });
+    const messageBubble = wrapper.findComponent({ name: 'MessageBubble' });
+
+    expect(messageBubble.props('branching')).toBeUndefined();
+    messageBubble.vm.$emit('branch', message);
+    await nextTick();
+    expect(wrapper.emitted('branch')?.[0]?.[0]).toEqual(message);
   });
 
   it('updates rollback visibility when following messages change', async (): Promise<void> => {

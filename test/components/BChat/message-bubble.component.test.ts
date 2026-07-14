@@ -128,6 +128,10 @@ const BButtonStub = defineComponent({
     disabled: {
       type: Boolean,
       default: false
+    },
+    loading: {
+      type: Boolean,
+      default: false
     }
   },
   emits: ['click'],
@@ -401,6 +405,23 @@ describe('MessageBubble', (): void => {
     const wrapper = mountMessageBubble(createAssistantMessage());
 
     expect(wrapper.find('[data-icon="lucide:refresh-cw"]').exists()).toBe(true);
+  });
+
+  it('emits branch clicks without owning request loading state', async (): Promise<void> => {
+    const message = createAssistantMessage();
+    const wrapper = mountMessageBubble(message);
+    const branchButton = wrapper.findAllComponents(BButtonStub).find((button): boolean => button.props('icon') === 'lucide:git-branch-plus');
+
+    expect(branchButton).toBeDefined();
+
+    await branchButton?.trigger('click');
+    await branchButton?.trigger('click');
+
+    const branchEvents = wrapper.emitted('branch');
+    expect(branchEvents).toHaveLength(2);
+    expect(branchEvents?.[0]?.[0]).toEqual(message);
+    expect(branchButton?.props('disabled')).toBe(false);
+    expect(branchButton?.props('loading')).toBe(false);
   });
 
   it('does not show regenerate for runtime error messages', (): void => {

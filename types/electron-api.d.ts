@@ -541,6 +541,7 @@ export interface ElectronAPI {
   // 聊天会话操作
   chatSessionList: (type: ChatSessionType, pagination?: SessionPaginationParams) => Promise<ChatHandlerResult<PaginatedSessionsResult>>;
   chatSessionCreate: (session: ChatSession) => Promise<ChatHandlerResult<void>>;
+  chatSessionBranch: (sourceSessionId: string, targetMessageId: string) => Promise<ChatHandlerResult<ChatSession>>;
   chatSessionUpdateTitle: (sessionId: string, title: string) => Promise<ChatHandlerResult<void>>;
   chatSessionDelete: (sessionId: string) => Promise<ChatHandlerResult<void>>;
   chatSessionUsageGet: (sessionId: string) => Promise<ChatHandlerResult<AIUsage | undefined>>;

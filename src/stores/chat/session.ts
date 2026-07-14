@@ -161,6 +161,19 @@ export const useChatSessionStore = defineStore('chat', {
     },
 
     /**
+     * 从指定助手消息创建独立会话分支。
+     * @param sourceSessionId - 源会话 ID
+     * @param targetMessageId - 目标助手消息 ID
+     * @returns 已持久化的新会话
+     */
+    async branchSession(sourceSessionId: string, targetMessageId: string): Promise<ChatSession> {
+      return retryDuringDatabaseInitialization(async (): Promise<ChatSession> => {
+        const result = await getElectronAPI().chatSessionBranch(sourceSessionId, targetMessageId);
+        return unwrap(result);
+      });
+    },
+
+    /**
      * 持久化单条消息及其使用量元数据（如果可用）。
      * 级联更新（lastMessageAt + usage）在主进程事务内完成。
      * @param sessionId - 要更新的会话 ID。
