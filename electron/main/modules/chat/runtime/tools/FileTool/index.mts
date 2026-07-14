@@ -330,10 +330,7 @@ async function resolveRuntimeWriteDestination(target: RuntimeFileWriteTarget, wo
  * @param currentFile - 当前磁盘文件状态
  * @returns 文件存在状态和内容是否都未变化
  */
-function isRuntimeFileUnchanged(
-  expectedFile: { exists: boolean; content: string },
-  currentFile: { exists: boolean; content: string }
-): boolean {
+function isRuntimeFileUnchanged(expectedFile: { exists: boolean; content: string }, currentFile: { exists: boolean; content: string }): boolean {
   return expectedFile.exists === currentFile.exists && (!expectedFile.exists || expectedFile.content === currentFile.content);
 }
 
