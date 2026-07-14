@@ -1,6 +1,6 @@
 /**
  * @file parser.test.ts
- * @description Widget JSON 内容版本测试。
+ * @description Widget JSON 内容版本与 dirPath 计算测试。
  */
 import { describe, expect, it } from 'vitest';
 import { parseWidgetJson } from '@/ai/widget';
@@ -19,5 +19,22 @@ describe('parseWidgetJson content hash', (): void => {
     const source = '{broken';
 
     expect(parseWidgetJson(source, '/widgets/broken/widget.json').contentHash).toBe(hashString(source));
+  });
+});
+
+describe('parseWidgetJson dirPath', (): void => {
+  it('exposes the parent directory of the widget.json file path', (): void => {
+    const widget = parseWidgetJson('{"name":"天气","description":"查询天气"}', '/home/.tibis/widgets/weather/widget.json');
+    expect(widget.dirPath).toBe('/home/.tibis/widgets/weather');
+  });
+
+  it('normalizes backslash separators when deriving dirPath', (): void => {
+    const widget = parseWidgetJson('{"name":"天气","description":"查询天气"}', 'C:\\Users\\test\\.tibis\\widgets\\weather\\widget.json');
+    expect(widget.dirPath).toBe('C:/Users/test/.tibis/widgets/weather');
+  });
+
+  it('populates dirPath even when JSON parsing fails', (): void => {
+    const widget = parseWidgetJson('{broken', '/home/.tibis/widgets/broken/widget.json');
+    expect(widget.dirPath).toBe('/home/.tibis/widgets/broken');
   });
 });

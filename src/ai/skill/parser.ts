@@ -4,6 +4,7 @@
  */
 import yaml from 'js-yaml';
 import { hashString } from '@/shared/utils/hash';
+import { posix } from '@/utils/file/posix';
 import { DEFAULT_SKILL_MAX_CONTENT_LENGTH, type SkillDefinition, type SkillSource } from './types';
 
 export { joinFilePath as joinPath } from '@/shared/workspace/pathUtils';
@@ -64,20 +65,6 @@ function truncateContent(content: string, maxLength: number, filePath: string): 
 }
 
 /**
- * 获取文件所在目录，兼容 POSIX 与 Windows 路径。
- * @param filePath - 文件路径
- * @returns 文件所在目录（统一使用 / 分隔）
- */
-function dirname(filePath: string): string {
-  const normalized = filePath.replace(/\\/g, '/');
-  const index = normalized.lastIndexOf('/');
-  if (index <= 0) {
-    return index === 0 ? '/' : '.';
-  }
-  return normalized.slice(0, index);
-}
-
-/**
  * 解析 SKILL.md 文件内容为 SkillDefinition。
  * @param markdown - SKILL.md 文件内容
  * @param filePath - SKILL.md 文件绝对路径
@@ -90,7 +77,7 @@ export function parseSkillMarkdown(markdown: string, filePath: string, options: 
   const contentHash = hashString(markdown);
   // 统一使用 / 分隔符，避免 Windows 下 Chokidar 报告 \ 路径与 scanner 的 / 路径不一致导致去重失败
   const normalizedFilePath = filePath.replace(/\\/g, '/');
-  const dirPath = dirname(normalizedFilePath);
+  const dirPath = posix.dirname(normalizedFilePath);
   const parsedAt = Date.now();
 
   const extracted = extractFrontmatter(markdown);

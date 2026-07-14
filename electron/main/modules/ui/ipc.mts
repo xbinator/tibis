@@ -25,7 +25,10 @@ export function registerUiHandlers(): void {
   });
 
   ipcMain.handle('ui:trashFile', async (_event, filePath: string) => {
-    await shell.trashItem(filePath);
+    // 业务层传入的路径统一为 / 分隔符，需在调用 shell.trashItem 前转换为平台原生分隔符，
+    // 否则 Windows 上的 SHFileOperation 会拒绝正斜杠路径并抛出 "Failed to parse path"。
+    const normalizedPath = path.normalize(filePath);
+    await shell.trashItem(normalizedPath);
   });
 
   ipcMain.handle('ui:showItemInFolder', async (_event, filePath: string) => {

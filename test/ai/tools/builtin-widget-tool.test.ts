@@ -51,6 +51,7 @@ function createWeatherWidget(): WidgetDefinition {
     description: data.description,
     data,
     filePath: '/home/.tibis/widgets/weather/widget.json',
+    dirPath: '/home/.tibis/widgets/weather',
     enabled: true,
     parsedAt: 1
   };
@@ -213,9 +214,9 @@ describe('WidgetTool', (): void => {
         },
         renderContext: {
           input: {
-              city: '上海'
-            },
-            output: undefined,
+            city: '上海'
+          },
+          output: undefined,
           data: {}
         },
         execution: {
@@ -236,7 +237,7 @@ describe('WidgetTool', (): void => {
       data: {
         renderContext: {
           input: {},
-            output: undefined,
+          output: undefined,
           data: {}
         },
         execution: {

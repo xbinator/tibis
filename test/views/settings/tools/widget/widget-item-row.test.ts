@@ -62,6 +62,7 @@ const widget: WidgetDefinition = {
   description: '查询天气',
   data: createDefaultWidgetData('weather'),
   filePath: '/Users/test/.tibis/widgets/weather/widget.json',
+  dirPath: '/Users/test/.tibis/widgets/weather',
   enabled: true,
   parsedAt: 1
 };

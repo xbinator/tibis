@@ -349,6 +349,7 @@ async function handleConfirm(): Promise<void> {
       description: widgetData.description,
       data: widgetData,
       filePath: joinPath(widgetDir, 'widget.json'),
+      dirPath: widgetDir,
       enabled: true,
       parsedAt: Date.now()
     };

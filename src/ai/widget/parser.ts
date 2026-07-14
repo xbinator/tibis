@@ -7,6 +7,7 @@ import { cloneDeep } from 'lodash-es';
 import type { WidgetData } from '@/components/BWidget/types';
 import { createDefaultWidgetData, normalizeWidgetDataContract } from '@/components/BWidget/utils/widgetData';
 import { hashString } from '@/shared/utils/hash';
+import { posix } from '@/utils/file/posix';
 
 export { joinFilePath as joinPath } from '@/shared/workspace/pathUtils';
 
@@ -79,6 +80,7 @@ function normalizeWidgetData(id: string, value: Record<string, unknown>): Widget
 function createWidgetParseError(filePath: string, message: string, contentHash: string): WidgetDefinition {
   const id = readWidgetIdFromFilePath(filePath);
   const data = createDefaultWidgetData(id);
+  const normalizedFilePath = filePath.replace(/\\/g, '/');
 
   return {
     id,
@@ -89,7 +91,8 @@ function createWidgetParseError(filePath: string, message: string, contentHash: 
       name: id
     },
     contentHash,
-    filePath: filePath.replace(/\\/g, '/'),
+    filePath: normalizedFilePath,
+    dirPath: posix.dirname(normalizedFilePath),
     enabled: true,
     parsedAt: Date.now(),
     parseError: message
@@ -123,6 +126,7 @@ export function parseWidgetJson(content: string, filePath: string): WidgetDefini
       data,
       contentHash,
       filePath: normalizedFilePath,
+      dirPath: posix.dirname(normalizedFilePath),
       enabled: true,
       parsedAt: Date.now()
     };

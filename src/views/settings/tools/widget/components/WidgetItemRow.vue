@@ -82,16 +82,6 @@ function handleToggle(): void {
 }
 
 /**
- * 获取小组件资源目录。
- * @returns 小组件配置文件所在目录
- */
-function getWidgetDirectoryPath(): string {
-  const separatorIndex = props.widget.filePath.lastIndexOf('/');
-
-  return separatorIndex > 0 ? props.widget.filePath.slice(0, separatorIndex) : props.widget.filePath;
-}
-
-/**
  * 将当前小组件的整个资源目录移入系统回收站，并刷新 Store。
  */
 async function handleDeleteWidget(): Promise<void> {
@@ -109,7 +99,7 @@ async function handleDeleteWidget(): Promise<void> {
       return;
     }
 
-    await native.trashFile(getWidgetDirectoryPath());
+    await native.trashFile(props.widget.dirPath);
     movedToTrash = true;
     await store.rescan();
     message.success(`小组件 "${props.widget.name}" 已删除`);

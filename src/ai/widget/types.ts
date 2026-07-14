@@ -20,6 +20,8 @@ export interface WidgetDefinition {
   contentHash?: string;
   /** 小组件 JSON 文件绝对路径 */
   filePath: string;
+  /** 小组件目录绝对路径 */
+  dirPath: string;
   /** 是否启用 */
   enabled: boolean;
   /** 解析时间戳 */

@@ -438,6 +438,7 @@ describe('WidgetCreator', (): void => {
       description: '',
       data: createDefaultWidgetData('weather'),
       filePath: '/home/test/.tibis/widgets/weather/widget.json',
+      dirPath: '/home/test/.tibis/widgets/weather',
       enabled: true,
       parsedAt: 1
     });
