@@ -47,9 +47,9 @@
 
     <!-- 助手消息工具栏 -->
     <div v-if="showAssistantToolbar" :class="bem('toolbar')">
-      <BButton type="text" size="small" square icon="lucide:copy" @click="handleCopy(message)" />
-      <BButton type="text" size="small" square tooltip="创建分支" icon="lucide:git-branch-plus" @click="$emit('branch', message)" />
+      <BButton type="text" size="small" square icon="lucide:git-branch" @click="$emit('branch', message)" />
       <BButton square type="text" size="small" icon="lucide:refresh-cw" @click="$emit('regenerate', message)" />
+      <BButton type="text" size="small" square icon="lucide:copy" @click="handleCopy(message)" />
     </div>
 
     <!-- 用户消息底部：时间戳 + 回退按钮 + 复制按钮（hover 可见） -->
