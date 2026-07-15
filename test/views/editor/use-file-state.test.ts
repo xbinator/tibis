@@ -17,8 +17,8 @@ const clearDirtyMock = vi.hoisted(() => vi.fn());
 const setDirtyMock = vi.hoisted(() => vi.fn());
 const isDirtyMock = vi.hoisted(() => vi.fn());
 
-vi.mock('@/stores/workspace/files', () => ({
-  useFilesStore: () => ({
+vi.mock('@/stores/workspace/recent', () => ({
+  useRecentStore: () => ({
     getFileById: getFileByIdMock,
     addFile: addFileMock,
     updateFile: updateFileMock

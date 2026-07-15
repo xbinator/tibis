@@ -11,8 +11,8 @@ const getFileByIdMock = vi.hoisted(() => vi.fn());
 const updateFileMock = vi.hoisted(() => vi.fn());
 const addFileMock = vi.hoisted(() => vi.fn());
 
-vi.mock('@/stores/workspace/files', () => ({
-  useFilesStore: () => ({
+vi.mock('@/stores/workspace/recent', () => ({
+  useRecentStore: () => ({
     getFileById: getFileByIdMock,
     updateFile: updateFileMock,
     addFile: addFileMock

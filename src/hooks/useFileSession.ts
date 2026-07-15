@@ -11,7 +11,7 @@ import type { File, FileChangeEvent } from '@/shared/platform/native/types';
 import type { StoredDocumentRecord } from '@/shared/storage/files/types';
 import { useEditorFileWatchStore } from '@/stores/editor/fileWatch';
 import { useEditorPreferencesStore } from '@/stores/editor/preferences';
-import { useFilesStore } from '@/stores/workspace/files';
+import { useRecentStore } from '@/stores/workspace/recent';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import { resolveFileTitle } from '@/utils/file/title';
 import { Modal } from '@/utils/modal';
@@ -141,7 +141,7 @@ function createDataFromContent<TData>(options: UseFileSessionOptions<TData>, con
  * @returns 文件会话
  */
 export function useFileSession<TData>(options: UseFileSessionOptions<TData>): UseFileSessionReturn<TData> {
-  const filesStore = useFilesStore();
+  const recentStore = useRecentStore();
   const tabsStore = useTabsStore();
   const fileWatchStore = useEditorFileWatchStore();
   const editorPreferencesStore = useEditorPreferencesStore();
@@ -229,7 +229,7 @@ export function useFileSession<TData>(options: UseFileSessionOptions<TData>): Us
    */
   async function load(): Promise<void> {
     autoSave.pause();
-    const stored = await filesStore.getFileById(options.fileId.value);
+    const stored = await recentStore.getFileById(options.fileId.value);
 
     fileState.value = stored ? createFileStateFromStored(stored) : createDefaultFileState(options);
     savedContent.value = stored?.savedContent ?? fileState.value.content;
@@ -239,9 +239,9 @@ export function useFileSession<TData>(options: UseFileSessionOptions<TData>): Us
     syncingContentToData.value = false;
 
     if (stored) {
-      await filesStore.updateFile(options.fileId.value, { ...fileState.value, type: readRecordType(stored.type), savedContent: savedContent.value });
+      await recentStore.updateFile(options.fileId.value, { ...fileState.value, type: readRecordType(stored.type), savedContent: savedContent.value });
     } else {
-      await filesStore.addFile({ ...fileState.value, type: readRecordType(), savedContent: savedContent.value });
+      await recentStore.addFile({ ...fileState.value, type: readRecordType(), savedContent: savedContent.value });
     }
 
     syncLoadedDirtyState();
@@ -256,7 +256,7 @@ export function useFileSession<TData>(options: UseFileSessionOptions<TData>): Us
     savedContent.value = fileState.value.content;
     tabsStore.clearDirty(options.fileId.value);
     tabsStore.clearMissing(options.fileId.value);
-    await filesStore.updateFile(options.fileId.value, {
+    await recentStore.updateFile(options.fileId.value, {
       ...fileState.value,
       type: readRecordType(),
       savedContent: fileState.value.content,
@@ -326,7 +326,7 @@ export function useFileSession<TData>(options: UseFileSessionOptions<TData>): Us
     savedContent.value = content;
     tabsStore.clearDirty(options.fileId.value);
     tabsStore.clearMissing(options.fileId.value);
-    await filesStore.updateFile(options.fileId.value, {
+    await recentStore.updateFile(options.fileId.value, {
       ...fileState.value,
       type: readRecordType(),
       savedContent: content
@@ -511,7 +511,7 @@ export function useFileSession<TData>(options: UseFileSessionOptions<TData>): Us
    * 删除当前最近文件记录。
    */
   async function onDelete(): Promise<void> {
-    await filesStore.removeFile(options.fileId.value);
+    await recentStore.removeFile(options.fileId.value);
   }
 
   /**

@@ -9,7 +9,7 @@ import type BTextEditor from '@/components/BText/Editor.vue';
 import type { BTextEditorExpose, FileMentionOption } from '@/components/BText/types';
 import { useFileDrop } from '@/hooks/useFileDrop';
 import type { OpenFileOptions } from '@/hooks/useNavigate';
-import { useFilesStore } from '@/stores/workspace/files';
+import { useRecentStore } from '@/stores/workspace/recent';
 import type { FileReferenceNavigationTarget } from '@/utils/file/reference';
 import { createFileRefChipResolver } from '../utils/chipResolver';
 import { useChatInput } from './useChatInput';
@@ -75,7 +75,7 @@ interface UseChatComposerReturn {
  * @returns 输入区域状态和事件 API
  */
 export function useChatComposer(options: UseChatComposerOptions): UseChatComposerReturn {
-  const filesStore = useFilesStore();
+  const recentStore = useRecentStore();
 
   /** 聚焦输入编辑器。 */
   function focusInput(focusOptions?: { moveToEnd?: boolean }): void {
@@ -164,7 +164,7 @@ export function useChatComposer(options: UseChatComposerOptions): UseChatCompose
 
   const { isDragging: isContainerDragActive } = useFileDrop({ targetRef: options.containerRef, onDropFiles: handleInputDropFiles });
   const fileMentionOptions = computed<FileMentionOption[]>(() =>
-    (filesStore.recentFiles ?? [])
+    (recentStore.recentFiles ?? [])
       .filter((file): boolean => file.ext.toLowerCase() === 'md')
       .map((file): FileMentionOption => ({ id: file.id, name: file.name, path: file.path, ext: file.ext }))
   );
@@ -176,7 +176,7 @@ export function useChatComposer(options: UseChatComposerOptions): UseChatCompose
 
   onMounted(async (): Promise<void> => {
     await model.loadSelectedModel();
-    await filesStore.ensureLoaded();
+    await recentStore.ensureLoaded();
   });
 
   return {

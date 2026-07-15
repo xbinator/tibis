@@ -64,8 +64,8 @@ vi.mock('@/hooks/useFileAutoSave', async () => {
   };
 });
 
-vi.mock('@/stores/workspace/files', () => ({
-  useFilesStore: () => ({
+vi.mock('@/stores/workspace/recent', () => ({
+  useRecentStore: () => ({
     getFileById: getFileByIdMock,
     addFile: addFileMock,
     updateFile: updateFileMock,

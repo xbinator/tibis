@@ -7,7 +7,7 @@ import { useRouter } from 'vue-router';
 import { customAlphabet } from 'nanoid';
 import { native } from '@/shared/platform';
 import type { StoredDocumentRecord } from '@/shared/storage/files/types';
-import { useFilesStore } from '@/stores/workspace/files';
+import { useRecentStore } from '@/stores/workspace/recent';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import { Modal } from '@/utils/modal';
 
@@ -63,7 +63,7 @@ function resolveFileRoute(file: StoredDocumentRecord): FileRouteLocation {
  */
 export function useOpenFile(): OpenFileActions {
   const router = useRouter();
-  const filesStore = useFilesStore();
+  const recentStore = useRecentStore();
   const tabsStore = useTabsStore();
 
   /**
@@ -73,9 +73,9 @@ export function useOpenFile(): OpenFileActions {
    * @returns 已打开标签的路由路径；未命中时返回 null
    */
   async function findOpenTabPathByFilePath(path: string): Promise<string | null> {
-    await filesStore.ensureLoaded();
+    await recentStore.ensureLoaded();
 
-    const matchedFileId = filesStore.recentFiles?.find((f) => f.path === path)?.id;
+    const matchedFileId = recentStore.recentFiles?.find((f) => f.path === path)?.id;
     if (!matchedFileId) return null;
 
     return tabsStore.tabs.find((tab) => tab.id === matchedFileId)?.path ?? null;
@@ -90,22 +90,22 @@ export function useOpenFile(): OpenFileActions {
     const openedTabPath = await findOpenTabPathByFilePath(path);
     if (openedTabPath) {
       await router.push(openedTabPath);
-      return (await filesStore.getFileByPath(path)) ?? null;
+      return (await recentStore.getFileByPath(path)) ?? null;
     }
 
     try {
-      const openedFile = await filesStore.openOrRefreshByPathFromDisk(path);
+      const openedFile = await recentStore.openOrRefreshByPathFromDisk(path);
       if (!openedFile) return null;
 
       await router.push(resolveFileRoute(openedFile));
       return openedFile;
     } catch {
       // 文件不存在则弹窗提示后从最近记录中移除。
-      const existingFile = await filesStore.getFileByPath(path);
+      const existingFile = await recentStore.getFileByPath(path);
       if (existingFile?.path) {
         await Modal.alert('文件不存在', `路径不存在：${existingFile.path}`);
 
-        await filesStore.removeFile(existingFile.id);
+        await recentStore.removeFile(existingFile.id);
       }
       return null;
     }
@@ -123,7 +123,7 @@ export function useOpenFile(): OpenFileActions {
     }
 
     // 无磁盘路径的未保存草稿仍然沿用最近文件缓存恢复。
-    const openedFile = await filesStore.openExistingFile(file.id);
+    const openedFile = await recentStore.openExistingFile(file.id);
     await router.push(resolveFileRoute(openedFile));
 
     return openedFile;
@@ -135,7 +135,7 @@ export function useOpenFile(): OpenFileActions {
    * @returns 更新后的文件记录；未命中时返回 null
    */
   async function openFileById(id: string): Promise<StoredDocumentRecord | null> {
-    const file = await filesStore.getFileById(id);
+    const file = await recentStore.getFileById(id);
     if (!file) return null;
 
     if (file.path) {
@@ -161,7 +161,7 @@ export function useOpenFile(): OpenFileActions {
    * @returns 创建后的文件记录
    */
   async function createNewFile(): Promise<StoredDocumentRecord> {
-    const createdFile = await filesStore.createAndOpen({
+    const createdFile = await recentStore.createAndOpen({
       type: 'file',
       id: createFileId(),
       path: null,

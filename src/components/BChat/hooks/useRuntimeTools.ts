@@ -31,7 +31,7 @@ import { native } from '@/shared/platform';
 import { useSkillStore } from '@/stores/ai/skill';
 import { useToolSettingsStore } from '@/stores/ai/toolSettings';
 import { useWidgetStore } from '@/stores/ai/widget';
-import { useFilesStore } from '@/stores/workspace/files';
+import { useRecentStore } from '@/stores/workspace/recent';
 import { userChoice } from '../utils/messageHelper';
 
 /**
@@ -77,7 +77,7 @@ export function useRuntimeTools(options: UseRuntimeToolsOptions): UseRuntimeTool
   const skillStore = useSkillStore();
   const widgetStore = useWidgetStore();
   const toolSettingsStore = useToolSettingsStore();
-  const filesStore = useFilesStore();
+  const recentStore = useRecentStore();
   const { openDraft } = useOpenDraft();
   const { openFileByPath } = useOpenFile();
   const { workspaceRoot, getWorkspaceRoot } = useWorkspaceRoot();
@@ -115,14 +115,14 @@ export function useRuntimeTools(options: UseRuntimeToolsOptions): UseRuntimeTool
     mcpStore: toolSettingsStore,
     getWorkspaceRoot,
     isFileInRecent: (filePath: string) => {
-      return Boolean(filesStore.recentFiles?.some((file) => file.path === filePath));
+      return Boolean(recentStore.recentFiles?.some((file) => file.path === filePath));
     },
     /**
      * 通过文件绝对路径查找文件 ID。
-     * 封装 filesStore.getFileByPath。
+     * 封装 recentStore.getFileByPath。
      */
     findFileByPath: async (filePath: string) => {
-      const file = await filesStore.getFileByPath(filePath);
+      const file = await recentStore.getFileByPath(filePath);
       return file ? { id: file.id } : null;
     },
     /**

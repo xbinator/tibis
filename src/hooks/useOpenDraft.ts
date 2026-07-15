@@ -6,7 +6,7 @@ import { customAlphabet } from 'nanoid';
 import type { OpenDraftInput, OpenDraftResult } from '@/ai/tools/shared/types';
 import { useOpenFile } from '@/hooks/useOpenFile';
 import type { StoredFile } from '@/shared/storage/files/types';
-import { useFilesStore } from '@/stores/workspace/files';
+import { useRecentStore } from '@/stores/workspace/recent';
 import { buildUnsavedPath } from '@/utils/file/unsaved';
 
 const createFileId = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz_', 8);
@@ -53,7 +53,7 @@ export function extractNameAndExt(originalPath: string): { name: string; ext: st
  * @returns 草稿创建函数
  */
 export function useOpenDraft() {
-  const filesStore = useFilesStore();
+  const recentStore = useRecentStore();
   const { openFile } = useOpenFile();
 
   /**
@@ -79,7 +79,7 @@ export function useOpenDraft() {
       modifiedAt: now
     };
 
-    const createdFile = await filesStore.createAndOpen(storedFile);
+    const createdFile = await recentStore.createAndOpen(storedFile);
     await openFile(createdFile);
 
     const unsavedPath = buildUnsavedPath({

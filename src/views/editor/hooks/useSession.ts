@@ -15,7 +15,7 @@ import type { ReadFileResult } from '@/shared/platform/native/types';
 import type { StoredDocumentRecord, StoredFile } from '@/shared/storage';
 import { useEditorFileWatchStore } from '@/stores/editor/fileWatch';
 import { useEditorPreferencesStore } from '@/stores/editor/preferences';
-import { useFilesStore } from '@/stores/workspace/files';
+import { useRecentStore } from '@/stores/workspace/recent';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import { resolveFileTitle } from '@/utils/file/title';
 import { Modal } from '@/utils/modal';
@@ -43,7 +43,7 @@ export function useSession(fileId: Ref<string>) {
   const router = useRouter();
 
   const tabsStore = useTabsStore();
-  const filesStore = useFilesStore();
+  const recentStore = useRecentStore();
   const fileWatchStore = useEditorFileWatchStore();
   const editorPreferencesStore = useEditorPreferencesStore();
   const { clipboard } = useClipboard();
@@ -293,7 +293,7 @@ export function useSession(fileId: Ref<string>) {
     const nextId = nanoid();
     const nextName = fileState.value.name ? `${fileState.value.name}-副本` : '';
 
-    await filesStore.addFile({ ...fileState.value, type: 'file' as const, id: nextId, name: nextName, path: null, savedContent: fileState.value.content });
+    await recentStore.addFile({ ...fileState.value, type: 'file' as const, id: nextId, name: nextName, path: null, savedContent: fileState.value.content });
 
     await router.push({ name: 'editor', params: { id: nextId } });
   }
@@ -346,7 +346,7 @@ export function useSession(fileId: Ref<string>) {
       await native.trashFile(path);
     }
     // 删除关联的文件
-    await filesStore.removeFile(fileId.value);
+    await recentStore.removeFile(fileId.value);
     // 删除关联的标签页
     tabsStore.removeTab(fileId.value);
 
@@ -438,7 +438,7 @@ export function useSession(fileId: Ref<string>) {
       // 记录当前文件ID，避免在异步操作过程中文件ID发生变化
       const currentFileId = fileId.value;
 
-      const storedRecord = await filesStore.getFileById(currentFileId);
+      const storedRecord = await recentStore.getFileById(currentFileId);
       // 检查版本号，如果版本不匹配则终止（说明有更新的加载请求）
       if (currentVersion !== loadVersion) return;
 

@@ -145,7 +145,7 @@ const skillStoreMock = vi.hoisted(() => ({
   handleSkillChange: vi.fn()
 }));
 
-const filesStoreMock = vi.hoisted(() => ({
+const recentStoreMock = vi.hoisted(() => ({
   recentFiles: [] as StoredFile[],
   ensureLoaded: vi.fn<() => Promise<void>>(() => Promise.resolve()),
   getFileByPath: vi.fn()
@@ -262,8 +262,8 @@ vi.mock('@/hooks/useOpenDraft', () => ({
   }))
 }));
 
-vi.mock('@/stores/workspace/files', () => ({
-  useFilesStore: vi.fn(() => filesStoreMock)
+vi.mock('@/stores/workspace/recent', () => ({
+  useRecentStore: vi.fn(() => recentStoreMock)
 }));
 
 vi.mock('@/stores/chat/session', () => ({
@@ -660,10 +660,10 @@ describe('BChat sessionId runtime', (): void => {
     skillStoreMock.getEnabledSkills.mockReturnValue([]);
     skillStoreMock.waitForInit.mockClear();
     skillStoreMock.syncFromDisk.mockClear();
-    filesStoreMock.recentFiles = [];
-    filesStoreMock.ensureLoaded.mockReset();
-    filesStoreMock.ensureLoaded.mockResolvedValue();
-    filesStoreMock.getFileByPath.mockReset();
+    recentStoreMock.recentFiles = [];
+    recentStoreMock.ensureLoaded.mockReset();
+    recentStoreMock.ensureLoaded.mockResolvedValue();
+    recentStoreMock.getFileByPath.mockReset();
     resetRuntimeEventListeners(runtimeListeners);
     conversationViewMockState.scrollToBottom.mockReset();
     chatStoreMock.getSessionMessages.mockResolvedValue([]);
@@ -697,7 +697,7 @@ describe('BChat sessionId runtime', (): void => {
   });
 
   it('passes only markdown recent files to prompt editor file mentions', async (): Promise<void> => {
-    filesStoreMock.recentFiles = [
+    recentStoreMock.recentFiles = [
       createStoredFile({ id: 'md-1', name: 'note.md', path: '/workspace/note.md', ext: 'md' }),
       createStoredFile({ id: 'json-1', name: 'config.json', path: '/workspace/config.json', ext: 'json' }),
       createStoredFile({ id: 'txt-1', name: 'notes.txt', path: '/workspace/notes.txt', ext: 'txt' })

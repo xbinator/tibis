@@ -8,7 +8,7 @@ import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
 import type { useOpenDraft } from '@/hooks/useOpenDraft';
 import type { useOpenFile } from '@/hooks/useOpenFile';
 import { native } from '@/shared/platform';
-import { useFilesStore } from '@/stores/workspace/files';
+import { useRecentStore } from '@/stores/workspace/recent';
 import { handleBChatRuntimeBridgeRequest } from '../utils/runtimeBridge';
 import { useRuntimeSettings } from './useRuntimeSettings';
 
@@ -30,7 +30,7 @@ interface UseRuntimeBridgeHandlerOptions {
  * @returns Runtime Bridge 请求处理器
  */
 export function useRuntimeBridgeHandler(options: UseRuntimeBridgeHandlerOptions): (event: ChatRuntimeBridgeRequestEvent) => Promise<unknown> {
-  const filesStore = useFilesStore();
+  const recentStore = useRecentStore();
   const { getSettingsSnapshot, applyRuntimeSetting } = useRuntimeSettings();
 
   /** 执行当前应用级 Runtime Bridge 请求。 */
@@ -39,11 +39,11 @@ export function useRuntimeBridgeHandler(options: UseRuntimeBridgeHandlerOptions)
       getEditorContext: editorToolContextRegistry.getCurrentContext,
       getEditorContextByDocumentId: (documentId) => editorToolContextRegistry.getContext(documentId),
       findFileByPath: async (filePath) => {
-        const file = await filesStore.getFileByPath(filePath);
+        const file = await recentStore.getFileByPath(filePath);
         return file ? { id: file.id } : null;
       },
-      getRecentFileById: (fileId) => filesStore.getFileById(fileId),
-      updateRecentFileById: (fileId, updates) => filesStore.updateFile(fileId, updates),
+      getRecentFileById: (fileId) => recentStore.getFileById(fileId),
+      updateRecentFileById: (fileId, updates) => recentStore.updateFile(fileId, updates),
       getWebviewContext: webviewToolContextRegistry.getCurrentContext,
       getSettingsSnapshot,
       applySetting: applyRuntimeSetting,

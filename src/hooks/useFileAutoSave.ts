@@ -8,7 +8,7 @@ import type { Ref } from 'vue';
 import { getCurrentScope, onScopeDispose, ref, watch } from 'vue';
 import { debounce } from 'lodash-es';
 import type { StoredDocumentRecord } from '@/shared/storage/files/types';
-import { useFilesStore } from '@/stores/workspace/files';
+import { useRecentStore } from '@/stores/workspace/recent';
 
 /**
  * 自动保存配置。
@@ -60,7 +60,7 @@ function createStoredFile(fileState: FileSessionState, timestamp: number, type: 
  */
 export function useFileAutoSave(fileState: Ref<FileSessionState>, options: FileAutoSaveOptions = {}): FileAutoSaveController {
   const { delay = 500 } = options;
-  const filesStore = useFilesStore();
+  const recentStore = useRecentStore();
   const isPaused = ref<boolean>(false);
 
   /**
@@ -82,14 +82,14 @@ export function useFileAutoSave(fileState: Ref<FileSessionState>, options: FileA
 
     const current = fileState.value;
     const modifiedAt = Date.now();
-    const stored = await filesStore.getFileById(current.id);
+    const stored = await recentStore.getFileById(current.id);
 
     if (stored) {
-      await filesStore.updateFile(current.id, { ...current, type: readRecordType(stored), modifiedAt });
+      await recentStore.updateFile(current.id, { ...current, type: readRecordType(stored), modifiedAt });
       return;
     }
 
-    await filesStore.addFile(createStoredFile(current, modifiedAt, readRecordType()));
+    await recentStore.addFile(createStoredFile(current, modifiedAt, readRecordType()));
   }
 
   const debouncedSave = debounce(saveToStorage, delay);

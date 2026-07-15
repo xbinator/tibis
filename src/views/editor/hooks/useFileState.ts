@@ -4,7 +4,7 @@ import { ref, watch } from 'vue';
 import type { FileAutoSaveController } from '@/hooks/useFileAutoSave';
 import type { FileChangeEvent } from '@/shared/platform/native/types';
 import type { StoredFile } from '@/shared/storage/files/types';
-import { useFilesStore } from '@/stores/workspace/files';
+import { useRecentStore } from '@/stores/workspace/recent';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import { parseFileName } from '../utils/filePath';
 
@@ -38,7 +38,7 @@ interface SessionPersistenceResult {
  */
 export function useFileState(options: SessionPersistenceOptions): SessionPersistenceResult {
   const { fileId, fileState, switchWatchedFile, autoSave, finishReload } = options;
-  const filesStore = useFilesStore();
+  const recentStore = useRecentStore();
   const tabsStore = useTabsStore();
   // 与当前编辑内容对比，用来判断标签页 dirty 状态和外部变更后的“已保存”基线。
   const savedContent = ref<string>('');
@@ -90,24 +90,24 @@ export function useFileState(options: SessionPersistenceOptions): SessionPersist
 
   // 确保当前编辑文件在最近文件存储中存在，供显式保存和后续自动保存复用。
   async function ensureStoredFile(): Promise<void> {
-    const stored = await filesStore.getFileById(fileState.value.id);
+    const stored = await recentStore.getFileById(fileState.value.id);
     if (stored) return;
 
-    await filesStore.addFile(toStoredFile());
+    await recentStore.addFile(toStoredFile());
   }
 
   // 将当前文件状态写回本地存储；如果记录尚未创建则补建，避免新文件首次自动保存丢失。
   async function persistCurrentFile(): Promise<void> {
     const current = toStoredFile();
-    const stored = await filesStore.getFileById(current.id);
+    const stored = await recentStore.getFileById(current.id);
 
     if (stored) {
-      await filesStore.updateFile(current.id, current);
+      await recentStore.updateFile(current.id, current);
       return;
     }
 
     // 新建文件的首次自动保存可能发生在初始化写入完成前，这里兜底补建记录。
-    await filesStore.addFile(current);
+    await recentStore.addFile(current);
   }
 
   // 外部文件变化被接受后，统一从这里回填内容并重置“已保存”基线。
@@ -135,10 +135,10 @@ export function useFileState(options: SessionPersistenceOptions): SessionPersist
     syncDirtyState();
 
     const current = toStoredFile();
-    const stored = await filesStore.getFileById(current.id);
+    const stored = await recentStore.getFileById(current.id);
 
     if (stored) {
-      await filesStore.updateFile(current.id, {
+      await recentStore.updateFile(current.id, {
         ...current,
         savedContent: current.content,
         savedAt
@@ -146,7 +146,7 @@ export function useFileState(options: SessionPersistenceOptions): SessionPersist
       return;
     }
 
-    await filesStore.addFile({
+    await recentStore.addFile({
       ...current,
       savedContent: current.content,
       createdAt: savedAt,
@@ -189,7 +189,7 @@ export function useFileState(options: SessionPersistenceOptions): SessionPersist
     } else {
       // 先把新文件写入最近文件存储，避免首轮自动保存更新不到记录。
       fileState.value = { id: currentFileId, name: 'Untitled', content: '', ext: 'md', path: null };
-      await filesStore.addFile({ ...fileState.value, type: 'file' as const, savedContent: fileState.value.content });
+      await recentStore.addFile({ ...fileState.value, type: 'file' as const, savedContent: fileState.value.content });
     }
 
     hasSavedContentBaseline.value = stored?.savedContent !== undefined || !fileState.value.path;

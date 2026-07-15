@@ -16,8 +16,8 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: routerPushMock })
 }));
 
-vi.mock('@/stores/workspace/files', () => ({
-  useFilesStore: () => ({
+vi.mock('@/stores/workspace/recent', () => ({
+  useRecentStore: () => ({
     ensureLoaded: vi.fn(),
     recentFiles: [],
     getFileByPath: getFileByPathMock,

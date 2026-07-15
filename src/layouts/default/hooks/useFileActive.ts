@@ -10,7 +10,7 @@ import type { ToolbarOptions } from '@/components/BToolbar/types';
 import { useOpenFile } from '@/hooks/useOpenFile';
 import { isElectron } from '@/shared/platform/env';
 import { useCommandPanelStore } from '@/stores/ui/commandPanel';
-import { useFilesStore } from '@/stores/workspace/files';
+import { useRecentStore } from '@/stores/workspace/recent';
 import { emitter } from '@/utils/emitter';
 import { EditorShortcuts } from '../../../constants/shortcuts';
 
@@ -23,7 +23,7 @@ interface UseFileActiveResult {
  * @returns 工具栏文件菜单配置
  */
 export function useFileActive(): UseFileActiveResult {
-  const filesStore = useFilesStore();
+  const recentStore = useRecentStore();
   const commandPanelStore = useCommandPanelStore();
   const { register: registerShortcuts } = useToolbarShortcuts();
   const { createNewFile, openFileById, openNativeFile } = useOpenFile();
@@ -47,7 +47,7 @@ export function useFileActive(): UseFileActiveResult {
    * @param id - 文件 ID
    */
   async function handleOpenRecentFile(id: string): Promise<void> {
-    const file = await filesStore.getFileById(id);
+    const file = await recentStore.getFileById(id);
     if (!file) {
       commandPanelStore.openRecent();
       return;

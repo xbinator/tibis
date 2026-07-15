@@ -20,7 +20,7 @@ import { useWidgetStore } from '@/stores/ai/widget';
 import { useEditorFileWatchStore } from '@/stores/editor/fileWatch';
 import type { EditorSaveStrategy } from '@/stores/editor/preferences';
 import { useEditorPreferencesStore } from '@/stores/editor/preferences';
-import { useFilesStore } from '@/stores/workspace/files';
+import { useRecentStore } from '@/stores/workspace/recent';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import { resolveFileTitle } from '@/utils/file/title';
 import { Modal } from '@/utils/modal';
@@ -197,7 +197,7 @@ export function useSession(): WidgetSessionReturn {
   const isActive = ref(true);
   const isLoading = ref(true);
   const loadError = ref<string | null>(null);
-  const filesStore = useFilesStore();
+  const recentStore = useRecentStore();
   const tabsStore = useTabsStore();
   const widgetStore = useWidgetStore();
   const fileWatchStore = useEditorFileWatchStore();
@@ -388,11 +388,11 @@ export function useSession(): WidgetSessionReturn {
     };
 
     if (stored) {
-      await filesStore.updateFile(fileId.value, nextRecord);
+      await recentStore.updateFile(fileId.value, nextRecord);
       return;
     }
 
-    await filesStore.addFile(nextRecord);
+    await recentStore.addFile(nextRecord);
   }
 
   /**
@@ -405,7 +405,7 @@ export function useSession(): WidgetSessionReturn {
     autoSave.pause();
 
     try {
-      const storedRecord = await filesStore.getFileById(fileId.value);
+      const storedRecord = await recentStore.getFileById(fileId.value);
       const stored = isStoredWidget(storedRecord) ? storedRecord : undefined;
       const loaded = await resolveLoadedState(stored);
       if (currentVersion !== loadVersion) return;
@@ -454,7 +454,7 @@ export function useSession(): WidgetSessionReturn {
     savedContent.value = content;
     syncDirtyState();
     tabsStore.clearMissing(fileId.value);
-    await filesStore.updateFile(fileId.value, {
+    await recentStore.updateFile(fileId.value, {
       ...fileState.value,
       type: 'widget',
       savedContent: content,
@@ -607,7 +607,7 @@ export function useSession(): WidgetSessionReturn {
     savedContent.value = content;
     tabsStore.clearDirty(fileId.value);
     tabsStore.clearMissing(fileId.value);
-    await filesStore.updateFile(fileId.value, {
+    await recentStore.updateFile(fileId.value, {
       ...fileState.value,
       type: 'widget',
       savedContent: content
@@ -781,7 +781,7 @@ export function useSession(): WidgetSessionReturn {
    * 删除当前 Widget 最近文件记录。
    */
   async function onDelete(): Promise<void> {
-    await filesStore.removeFile(fileId.value);
+    await recentStore.removeFile(fileId.value);
   }
 
   /**

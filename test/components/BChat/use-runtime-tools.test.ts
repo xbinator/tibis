@@ -74,7 +74,7 @@ const storeMockState = vi.hoisted(() => ({
   toolSettingsStore: {
     hasEnabledMcpServers: false
   },
-  filesStore: {
+  recentStore: {
     recentFiles: [],
     getFileByPath: vi.fn(() => Promise.resolve(null))
   }
@@ -195,8 +195,8 @@ vi.mock('@/stores/ai/toolSettings', () => ({
   useToolSettingsStore: vi.fn(() => storeMockState.toolSettingsStore)
 }));
 
-vi.mock('@/stores/workspace/files', () => ({
-  useFilesStore: vi.fn(() => storeMockState.filesStore)
+vi.mock('@/stores/workspace/recent', () => ({
+  useRecentStore: vi.fn(() => storeMockState.recentStore)
 }));
 
 /**
