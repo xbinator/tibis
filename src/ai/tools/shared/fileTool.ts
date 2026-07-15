@@ -6,12 +6,9 @@ import type { AIToolConfirmationAdapter, AIToolConfirmationRequest } from '../co
 import type { AIToolContext, AIToolExecutionError, AIToolExecutionResult } from 'types/ai';
 import { isDocumentRecord, recentFilesStorage } from '@/shared/storage';
 import type { StoredDocumentRecord } from '@/shared/storage/files/types';
-import { isUnsavedPath as isUnsavedPathUtil } from '@/utils/file/unsaved';
+import { isUnsavedPath } from '@/utils/file/unsaved';
 import { workspace } from '@/utils/file/workspace';
 import { createToolCancelledResult, createToolFailureResult, createToolSuccessResult } from '../results';
-
-/** 重新导出 isUnsavedPath，方便调用方统一从本模块导入。 */
-export { isUnsavedPathUtil as isUnsavedPath };
 
 // ─── 类型 ─────────────────────────────────────────────────────────────────────
 
@@ -69,7 +66,7 @@ export function mapNativeError(error: unknown): { code: AIToolExecutionError['co
  * @returns 规范化后的目标路径、草稿降级、工作区外标记或失败结果
  */
 export function resolveTargetPath(filePath: string, workspaceRoot: string | null, toolName: string): ResolveResult {
-  if (isUnsavedPathUtil(filePath)) {
+  if (isUnsavedPath(filePath)) {
     return { path: filePath };
   }
 
@@ -82,7 +79,7 @@ export function resolveTargetPath(filePath: string, workspaceRoot: string | null
   }
 
   if (workspace.isAbsoluteFilePath(filePath)) {
-    if (!contains(workspaceRoot, filePath)) {
+    if (!workspace.contains(workspaceRoot, filePath)) {
       return { path: filePath, outsideWorkspace: true };
     }
 
