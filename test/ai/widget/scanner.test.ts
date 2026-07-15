@@ -3,7 +3,7 @@
  * @description 小组件文件扫描器测试。
  */
 import { describe, expect, it, type Mock, vi } from 'vitest';
-import { scanWidgets, type WidgetScannerAPI } from '@/ai/widget';
+import { scanWidgets, type WidgetScannerAPI } from '@/ai/widget/scanner';
 
 /**
  * 小组件扫描器测试 API。

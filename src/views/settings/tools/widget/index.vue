@@ -31,7 +31,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { WidgetDefinition } from '@/ai/widget';
+import type { WidgetDefinition } from '@/ai/widget/types';
 import { useWidgetStore } from '@/stores/ai/widget';
 import SettingsPage from '@/views/settings/_components/SettingsPage.vue';
 import SettingsPagination from '@/views/settings/_components/SettingsPagination.vue';

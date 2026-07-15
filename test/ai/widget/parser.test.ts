@@ -3,7 +3,7 @@
  * @description Widget JSON 内容版本与 dirPath 计算测试。
  */
 import { describe, expect, it } from 'vitest';
-import { parseWidgetJson } from '@/ai/widget';
+import { parseWidgetJson } from '@/ai/widget/parser';
 import { hashString } from '@/shared/utils/hash';
 
 describe('parseWidgetJson content hash', (): void => {

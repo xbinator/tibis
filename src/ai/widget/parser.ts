@@ -9,8 +9,6 @@ import { createDefaultWidgetData, normalizeWidgetDataContract } from '@/componen
 import { hashString } from '@/shared/utils/hash';
 import { posix } from '@/utils/file/posix';
 
-export { join as joinPath } from '@/utils/file/posix';
-
 /**
  * 判断值是否为普通记录。
  * @param value - 待判断值

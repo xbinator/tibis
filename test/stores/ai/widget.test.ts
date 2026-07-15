@@ -5,8 +5,10 @@
  */
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import { joinPath, parseWidgetJson, type WidgetScannerAPI } from '@/ai/widget';
+import { parseWidgetJson } from '@/ai/widget/parser';
+import type { WidgetScannerAPI } from '@/ai/widget/scanner';
 import { useWidgetStore } from '@/stores/ai/widget';
+import { posix } from '@/utils/file/posix';
 
 /**
  * 小组件扫描器测试 API。
@@ -89,7 +91,7 @@ describe('widget store', (): void => {
 
   it('updates widgets from watched widget.json changes', (): void => {
     const store = useWidgetStore();
-    const filePath = joinPath('/Users/test', '.tibis', 'widgets', 'weather', 'widget.json');
+    const filePath = posix.join('/Users/test', '.tibis', 'widgets', 'weather', 'widget.json');
     const widget = parseWidgetJson(
       JSON.stringify({
         name: '天气',
@@ -119,7 +121,7 @@ describe('widget store', (): void => {
 
   it('preserves disabled state when watched widget.json changes', (): void => {
     const store = useWidgetStore();
-    const filePath = joinPath('/Users/test', '.tibis', 'widgets', 'weather', 'widget.json');
+    const filePath = posix.join('/Users/test', '.tibis', 'widgets', 'weather', 'widget.json');
     const widget = parseWidgetJson(
       JSON.stringify({
         name: '天气',
@@ -149,7 +151,7 @@ describe('widget store', (): void => {
 
   it('keeps widgets visible when watched widget.json becomes invalid', (): void => {
     const store = useWidgetStore();
-    const filePath = joinPath('/Users/test', '.tibis', 'widgets', 'weather', 'widget.json');
+    const filePath = posix.join('/Users/test', '.tibis', 'widgets', 'weather', 'widget.json');
     const widget = parseWidgetJson(
       JSON.stringify({
         name: '天气',

@@ -8,7 +8,7 @@ import { defineComponent } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { WidgetDefinition } from '@/ai/widget';
+import type { WidgetDefinition } from '@/ai/widget/types';
 import type { DropdownOption, DropdownOptionItem } from '@/components/BDropdown/type';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { useWidgetStore } from '@/stores/ai/widget';

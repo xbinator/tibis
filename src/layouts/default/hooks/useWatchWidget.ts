@@ -3,7 +3,7 @@
  * @description 默认布局的 Widget 资源监听 hook，委托给通用 useWatchResource。
  */
 
-import { parseWidgetJson } from '@/ai/widget';
+import { parseWidgetJson } from '@/ai/widget/parser';
 import type { WidgetDefinition } from '@/ai/widget/types';
 import { useWatchResource } from '@/hooks/useWatchResource';
 import { native } from '@/shared/platform';

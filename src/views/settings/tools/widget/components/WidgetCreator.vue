@@ -54,7 +54,8 @@ import type { Rule } from 'ant-design-vue/es/form';
 import { reactive, ref, shallowRef, watch } from 'vue';
 import { Form, message } from 'ant-design-vue';
 import { cloneDeep } from 'lodash-es';
-import { importWidgetJsonFile, importWidgetZipFile, joinPath, type WidgetDefinition, type WidgetImportResource, type WidgetImportResult } from '@/ai/widget';
+import { importWidgetJsonFile, importWidgetZipFile } from '@/ai/widget/importer';
+import type { WidgetDefinition, WidgetImportResource, WidgetImportResult } from '@/ai/widget/importer';
 import type { WidgetData } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { createDefaultWidgetExecuteMethod, isDefaultWidgetExecuteMethod } from '@/components/BWidget/utils/widgetExecuteMethod';
@@ -66,6 +67,7 @@ import { useWidgetStore } from '@/stores/ai/widget';
 import { asyncTo } from '@/utils/asyncTo';
 import { formatDirectoryInstallError, installDirectory, type DirectoryInstallFile } from '@/utils/file/directory';
 import { path, PORTABLE_RESOURCE_ID_PATTERN } from '@/utils/file/path';
+import { posix } from '@/utils/file/posix';
 
 /**
  * 创建小组件表单数据。
@@ -336,7 +338,7 @@ async function handleConfirm(): Promise<void> {
   try {
     await installLogger.start();
     const homeDir = await native.getHomeDir();
-    const widgetDir = joinPath(homeDir, '.tibis', 'widgets', widgetId);
+    const widgetDir = posix.join(homeDir, '.tibis', 'widgets', widgetId);
     const importedData = createImportedWidgetDataForConfirm();
     const widgetData: WidgetData = {
       ...(importedData ?? createDefaultWidgetData(widgetId)),
@@ -348,7 +350,7 @@ async function handleConfirm(): Promise<void> {
       name: widgetData.name,
       description: widgetData.description,
       data: widgetData,
-      filePath: joinPath(widgetDir, 'widget.json'),
+      filePath: posix.join(widgetDir, 'widget.json'),
       dirPath: widgetDir,
       enabled: true,
       parsedAt: Date.now()

@@ -31,7 +31,7 @@
 import { computed, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import { message } from 'ant-design-vue';
-import type { WidgetDefinition } from '@/ai/widget';
+import type { WidgetDefinition } from '@/ai/widget/types';
 import type { DropdownOption } from '@/components/BDropdown/type';
 import { useOpenFile } from '@/hooks/useOpenFile';
 import { native } from '@/shared/platform';

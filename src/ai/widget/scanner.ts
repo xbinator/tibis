@@ -5,8 +5,9 @@
 import type { WidgetDefinition, WidgetScanConfig } from './types';
 import { logDirectoryInstallRecoveryFailure } from '@/shared/logger/directoryInstall';
 import { recoverDirectoryInstallTransactions } from '@/utils/file/directory';
+import { posix } from '@/utils/file/posix';
 import { canReadDirectory, type PathStatusReader } from '@/utils/file/status';
-import { joinPath, parseWidgetJson } from './parser';
+import { parseWidgetJson } from './parser';
 
 /**
  * 小组件扫描器依赖的平台 API 接口。
@@ -45,7 +46,7 @@ function isWidgetDirectoryEntry(entry: { name: string; type: 'file' | 'directory
  * @returns 小组件定义列表
  */
 export async function scanWidgets(config: WidgetScanConfig, api: WidgetScannerAPI): Promise<WidgetDefinition[]> {
-  const widgetDir = joinPath(config.homeDir, '.tibis', 'widgets');
+  const widgetDir = posix.join(config.homeDir, '.tibis', 'widgets');
 
   try {
     if (!(await canReadDirectory(widgetDir, api))) {
@@ -72,7 +73,7 @@ export async function scanWidgets(config: WidgetScanConfig, api: WidgetScannerAP
     const widgetEntries = entries.filter(isWidgetDirectoryEntry);
     const results = await Promise.allSettled(
       widgetEntries.map(async (entry: { name: string; type: 'file' | 'directory' }): Promise<WidgetDefinition> => {
-        const filePath = joinPath(widgetDir, entry.name, 'widget.json');
+        const filePath = posix.join(widgetDir, entry.name, 'widget.json');
         const { content } = await api.readFile(filePath);
 
         return parseWidgetJson(content, filePath);

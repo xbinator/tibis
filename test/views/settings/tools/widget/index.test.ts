@@ -9,7 +9,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import JSZip from 'jszip';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { WidgetScannerAPI } from '@/ai/widget';
+import type { WidgetScannerAPI } from '@/ai/widget/scanner';
 import { createDefaultWidgetExecuteMethod } from '@/components/BWidget/utils/widgetExecuteMethod';
 import { useWidgetStore } from '@/stores/ai/widget';
 import WidgetSettingsPage from '@/views/settings/tools/widget/index.vue';

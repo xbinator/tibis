@@ -5,7 +5,7 @@
 import type { Ref } from 'vue';
 import { computed, getCurrentInstance, nextTick, onActivated, onDeactivated, onScopeDispose, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { parseWidgetJson } from '@/ai/widget';
+import { parseWidgetJson } from '@/ai/widget/parser';
 import type { WidgetData } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { useClipboard } from '@/hooks/useClipboard';

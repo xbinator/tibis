@@ -4,7 +4,8 @@
  */
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
-import { parseWidgetJson, scanWidgets, type WidgetScannerAPI } from '@/ai/widget';
+import { parseWidgetJson } from '@/ai/widget/parser';
+import { scanWidgets, type WidgetScannerAPI } from '@/ai/widget/scanner';
 import type { WidgetDefinition, WidgetScanConfig } from '@/ai/widget/types';
 import { local } from '@/shared/storage/base';
 import { asyncTo } from '@/utils/asyncTo';

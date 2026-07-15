@@ -4,8 +4,7 @@
  */
 import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
-import { importWidgetJsonFile, importWidgetZipFile } from '@/ai/widget';
-import { WIDGET_ZIP_MAX_RESOURCE_BYTES } from '@/ai/widget/importer';
+import { importWidgetJsonFile, importWidgetZipFile, WIDGET_ZIP_MAX_RESOURCE_BYTES } from '@/ai/widget/importer';
 
 /**
  * 测试 zip 资源条目。
