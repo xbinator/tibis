@@ -3,7 +3,7 @@
  * @description Skill Markdown 内容版本测试。
  */
 import { describe, expect, it } from 'vitest';
-import { parseSkillMarkdown } from '@/ai/skill';
+import { parseSkillMarkdown } from '@/ai/skill/parser';
 import { hashString } from '@/shared/utils/hash';
 
 describe('parseSkillMarkdown content hash', (): void => {

@@ -5,8 +5,9 @@
 import type { SkillDefinition, SkillScanConfig } from './types';
 import { logDirectoryInstallRecoveryFailure } from '@/shared/logger/directoryInstall';
 import { recoverDirectoryInstallTransactions } from '@/utils/file/directory';
+import { posix } from '@/utils/file/posix';
 import { canReadDirectory, type PathStatusReader } from '@/utils/file/status';
-import { parseSkillMarkdown, joinPath } from './parser';
+import { parseSkillMarkdown } from './parser';
 
 /**
  * 扫描器依赖的平台 API 接口。
@@ -52,8 +53,8 @@ async function scanDirectory(dirPath: string, source: SkillDefinition['source'],
 
     const results = await Promise.allSettled(
       dirEntries.map(async (entry) => {
-        const skillDirPath = joinPath(dirPath, entry.name);
-        const skillFilePath = joinPath(skillDirPath, 'SKILL.md');
+        const skillDirPath = posix.join(dirPath, entry.name);
+        const skillFilePath = posix.join(skillDirPath, 'SKILL.md');
         if (api.getPathStatus) {
           const status = await api.getPathStatus(skillFilePath);
           if (!status.exists || !status.isFile) {
@@ -88,7 +89,7 @@ export async function scanSkills(config: SkillScanConfig, api: SkillScannerAPI):
   const { maxContentLength } = config;
 
   // 扫描用户级全局 skill 目录。
-  const globalSkillsDir = joinPath(config.homeDir, '.agents', 'skills');
+  const globalSkillsDir = posix.join(config.homeDir, '.agents', 'skills');
   const hasGlobalSkillsDir = await canReadDirectory(globalSkillsDir, api);
 
   if (!hasGlobalSkillsDir) {

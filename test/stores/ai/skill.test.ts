@@ -5,7 +5,8 @@
  */
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import { parseSkillMarkdown, type SkillScannerAPI } from '@/ai/skill';
+import { parseSkillMarkdown } from '@/ai/skill/parser';
+import type { SkillScannerAPI } from '@/ai/skill/scanner';
 import { useSkillStore } from '@/stores/ai/skill';
 
 /** Skill 测试文件路径。 */

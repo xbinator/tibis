@@ -3,7 +3,7 @@
  * @description 默认布局的 Skill 资源监听 hook，委托给通用 useWatchResource。
  */
 
-import { parseSkillMarkdown } from '@/ai/skill';
+import { parseSkillMarkdown } from '@/ai/skill/parser';
 import type { SkillDefinition } from '@/ai/skill/types';
 import { useWatchResource } from '@/hooks/useWatchResource';
 import { native } from '@/shared/platform';

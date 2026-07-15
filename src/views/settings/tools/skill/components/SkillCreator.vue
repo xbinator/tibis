@@ -84,7 +84,6 @@ import type { VirtualFile } from './SkillPreview.vue';
 import { computed, ref, shallowRef, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { message } from 'ant-design-vue';
-import { joinPath } from '@/ai/skill';
 import type { SkillPackageResource } from '@/ai/skill/package';
 import type { SkillDefinition } from '@/ai/skill/types';
 import { logger } from '@/shared/logger';
@@ -93,6 +92,7 @@ import { getElectronAPI } from '@/shared/platform/electron-api';
 import { useSkillStore } from '@/stores/ai/skill';
 import { asyncTo } from '@/utils/asyncTo';
 import { formatDirectoryInstallError, installDirectory, type DirectoryInstallFile } from '@/utils/file/directory';
+import { posix } from '@/utils/file/posix';
 import SkillPreview from './SkillPreview.vue';
 
 /** Worker 解析返回数据结构。 */
@@ -241,7 +241,7 @@ async function handleFileSelected(files: FileList): Promise<void> {
  */
 async function getSkillDir(api: ReturnType<typeof getElectronAPI>): Promise<string> {
   const homeDir = await api.getHomeDir();
-  return joinPath(homeDir, '.agents', 'skills');
+  return posix.join(homeDir, '.agents', 'skills');
 }
 
 /**
@@ -269,7 +269,7 @@ async function handleInstall(): Promise<void> {
   try {
     await installLogger.start();
     const baseDir = await getSkillDir(api);
-    const targetDir = joinPath(baseDir, skillName);
+    const targetDir = posix.join(baseDir, skillName);
 
     await installDirectory({
       api,

@@ -3,7 +3,7 @@
  * @description Skill 文件扫描器测试。
  */
 import { describe, expect, it, type Mock, vi } from 'vitest';
-import { scanSkills, type SkillScannerAPI } from '@/ai/skill';
+import { scanSkills, type SkillScannerAPI } from '@/ai/skill/scanner';
 
 /**
  * Skill 扫描器测试 API。

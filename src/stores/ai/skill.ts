@@ -4,8 +4,9 @@
  */
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
-import { DEFAULT_SKILL_MAX_CONTENT_LENGTH, parseSkillMarkdown, scanSkills, type SkillScannerAPI } from '@/ai/skill';
-import type { SkillDefinition, SkillScanConfig } from '@/ai/skill/types';
+import { parseSkillMarkdown } from '@/ai/skill/parser';
+import { scanSkills, type SkillScannerAPI } from '@/ai/skill/scanner';
+import { DEFAULT_SKILL_MAX_CONTENT_LENGTH, type SkillDefinition, type SkillScanConfig } from '@/ai/skill/types';
 import { local } from '@/shared/storage/base';
 import { asyncTo } from '@/utils/asyncTo';
 

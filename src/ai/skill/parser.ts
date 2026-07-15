@@ -7,8 +7,6 @@ import { hashString } from '@/shared/utils/hash';
 import { posix } from '@/utils/file/posix';
 import { DEFAULT_SKILL_MAX_CONTENT_LENGTH, type SkillDefinition, type SkillSource } from './types';
 
-export { join as joinPath } from '@/utils/file/posix';
-
 /** 解析选项。 */
 interface ParseOptions {
   /** skill 来源，默认 'global' */
