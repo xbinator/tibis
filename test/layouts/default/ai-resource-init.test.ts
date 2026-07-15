@@ -6,8 +6,8 @@
 import { defineComponent, h } from 'vue';
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useSkillInit } from '@/components/BChat/hooks/useSkillInit';
-import { useWidgetInit } from '@/components/BChat/hooks/useWidgetInit';
+import { useSkillInit } from '@/layouts/default/hooks/useSkillInit';
+import { useWidgetInit } from '@/layouts/default/hooks/useWidgetInit';
 
 /** Skill 目录变更事件。 */
 interface SkillChangedEvent {

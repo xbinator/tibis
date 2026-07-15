@@ -1,6 +1,6 @@
 /**
  * @file useWidgetInit.ts
- * @description 初始化 Widget Store，负责扫描小组件目录、监听目录变更及增量更新。
+ * @description 默认布局的 Widget Store 初始化 hook，负责扫描小组件目录、监听目录变更及增量更新。
  */
 
 import { onMounted, onUnmounted } from 'vue';

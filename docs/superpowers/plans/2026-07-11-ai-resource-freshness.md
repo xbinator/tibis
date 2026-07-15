@@ -242,8 +242,8 @@ Expected: PASS.
 **Files:**
 - Modify: `src/layouts/default/index.vue`
 - Modify: `src/components/BChat/index.vue`
-- Modify: `src/components/BChat/hooks/useSkillInit.ts`
-- Modify: `src/components/BChat/hooks/useWidgetInit.ts`
+- Modify: `src/layouts/default/hooks/useSkillInit.ts`
+- Modify: `src/layouts/default/hooks/useWidgetInit.ts`
 - Modify: `test/components/BChat/session-id-runtime.test.ts`
 
 - [ ] **Step 1: Add failing lifecycle assertions**

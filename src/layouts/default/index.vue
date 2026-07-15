@@ -86,8 +86,6 @@ import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { useEventListener } from '@vueuse/core';
 import BButton from '@/components/BButton/index.vue';
-import { useSkillInit } from '@/components/BChat/hooks/useSkillInit';
-import { useWidgetInit } from '@/components/BChat/hooks/useWidgetInit';
 import BCommandPanel from '@/components/BCommandPanel/index.vue';
 import { getElectronAPI } from '@/shared/platform/electron-api';
 import { isMac } from '@/shared/platform/env';
@@ -103,7 +101,9 @@ import { useEditActive } from './hooks/useEditActive';
 import { useFileActive } from './hooks/useFileActive';
 import { useHelpActive } from './hooks/useHelpActive';
 import { useKeepAlive } from './hooks/useKeepAlive';
+import { useSkillInit } from './hooks/useSkillInit';
 import { useViewActive } from './hooks/useViewActive';
+import { useWidgetInit } from './hooks/useWidgetInit';
 
 const currentRoute = useRoute();
 const router = useRouter();

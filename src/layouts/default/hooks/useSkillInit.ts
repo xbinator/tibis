@@ -1,6 +1,6 @@
 /**
  * @file useSkillInit.ts
- * @description 初始化 Skill Store 的 hook，负责扫描 skill 目录、监听目录变更及增量更新。
+ * @description 默认布局的 Skill Store 初始化 hook，负责扫描 skill 目录、监听目录变更及增量更新。
  */
 
 import { onMounted, onUnmounted } from 'vue';
