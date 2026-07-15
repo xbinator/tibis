@@ -2,9 +2,13 @@
  * @file asyncTo.ts
  * @description 将 Promise 结果转换为错误优先元组，并统一未知异常结构。
  */
+import { logger } from './logger';
 
 /** 未提供有效错误消息时使用的兜底文案。 */
 const DEFAULT_ERROR_MESSAGE = '未知错误';
+
+/** 异步错误日志标签，便于在日志面板中按来源过滤。 */
+const ASYNC_ERROR_LOG_LABEL = 'asyncTo';
 
 /**
  * 安全读取未知异常的消息文本，避免 getter 或 Proxy 再次抛错。
@@ -43,6 +47,8 @@ export async function asyncTo<T>(promise: Promise<T>): Promise<[Error] | [undefi
   try {
     return [undefined, await promise];
   } catch (error: unknown) {
-    return [normalizeError(error)];
+    const normalized = normalizeError(error);
+    logger.error(ASYNC_ERROR_LOG_LABEL, normalized);
+    return [normalized];
   }
 }
