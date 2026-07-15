@@ -1,9 +1,9 @@
 /**
  * @file builtin-skill-tool.test.ts
- * @description Skill 工具执行时最新源文件读取测试。
+ * @description Skill 工具执行复用 Store 内容缓存测试。
  */
-import { describe, expect, it } from 'vitest';
-import type { SkillDefinition } from '@/ai/skill/types';
+import { describe, expect, it, vi } from 'vitest';
+import type { SkillDefinition, SkillEntry } from '@/ai/skill/types';
 import { createSkillTool, type SkillStoreLike } from '@/ai/tools/builtin/SkillTool';
 
 /**
@@ -21,28 +21,45 @@ function createSkill(content: string, contentHash: string): SkillDefinition {
     filePath: '/home/.agents/skills/weather/SKILL.md',
     dirPath: '/home/.agents/skills/weather',
     source: 'global',
-    enabled: true,
     parsedAt: 1
   };
 }
 
+/**
+ * 创建已加载 Skill Store 条目。
+ * @param definition - Skill 解析定义
+ * @returns 已加载 Store 条目
+ */
+function createSkillEntry(definition: SkillDefinition): SkillEntry {
+  return {
+    id: 'weather-directory',
+    dirPath: definition.dirPath,
+    filePath: definition.filePath,
+    source: 'global',
+    enabled: true,
+    revision: 1,
+    sourceContent: definition.content,
+    definition
+  };
+}
+
 describe('SkillTool', (): void => {
-  it('loads execution-time Skill content and version from the Store resolver', async (): Promise<void> => {
-    const oldSkill = createSkill('old instructions', 'old-hash');
-    const latestSkill = createSkill('latest instructions', 'latest-hash');
+  it('loads Skill content and version through the Store cache', async (): Promise<void> => {
+    const skill = createSkillEntry(createSkill('cached instructions', 'cached-hash'));
+    const getSkill = vi.fn(async (): Promise<SkillEntry | undefined> => skill);
     const store = {
       initialized: true,
-      getEnabledSkills: (): SkillDefinition[] => [oldSkill],
-      getSkillByName: (): SkillDefinition => oldSkill,
-      resolveLatestEnabledSkill: async (): Promise<SkillDefinition> => latestSkill
+      getEnabledSkills: (): SkillEntry[] => [skill],
+      getSkillByName: (): SkillEntry => skill,
+      getSkill
     } as SkillStoreLike;
     const tool = createSkillTool(store);
 
     const result = await tool.execute({ name: 'weather' });
 
+    expect(getSkill).toHaveBeenCalledWith('weather-directory');
     expect(result).toMatchObject({ status: 'success' });
-    expect(result.status === 'success' ? result.data : '').toContain('latest instructions');
-    expect(result.status === 'success' ? result.data : '').toContain('<content_hash>latest-hash</content_hash>');
-    expect(result.status === 'success' ? result.data : '').not.toContain('old instructions');
+    expect(result.status === 'success' ? result.data : '').toContain('cached instructions');
+    expect(result.status === 'success' ? result.data : '').toContain('<content_hash>cached-hash</content_hash>');
   });
 });

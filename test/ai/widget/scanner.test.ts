@@ -3,7 +3,7 @@
  * @description 小组件文件扫描器测试。
  */
 import { describe, expect, it, type Mock, vi } from 'vitest';
-import { scanWidgets, type WidgetScannerAPI } from '@/ai/widget';
+import { scanWidgetDirectories, type WidgetScannerAPI } from '@/ai/widget';
 
 /**
  * 小组件扫描器测试 API。
@@ -41,7 +41,7 @@ function createScannerAPI(): WidgetScannerAPIMock {
   };
 }
 
-describe('scanWidgets', (): void => {
+describe('scanWidgetDirectories', (): void => {
   it('cleans an interrupted rejected install before scanning widgets', async (): Promise<void> => {
     const api = createScannerAPI();
     api.readWorkspaceDirectory.mockResolvedValueOnce({ entries: [{ name: '.install-test.json', type: 'file' }] }).mockResolvedValueOnce({ entries: [] });
@@ -54,13 +54,13 @@ describe('scanWidgets', (): void => {
       isDirectory: path.endsWith('/widgets') || path.endsWith('/.tmp-test')
     }));
 
-    await scanWidgets({ homeDir: '/Users/test' }, api);
+    await scanWidgetDirectories({ homeDir: '/Users/test' }, api);
 
     expect(api.trashFile).toHaveBeenCalledWith('/Users/test/.tibis/widgets/.tmp-test');
     expect(api.trashFile).toHaveBeenCalledWith('/Users/test/.tibis/widgets/.install-test.json');
   });
 
-  it('scans widget directories from .tibis/widgets and uses directory name as id', async (): Promise<void> => {
+  it('scans Widget directories without reading widget.json', async (): Promise<void> => {
     const api = createScannerAPI();
     api.readWorkspaceDirectory.mockResolvedValue({
       entries: [
@@ -69,33 +69,24 @@ describe('scanWidgets', (): void => {
         { name: '.draft', type: 'directory' }
       ]
     });
-    api.readFile.mockResolvedValue({
-      content: JSON.stringify({
-        name: '天气',
-        description: '查询指定城市天气'
-      })
-    });
-
-    const widgets = await scanWidgets({ homeDir: '/Users/test' }, api);
+    const widgets = await scanWidgetDirectories({ homeDir: '/Users/test' }, api);
 
     expect(api.readWorkspaceDirectory).toHaveBeenCalledWith({ directoryPath: '/Users/test/.tibis/widgets' });
-    expect(api.readFile).toHaveBeenCalledWith('/Users/test/.tibis/widgets/weather/widget.json');
-    expect(widgets).toHaveLength(1);
-    expect(widgets[0]).toMatchObject({
-      id: 'weather',
-      name: '天气',
-      description: '查询指定城市天气',
-      filePath: '/Users/test/.tibis/widgets/weather/widget.json',
-      enabled: true
-    });
-    expect(widgets[0]?.data.elements).toEqual([]);
+    expect(api.readFile).not.toHaveBeenCalledWith('/Users/test/.tibis/widgets/weather/widget.json');
+    expect(widgets).toEqual([
+      {
+        id: 'weather',
+        dirPath: '/Users/test/.tibis/widgets/weather',
+        filePath: '/Users/test/.tibis/widgets/weather/widget.json'
+      }
+    ]);
   });
 
   it('skips directory reads when the widget directory does not exist', async (): Promise<void> => {
     const api = createScannerAPI();
     api.getPathStatus.mockResolvedValue({ exists: false, isFile: false, isDirectory: false });
 
-    const widgets = await scanWidgets({ homeDir: '/Users/test' }, api);
+    const widgets = await scanWidgetDirectories({ homeDir: '/Users/test' }, api);
 
     expect(api.getPathStatus).toHaveBeenCalledWith('/Users/test/.tibis/widgets');
     expect(api.readWorkspaceDirectory).not.toHaveBeenCalled();

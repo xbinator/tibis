@@ -24,7 +24,13 @@ import type {
   ChatRuntimeRecoverySnapshot,
   ChatRuntimeToolRequestEvent
 } from 'types/chat-runtime';
-import type { ElectronAPI, ElectronShellCommandOutputChunk, ElectronSpeechInstallProgress, FileChangeEvent } from 'types/electron-api';
+import type {
+  DirectoryChangeEvent,
+  ElectronAPI,
+  ElectronShellCommandOutputChunk,
+  ElectronSpeechInstallProgress,
+  FileChangeEvent
+} from 'types/electron-api';
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { formatPreloadErrorMessage, shouldIgnorePreloadError } from './error-collector.mjs';
 import webviewAPI from './webview.mjs';
@@ -171,17 +177,17 @@ const electronAPI: ElectronAPI = {
     };
   },
 
-  watchDirectory: (dirPath: string, globPattern?: string) => ipcRenderer.invoke('fs:watchDirectory', dirPath, globPattern),
+  watchResourceDirectory: (rootPath: string) => ipcRenderer.invoke('fs:watchResourceDirectory', rootPath),
 
-  unwatchDirectory: (dirPath: string, globPattern?: string) => ipcRenderer.invoke('fs:unwatchDirectory', dirPath, globPattern),
+  unwatchResourceDirectory: (rootPath: string) => ipcRenderer.invoke('fs:unwatchResourceDirectory', rootPath),
 
-  onSkillChanged: (callback) => {
-    const handler = (_event: Electron.IpcRendererEvent, data: { type: string; filePath: string; content?: string }) => {
+  onDirectoryChanged: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: DirectoryChangeEvent) => {
       callback(data);
     };
-    ipcRenderer.on('skill:changed', handler);
+    ipcRenderer.on('directory:changed', handler);
     return () => {
-      ipcRenderer.removeListener('skill:changed', handler);
+      ipcRenderer.removeListener('directory:changed', handler);
     };
   },
 

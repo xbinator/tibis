@@ -5,7 +5,7 @@
 import type { Ref } from 'vue';
 import { computed, getCurrentInstance, nextTick, onActivated, onDeactivated, onScopeDispose, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { parseWidgetJson } from '@/ai/widget';
+import { parseWidgetJson, type WidgetEntry } from '@/ai/widget';
 import type { WidgetData } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { useClipboard } from '@/hooks/useClipboard';
@@ -136,21 +136,21 @@ function createStoredState(stored: StoredWidget): FileSessionState {
 }
 
 /**
- * 将磁盘读取结果转换为页面文件状态。
+ * 将 Store 入口文件快照转换为页面文件状态。
  * @param fileId - Widget 文件会话 ID
  * @param filePath - Widget 文件路径
- * @param diskFile - 磁盘读取结果
+ * @param sourceFile - Store 入口文件快照
  * @returns 页面文件状态
  */
-function createDiskState(fileId: string, filePath: string, diskFile: ReadFileResult): FileSessionState {
+function createSourceState(fileId: string, filePath: string, sourceFile: ReadFileResult): FileSessionState {
   const { name, ext } = parseFileName(filePath);
 
   return {
     id: fileId,
     path: filePath,
-    name: name || diskFile.name,
-    ext: ext || diskFile.ext || 'json',
-    content: diskFile.content
+    name: name || sourceFile.name,
+    ext: ext || sourceFile.ext || 'json',
+    content: sourceFile.content
   };
 }
 
@@ -285,12 +285,12 @@ export function useSession(): WidgetSessionReturn {
   }
 
   /**
-   * 解析已安装 Widget 的磁盘文件路径。
-   * @returns 磁盘路径；未找到 Widget 时返回 null
+   * 获取已安装 Widget 的 Store 内容条目。
+   * @returns 已加载 Widget 条目，不存在时返回 undefined
    */
-  async function resolveWidgetPath(): Promise<string | null> {
+  async function resolveWidgetEntry(): Promise<WidgetEntry | undefined> {
     await widgetStore.waitForInit();
-    return widgetStore.getWidgetById(resolveWidgetId(fileId.value))?.filePath ?? null;
+    return widgetStore.getWidget(resolveWidgetId(fileId.value));
   }
 
   /**
@@ -299,55 +299,55 @@ export function useSession(): WidgetSessionReturn {
    * @returns 页面应采用的文件状态与保存基线
    */
   async function resolveLoadedState(stored: StoredWidget | undefined): Promise<LoadedWidgetState> {
-    const widgetPath = await resolveWidgetPath();
-    const filePath = widgetPath ?? stored?.path ?? null;
     const storedState = stored ? createStoredState(stored) : null;
-    if (storedState && widgetPath) {
-      const { name, ext } = parseFileName(widgetPath);
-      storedState.path = widgetPath;
-      storedState.name = name || storedState.name;
-      storedState.ext = ext || storedState.ext;
-    }
-
-    if (!filePath) {
-      const fallbackState = storedState ?? createDefaultState(fileId.value);
-      return {
-        fileState: fallbackState,
-        savedContent: stored?.savedContent ?? fallbackState.content,
-        shouldPersist: Boolean(stored),
-        loadError: stored ? null : '未找到已安装 Widget 的文件路径'
-      };
-    }
-
-    let diskFile: ReadFileResult;
-    try {
-      diskFile = await native.readFile(filePath);
-    } catch (error: unknown) {
-      console.error('Failed to load Widget file:', error);
-      const fallbackState = storedState ?? createFallbackState(fileId.value, filePath);
-      const reason = error instanceof Error ? error.message : String(error);
+    const widgetEntry = await resolveWidgetEntry();
+    if (!widgetEntry) {
+      const fallbackState = storedState ?? (stored?.path ? createFallbackState(fileId.value, stored.path) : createDefaultState(fileId.value));
       return {
         fileState: fallbackState,
         savedContent: stored?.savedContent ?? fallbackState.content,
         shouldPersist: false,
-        loadError: `无法读取 Widget 文件：${reason}`
+        loadError: `未找到 Widget：${resolveWidgetId(fileId.value)}`
       };
     }
 
-    const diskState = createDiskState(fileId.value, filePath, diskFile);
+    const { filePath } = widgetEntry;
+    if (storedState) {
+      const { name, ext } = parseFileName(filePath);
+      storedState.path = filePath;
+      storedState.name = name || storedState.name;
+      storedState.ext = ext || storedState.ext;
+    }
+
+    if (widgetEntry.sourceContent === undefined) {
+      const fallbackState = storedState ?? createFallbackState(fileId.value, filePath);
+      return {
+        fileState: fallbackState,
+        savedContent: stored?.savedContent ?? fallbackState.content,
+        shouldPersist: false,
+        loadError: widgetEntry.loadError ? `无法读取 Widget 文件：${widgetEntry.loadError}` : 'Widget Store 未提供入口文件内容'
+      };
+    }
+
+    const currentMeta = parseFileName(filePath);
+    const sourceFile: ReadFileResult = {
+      name: currentMeta.name,
+      ext: currentMeta.ext,
+      content: widgetEntry.sourceContent
+    };
+    const sourceState = createSourceState(fileId.value, filePath, sourceFile);
     if (!storedState || stored?.savedContent === undefined) {
-      return { fileState: diskState, savedContent: diskFile.content, shouldPersist: true, loadError: null };
+      return { fileState: sourceState, savedContent: sourceFile.content, shouldPersist: true, loadError: null };
     }
 
     const savedBaseline = stored.savedContent;
-    const currentMeta = parseFileName(filePath);
     const hasUnsavedDraft = storedState.content !== savedBaseline;
     const decision = resolveFileReconcileDecision({
       currentContent: storedState.content,
       savedContent: savedBaseline,
       currentName: storedState.name,
       currentExt: storedState.ext,
-      diskFile,
+      diskFile: sourceFile,
       diskName: currentMeta.name,
       diskExt: currentMeta.ext,
       hasUnsavedDraft
@@ -362,7 +362,7 @@ export function useSession(): WidgetSessionReturn {
     }
 
     if (decision === 'applyDisk') {
-      return { fileState: diskState, savedContent: diskFile.content, shouldPersist: true, loadError: null };
+      return { fileState: sourceState, savedContent: sourceFile.content, shouldPersist: true, loadError: null };
     }
 
     const [cancelled] = await Modal.confirm('发现内容冲突', '当前 Widget 有未保存草稿，同时磁盘内容也已变化。是否使用磁盘中的最新内容？', {
@@ -372,7 +372,15 @@ export function useSession(): WidgetSessionReturn {
 
     return cancelled
       ? { fileState: storedState, savedContent: savedBaseline, shouldPersist: true, loadError: null }
-      : { fileState: diskState, savedContent: diskFile.content, shouldPersist: true, loadError: null };
+      : { fileState: sourceState, savedContent: sourceFile.content, shouldPersist: true, loadError: null };
+  }
+
+  /**
+   * 将应用已接受的 Widget 原文同步到 Store。
+   * @param content - 最新 widget.json 原文
+   */
+  function syncWidgetContent(content: string): void {
+    widgetStore.updateWidgetContent(resolveWidgetId(fileId.value), content);
   }
 
   /**
@@ -525,6 +533,7 @@ export function useSession(): WidgetSessionReturn {
 
     try {
       await native.writeFile(filePath, contentToSave);
+      syncWidgetContent(contentToSave);
       await markContentSaved(contentToSave);
       return { status: 'saved' };
     } catch (error: unknown) {
@@ -564,6 +573,7 @@ export function useSession(): WidgetSessionReturn {
       ext: ext || fileState.value.ext
     };
     addFileSuppression(savedPath, contentToSave);
+    syncWidgetContent(contentToSave);
     await markContentSaved(contentToSave);
     return true;
   }
@@ -589,6 +599,8 @@ export function useSession(): WidgetSessionReturn {
    * @param content - 外部 Widget JSON 内容
    */
   async function applyExternalContent(content: string): Promise<void> {
+    // 用户已接受该磁盘快照；即使 JSON 无效，也要让 Store 缓存原文和解析错误。
+    syncWidgetContent(content);
     const parsedContent = parseWidgetContent(content, fileState.value.path);
     if (parsedContent.parseError) {
       loadError.value = `Widget JSON 解析失败：${parsedContent.parseError}`;

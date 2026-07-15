@@ -46,7 +46,7 @@ const USER_MESSAGE: Message = {
 };
 
 describe('useRuntimeRequestConfig', (): void => {
-  it('synchronizes resources before resolving a complete request', async (): Promise<void> => {
+  it('fetches resources before resolving tool and Skill snapshots', async (): Promise<void> => {
     const order: string[] = [];
     const hook = useRuntimeRequestConfig({
       contextWindow: ref(32000),
@@ -55,11 +55,17 @@ describe('useRuntimeRequestConfig', (): void => {
         order.push('service');
         return { providerId: 'provider', modelId: 'model', toolSupport: { supported: true, reason: 'supported' } };
       }),
-      syncAIResources: vi.fn(async (): Promise<void> => {
-        order.push('sync');
+      getAIResources: vi.fn(async (): Promise<void> => {
+        order.push('fetch');
       }),
-      getActiveTools: vi.fn(() => [createTool('edit_memory')]),
-      getSkillContentHashes: vi.fn(() => ({ weather: 'hash-1' })),
+      getActiveTools: vi.fn(() => {
+        order.push('tools');
+        return [createTool('edit_memory')];
+      }),
+      getSkillContentHashes: vi.fn(() => {
+        order.push('hashes');
+        return { weather: 'hash-1' };
+      }),
       resolveRuntimeSystemPrompt: vi.fn(async () => 'system'),
       resolveRuntimeTavilyConfig: vi.fn(() => undefined),
       resolveRuntimeMcpRequestConfig: vi.fn(() => undefined),
@@ -78,19 +84,19 @@ describe('useRuntimeRequestConfig', (): void => {
       }
     ]);
 
-    expect(order).toEqual(['service', 'sync']);
+    expect(order).toEqual(['service', 'fetch', 'tools', 'hashes']);
     expect(prepared?.config.skillContentHashes).toEqual({ weather: 'hash-1' });
     expect(prepared?.memorySelection).toMatchObject({ mode: 'full', references: ['/notes/a.md', '/notes/b.md'] });
   });
 
   it('reports missing model configuration without synchronizing resources', async (): Promise<void> => {
     const onMissingServiceConfig = vi.fn();
-    const syncAIResources = vi.fn();
+    const getAIResources = vi.fn();
     const hook = useRuntimeRequestConfig({
       contextWindow: ref(8000),
       workspaceRoot: ref(''),
       resolveServiceConfig: vi.fn(async () => undefined),
-      syncAIResources,
+      getAIResources,
       getActiveTools: vi.fn(() => []),
       getSkillContentHashes: vi.fn(() => ({})),
       resolveRuntimeSystemPrompt: vi.fn(async () => undefined),
@@ -101,6 +107,6 @@ describe('useRuntimeRequestConfig', (): void => {
 
     expect(await hook.prepareRuntimeRequest(USER_MESSAGE)).toBeNull();
     expect(onMissingServiceConfig).toHaveBeenCalledOnce();
-    expect(syncAIResources).not.toHaveBeenCalled();
+    expect(getAIResources).not.toHaveBeenCalled();
   });
 });

@@ -3,9 +3,9 @@
  * @description 验证 Widget 工具按小组件名称与说明暴露可用小组件契约。
  */
 import type { AIToolContext } from 'types/ai';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createOpenWidgetTool, createWidgetTool, OPEN_WIDGET_TOOL_NAME, WIDGET_TOOL_NAME, type WidgetStoreLike } from '@/ai/tools/builtin/WidgetTool';
-import type { WidgetDefinition } from '@/ai/widget/types';
+import type { WidgetDefinition, WidgetEntry } from '@/ai/widget/types';
 import type { WidgetData } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
@@ -52,8 +52,25 @@ function createWeatherWidget(): WidgetDefinition {
     data,
     filePath: '/home/.tibis/widgets/weather/widget.json',
     dirPath: '/home/.tibis/widgets/weather',
-    enabled: true,
     parsedAt: 1
+  };
+}
+
+/**
+ * 创建已加载 Widget Store 条目。
+ * @param definition - Widget 解析定义
+ * @param enabled - 是否启用
+ * @returns 已加载 Store 条目
+ */
+function createWidgetEntry(definition: WidgetDefinition, enabled = true): WidgetEntry {
+  return {
+    id: definition.id,
+    dirPath: definition.dirPath,
+    filePath: definition.filePath,
+    enabled,
+    revision: 1,
+    sourceContent: JSON.stringify(definition.data),
+    definition
   };
 }
 
@@ -62,12 +79,14 @@ function createWeatherWidget(): WidgetDefinition {
  * @param widgets - 可用小组件列表
  * @returns Widget Store 夹具
  */
-function createWidgetStore(widgets: WidgetDefinition[], latestWidgets: WidgetDefinition[] = widgets): WidgetStoreLike {
+function createWidgetStore(widgets: WidgetEntry[], latestWidgets: WidgetEntry[] = widgets): WidgetStoreLike {
   return {
     initialized: true,
-    getEnabledWidgets: (): WidgetDefinition[] => widgets.filter((widget: WidgetDefinition): boolean => widget.enabled && !widget.parseError),
-    resolveLatestEnabledWidget: async (id: string): Promise<WidgetDefinition | undefined> =>
-      latestWidgets.find((widget: WidgetDefinition): boolean => widget.id === id && widget.enabled)
+    getEnabledWidgets: (): WidgetEntry[] => widgets.filter((widget: WidgetEntry): boolean => widget.enabled && !widget.definition?.parseError),
+    getWidget: vi.fn(async (id: string): Promise<WidgetEntry | undefined> => {
+      const widget = latestWidgets.find((entry: WidgetEntry): boolean => entry.id === id);
+      return widget;
+    })
   } as WidgetStoreLike;
 }
 
@@ -82,7 +101,7 @@ function readDescription(tool: ReturnType<typeof createWidgetTool>): string {
 
 describe('WidgetTool', (): void => {
   it('lists enabled widgets by id, name and description without reading metadata.skill', (): void => {
-    const tool = createWidgetTool(createWidgetStore([createWeatherWidget()]));
+    const tool = createWidgetTool(createWidgetStore([createWidgetEntry(createWeatherWidget())]));
     const description = readDescription(tool);
 
     expect(tool.definition.name).toBe(WIDGET_TOOL_NAME);
@@ -91,9 +110,11 @@ describe('WidgetTool', (): void => {
   });
 
   it('loads widget contract by stable id', async (): Promise<void> => {
-    const tool = createWidgetTool(createWidgetStore([createWeatherWidget()]));
+    const store = createWidgetStore([createWidgetEntry(createWeatherWidget())]);
+    const tool = createWidgetTool(store);
     const result = await tool.execute({ id: 'weather' });
 
+    expect(store.getWidget).toHaveBeenCalledWith('weather');
     expect(result).toMatchObject({
       toolName: WIDGET_TOOL_NAME,
       status: 'success',
@@ -120,8 +141,8 @@ describe('WidgetTool', (): void => {
   });
 
   it('loads the widget contract from the execution-time Store resolver', async (): Promise<void> => {
-    const oldWidget = createWeatherWidget();
-    const latestWidget = {
+    const oldWidget = createWidgetEntry(createWeatherWidget());
+    const latestDefinition: WidgetDefinition = {
       ...createWeatherWidget(),
       description: '执行时最新描述',
       data: {
@@ -129,7 +150,7 @@ describe('WidgetTool', (): void => {
         description: '执行时最新描述'
       }
     };
-    const tool = createWidgetTool(createWidgetStore([oldWidget], [latestWidget]));
+    const tool = createWidgetTool(createWidgetStore([oldWidget], [createWidgetEntry(latestDefinition)]));
 
     const result = await tool.execute({ id: 'weather' });
 
@@ -142,12 +163,12 @@ describe('WidgetTool', (): void => {
   });
 
   it('fails explicitly when the execution-time Widget source is invalid', async (): Promise<void> => {
-    const oldWidget = createWeatherWidget();
-    const invalidWidget = {
+    const oldWidget = createWidgetEntry(createWeatherWidget());
+    const invalidDefinition: WidgetDefinition = {
       ...createWeatherWidget(),
       parseError: 'Unexpected token'
     };
-    const tool = createWidgetTool(createWidgetStore([oldWidget], [invalidWidget]));
+    const tool = createWidgetTool(createWidgetStore([oldWidget], [createWidgetEntry(invalidDefinition)]));
 
     const result = await tool.execute({ id: 'weather' });
 
@@ -161,7 +182,7 @@ describe('WidgetTool', (): void => {
   });
 
   it('fails when widget id is not found', async (): Promise<void> => {
-    const tool = createWidgetTool(createWidgetStore([createWeatherWidget()]));
+    const tool = createWidgetTool(createWidgetStore([createWidgetEntry(createWeatherWidget())]));
     const result = await tool.execute({ id: 'coffee' });
 
     expect(result).toMatchObject({
@@ -175,7 +196,7 @@ describe('WidgetTool', (): void => {
   });
 
   it('does not inspect disabled widgets', async (): Promise<void> => {
-    const tool = createWidgetTool(createWidgetStore([{ ...createWeatherWidget(), enabled: false }]));
+    const tool = createWidgetTool(createWidgetStore([createWidgetEntry(createWeatherWidget(), false)]));
     const result = await tool.execute({ id: 'weather' });
 
     expect(result).toMatchObject({
@@ -188,7 +209,8 @@ describe('WidgetTool', (): void => {
   });
 
   it('creates a renderable widget snapshot through open widget tool', async (): Promise<void> => {
-    const tool = createOpenWidgetTool(createWidgetStore([createWeatherWidget()]));
+    const store = createWidgetStore([createWidgetEntry(createWeatherWidget())]);
+    const tool = createOpenWidgetTool(store);
     const result = await tool.execute(
       {
         id: 'weather',
@@ -200,6 +222,7 @@ describe('WidgetTool', (): void => {
     );
 
     expect(tool.definition.name).toBe(OPEN_WIDGET_TOOL_NAME);
+    expect(store.getWidget).toHaveBeenCalledWith('weather');
     expect(tool.definition.parameters.properties).not.toHaveProperty('state');
     expect(tool.definition.parameters.properties).not.toHaveProperty('output');
     expect(result).toMatchObject({
@@ -228,7 +251,7 @@ describe('WidgetTool', (): void => {
   });
 
   it('opens widget without input values', async (): Promise<void> => {
-    const tool = createOpenWidgetTool(createWidgetStore([createWeatherWidget()]));
+    const tool = createOpenWidgetTool(createWidgetStore([createWidgetEntry(createWeatherWidget())]));
     const result = await tool.execute({ id: 'weather' }, { toolCallId: 'tool-call-widget' } as AIToolContext);
 
     expect(result).toMatchObject({
@@ -249,7 +272,7 @@ describe('WidgetTool', (): void => {
   });
 
   it('does not open disabled widgets', async (): Promise<void> => {
-    const tool = createOpenWidgetTool(createWidgetStore([{ ...createWeatherWidget(), enabled: false }]));
+    const tool = createOpenWidgetTool(createWidgetStore([createWidgetEntry(createWeatherWidget(), false)]));
     const result = await tool.execute({ id: 'weather' }, { toolCallId: 'tool-call-widget' } as AIToolContext);
 
     expect(result).toMatchObject({

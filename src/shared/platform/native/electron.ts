@@ -1,6 +1,7 @@
 /* eslint-disable class-methods-use-this */
 import type {
   Native,
+  DirectoryChangeEvent,
   ExportPdfOptions,
   FilePathStatus,
   OpenFileOptions,
@@ -164,16 +165,29 @@ export class ElectronNative implements Native {
     return getElectronAPI().onFileChanged(callback);
   }
 
-  async watchDirectory(dirPath: string, globPattern?: string): Promise<void> {
-    await getElectronAPI().watchDirectory(dirPath, globPattern);
+  /**
+   * 监听资源根目录的直接子目录。
+   * @param rootPath - Skill 或 Widget 资源根目录
+   */
+  async watchResourceDirectory(rootPath: string): Promise<void> {
+    await getElectronAPI().watchResourceDirectory(rootPath);
   }
 
-  async unwatchDirectory(dirPath: string, globPattern?: string): Promise<void> {
-    await getElectronAPI().unwatchDirectory(dirPath, globPattern);
+  /**
+   * 停止监听资源根目录的直接子目录。
+   * @param rootPath - Skill 或 Widget 资源根目录
+   */
+  async unwatchResourceDirectory(rootPath: string): Promise<void> {
+    await getElectronAPI().unwatchResourceDirectory(rootPath);
   }
 
-  onSkillChanged(callback: (data: { type: string; filePath: string; content?: string }) => void): () => void {
-    return getElectronAPI().onSkillChanged(callback);
+  /**
+   * 订阅资源目录变化。
+   * @param callback - 目录变化回调
+   * @returns 取消订阅函数
+   */
+  onDirectoryChanged(callback: (data: DirectoryChangeEvent) => void): () => void {
+    return getElectronAPI().onDirectoryChanged(callback);
   }
 
   async setWindowTitle(title: string): Promise<void> {

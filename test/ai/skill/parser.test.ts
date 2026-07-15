@@ -20,4 +20,11 @@ describe('parseSkillMarkdown content hash', (): void => {
 
     expect(parseSkillMarkdown(source, '/skills/broken/SKILL.md').contentHash).toBe(hashString(source));
   });
+
+  it('leaves enablement ownership to the Skill entry', (): void => {
+    const source = ['---', 'name: weather', 'description: Weather instructions', '---', 'Read weather data.'].join('\n');
+
+    expect(parseSkillMarkdown(source, '/skills/weather/SKILL.md')).not.toHaveProperty('enabled');
+    expect(parseSkillMarkdown('broken', '/skills/broken/SKILL.md')).not.toHaveProperty('enabled');
+  });
 });

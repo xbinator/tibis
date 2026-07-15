@@ -93,7 +93,6 @@ function createWidgetParseError(filePath: string, message: string, contentHash: 
     contentHash,
     filePath: normalizedFilePath,
     dirPath: posix.dirname(normalizedFilePath),
-    enabled: true,
     parsedAt: Date.now(),
     parseError: message
   };
@@ -127,7 +126,6 @@ export function parseWidgetJson(content: string, filePath: string): WidgetDefini
       contentHash,
       filePath: normalizedFilePath,
       dirPath: posix.dirname(normalizedFilePath),
-      enabled: true,
       parsedAt: Date.now()
     };
   } catch (error: unknown) {

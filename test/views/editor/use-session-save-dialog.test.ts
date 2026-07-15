@@ -6,7 +6,9 @@
 import { defineComponent, ref } from 'vue';
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { FileChangeEvent } from '@/shared/platform/native/types';
 import type { StoredFile, StoredWidget } from '@/shared/storage/files/types';
+import { type FileSavedPayload, storeEvents } from '@/stores/helpers/events';
 import { useSession } from '@/views/editor/hooks/useSession';
 
 const getFileByIdMock = vi.hoisted(() => vi.fn());
@@ -18,6 +20,7 @@ const clearMissingMock = vi.hoisted(() => vi.fn());
 const isDirtyMock = vi.hoisted(() => vi.fn());
 const isMissingMock = vi.hoisted(() => vi.fn());
 const saveFileMock = vi.hoisted(() => vi.fn());
+const writeFileMock = vi.hoisted(() => vi.fn());
 const readFileMock = vi.hoisted(() => vi.fn());
 const registerWatchMock = vi.hoisted(() => vi.fn());
 const unregisterWatchMock = vi.hoisted(() => vi.fn());
@@ -30,6 +33,8 @@ const finishReloadMock = vi.hoisted(() => vi.fn());
 const suppressNextChangeMock = vi.hoisted(() => vi.fn());
 const clearSuppressedChangeMock = vi.hoisted(() => vi.fn());
 const routerPushMock = vi.hoisted(() => vi.fn());
+/** 通用编辑器当前注册的外部文件变化回调。 */
+let externalFileChangedHandler: ((event: FileChangeEvent) => void) | null = null;
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({
@@ -103,7 +108,7 @@ vi.mock('@/shared/platform', () => ({
   native: {
     readFile: readFileMock,
     saveFile: saveFileMock,
-    writeFile: vi.fn(),
+    writeFile: writeFileMock,
     renameFile: vi.fn(),
     showItemInFolder: vi.fn(),
     getRelativePath: vi.fn()
@@ -189,6 +194,18 @@ function mountSessionHost(): ReturnType<typeof mount> {
   );
 }
 
+/**
+ * 监听应用内文件保存事件。
+ * @returns 事件处理 mock 与清理函数
+ */
+function observeFileSaved(): { handler: ReturnType<typeof vi.fn<(payload: FileSavedPayload) => void>>; cleanup: () => void } {
+  const handler = vi.fn<(payload: FileSavedPayload) => void>();
+  return {
+    handler,
+    cleanup: storeEvents.onFileSaved(handler)
+  };
+}
+
 describe('useSession save dialog', (): void => {
   beforeEach((): void => {
     getFileByIdMock.mockReset();
@@ -200,6 +217,7 @@ describe('useSession save dialog', (): void => {
     isDirtyMock.mockReset();
     isMissingMock.mockReset();
     saveFileMock.mockReset();
+    writeFileMock.mockReset().mockResolvedValue(undefined);
     readFileMock.mockReset();
     registerWatchMock.mockReset();
     unregisterWatchMock.mockReset();
@@ -207,6 +225,10 @@ describe('useSession save dialog', (): void => {
     switchWatchedFileMock.mockReset();
     clearWatchedFileMock.mockReset();
     setOnFileChangedMock.mockReset();
+    externalFileChangedHandler = null;
+    setOnFileChangedMock.mockImplementation((handler: (event: FileChangeEvent) => void): void => {
+      externalFileChangedHandler = handler;
+    });
     setIsDirtyMock.mockReset();
     finishReloadMock.mockReset();
     suppressNextChangeMock.mockReset();
@@ -222,6 +244,7 @@ describe('useSession save dialog', (): void => {
   });
 
   it('registers self-write suppression before switching watcher after save-as overwrites the watched path', async (): Promise<void> => {
+    const observer = observeFileSaved();
     const wrapper = mountSessionHost();
 
     await flushPromises();
@@ -232,9 +255,12 @@ describe('useSession save dialog', (): void => {
 
     expect(suppressNextChangeMock).toHaveBeenCalledWith(FILE_PATH, FILE_CONTENT);
     expect(suppressNextChangeMock.mock.invocationCallOrder[0]).toBeLessThan(saveFileMock.mock.invocationCallOrder[0]);
+    expect(observer.handler).toHaveBeenCalledWith({ filePath: FILE_PATH, content: FILE_CONTENT });
+    observer.cleanup();
   });
 
   it('clears pre-registered self-write suppression when save-as dialog is cancelled', async (): Promise<void> => {
+    const observer = observeFileSaved();
     saveFileMock.mockResolvedValue(null);
     const wrapper = mountSessionHost();
 
@@ -246,6 +272,48 @@ describe('useSession save dialog', (): void => {
 
     expect(suppressNextChangeMock).toHaveBeenCalledWith(FILE_PATH, FILE_CONTENT);
     expect(clearSuppressedChangeMock).toHaveBeenCalledWith(FILE_PATH);
+    expect(observer.handler).not.toHaveBeenCalled();
+    observer.cleanup();
+  });
+
+  it('emits the saved content after writing an existing file path', async (): Promise<void> => {
+    const observer = observeFileSaved();
+    const wrapper = mountSessionHost();
+    await flushPromises();
+
+    await (wrapper.vm as unknown as SessionExpose).session.actions.onSave();
+
+    expect(writeFileMock).toHaveBeenCalledWith(FILE_PATH, FILE_CONTENT);
+    expect(observer.handler).toHaveBeenCalledWith({ filePath: FILE_PATH, content: FILE_CONTENT });
+    observer.cleanup();
+  });
+
+  it('emits the restored content after recreating a missing file', async (): Promise<void> => {
+    const observer = observeFileSaved();
+    isMissingMock.mockReturnValue(true);
+    readFileMock.mockRejectedValue(new Error('missing'));
+    const wrapper = mountSessionHost();
+    await flushPromises();
+
+    await (wrapper.vm as unknown as SessionExpose).session.actions.onSave();
+
+    expect(writeFileMock).toHaveBeenCalledWith(FILE_PATH, FILE_CONTENT);
+    expect(observer.handler).toHaveBeenCalledWith({ filePath: FILE_PATH, content: FILE_CONTENT });
+    observer.cleanup();
+  });
+
+  it('emits accepted external content for resource Store synchronization', async (): Promise<void> => {
+    const observer = observeFileSaved();
+    const wrapper = mountSessionHost();
+    const externalContent = '# Externally updated';
+    await flushPromises();
+
+    externalFileChangedHandler?.({ type: 'change', filePath: FILE_PATH, content: externalContent });
+    await flushPromises();
+
+    expect(observer.handler).toHaveBeenCalledWith({ filePath: FILE_PATH, content: externalContent });
+    expect((wrapper.vm as unknown as SessionExpose).session.fileState.value.content).toBe(externalContent);
+    observer.cleanup();
   });
 
   it('redirects widget records away from the editor without replacing the stored record', async (): Promise<void> => {

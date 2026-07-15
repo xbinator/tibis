@@ -1,6 +1,6 @@
 /**
  * @file watch.mts
- * @description 提供主进程文件变化监听服务，支持文件级和目录级监听，并向所有窗口广播事件。
+ * @description 提供主进程文件与资源目录变化监听服务，并向所有窗口广播事件。
  */
 
 import fs from 'node:fs';
@@ -20,6 +20,41 @@ const RECREATE_WINDOW_MS = 300;
 type FileWatcher = ReturnType<typeof chokidar.watch>;
 
 /**
+ * 记录资源目录 watcher 的运行期错误，避免未处理的 error 事件终止主进程。
+ * @param error - Chokidar 错误
+ */
+function handleResourceWatcherError(error: unknown): void {
+  console.error('ResourceDirectoryWatchService error:', error);
+}
+
+/**
+ * 等待 Chokidar 完成首次目录遍历。
+ * @param watcher - Chokidar watcher
+ * @returns watcher ready 信号
+ */
+function waitForWatcherReady(watcher: FileWatcher): Promise<void> {
+  return new Promise<void>((resolve: () => void, reject: (error: unknown) => void): void => {
+    /** ready 前的临时错误处理器。 */
+    let handleError: (error: unknown) => void;
+
+    /** 完成 watcher 注册。 */
+    function handleReady(): void {
+      watcher.off('error', handleError);
+      resolve();
+    }
+
+    /** 拒绝 watcher 注册。 */
+    handleError = (error: unknown): void => {
+      watcher.off('ready', handleReady);
+      reject(error);
+    };
+
+    watcher.once('ready', handleReady);
+    watcher.once('error', handleError);
+  });
+}
+
+/**
  * 统一监听路径分隔符，避免 Windows 反斜杠影响匹配。
  * @param filePath - 原始文件路径
  * @returns 使用 / 分隔的路径
@@ -29,87 +64,31 @@ function normalizeWatchPath(filePath: string): string {
 }
 
 /**
- * 获取跨平台文件名。
- * @param filePath - 原始文件路径
- * @returns 文件名
+ * 判断目录是否为资源根目录下的直接可见子目录。
+ * @param dirPath - 待判断目录路径
+ * @param rootPath - 资源根目录路径
+ * @returns 仅直接且非隐藏子目录返回 true
  */
-function getWatchPathBasename(filePath: string): string {
-  const normalizedPath = normalizeWatchPath(filePath);
-  const index = normalizedPath.lastIndexOf('/');
-  return index === -1 ? normalizedPath : normalizedPath.slice(index + 1);
-}
-
-/**
- * 获取跨平台文件扩展名。
- * @param filePath - 原始文件路径
- * @returns 小写扩展名，包含前导点
- */
-function getWatchPathExtname(filePath: string): string {
-  const basename = getWatchPathBasename(filePath);
-  const index = basename.lastIndexOf('.');
-  return index > 0 ? basename.slice(index).toLowerCase() : '';
-}
-
-/**
- * 判断路径是否位于安装临时目录或备份目录中。
- * @param filePath - 原始文件路径
- * @returns 位于安装中间目录时返回 true
- */
-function isInstallerScratchPath(filePath: string): boolean {
-  return normalizeWatchPath(filePath)
-    .split('/')
-    .some((segment: string): boolean => segment.startsWith('.tmp-') || segment.startsWith('.bak-'));
-}
-
-/**
- * 判断文件是否位于被监听根目录下的隐藏目录。
- * @param filePath - 原始文件路径
- * @param rootDirPath - 被监听根目录路径
- * @returns 位于隐藏目录时返回 true
- */
-function isHiddenPathUnderWatchRoot(filePath: string, rootDirPath: string | undefined): boolean {
-  if (!rootDirPath) return false;
-
-  const normalizedPath = normalizeWatchPath(filePath);
-  const normalizedRoot = normalizeWatchPath(rootDirPath).replace(/\/+$/u, '');
-  const relativePath = normalizedPath.startsWith(`${normalizedRoot}/`) ? normalizedPath.slice(normalizedRoot.length + 1) : normalizedPath;
-  const directorySegments = relativePath.split('/').slice(0, -1);
-
-  return directorySegments.some((segment: string): boolean => segment.startsWith('.'));
-}
-
-/**
- * 判断目录监听事件是否匹配请求的 skill 文件模式。
- * @param filePath - 变更文件路径
- * @param globPattern - 调用方传入的匹配模式
- * @param rootDirPath - 被监听根目录路径
- * @returns 是否应该广播 skill 变更事件
- */
-export function isDirectoryWatchMatch(filePath: string, globPattern: string, rootDirPath?: string): boolean {
-  if (isInstallerScratchPath(filePath) || isHiddenPathUnderWatchRoot(filePath, rootDirPath)) {
+export function isResourceDirectory(dirPath: string, rootPath: string): boolean {
+  const normalizedRoot = normalizeWatchPath(rootPath).replace(/\/+$/u, '');
+  const normalizedDir = normalizeWatchPath(dirPath).replace(/\/+$/u, '');
+  if (!normalizedDir.startsWith(`${normalizedRoot}/`)) {
     return false;
   }
 
-  if (globPattern.endsWith('SKILL.md')) {
-    return getWatchPathBasename(filePath) === 'SKILL.md';
-  }
-
-  if (globPattern.endsWith('*.md')) {
-    return getWatchPathExtname(filePath) === '.md';
-  }
-
-  return getWatchPathBasename(filePath) === getWatchPathBasename(globPattern);
+  const relativePath = normalizedDir.slice(normalizedRoot.length + 1);
+  return relativePath.length > 0 && !relativePath.includes('/') && !relativePath.startsWith('.');
 }
 
 /**
  * 主进程文件监听服务，支持多个路径同时监听。
  */
-class FileWatchService {
+export class FileWatchService {
   /** 按文件路径保存已创建的 watcher。 */
   private readonly watchers = new Map<string, FileWatcher>();
 
-  /** 按目录路径保存已创建的目录 watcher。 */
-  private readonly directoryWatchers = new Map<string, FileWatcher>();
+  /** 按资源根目录保存直接子目录 watcher。 */
+  private readonly resourceDirectoryWatchers = new Map<string, FileWatcher>();
 
   /** unlink 防抖定时器，用于合并 git 回退等场景的 unlink → add 序列。 */
   private readonly pendingUnlinks = new Map<string, NodeJS.Timeout>();
@@ -135,6 +114,7 @@ class FileWatchService {
 
     const watcher = chokidar.watch(filePath, {
       persistent: true,
+      ignoreInitial: true,
       awaitWriteFinish: {
         stabilityThreshold: 100,
         pollInterval: 100
@@ -197,76 +177,66 @@ class FileWatchService {
   }
 
   /**
-   * 注册指定目录的监听，匹配 glob 模式的文件变化时广播 skill:changed 事件。
-   * @param dirPath - 需要监听的目录路径
-   * @param globPattern - 文件匹配模式
+   * 监听资源根目录的直接子目录新增与删除。
+   * @param rootPath - Skill 或 Widget 资源根目录
    */
-  async watchDirectory(dirPath: string, globPattern = `**/SKILL.md`): Promise<void> {
-    const watcherKey = `${dirPath}:${globPattern}`;
-    if (this.directoryWatchers.has(watcherKey)) return;
+  async watchResourceDirectory(rootPath: string): Promise<void> {
+    const normalizedRoot = normalizeWatchPath(rootPath).replace(/\/+$/u, '');
+    if (this.resourceDirectoryWatchers.has(normalizedRoot)) {
+      return;
+    }
 
-    const watcher = chokidar.watch(dirPath, {
+    const watcher = chokidar.watch(rootPath, {
       persistent: true,
       ignoreInitial: true,
-      depth: 3,
-      ignored: ['**/node_modules/**', '**/.git/**', '**/.tmp-*/**', '**/.bak-*/**'],
-      awaitWriteFinish: {
-        stabilityThreshold: 100,
-        pollInterval: 100
+      depth: 0
+    });
+    watcher.on('error', handleResourceWatcherError);
+    watcher.on('addDir', (dirPath: string) => {
+      if (isResourceDirectory(dirPath, normalizedRoot)) {
+        this.notifyWindowsDirectory('add', normalizedRoot, normalizeWatchPath(dirPath));
       }
     });
-
-    watcher.on('change', async (changedPath: string) => {
-      if (!isDirectoryWatchMatch(changedPath, globPattern, dirPath)) return;
-      try {
-        const content = await fsPromises.readFile(changedPath, 'utf-8');
-        this.notifyWindowsSkill('change', changedPath, content);
-      } catch (error: unknown) {
-        console.error('DirectoryWatchService read error:', error);
+    watcher.on('unlinkDir', (dirPath: string) => {
+      if (isResourceDirectory(dirPath, normalizedRoot)) {
+        this.notifyWindowsDirectory('unlink', normalizedRoot, normalizeWatchPath(dirPath));
       }
     });
-
-    watcher.on('add', async (addedPath: string) => {
-      if (!isDirectoryWatchMatch(addedPath, globPattern, dirPath)) return;
-      try {
-        const content = await fsPromises.readFile(addedPath, 'utf-8');
-        this.notifyWindowsSkill('add', addedPath, content);
-      } catch (error: unknown) {
-        console.error('DirectoryWatchService read error on add:', error);
-      }
-    });
-
-    watcher.on('unlink', (removedPath: string) => {
-      if (!isDirectoryWatchMatch(removedPath, globPattern, dirPath)) return;
-      this.notifyWindowsSkill('unlink', removedPath);
-    });
-
-    this.directoryWatchers.set(watcherKey, watcher);
+    this.resourceDirectoryWatchers.set(normalizedRoot, watcher);
+    try {
+      // ready 之后再让 renderer 开始扫描，封住 watcher 初次遍历期间的事件窗口。
+      await waitForWatcherReady(watcher);
+    } catch (error: unknown) {
+      this.resourceDirectoryWatchers.delete(normalizedRoot);
+      await watcher.close();
+      throw error;
+    }
   }
 
   /**
-   * 停止监听指定目录。
-   * @param dirPath - 需要停止监听的目录路径
-   * @param globPattern - 文件匹配模式
+   * 停止监听资源根目录。
+   * @param rootPath - Skill 或 Widget 资源根目录
    */
-  async unwatchDirectory(dirPath: string, globPattern = `**/SKILL.md`): Promise<void> {
-    const watcherKey = `${dirPath}:${globPattern}`;
-    const watcher = this.directoryWatchers.get(watcherKey);
-    if (!watcher) return;
+  async unwatchResourceDirectory(rootPath: string): Promise<void> {
+    const normalizedRoot = normalizeWatchPath(rootPath).replace(/\/+$/u, '');
+    const watcher = this.resourceDirectoryWatchers.get(normalizedRoot);
+    if (!watcher) {
+      return;
+    }
 
-    this.directoryWatchers.delete(watcherKey);
+    this.resourceDirectoryWatchers.delete(normalizedRoot);
     await watcher.close();
   }
 
   /**
-   * 向所有窗口广播 skill 目录变化事件。
-   * @param type - 事件类型
-   * @param filePath - 文件路径
-   * @param content - 文件内容（仅 change/add 事件携带）
+   * 向所有窗口广播资源目录变化事件。
+   * @param type - 目录事件类型
+   * @param rootPath - 被监听的资源根目录
+   * @param dirPath - 新增或删除的直接子目录
    */
-  private notifyWindowsSkill(type: 'change' | 'add' | 'unlink', filePath: string, content?: string): void {
+  private notifyWindowsDirectory(type: 'add' | 'unlink', rootPath: string, dirPath: string): void {
     BrowserWindow.getAllWindows().forEach((win) => {
-      win.webContents.send('skill:changed', { type, filePath, content });
+      win.webContents.send('directory:changed', { type, rootPath, dirPath });
     });
   }
 
@@ -275,10 +245,10 @@ class FileWatchService {
    */
   async unwatchAll(): Promise<void> {
     const fileWatchers = Array.from(this.watchers.values());
-    const dirWatchers = Array.from(this.directoryWatchers.values());
+    const resourceDirectoryWatchers = Array.from(this.resourceDirectoryWatchers.values());
     this.watchers.clear();
-    this.directoryWatchers.clear();
-    await Promise.all([...fileWatchers, ...dirWatchers].map((w) => w.close()));
+    this.resourceDirectoryWatchers.clear();
+    await Promise.all([...fileWatchers, ...resourceDirectoryWatchers].map((w) => w.close()));
   }
 }
 

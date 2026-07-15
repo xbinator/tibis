@@ -15,6 +15,7 @@ import type { ReadFileResult } from '@/shared/platform/native/types';
 import type { StoredDocumentRecord, StoredFile } from '@/shared/storage';
 import { useEditorFileWatchStore } from '@/stores/editor/fileWatch';
 import { useEditorPreferencesStore } from '@/stores/editor/preferences';
+import { storeEvents } from '@/stores/helpers/events';
 import { useFilesStore } from '@/stores/workspace/files';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import { resolveFileTitle } from '@/utils/file/title';
@@ -157,6 +158,7 @@ export function useSession(fileId: Ref<string>) {
 
     suppressNextChange(savedPath, contentToSave);
     await fileStateActions.finalizeSave(savedPath);
+    storeEvents.emitFileSaved(savedPath, contentToSave);
     await updateGlobalWatchPath(fileId.value, savedPath);
     tabsStore.clearMissing(fileId.value);
     return true;
@@ -181,9 +183,11 @@ export function useSession(fileId: Ref<string>) {
    * @param filePath - 写入目标路径
    */
   async function restoreCurrentFileAtPath(filePath: string): Promise<void> {
-    suppressNextChange(filePath, fileState.value.content);
-    await native.writeFile(filePath, fileState.value.content);
+    const contentToSave = fileState.value.content;
+    suppressNextChange(filePath, contentToSave);
+    await native.writeFile(filePath, contentToSave);
     await fileStateActions.markCurrentContentSaved();
+    storeEvents.emitFileSaved(filePath, contentToSave);
     await switchWatchedFile(filePath);
     await updateGlobalWatchPath(fileId.value, filePath);
     tabsStore.clearMissing(fileId.value);
@@ -201,9 +205,11 @@ export function useSession(fileId: Ref<string>) {
     }
 
     try {
-      suppressNextChange(filePath, fileState.value.content);
-      await native.writeFile(filePath, fileState.value.content);
+      const contentToSave = fileState.value.content;
+      suppressNextChange(filePath, contentToSave);
+      await native.writeFile(filePath, contentToSave);
       await fileStateActions.markCurrentContentSaved();
+      storeEvents.emitFileSaved(filePath, contentToSave);
       tabsStore.clearMissing(fileId.value);
       return { status: 'saved' };
     } catch (error) {

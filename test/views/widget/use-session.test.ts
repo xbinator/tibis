@@ -6,6 +6,7 @@
 import { defineComponent, effectScope, nextTick } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { WidgetEntry } from '@/ai/widget';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import type { FileChangeEvent } from '@/shared/platform/native/types';
 import { emitter } from '@/utils/emitter';
@@ -16,7 +17,8 @@ const addFileMock = vi.hoisted(() => vi.fn());
 const updateFileMock = vi.hoisted(() => vi.fn());
 const clearDirtyMock = vi.hoisted(() => vi.fn());
 const setDirtyMock = vi.hoisted(() => vi.fn());
-const getWidgetByIdMock = vi.hoisted(() => vi.fn());
+const getWidgetMock = vi.hoisted(() => vi.fn());
+const updateWidgetContentMock = vi.hoisted(() => vi.fn());
 const waitForInitMock = vi.hoisted(() => vi.fn());
 const readFileMock = vi.hoisted(() => vi.fn());
 const writeFileMock = vi.hoisted(() => vi.fn());
@@ -79,7 +81,8 @@ vi.mock('@/shared/platform', () => ({
 
 vi.mock('@/stores/ai/widget', () => ({
   useWidgetStore: () => ({
-    getWidgetById: getWidgetByIdMock,
+    getWidget: getWidgetMock,
+    updateWidgetContent: updateWidgetContentMock,
     waitForInit: waitForInitMock
   })
 }));
@@ -151,6 +154,32 @@ function createDeferred<T>(): DeferredPromise<T> {
 }
 
 /**
+ * 创建已加载的 Widget Store 条目。
+ * @param content - widget.json 原文
+ * @param filePath - Widget 入口文件路径
+ * @returns 已加载 Store 条目
+ */
+function createWidgetEntry(content: string, filePath = '/tmp/widgets/weather/widget.json'): WidgetEntry {
+  return {
+    id: 'weather',
+    dirPath: filePath.slice(0, filePath.lastIndexOf('/')),
+    filePath,
+    enabled: true,
+    revision: 1,
+    sourceContent: content
+  };
+}
+
+/**
+ * 配置 Widget Store 首次内容快照。
+ * @param content - widget.json 原文
+ * @param filePath - Widget 入口文件路径
+ */
+function mockWidgetContent(content: string, filePath = '/tmp/widgets/weather/widget.json'): void {
+  getWidgetMock.mockResolvedValue(createWidgetEntry(content, filePath));
+}
+
+/**
  * 等待异步文件加载完成。
  * @returns 下一轮宏任务 Promise
  */
@@ -189,7 +218,8 @@ describe('Widget useSession', (): void => {
     setDirtyMock.mockReset().mockImplementation((): void => {
       dirtyEvents.push('dirty');
     });
-    getWidgetByIdMock.mockReset();
+    getWidgetMock.mockReset();
+    updateWidgetContentMock.mockReset();
     waitForInitMock.mockReset().mockResolvedValue(undefined);
     readFileMock.mockReset();
     writeFileMock.mockReset().mockResolvedValue(undefined);
@@ -217,15 +247,7 @@ describe('Widget useSession', (): void => {
   it('syncs the Widget tab and handles file menu events through the unified session', async (): Promise<void> => {
     const diskContent = JSON.stringify({ ...createDefaultWidgetData('weather'), name: '磁盘天气' }, null, 2);
     getFileByIdMock.mockResolvedValue(undefined);
-    getWidgetByIdMock.mockReturnValue({
-      id: 'weather',
-      filePath: '/tmp/widgets/weather/widget.json'
-    });
-    readFileMock.mockResolvedValue({
-      name: 'widget',
-      ext: 'json',
-      content: diskContent
-    });
+    mockWidgetContent(diskContent);
     const wrapper = mountSession();
 
     await flushPromises();
@@ -240,6 +262,7 @@ describe('Widget useSession', (): void => {
       cacheKey: 'widget:widget-weather'
     });
     expect(writeFileMock).toHaveBeenCalledWith('/tmp/widgets/weather/widget.json', diskContent);
+    expect(updateWidgetContentMock).toHaveBeenCalledWith('weather', diskContent);
     wrapper.unmount();
   });
 
@@ -248,8 +271,7 @@ describe('Widget useSession', (): void => {
     const installedPath = '/tmp/widgets/weather/widget.json';
     const exportedPath = '/tmp/exports/weather-copy.json';
     getFileByIdMock.mockResolvedValue(undefined);
-    getWidgetByIdMock.mockReturnValue({ id: 'weather', filePath: installedPath });
-    readFileMock.mockResolvedValue({ name: 'widget', ext: 'json', content: diskContent });
+    mockWidgetContent(diskContent, installedPath);
     saveFileMock.mockResolvedValue(exportedPath);
     const scope = effectScope();
     let currentPath: string | null = null;
@@ -272,8 +294,7 @@ describe('Widget useSession', (): void => {
     const diskContent = JSON.stringify({ ...createDefaultWidgetData('weather'), name: '磁盘天气' }, null, 2);
     const installedPath = '/tmp/widgets/weather/widget.json';
     getFileByIdMock.mockResolvedValue(undefined);
-    getWidgetByIdMock.mockReturnValue({ id: 'weather', filePath: installedPath });
-    readFileMock.mockResolvedValue({ name: 'widget', ext: 'json', content: diskContent });
+    mockWidgetContent(diskContent, installedPath);
     const scope = effectScope();
 
     await scope.run(async (): Promise<void> => {
@@ -288,14 +309,10 @@ describe('Widget useSession', (): void => {
     expect(renameFileMock).not.toHaveBeenCalled();
   });
 
-  it('exposes loading state while the initial disk read is pending', async (): Promise<void> => {
-    const readDeferred = createDeferred<{ name: string; ext: string; content: string }>();
+  it('exposes loading state while the initial Store fetch is pending', async (): Promise<void> => {
+    const fetchDeferred = createDeferred<WidgetEntry>();
     getFileByIdMock.mockResolvedValue(undefined);
-    getWidgetByIdMock.mockReturnValue({
-      id: 'weather',
-      filePath: '/tmp/widgets/weather/widget.json'
-    });
-    readFileMock.mockReturnValue(readDeferred.promise);
+    getWidgetMock.mockReturnValue(fetchDeferred.promise);
     const scope = effectScope();
 
     await scope.run(async (): Promise<void> => {
@@ -304,28 +321,16 @@ describe('Widget useSession', (): void => {
       expect(session).toHaveProperty('isLoading');
       expect(session).toHaveProperty('loadError');
       expect(session).toHaveProperty('reload');
-      readDeferred.resolve({
-        name: 'widget',
-        ext: 'json',
-        content: JSON.stringify(createDefaultWidgetData('weather'), null, 2)
-      });
+      fetchDeferred.resolve(createWidgetEntry(JSON.stringify(createDefaultWidgetData('weather'), null, 2)));
       await flushPromises();
     });
     scope.stop();
   });
 
-  it('loads an installed Widget from disk when no recent record exists', async (): Promise<void> => {
+  it('loads an installed Widget from Store when no recent record exists', async (): Promise<void> => {
     const diskContent = JSON.stringify({ ...createDefaultWidgetData('weather'), name: '磁盘天气' }, null, 2);
     getFileByIdMock.mockResolvedValue(undefined);
-    getWidgetByIdMock.mockReturnValue({
-      id: 'weather',
-      filePath: '/tmp/widgets/weather/widget.json'
-    });
-    readFileMock.mockResolvedValue({
-      name: 'widget',
-      ext: 'json',
-      content: diskContent
-    });
+    mockWidgetContent(diskContent);
     const scope = effectScope();
     let loadedName = '';
 
@@ -338,8 +343,8 @@ describe('Widget useSession', (): void => {
     scope.stop();
 
     expect(waitForInitMock).toHaveBeenCalledOnce();
-    expect(getWidgetByIdMock).toHaveBeenCalledWith('weather');
-    expect(readFileMock).toHaveBeenCalledWith('/tmp/widgets/weather/widget.json');
+    expect(getWidgetMock).toHaveBeenCalledWith('weather');
+    expect(readFileMock).not.toHaveBeenCalled();
     expect(loadedName).toBe('磁盘天气');
     expect(addFileMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -353,7 +358,7 @@ describe('Widget useSession', (): void => {
     );
   });
 
-  it('refreshes a clean recent Widget from disk', async (): Promise<void> => {
+  it('refreshes a clean recent Widget from the Store snapshot', async (): Promise<void> => {
     const storedContent = JSON.stringify({ ...createDefaultWidgetData('weather'), name: '缓存天气' }, null, 2);
     const diskContent = JSON.stringify({ ...createDefaultWidgetData('weather'), name: '磁盘天气' }, null, 2);
     getFileByIdMock.mockResolvedValue({
@@ -365,11 +370,7 @@ describe('Widget useSession', (): void => {
       content: storedContent,
       savedContent: storedContent
     });
-    readFileMock.mockResolvedValue({
-      name: 'widget',
-      ext: 'json',
-      content: diskContent
-    });
+    mockWidgetContent(diskContent);
     const scope = effectScope();
     let loadedName = '';
 
@@ -403,15 +404,7 @@ describe('Widget useSession', (): void => {
       content: savedContent,
       savedContent
     });
-    getWidgetByIdMock.mockReturnValue({
-      id: 'weather',
-      filePath: '/tmp/widgets/weather/widget.json'
-    });
-    readFileMock.mockResolvedValue({
-      name: 'widget',
-      ext: 'json',
-      content: diskContent
-    });
+    mockWidgetContent(diskContent);
     const scope = effectScope();
     let loadedPath: string | null = null;
 
@@ -423,21 +416,13 @@ describe('Widget useSession', (): void => {
     });
     scope.stop();
 
-    expect(readFileMock).toHaveBeenCalledWith('/tmp/widgets/weather/widget.json');
+    expect(readFileMock).not.toHaveBeenCalled();
     expect(loadedPath).toBe('/tmp/widgets/weather/widget.json');
   });
 
   it('normalizes incomplete Widget JSON before exposing page data', async (): Promise<void> => {
     getFileByIdMock.mockResolvedValue(undefined);
-    getWidgetByIdMock.mockReturnValue({
-      id: 'weather',
-      filePath: '/tmp/widgets/weather/widget.json'
-    });
-    readFileMock.mockResolvedValue({
-      name: 'widget',
-      ext: 'json',
-      content: '{}'
-    });
+    mockWidgetContent('{}');
     const scope = effectScope();
     let hasElements = false;
     let hasExecuteCode = false;
@@ -457,15 +442,7 @@ describe('Widget useSession', (): void => {
 
   it('surfaces invalid Widget JSON instead of accepting a default model as saved', async (): Promise<void> => {
     getFileByIdMock.mockResolvedValue(undefined);
-    getWidgetByIdMock.mockReturnValue({
-      id: 'weather',
-      filePath: '/tmp/widgets/weather/widget.json'
-    });
-    readFileMock.mockResolvedValue({
-      name: 'widget',
-      ext: 'json',
-      content: '{invalid json'
-    });
+    mockWidgetContent('{invalid json');
     const scope = effectScope();
     let sessionResult: ReturnType<typeof useSession> | null = null;
 
@@ -486,14 +463,16 @@ describe('Widget useSession', (): void => {
     expect(autoSaveMock.resume).not.toHaveBeenCalled();
   });
 
-  it('does not persist a blank recent record when the first disk read fails', async (): Promise<void> => {
+  it('does not persist a blank recent record when the first Store load fails', async (): Promise<void> => {
     getFileByIdMock.mockResolvedValue(undefined);
-    getWidgetByIdMock.mockReturnValue({
+    getWidgetMock.mockResolvedValue({
       id: 'weather',
-      filePath: '/tmp/widgets/weather/widget.json'
-    });
-    readFileMock.mockRejectedValue(new Error('EACCES'));
-    const consoleError = vi.spyOn(console, 'error').mockImplementation((): void => undefined);
+      dirPath: '/tmp/widgets/weather',
+      filePath: '/tmp/widgets/weather/widget.json',
+      enabled: true,
+      revision: 1,
+      loadError: 'EACCES'
+    } satisfies WidgetEntry);
     const scope = effectScope();
     let loadedName = '';
 
@@ -503,22 +482,17 @@ describe('Widget useSession', (): void => {
       await flushPromises();
       expect(addFileMock).not.toHaveBeenCalled();
       expect(session.loadError.value).toContain('EACCES');
-      readFileMock.mockResolvedValue({
-        name: 'widget',
-        ext: 'json',
-        content: JSON.stringify({ ...createDefaultWidgetData('weather'), name: '重试天气' }, null, 2)
-      });
+      mockWidgetContent(JSON.stringify({ ...createDefaultWidgetData('weather'), name: '重试天气' }, null, 2));
       await session.reload();
       loadedName = session.data.value.name;
     });
     scope.stop();
-    consoleError.mockRestore();
 
     expect(loadedName).toBe('重试天气');
     expect(addFileMock).toHaveBeenCalledOnce();
   });
 
-  it('keeps an unsaved Widget draft when disk still matches its saved baseline', async (): Promise<void> => {
+  it('keeps an unsaved Widget draft when Store still matches its saved baseline', async (): Promise<void> => {
     const savedContent = JSON.stringify({ ...createDefaultWidgetData('weather'), name: '已保存天气' }, null, 2);
     const draftContent = JSON.stringify({ ...createDefaultWidgetData('weather'), name: '草稿天气' }, null, 2);
     getFileByIdMock.mockResolvedValue({
@@ -530,11 +504,7 @@ describe('Widget useSession', (): void => {
       content: draftContent,
       savedContent
     });
-    readFileMock.mockResolvedValue({
-      name: 'widget',
-      ext: 'json',
-      content: savedContent
-    });
+    mockWidgetContent(savedContent);
     const scope = effectScope();
     let loadedName = '';
 
@@ -546,7 +516,7 @@ describe('Widget useSession', (): void => {
     });
     scope.stop();
 
-    expect(readFileMock).toHaveBeenCalledWith('/tmp/widgets/weather/widget.json');
+    expect(readFileMock).not.toHaveBeenCalled();
     expect(loadedName).toBe('草稿天气');
     expect(setDirtyMock).toHaveBeenCalledWith('widget-weather');
   });
@@ -563,11 +533,7 @@ describe('Widget useSession', (): void => {
       content: savedContent,
       savedContent
     });
-    readFileMock.mockResolvedValue({
-      name: 'widget',
-      ext: 'json',
-      content: savedContent
-    });
+    mockWidgetContent(savedContent);
     const scope = effectScope();
     let currentName = '';
 
@@ -592,15 +558,33 @@ describe('Widget useSession', (): void => {
     expect(dirtyEvents.at(-1)).toBe('dirty');
   });
 
+  it('ignores an initial add event that matches the Store snapshot', async (): Promise<void> => {
+    const storeContent = JSON.stringify({ ...createDefaultWidgetData('weather'), name: 'Store 天气' }, null, 2);
+    const installedPath = '/tmp/widgets/weather/widget.json';
+    getFileByIdMock.mockResolvedValue(undefined);
+    mockWidgetContent(storeContent, installedPath);
+    const scope = effectScope();
+
+    await scope.run(async (): Promise<void> => {
+      useSession();
+      await flushPromises();
+      await flushPromises();
+      fileChangedHandler?.({ type: 'add', filePath: installedPath, content: storeContent });
+      await flushPromises();
+    });
+    scope.stop();
+
+    expect(readFileMock).not.toHaveBeenCalled();
+    expect(updateWidgetContentMock).not.toHaveBeenCalled();
+  });
+
   it('loads recreated Widget content from an add event', async (): Promise<void> => {
     const diskContent = JSON.stringify({ ...createDefaultWidgetData('weather'), name: '原始天气' }, null, 2);
     const recreatedContent = JSON.stringify({ ...createDefaultWidgetData('weather'), name: '重建天气' }, null, 2);
     const installedPath = '/tmp/widgets/weather/widget.json';
     getFileByIdMock.mockResolvedValue(undefined);
-    getWidgetByIdMock.mockReturnValue({ id: 'weather', filePath: installedPath });
-    readFileMock
-      .mockResolvedValueOnce({ name: 'widget', ext: 'json', content: diskContent })
-      .mockResolvedValueOnce({ name: 'widget', ext: 'json', content: recreatedContent });
+    mockWidgetContent(diskContent, installedPath);
+    readFileMock.mockResolvedValueOnce({ name: 'widget', ext: 'json', content: recreatedContent });
     const scope = effectScope();
     let currentName = '';
 
@@ -615,8 +599,29 @@ describe('Widget useSession', (): void => {
     });
     scope.stop();
 
-    expect(readFileMock).toHaveBeenCalledTimes(2);
+    expect(readFileMock).toHaveBeenCalledOnce();
     expect(currentName).toBe('重建天气');
+    expect(updateWidgetContentMock).toHaveBeenCalledWith('weather', recreatedContent);
+  });
+
+  it('stores invalid externally accepted Widget content', async (): Promise<void> => {
+    const savedContent = JSON.stringify({ ...createDefaultWidgetData('weather'), name: '有效天气' }, null, 2);
+    const invalidExternalContent = '{ invalid widget json';
+    const installedPath = '/tmp/widgets/weather/widget.json';
+    getFileByIdMock.mockResolvedValue(undefined);
+    mockWidgetContent(savedContent, installedPath);
+    const scope = effectScope();
+
+    await scope.run(async (): Promise<void> => {
+      useSession();
+      await flushPromises();
+      await flushPromises();
+      fileChangedHandler?.({ type: 'change', filePath: installedPath, content: invalidExternalContent });
+      await flushPromises();
+    });
+    scope.stop();
+
+    expect(updateWidgetContentMock).toHaveBeenCalledWith('weather', invalidExternalContent);
   });
 
   it('keeps edits made during an in-flight save dirty and ignores its own file event', async (): Promise<void> => {
@@ -630,11 +635,7 @@ describe('Widget useSession', (): void => {
       content: savedContent,
       savedContent
     });
-    readFileMock.mockResolvedValue({
-      name: 'widget',
-      ext: 'json',
-      content: savedContent
-    });
+    mockWidgetContent(savedContent);
     const writeDeferred = createDeferred<void>();
     writeFileMock.mockReturnValue(writeDeferred.promise);
     const scope = effectScope();
@@ -675,6 +676,7 @@ describe('Widget useSession', (): void => {
     expect(confirmMock).not.toHaveBeenCalled();
     expect(currentName).toBe('保存中继续编辑');
     expect(dirtyEvents.at(-1)).toBe('dirty');
+    expect(updateWidgetContentMock).toHaveBeenCalledWith('weather', expect.stringContaining('第一次编辑'));
   });
 
   it('suppresses delayed self-write events from overlapping saves', async (): Promise<void> => {
@@ -688,7 +690,7 @@ describe('Widget useSession', (): void => {
       content: savedContent,
       savedContent
     });
-    readFileMock.mockResolvedValue({ name: 'widget', ext: 'json', content: savedContent });
+    mockWidgetContent(savedContent);
     const firstWrite = createDeferred<void>();
     const secondWrite = createDeferred<void>();
     writeFileMock.mockReturnValueOnce(firstWrite.promise).mockReturnValueOnce(secondWrite.promise);
@@ -731,7 +733,7 @@ describe('Widget useSession', (): void => {
       content: savedContent,
       savedContent
     });
-    readFileMock.mockResolvedValue({ name: 'widget', ext: 'json', content: savedContent });
+    mockWidgetContent(savedContent);
     const scope = effectScope();
     const dateNow = vi.spyOn(Date, 'now').mockReturnValue(1_000);
 
@@ -756,21 +758,16 @@ describe('Widget useSession', (): void => {
   });
 
   it('keeps the Widget tab path stable when another route becomes active during loading', async (): Promise<void> => {
-    const readDeferred = createDeferred<{ name: string; ext: string; content: string }>();
+    const fetchDeferred = createDeferred<WidgetEntry>();
     getFileByIdMock.mockResolvedValue(undefined);
-    getWidgetByIdMock.mockReturnValue({ id: 'weather', filePath: '/tmp/widgets/weather/widget.json' });
-    readFileMock.mockReturnValue(readDeferred.promise);
+    getWidgetMock.mockReturnValue(fetchDeferred.promise);
     const scope = effectScope();
 
     await scope.run(async (): Promise<void> => {
       useSession();
       await flushPromises();
       routeMock.fullPath = '/settings/widget';
-      readDeferred.resolve({
-        name: 'widget',
-        ext: 'json',
-        content: JSON.stringify(createDefaultWidgetData('weather'), null, 2)
-      });
+      fetchDeferred.resolve(createWidgetEntry(JSON.stringify(createDefaultWidgetData('weather'), null, 2)));
       await flushPromises();
       await flushPromises();
     });
@@ -782,12 +779,7 @@ describe('Widget useSession', (): void => {
   it('unregisters a file watch that finishes registering after disposal', async (): Promise<void> => {
     const registerDeferred = createDeferred<void>();
     getFileByIdMock.mockResolvedValue(undefined);
-    getWidgetByIdMock.mockReturnValue({ id: 'weather', filePath: '/tmp/widgets/weather/widget.json' });
-    readFileMock.mockResolvedValue({
-      name: 'widget',
-      ext: 'json',
-      content: JSON.stringify(createDefaultWidgetData('weather'), null, 2)
-    });
+    mockWidgetContent(JSON.stringify(createDefaultWidgetData('weather'), null, 2));
     registerWatchMock.mockReturnValue(registerDeferred.promise);
     const scope = effectScope();
 

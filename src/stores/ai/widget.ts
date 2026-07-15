@@ -1,224 +1,351 @@
 /**
  * @file widget.ts
- * @description 小组件 Pinia Store，管理 .tibis/widgets/<name>/widget.json 发现结果和启用状态。
+ * @description Widget Pinia Store，管理目录索引、启用状态与懒加载内容缓存。
  */
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
-import { parseWidgetJson, scanWidgets, type WidgetScannerAPI } from '@/ai/widget';
-import type { WidgetDefinition, WidgetScanConfig } from '@/ai/widget/types';
+import { joinPath, parseWidgetJson, scanWidgetDirectories, type WidgetScannerAPI } from '@/ai/widget';
+import type { WidgetEntry, WidgetIndex, WidgetScanConfig } from '@/ai/widget/types';
 import { local } from '@/shared/storage/base';
+import { asyncTo } from '@/utils/asyncTo';
+import { SharedRequest } from '@/utils/sharedRequest';
 
-/** localStorage 持久化键名。 */
+/** 按目录 ID 持久化禁用状态的键名。 */
 const STORAGE_KEY_DISABLED_IDS = 'widget.disabledIds';
 
 /**
- * 从 localStorage 加载数据。
+ * 从本地存储读取数据。
  * @param key - 存储键名
- * @param defaults - 默认值
- * @returns 加载的数据或默认值
+ * @param defaults - 数据不存在时的默认值
+ * @returns 已存储的数据或默认值
  */
 function loadFromStorage<T>(key: string, defaults: T): T {
   const saved = local.getItem<unknown>(key);
-
   return saved !== null && saved !== undefined ? (saved as T) : defaults;
 }
 
 /**
- * 小组件 Pinia Store。
+ * 统一目录路径分隔符并移除末尾斜杠。
+ * @param dirPath - 原始目录路径
+ * @returns 规范化目录路径
+ */
+function normalizeDirPath(dirPath: string): string {
+  return dirPath.replace(/\\/g, '/').replace(/\/+$/, '');
+}
+
+/**
+ * 从目录路径读取资源 ID。
+ * @param dirPath - Widget 目录路径
+ * @returns 目录末段名称
+ */
+function readDirectoryId(dirPath: string): string {
+  return normalizeDirPath(dirPath).split('/').filter(Boolean).at(-1) ?? '';
+}
+
+/**
+ * Widget Pinia Store。
  */
 export const useWidgetStore = defineStore('widget', () => {
-  /** 已发现的所有小组件。 */
-  const widgets = ref<WidgetDefinition[]>([]);
-  /** 是否已完成初始化扫描。 */
+  /** 已发现的 Widget 目录及其可选内容缓存。 */
+  const widgets = ref<WidgetEntry[]>([]);
+
+  /** 是否已完成首次目录扫描。 */
   const initialized = ref(false);
-  /** 初始化等待屏障，用于覆盖布局挂载到真正开始扫描之间的窗口。 */
-  let initPromise: Promise<void> | null = null;
-  /** 完成初始化等待屏障的回调。 */
-  let resolveInitPromise: (() => void) | null = null;
-  /** 实际初始化任务，用于合并重复调用。 */
-  let initTaskPromise: Promise<void> | null = null;
-  /** 主动磁盘同步 Promise，用于合并并发扫描。 */
-  let syncPromise: Promise<void> | null = null;
-  /** 缓存的扫描 API，用于 rescan。 */
-  let cachedApi: WidgetScannerAPI | null = null;
-  /** 按 Widget ID 合并执行时的并发读取。 */
-  const latestWidgetPromises = new Map<string, Promise<WidgetDefinition | undefined>>();
-  /** 全局单调资源操作序号。 */
-  let resourceOperationSequence = 0;
-  /** 每个文件路径最后一次成功写回的操作序号。 */
-  const appliedOperationByPath = new Map<string, number>();
+
   /** 扫描配置。 */
   const scanConfig = ref<WidgetScanConfig>({
     homeDir: ''
   });
 
+  /** 初始化等待屏障。 */
+  let initPromise: Promise<void> | null = null;
+  /** 初始化等待屏障完成回调。 */
+  let resolveInitPromise: (() => void) | null = null;
+  /** 合并重复初始化调用的任务。 */
+  let initTaskPromise: Promise<void> | null = null;
+  /** 合并并发目录刷新的任务。 */
+  let refreshPromise: Promise<void> | null = null;
+  /** 初始化时注入的平台 API。 */
+  let cachedApi: WidgetScannerAPI | null = null;
+  /** 目录 watcher 事件修订序号，用于识别扫描期间发生的增删。 */
+  let directoryRevision = 0;
+
   /**
-   * 按 ID 查找小组件。
-   * @param id - 小组件 ID
-   * @returns 匹配的小组件或 undefined
+   * 按目录 ID 查找 Widget。
+   * @param id - Widget 目录 ID
+   * @returns 匹配的 Store 条目
    */
-  function getWidgetById(id: string): WidgetDefinition | undefined {
-    return widgets.value.find((widget: WidgetDefinition): boolean => widget.id === id);
+  function getWidgetById(id: string): WidgetEntry | undefined {
+    return widgets.value.find((widget: WidgetEntry): boolean => widget.id === id);
   }
 
   /**
-   * 获取已启用且无解析错误的小组件列表。
-   * @returns 可用小组件列表
+   * 获取已启用且成功解析的 Widget。
+   * @returns 当前可用于聊天或工具执行的条目
    */
-  function getEnabledWidgets(): WidgetDefinition[] {
-    return widgets.value.filter((widget: WidgetDefinition): boolean => widget.enabled && !widget.parseError);
+  function getEnabledWidgets(): WidgetEntry[] {
+    return widgets.value.filter((widget: WidgetEntry): boolean => widget.enabled && !!widget.definition && !widget.definition.parseError);
   }
 
   /**
-   * 持久化禁用小组件 ID 列表。
+   * 读取已禁用目录 ID。
+   * @returns 已禁用 Widget ID 集合
+   */
+  function getDisabledIds(): Set<string> {
+    return new Set(loadFromStorage<string[]>(STORAGE_KEY_DISABLED_IDS, []));
+  }
+
+  /**
+   * 持久化当前禁用目录 ID。
    */
   function persistDisabledIds(): void {
-    const disabledIds = widgets.value.filter((widget: WidgetDefinition): boolean => !widget.enabled).map((widget: WidgetDefinition): string => widget.id);
+    const disabledIds = widgets.value.filter((widget: WidgetEntry): boolean => !widget.enabled).map((widget: WidgetEntry): string => widget.id);
     local.setItem(STORAGE_KEY_DISABLED_IDS, disabledIds);
   }
 
   /**
-   * 领取下一次资源操作序号。
-   * @returns 单调递增操作序号
+   * 为新发现目录创建未加载条目。
+   * @param index - Widget 目录索引
+   * @param disabledIds - 已持久化的禁用目录 ID
+   * @returns Store 条目
    */
-  function nextResourceOperation(): number {
-    resourceOperationSequence += 1;
-    return resourceOperationSequence;
+  function createWidgetEntry(index: WidgetIndex, disabledIds: Set<string>): WidgetEntry {
+    return {
+      ...index,
+      enabled: !disabledIds.has(index.id),
+      revision: 0
+    };
   }
 
   /**
-   * 判断指定路径的操作是否仍允许写回。
-   * @param filePath - Widget 文件路径
-   * @param operation - 待写回操作序号
-   * @returns 未被更新操作抢先写回时返回 true
+   * 将扫描结果合并到 Store，同时保留未变化目录的内容缓存。
+   * @param discovered - 最新目录索引
    */
-  function canApplyResourceOperation(filePath: string, operation: number): boolean {
-    return operation >= (appliedOperationByPath.get(filePath) ?? 0);
+  function applyWidgetIndices(discovered: WidgetIndex[]): void {
+    const previousById = new Map(widgets.value.map((widget: WidgetEntry): [string, WidgetEntry] => [widget.id, widget]));
+    const disabledIds = getDisabledIds();
+    const nextWidgets = discovered.map((index: WidgetIndex): WidgetEntry => {
+      const previous = previousById.get(index.id);
+      if (previous && previous.dirPath === index.dirPath && previous.filePath === index.filePath) {
+        return previous;
+      }
+
+      if (previous) {
+        previous.revision += 1;
+      }
+      return createWidgetEntry(index, disabledIds);
+    });
+
+    const nextIds = new Set(discovered.map((index: WidgetIndex): string => index.id));
+    for (const previous of widgets.value) {
+      if (!nextIds.has(previous.id)) {
+        previous.revision += 1;
+      }
+    }
+    widgets.value = nextWidgets;
   }
 
   /**
-   * 判断小组件是否被用户持久化禁用。
-   * @param id - 小组件 ID
-   * @returns 是否禁用
+   * 将入口文件原文解析并写入当前 Store 条目。
+   * @param widget - 目标 Widget 条目
+   * @param sourceContent - 完整 widget.json 原文
    */
-  function isPersistedDisabledWidget(id: string): boolean {
-    return loadFromStorage<string[]>(STORAGE_KEY_DISABLED_IDS, []).includes(id);
+  function applyWidgetContent(widget: WidgetEntry, sourceContent: string): void {
+    widget.sourceContent = sourceContent;
+    widget.definition = parseWidgetJson(sourceContent, widget.filePath);
+    widget.loadError = undefined;
   }
 
   /**
-   * 切换小组件启用状态。
-   * @param id - 小组件 ID
+   * 从磁盘执行一次 Widget 首次加载。
+   * @param id - Widget 目录 ID
+   * @returns 已加载或被更新操作替代的当前条目
+   */
+  async function loadWidget(id: string): Promise<WidgetEntry> {
+    const widget = getWidgetById(id);
+    if (!widget || !cachedApi) {
+      throw new Error(`Widget not found: ${id}`);
+    }
+
+    if (widget.sourceContent !== undefined) {
+      return widget;
+    }
+
+    const { revision } = widget;
+    const [readError, file] = await asyncTo(cachedApi.readFile(widget.filePath));
+    if (readError) {
+      const current = getWidgetById(id);
+      if (current === widget && current.revision === revision) {
+        current.loadError = readError.message;
+        throw readError;
+      }
+
+      // 旧 Entry 读取失败时，应用内保存可直接返回缓存，目录替换则继续读取当前 Entry。
+      if (!current) {
+        throw readError;
+      }
+      if (current.sourceContent !== undefined) {
+        return current;
+      }
+      return loadWidget(id);
+    }
+
+    const current = getWidgetById(id);
+    if (!current) {
+      throw new Error(`Widget not found: ${id}`);
+    }
+
+    if (current === widget && current.revision === revision) {
+      applyWidgetContent(current, file.content);
+      return current;
+    }
+
+    // 应用内保存可以直接返回缓存；目录被替换时递归读取新条目。
+    if (current.sourceContent !== undefined) {
+      return current;
+    }
+    return loadWidget(id);
+  }
+
+  /** 按 Widget ID 共享执行中的首次加载请求。 */
+  const sharedWidgetRequest = new SharedRequest<string, WidgetEntry>(loadWidget);
+
+  /**
+   * 获取 Widget 内容；首次从磁盘读取，之后返回 Store 缓存。
+   * @param id - Widget 目录 ID
+   * @returns 当前 Store 条目；目录不存在时返回 undefined
+   */
+  async function getWidget(id: string): Promise<WidgetEntry | undefined> {
+    const widget = getWidgetById(id);
+    if (!widget) {
+      return undefined;
+    }
+    if (widget.sourceContent !== undefined) {
+      return widget;
+    }
+
+    const [, loadedWidget] = await asyncTo(sharedWidgetRequest.fetch(id));
+    return loadedWidget ?? getWidgetById(id);
+  }
+
+  /**
+   * 获取当前全部 Widget，单项读取失败通过 Entry.loadError 表达。
+   * @returns 与当前目录顺序一致且仍存在的 Store 条目
+   */
+  async function getWidgets(): Promise<WidgetEntry[]> {
+    const loadedWidgets = await Promise.all(widgets.value.map((widget: WidgetEntry): Promise<WidgetEntry | undefined> => getWidget(widget.id)));
+    return loadedWidgets.filter((widget: WidgetEntry | undefined): widget is WidgetEntry => widget !== undefined);
+  }
+
+  /**
+   * 用应用内最新原文更新 Widget 内容缓存。
+   * @param id - Widget 目录 ID
+   * @param sourceContent - 最新完整 widget.json 原文
+   * @returns 更新后的条目
+   */
+  function updateWidgetContent(id: string, sourceContent: string): WidgetEntry | undefined {
+    const widget = getWidgetById(id);
+    if (!widget) {
+      return undefined;
+    }
+
+    widget.revision += 1;
+    applyWidgetContent(widget, sourceContent);
+    return widget;
+  }
+
+  /**
+   * 切换 Widget 启用状态并按目录 ID 持久化。
+   * @param id - Widget 目录 ID
    */
   function toggleWidget(id: string): void {
     const widget = getWidgetById(id);
-
     if (!widget) {
       return;
     }
 
-    const operation = nextResourceOperation();
-    appliedOperationByPath.set(widget.filePath, operation);
     widget.enabled = !widget.enabled;
     persistDisabledIds();
   }
 
   /**
-   * 合并目录监听结果，并保留用户已设置的启用状态。
-   * @param updatedWidget - 文件系统最新解析结果
-   * @param existingWidget - 当前列表中的小组件
-   * @returns 合并后的小组件定义
+   * 处理直接子目录的新增或删除事件。
+   * @param type - 目录事件类型
+   * @param dirPath - Widget 资源目录路径
    */
-  function resolveWatchedWidget(updatedWidget: WidgetDefinition, existingWidget?: WidgetDefinition): WidgetDefinition {
-    return {
-      ...updatedWidget,
-      enabled: existingWidget?.enabled ?? !isPersistedDisabledWidget(updatedWidget.id)
-    };
-  }
-
-  /**
-   * 按文件路径操作序号应用 Widget 变更。
-   * @param type - 事件类型
-   * @param updatedWidget - 最新解析定义
-   * @param operation - 操作序号
-   * @returns 本次结果是否成功写回
-   */
-  function applyWidgetChange(type: 'change' | 'add' | 'unlink', updatedWidget: WidgetDefinition, operation: number): boolean {
-    const { filePath } = updatedWidget;
-    if (filePath && !canApplyResourceOperation(filePath, operation)) {
-      return false;
+  function handleWidgetDirectory(type: 'add' | 'unlink', dirPath: string): void {
+    const normalizedDirPath = normalizeDirPath(dirPath);
+    const id = readDirectoryId(normalizedDirPath);
+    if (!id || id.startsWith('.')) {
+      return;
     }
+    directoryRevision += 1;
 
-    if (filePath) {
-      appliedOperationByPath.set(filePath, operation);
-    }
-
-    const index =
-      type === 'unlink' && filePath
-        ? widgets.value.findIndex((widget: WidgetDefinition): boolean => widget.filePath === filePath)
-        : widgets.value.findIndex(
-            (widget: WidgetDefinition): boolean => widget.filePath === filePath || (!!updatedWidget.id && widget.id === updatedWidget.id)
-          );
-    const existingWidget = index !== -1 ? widgets.value[index] : undefined;
-
+    const existingIndex = widgets.value.findIndex((widget: WidgetEntry): boolean => normalizeDirPath(widget.dirPath) === normalizedDirPath);
     if (type === 'unlink') {
-      if (index !== -1) {
-        widgets.value.splice(index, 1);
+      if (existingIndex !== -1) {
+        widgets.value[existingIndex].revision += 1;
+        widgets.value.splice(existingIndex, 1);
       }
-      return true;
-    }
-
-    const nextWidget = resolveWatchedWidget(updatedWidget, existingWidget);
-    if (index !== -1) {
-      widgets.value[index] = nextWidget;
-    } else {
-      widgets.value.push(nextWidget);
-    }
-
-    return true;
-  }
-
-  /**
-   * 添加或更新小组件定义。
-   * @param widget - 小组件定义
-   */
-  function upsertWidget(widget: WidgetDefinition): void {
-    applyWidgetChange('change', widget, nextResourceOperation());
-  }
-
-  /**
-   * 使用缓存扫描依赖读取并应用最新 Widget 目录。
-   */
-  async function scanAndApplyWidgets(): Promise<void> {
-    if (!cachedApi || !scanConfig.value.homeDir) {
       return;
     }
 
-    const operation = nextResourceOperation();
-    const existingWidgets = [...widgets.value];
-    const discovered = await scanWidgets({ homeDir: scanConfig.value.homeDir }, cachedApi);
-    const discoveredPaths = new Set(discovered.map((widget: WidgetDefinition): string => widget.filePath));
-
-    for (const widget of discovered) {
-      applyWidgetChange('change', widget, operation);
+    const existingById = getWidgetById(id);
+    if (existingById?.dirPath === normalizedDirPath) {
+      return;
+    }
+    if (existingById) {
+      existingById.revision += 1;
+      widgets.value.splice(widgets.value.indexOf(existingById), 1);
     }
 
-    // 扫描开始后没有被更晚操作触及的缺失路径，才按磁盘删除处理。
-    for (const existingWidget of existingWidgets) {
-      if (!discoveredPaths.has(existingWidget.filePath)) {
-        applyWidgetChange('unlink', existingWidget, operation);
-      }
-    }
-
-    initialized.value = true;
+    widgets.value.push(
+      createWidgetEntry(
+        {
+          id,
+          dirPath: normalizedDirPath,
+          filePath: joinPath(normalizedDirPath, 'widget.json')
+        },
+        getDisabledIds()
+      )
+    );
   }
 
   /**
-   * 处理小组件目录变更事件。
-   * @param type - 事件类型
-   * @param updatedWidget - 解析后的小组件定义
+   * 扫描目录直到扫描期间没有新的 watcher 事件。
+   * @returns 稳定时刻的 Widget 目录索引
    */
-  function handleWidgetChange(type: 'change' | 'add' | 'unlink', updatedWidget: WidgetDefinition): void {
-    applyWidgetChange(type, updatedWidget, nextResourceOperation());
+  async function scanStableWidgets(): Promise<WidgetIndex[]> {
+    if (!cachedApi) {
+      return [];
+    }
+
+    const scanRevision = directoryRevision;
+    const discovered = await scanWidgetDirectories(scanConfig.value, cachedApi);
+    if (scanRevision !== directoryRevision) {
+      return scanStableWidgets();
+    }
+
+    return discovered;
+  }
+
+  /**
+   * 重新扫描 Widget 目录索引。
+   */
+  async function refreshWidgets(): Promise<void> {
+    if (!cachedApi || !scanConfig.value.homeDir) {
+      return;
+    }
+    if (!refreshPromise) {
+      refreshPromise = scanStableWidgets()
+        .then((discovered: WidgetIndex[]): void => {
+          applyWidgetIndices(discovered);
+        })
+        .finally((): void => {
+          refreshPromise = null;
+        });
+    }
+    await refreshPromise;
   }
 
   /**
@@ -235,7 +362,7 @@ export const useWidgetStore = defineStore('widget', () => {
   }
 
   /**
-   * 完成初始化等待屏障，初始化失败时也允许聊天继续降级运行。
+   * 完成初始化等待屏障。
    */
   function finishInitialization(): void {
     initialized.value = true;
@@ -245,10 +372,9 @@ export const useWidgetStore = defineStore('widget', () => {
   }
 
   /**
-   * 初始化小组件列表。
+   * 初始化 Widget 目录索引。
    * @param homeDir - 用户主目录路径
-   * @param api - 扫描依赖 API
-   * @returns 初始化完成信号
+   * @param api - 平台文件 API
    */
   async function init(homeDir: string, api: WidgetScannerAPI): Promise<void> {
     if (initTaskPromise) {
@@ -260,98 +386,23 @@ export const useWidgetStore = defineStore('widget', () => {
     cachedApi = api;
     initTaskPromise = (async (): Promise<void> => {
       try {
-        await scanAndApplyWidgets();
+        await refreshWidgets();
       } catch (error: unknown) {
         console.error('Widget scan failed:', error);
       } finally {
         finishInitialization();
       }
     })();
-
     return initTaskPromise;
   }
 
   /**
-   * 从磁盘重新同步完整 Widget 目录。
-   */
-  async function syncFromDisk(): Promise<void> {
-    if (!cachedApi || !scanConfig.value.homeDir) {
-      return;
-    }
-
-    if (!syncPromise) {
-      syncPromise = scanAndApplyWidgets().finally((): void => {
-        syncPromise = null;
-      });
-    }
-
-    await syncPromise;
-  }
-
-  /**
-   * 执行工具前从磁盘读取最新启用 Widget。
-   * @param id - Widget ID
-   * @returns 最新 Widget 定义，不存在或已禁用时返回 undefined
-   */
-  async function resolveLatestEnabledWidget(id: string): Promise<WidgetDefinition | undefined> {
-    const existingWidget = getWidgetById(id);
-    if (!existingWidget?.enabled || !cachedApi) {
-      return undefined;
-    }
-
-    const pending = latestWidgetPromises.get(id);
-    if (pending) {
-      return pending;
-    }
-
-    const operation = nextResourceOperation();
-    const nextPromise = (async (): Promise<WidgetDefinition | undefined> => {
-      try {
-        const { content } = await cachedApi.readFile(existingWidget.filePath);
-        const parsed = parseWidgetJson(content, existingWidget.filePath);
-
-        if (parsed.id !== id) {
-          applyWidgetChange('unlink', existingWidget, operation);
-          applyWidgetChange('add', parsed, operation);
-        } else {
-          applyWidgetChange('change', parsed, operation);
-        }
-      } catch {
-        applyWidgetChange('unlink', existingWidget, operation);
-      }
-
-      const latestWidget = getWidgetById(id);
-      return latestWidget?.enabled ? latestWidget : undefined;
-    })().finally((): void => {
-      latestWidgetPromises.delete(id);
-    });
-
-    latestWidgetPromises.set(id, nextPromise);
-    return nextPromise;
-  }
-
-  /**
-   * 重新扫描小组件目录。
-   * @returns 重新扫描完成信号
-   */
-  async function rescan(): Promise<void> {
-    if (!cachedApi || !scanConfig.value.homeDir) {
-      console.warn('Widget rescan called before init');
-      return;
-    }
-
-    await syncFromDisk();
-  }
-
-  /**
-   * 等待初始化完成。
-   * @returns 初始化完成信号
+   * 等待首次目录扫描完成。
    */
   async function waitForInit(): Promise<void> {
     if (initialized.value) {
       return;
     }
-
     if (initPromise) {
       await initPromise;
     }
@@ -363,15 +414,15 @@ export const useWidgetStore = defineStore('widget', () => {
     scanConfig,
     getWidgetById,
     getEnabledWidgets,
+    getWidget,
+    getWidgets,
+    updateWidgetContent,
     toggleWidget,
-    upsertWidget,
-    handleWidgetChange,
+    handleWidgetDirectory,
+    refreshWidgets,
     prepareInitialization,
     finishInitialization,
     init,
-    syncFromDisk,
-    resolveLatestEnabledWidget,
-    rescan,
     waitForInit
   };
 });

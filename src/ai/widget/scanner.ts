@@ -1,12 +1,12 @@
 /**
  * @file scanner.ts
- * @description 小组件目录扫描器。
+ * @description 小组件目录扫描器，仅发现资源目录索引。
  */
-import type { WidgetDefinition, WidgetScanConfig } from './types';
+import type { WidgetIndex, WidgetScanConfig } from './types';
 import { logDirectoryInstallRecoveryFailure } from '@/shared/logger/directoryInstall';
 import { recoverDirectoryInstallTransactions } from '@/utils/file/directory';
 import { canReadDirectory, type PathStatusReader } from '@/utils/file/status';
-import { joinPath, parseWidgetJson } from './parser';
+import { joinPath } from './parser';
 
 /**
  * 小组件扫描器依赖的平台 API 接口。
@@ -42,9 +42,9 @@ function isWidgetDirectoryEntry(entry: { name: string; type: 'file' | 'directory
  * 扫描用户小组件目录。
  * @param config - 扫描配置
  * @param api - 扫描依赖 API
- * @returns 小组件定义列表
+ * @returns 小组件目录索引列表
  */
-export async function scanWidgets(config: WidgetScanConfig, api: WidgetScannerAPI): Promise<WidgetDefinition[]> {
+export async function scanWidgetDirectories(config: WidgetScanConfig, api: WidgetScannerAPI): Promise<WidgetIndex[]> {
   const widgetDir = joinPath(config.homeDir, '.tibis', 'widgets');
 
   try {
@@ -69,17 +69,14 @@ export async function scanWidgets(config: WidgetScanConfig, api: WidgetScannerAP
     }
 
     const { entries } = await api.readWorkspaceDirectory({ directoryPath: widgetDir });
-    const widgetEntries = entries.filter(isWidgetDirectoryEntry);
-    const results = await Promise.allSettled(
-      widgetEntries.map(async (entry: { name: string; type: 'file' | 'directory' }): Promise<WidgetDefinition> => {
-        const filePath = joinPath(widgetDir, entry.name, 'widget.json');
-        const { content } = await api.readFile(filePath);
-
-        return parseWidgetJson(content, filePath);
-      })
-    );
-
-    return results.flatMap((result): WidgetDefinition[] => (result.status === 'fulfilled' ? [result.value] : []));
+    return entries.filter(isWidgetDirectoryEntry).map((entry): WidgetIndex => {
+      const dirPath = joinPath(widgetDir, entry.name);
+      return {
+        id: entry.name,
+        dirPath,
+        filePath: joinPath(dirPath, 'widget.json')
+      };
+    });
   } catch {
     return [];
   }

@@ -1,21 +1,26 @@
 /**
  * @file skill.ts
- * @description Skill Pinia Store，管理 skill 列表、启用状态和扫描配置。
+ * @description Skill Pinia Store，管理目录索引、启用状态与懒加载内容缓存。
  */
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
-import { DEFAULT_SKILL_MAX_CONTENT_LENGTH, parseSkillMarkdown, scanSkills, type SkillScannerAPI } from '@/ai/skill';
-import type { SkillDefinition, SkillScanConfig } from '@/ai/skill/types';
+import { DEFAULT_SKILL_MAX_CONTENT_LENGTH, joinPath, parseSkillMarkdown, scanSkillDirectories, type SkillScannerAPI } from '@/ai/skill';
+import type { SkillEntry, SkillIndex, SkillScanConfig } from '@/ai/skill/types';
 import { local } from '@/shared/storage/base';
+import { asyncTo } from '@/utils/asyncTo';
+import { SharedRequest } from '@/utils/sharedRequest';
 
-/** localStorage 持久化键名。 */
+/** 按目录 ID 持久化禁用状态的键名。 */
+const STORAGE_KEY_DISABLED_IDS = 'skill.disabledIds';
+
+/** 旧版本按 frontmatter 名称持久化禁用状态的键名。 */
 const STORAGE_KEY_DISABLED_NAMES = 'skill.disabledNames';
 
 /**
- * 从 localStorage 加载数据。
+ * 从本地存储读取数据。
  * @param key - 存储键名
- * @param defaults - 默认值
- * @returns 加载的数据或默认值
+ * @param defaults - 数据不存在时的默认值
+ * @returns 已存储的数据或默认值
  */
 function loadFromStorage<T>(key: string, defaults: T): T {
   const saved = local.getItem<unknown>(key);
@@ -23,203 +28,406 @@ function loadFromStorage<T>(key: string, defaults: T): T {
 }
 
 /**
+ * 统一目录路径分隔符并移除末尾斜杠。
+ * @param dirPath - 原始目录路径
+ * @returns 规范化目录路径
+ */
+function normalizeResourcePath(resourcePath: string): string {
+  return resourcePath.replace(/\\/g, '/').replace(/\/+$/, '');
+}
+
+/**
+ * 从目录路径读取资源 ID。
+ * @param dirPath - Skill 目录路径
+ * @returns 目录末段名称
+ */
+function readDirectoryId(dirPath: string): string {
+  return normalizeResourcePath(dirPath).split('/').filter(Boolean).at(-1) ?? '';
+}
+
+/**
  * Skill Pinia Store。
  */
 export const useSkillStore = defineStore('skill', () => {
-  /** 已发现的所有 skill。 */
-  const skills = ref<SkillDefinition[]>([]);
+  /** 已发现的 Skill 目录及其可选内容缓存。 */
+  const skills = ref<SkillEntry[]>([]);
 
-  /** 是否已完成初始化扫描。 */
+  /** 是否已完成首次目录扫描。 */
   const initialized = ref(false);
-
-  /** 初始化等待屏障，用于覆盖布局挂载到真正开始扫描之间的窗口。 */
-  let initPromise: Promise<void> | null = null;
-  /** 完成初始化等待屏障的回调。 */
-  let resolveInitPromise: (() => void) | null = null;
-  /** 实际初始化任务，用于合并重复调用。 */
-  let initTaskPromise: Promise<void> | null = null;
-  /** 主动磁盘同步 Promise，用于合并并发扫描。 */
-  let syncPromise: Promise<void> | null = null;
-  /** 缓存的扫描 API，用于 rescan。 */
-  let cachedApi: SkillScannerAPI | null = null;
-  /** 按 Skill 名称合并执行时的并发读取。 */
-  const latestSkillPromises = new Map<string, Promise<SkillDefinition | undefined>>();
-  /** 全局单调资源操作序号。 */
-  let resourceOperationSequence = 0;
-  /** 每个文件路径最后一次成功写回的操作序号。 */
-  const appliedOperationByPath = new Map<string, number>();
 
   /** 扫描配置。 */
   const scanConfig = ref<SkillScanConfig>({
     homeDir: ''
   });
 
-  /** 解析失败的 skill 及错误信息。 */
-  const parseErrors = computed(() => {
+  /** 初始化等待屏障。 */
+  let initPromise: Promise<void> | null = null;
+  /** 初始化等待屏障完成回调。 */
+  let resolveInitPromise: (() => void) | null = null;
+  /** 合并重复初始化调用的任务。 */
+  let initTaskPromise: Promise<void> | null = null;
+  /** 合并并发目录刷新的任务。 */
+  let refreshPromise: Promise<void> | null = null;
+  /** 初始化时注入的平台 API。 */
+  let cachedApi: SkillScannerAPI | null = null;
+  /** 目录 watcher 事件修订序号，用于识别扫描期间发生的增删。 */
+  let directoryRevision = 0;
+
+  /** 解析失败的 Skill 及错误信息。 */
+  const parseErrors = computed<Map<string, string>>((): Map<string, string> => {
     const errors = new Map<string, string>();
     for (const skill of skills.value) {
-      if (skill.parseError) {
-        errors.set(skill.filePath, skill.parseError);
+      if (skill.definition?.parseError) {
+        errors.set(skill.filePath, skill.definition.parseError);
       }
     }
     return errors;
   });
 
   /**
-   * 按名称查找 skill。
-   * @param name - skill 名称
-   * @returns 匹配的 skill 或 undefined
+   * 按目录 ID 查找 Skill。
+   * @param id - Skill 目录 ID
+   * @returns 匹配的 Store 条目
    */
-  function getSkillByName(name: string): SkillDefinition | undefined {
-    return skills.value.find((s) => s.name === name);
+  function getSkillById(id: string): SkillEntry | undefined {
+    return skills.value.find((skill: SkillEntry): boolean => skill.id === id);
   }
 
   /**
-   * 获取已启用且无解析错误的 skill 列表。
-   * @returns 可用 skill 列表
+   * 获取已启用且成功解析的 Skill。
+   * @returns 当前可用于聊天或工具执行的条目
    */
-  function getEnabledSkills(): SkillDefinition[] {
-    return skills.value.filter((s) => s.enabled && !s.parseError);
-  }
+  function getEnabledSkills(): SkillEntry[] {
+    const includedNames = new Set<string>();
+    return skills.value.filter((skill: SkillEntry): boolean => {
+      const { definition } = skill;
+      if (!skill.enabled || !definition || definition.parseError || includedNames.has(definition.name)) {
+        return false;
+      }
 
-  /** 持久化禁用名称列表。 */
-  function persistDisabledNames(): void {
-    const disabledNames = skills.value.filter((s) => !s.enabled).map((s) => s.name);
-    local.setItem(STORAGE_KEY_DISABLED_NAMES, disabledNames);
-  }
-
-  /**
-   * 领取下一次资源操作序号。
-   * @returns 单调递增操作序号
-   */
-  function nextResourceOperation(): number {
-    resourceOperationSequence += 1;
-    return resourceOperationSequence;
+      includedNames.add(definition.name);
+      return true;
+    });
   }
 
   /**
-   * 判断指定路径的操作是否仍允许写回。
-   * @param filePath - Skill 文件路径
-   * @param operation - 待写回操作序号
-   * @returns 未被更新操作抢先写回时返回 true
+   * 按已加载的 frontmatter 名称查找 Skill。
+   * @param name - Skill frontmatter 名称
+   * @returns 匹配的 Store 条目
    */
-  function canApplyResourceOperation(filePath: string, operation: number): boolean {
-    return operation >= (appliedOperationByPath.get(filePath) ?? 0);
+  function getSkillByName(name: string): SkillEntry | undefined {
+    // 聊天执行优先采用与工具目录一致的启用条目；全部不可用时保留原始查找结果供错误提示使用。
+    return (
+      getEnabledSkills().find((skill: SkillEntry): boolean => skill.definition?.name === name) ??
+      skills.value.find((skill: SkillEntry): boolean => skill.definition?.name === name)
+    );
   }
 
   /**
-   * 合并磁盘定义与当前启用状态。
-   * @param updatedSkill - 磁盘最新解析定义
-   * @param existingSkill - Store 当前定义
-   * @returns 合并后的 Skill 定义
+   * 读取已禁用目录 ID。
+   * @returns 已禁用 Skill ID 集合
    */
-  function resolveDiskSkill(updatedSkill: SkillDefinition, existingSkill?: SkillDefinition): SkillDefinition {
-    const name = updatedSkill.name || existingSkill?.name || '';
-    const description = updatedSkill.description || existingSkill?.description || '';
-    const disabledNames = loadFromStorage<string[]>(STORAGE_KEY_DISABLED_NAMES, []);
+  function getDisabledIds(): Set<string> {
+    return new Set(loadFromStorage<string[]>(STORAGE_KEY_DISABLED_IDS, []));
+  }
 
+  /**
+   * 持久化当前禁用目录 ID。
+   */
+  function persistDisabledIds(): void {
+    const disabledIds = skills.value.filter((skill: SkillEntry): boolean => !skill.enabled).map((skill: SkillEntry): string => skill.id);
+    local.setItem(STORAGE_KEY_DISABLED_IDS, disabledIds);
+  }
+
+  /**
+   * 为新发现目录创建未加载条目。
+   * @param index - Skill 目录索引
+   * @param disabledIds - 已持久化的禁用目录 ID
+   * @returns Store 条目
+   */
+  function createSkillEntry(index: SkillIndex, disabledIds: Set<string>): SkillEntry {
     return {
-      ...updatedSkill,
-      name,
-      description,
-      enabled: existingSkill?.enabled ?? !disabledNames.includes(name)
+      ...index,
+      enabled: !disabledIds.has(index.id),
+      revision: 0
     };
   }
 
   /**
-   * 按文件路径操作序号应用 Skill 变更。
-   * @param type - 事件类型
-   * @param updatedSkill - 最新解析定义
-   * @param operation - 操作序号
-   * @returns 本次结果是否成功写回
+   * 将扫描结果合并到 Store，同时保留未变化目录的内容缓存。
+   * @param discovered - 最新目录索引
    */
-  function applySkillChange(type: 'change' | 'add' | 'unlink', updatedSkill: SkillDefinition, operation: number): boolean {
-    const { filePath } = updatedSkill;
-    if (filePath && !canApplyResourceOperation(filePath, operation)) {
-      return false;
-    }
-
-    if (filePath) {
-      appliedOperationByPath.set(filePath, operation);
-    }
-
-    const index =
-      type === 'unlink' && filePath
-        ? skills.value.findIndex((skill: SkillDefinition): boolean => skill.filePath === filePath)
-        : skills.value.findIndex((skill: SkillDefinition): boolean => skill.filePath === filePath || (!!updatedSkill.name && skill.name === updatedSkill.name));
-    const existingSkill = index !== -1 ? skills.value[index] : undefined;
-
-    if (type === 'unlink') {
-      if (index !== -1) {
-        skills.value.splice(index, 1);
+  function applySkillIndices(discovered: SkillIndex[]): void {
+    const previousById = new Map(skills.value.map((skill: SkillEntry): [string, SkillEntry] => [skill.id, skill]));
+    const disabledIds = getDisabledIds();
+    const nextSkills = discovered.map((index: SkillIndex): SkillEntry => {
+      const previous = previousById.get(index.id);
+      if (previous && previous.dirPath === index.dirPath && previous.filePath === index.filePath && previous.source === index.source) {
+        return previous;
       }
-      return true;
+
+      if (previous) {
+        previous.revision += 1;
+      }
+      return createSkillEntry(index, disabledIds);
+    });
+
+    const nextIds = new Set(discovered.map((index: SkillIndex): string => index.id));
+    for (const previous of skills.value) {
+      if (!nextIds.has(previous.id)) {
+        previous.revision += 1;
+      }
     }
 
-    const nextSkill = resolveDiskSkill(updatedSkill, existingSkill);
-    if (index !== -1) {
-      skills.value[index] = nextSkill;
-    } else {
-      skills.value.push(nextSkill);
-    }
-
-    return true;
+    skills.value = nextSkills;
   }
 
   /**
-   * 使用缓存扫描依赖读取并应用最新 Skill 目录。
+   * 将旧版按 frontmatter 名称保存的禁用状态迁移为目录 ID。
+   * @param skill - 已加载 Skill 条目
    */
-  async function scanAndApplySkills(): Promise<void> {
-    if (!cachedApi || !scanConfig.value.homeDir) {
+  function migrateDisabledName(skill: SkillEntry): void {
+    const name = skill.definition?.name;
+    if (!name) {
       return;
     }
 
-    const operation = nextResourceOperation();
-    const existingSkills = [...skills.value];
-    const discovered = await scanSkills(
-      {
-        homeDir: scanConfig.value.homeDir,
-        maxContentLength: DEFAULT_SKILL_MAX_CONTENT_LENGTH
-      },
-      cachedApi
+    const disabledNames = loadFromStorage<string[]>(STORAGE_KEY_DISABLED_NAMES, []);
+    if (!disabledNames.includes(name)) {
+      return;
+    }
+
+    if (skill.enabled) {
+      skill.enabled = false;
+      persistDisabledIds();
+    }
+
+    // 消费已迁移名称，避免用户重新启用后下次启动又被旧数据禁用。
+    local.setItem(
+      STORAGE_KEY_DISABLED_NAMES,
+      disabledNames.filter((disabledName: string): boolean => disabledName !== name)
     );
+  }
 
-    const discoveredPaths = new Set(discovered.map((skill: SkillDefinition): string => skill.filePath));
-    for (const skill of discovered) {
-      applySkillChange('change', skill, operation);
+  /**
+   * 将入口文件原文解析并写入当前 Store 条目。
+   * @param skill - 目标 Skill 条目
+   * @param sourceContent - 完整 SKILL.md 原文
+   */
+  function applySkillContent(skill: SkillEntry, sourceContent: string): void {
+    skill.sourceContent = sourceContent;
+    skill.definition = parseSkillMarkdown(sourceContent, skill.filePath, {
+      source: skill.source,
+      maxContentLength: scanConfig.value.maxContentLength ?? DEFAULT_SKILL_MAX_CONTENT_LENGTH
+    });
+    skill.loadError = undefined;
+    migrateDisabledName(skill);
+  }
+
+  /**
+   * 从磁盘执行一次 Skill 首次加载。
+   * @param id - Skill 目录 ID
+   * @returns 已加载或被更新操作替代的当前条目
+   */
+  async function loadSkill(id: string): Promise<SkillEntry> {
+    const skill = getSkillById(id);
+    if (!skill || !cachedApi) {
+      throw new Error(`Skill not found: ${id}`);
     }
 
-    // 扫描开始后没有被更晚操作触及的缺失路径，才按磁盘删除处理。
-    for (const existingSkill of existingSkills) {
-      if (!discoveredPaths.has(existingSkill.filePath)) {
-        applySkillChange('unlink', existingSkill, operation);
+    if (skill.sourceContent !== undefined) {
+      return skill;
+    }
+
+    const { revision } = skill;
+    const [readError, file] = await asyncTo(cachedApi.readFile(skill.filePath));
+    if (readError) {
+      const current = getSkillById(id);
+      if (current === skill && current.revision === revision) {
+        current.loadError = readError.message;
+        throw readError;
       }
+
+      // 旧 Entry 读取失败时，应用内保存可直接返回缓存，目录替换则继续读取当前 Entry。
+      if (!current) {
+        throw readError;
+      }
+      if (current.sourceContent !== undefined) {
+        return current;
+      }
+      return loadSkill(id);
     }
 
-    initialized.value = true;
+    const current = getSkillById(id);
+    if (!current) {
+      throw new Error(`Skill not found: ${id}`);
+    }
+
+    if (current === skill && current.revision === revision) {
+      applySkillContent(current, file.content);
+      return current;
+    }
+
+    // 应用内保存可以直接返回缓存；目录被替换时递归读取新条目。
+    if (current.sourceContent !== undefined) {
+      return current;
+    }
+    return loadSkill(id);
+  }
+
+  /** 按 Skill ID 共享执行中的首次加载请求。 */
+  const sharedSkillRequest = new SharedRequest<string, SkillEntry>(loadSkill);
+
+  /**
+   * 获取 Skill 内容；首次从磁盘读取，之后返回 Store 缓存。
+   * @param id - Skill 目录 ID
+   * @returns 当前 Store 条目；目录不存在时返回 undefined
+   */
+  async function getSkill(id: string): Promise<SkillEntry | undefined> {
+    const skill = getSkillById(id);
+    if (!skill) {
+      return undefined;
+    }
+    if (skill.sourceContent !== undefined) {
+      return skill;
+    }
+
+    const [, loadedSkill] = await asyncTo(sharedSkillRequest.fetch(id));
+    return loadedSkill ?? getSkillById(id);
   }
 
   /**
-   * 切换 skill 启用/禁用状态。
-   * @param name - skill 名称
+   * 获取当前全部 Skill，单项读取失败通过 Entry.loadError 表达。
+   * @returns 与当前目录顺序一致且仍存在的 Store 条目
    */
-  function toggleSkill(name: string): void {
-    const skill = skills.value.find((s) => s.name === name);
+  async function getSkills(): Promise<SkillEntry[]> {
+    const loadedSkills = await Promise.all(skills.value.map((skill: SkillEntry): Promise<SkillEntry | undefined> => getSkill(skill.id)));
+    return loadedSkills.filter((skill: SkillEntry | undefined): skill is SkillEntry => skill !== undefined);
+  }
+
+  /**
+   * 用应用内最新原文更新 Skill 内容缓存。
+   * @param id - Skill 目录 ID
+   * @param sourceContent - 最新完整 SKILL.md 原文
+   * @returns 更新后的条目
+   */
+  function updateSkillContent(id: string, sourceContent: string): SkillEntry | undefined {
+    const skill = getSkillById(id);
+    if (!skill) {
+      return undefined;
+    }
+
+    skill.revision += 1;
+    applySkillContent(skill, sourceContent);
+    return skill;
+  }
+
+  /**
+   * 将应用内保存的入口文件内容同步到匹配的 Skill 缓存。
+   * @param filePath - 已成功保存的文件绝对路径
+   * @param sourceContent - 已成功保存的完整文件内容
+   */
+  function handleFileSaved(filePath: string, sourceContent: string): void {
+    const normalizedFilePath = normalizeResourcePath(filePath);
+    const skill = skills.value.find((entry: SkillEntry): boolean => normalizeResourcePath(entry.filePath) === normalizedFilePath);
     if (skill) {
-      const operation = nextResourceOperation();
-      appliedOperationByPath.set(skill.filePath, operation);
-      skill.enabled = !skill.enabled;
-      persistDisabledNames();
+      updateSkillContent(skill.id, sourceContent);
     }
   }
 
   /**
-   * 处理 skill 目录变更事件（增量更新）。
-   * @param type - 事件类型
-   * @param updatedSkill - 解析后的 skill（add/change 时提供）
+   * 切换 Skill 启用状态并按目录 ID 持久化。
+   * @param id - Skill 目录 ID
    */
-  function handleSkillChange(type: 'change' | 'add' | 'unlink', updatedSkill: SkillDefinition): void {
-    applySkillChange(type, updatedSkill, nextResourceOperation());
+  function toggleSkill(id: string): void {
+    const skill = getSkillById(id);
+    if (!skill) {
+      return;
+    }
+
+    skill.enabled = !skill.enabled;
+    persistDisabledIds();
+  }
+
+  /**
+   * 处理直接子目录的新增或删除事件。
+   * @param type - 目录事件类型
+   * @param dirPath - Skill 资源目录路径
+   */
+  function handleSkillDirectory(type: 'add' | 'unlink', dirPath: string): void {
+    const normalizedDirPath = normalizeResourcePath(dirPath);
+    const id = readDirectoryId(normalizedDirPath);
+    if (!id || id.startsWith('.')) {
+      return;
+    }
+    directoryRevision += 1;
+
+    const existingIndex = skills.value.findIndex((skill: SkillEntry): boolean => normalizeResourcePath(skill.dirPath) === normalizedDirPath);
+    if (type === 'unlink') {
+      if (existingIndex !== -1) {
+        skills.value[existingIndex].revision += 1;
+        skills.value.splice(existingIndex, 1);
+      }
+      return;
+    }
+
+    const existingById = getSkillById(id);
+    if (existingById?.dirPath === normalizedDirPath) {
+      return;
+    }
+    if (existingById) {
+      existingById.revision += 1;
+      skills.value.splice(skills.value.indexOf(existingById), 1);
+    }
+
+    skills.value.push(
+      createSkillEntry(
+        {
+          id,
+          dirPath: normalizedDirPath,
+          filePath: joinPath(normalizedDirPath, 'SKILL.md'),
+          source: 'global'
+        },
+        getDisabledIds()
+      )
+    );
+  }
+
+  /**
+   * 扫描目录直到扫描期间没有新的 watcher 事件。
+   * @returns 稳定时刻的 Skill 目录索引
+   */
+  async function scanStableSkills(): Promise<SkillIndex[]> {
+    if (!cachedApi) {
+      return [];
+    }
+
+    const scanRevision = directoryRevision;
+    const discovered = await scanSkillDirectories(scanConfig.value, cachedApi);
+    if (scanRevision !== directoryRevision) {
+      return scanStableSkills();
+    }
+
+    return discovered;
+  }
+
+  /**
+   * 重新扫描 Skill 目录索引。
+   */
+  async function refreshSkills(): Promise<void> {
+    if (!cachedApi || !scanConfig.value.homeDir) {
+      return;
+    }
+    if (!refreshPromise) {
+      refreshPromise = scanStableSkills()
+        .then((discovered: SkillIndex[]): void => {
+          applySkillIndices(discovered);
+        })
+        .finally((): void => {
+          refreshPromise = null;
+        });
+    }
+    await refreshPromise;
   }
 
   /**
@@ -236,7 +444,7 @@ export const useSkillStore = defineStore('skill', () => {
   }
 
   /**
-   * 完成初始化等待屏障，初始化失败时也允许聊天继续降级运行。
+   * 完成初始化等待屏障。
    */
   function finishInitialization(): void {
     initialized.value = true;
@@ -246,9 +454,9 @@ export const useSkillStore = defineStore('skill', () => {
   }
 
   /**
-   * 初始化：扫描 skill 目录。
+   * 初始化 Skill 目录索引。
    * @param homeDir - 用户主目录路径
-   * @param api - electronAPI 实例
+   * @param api - 平台文件 API
    */
   async function init(homeDir: string, api: SkillScannerAPI): Promise<void> {
     if (initTaskPromise) {
@@ -258,99 +466,28 @@ export const useSkillStore = defineStore('skill', () => {
     prepareInitialization();
     scanConfig.value.homeDir = homeDir;
     cachedApi = api;
-
     initTaskPromise = (async (): Promise<void> => {
       try {
-        await scanAndApplySkills();
+        await refreshSkills();
       } catch (error: unknown) {
         console.error('Skill scan failed:', error);
       } finally {
         finishInitialization();
       }
     })();
-
     return initTaskPromise;
   }
 
   /**
-   * 从磁盘重新同步完整 Skill 目录。
-   */
-  async function syncFromDisk(): Promise<void> {
-    if (!cachedApi || !scanConfig.value.homeDir) {
-      return;
-    }
-
-    if (!syncPromise) {
-      syncPromise = scanAndApplySkills().finally((): void => {
-        syncPromise = null;
-      });
-    }
-
-    await syncPromise;
-  }
-
-  /**
-   * 执行工具前从磁盘读取最新启用 Skill。
-   * @param name - Skill 名称
-   * @returns 最新 Skill 定义，不存在或已禁用时返回 undefined
-   */
-  async function resolveLatestEnabledSkill(name: string): Promise<SkillDefinition | undefined> {
-    const existingSkill = getSkillByName(name);
-    if (!existingSkill?.enabled || !cachedApi) {
-      return undefined;
-    }
-
-    const pending = latestSkillPromises.get(name);
-    if (pending) {
-      return pending;
-    }
-
-    const operation = nextResourceOperation();
-    const nextPromise = (async (): Promise<SkillDefinition | undefined> => {
-      try {
-        const { content } = await cachedApi.readFile(existingSkill.filePath);
-        const parsed = parseSkillMarkdown(content, existingSkill.filePath, {
-          source: existingSkill.source,
-          maxContentLength: scanConfig.value.maxContentLength ?? DEFAULT_SKILL_MAX_CONTENT_LENGTH
-        });
-
-        if (parsed.name && parsed.name !== name) {
-          applySkillChange('unlink', existingSkill, operation);
-          applySkillChange('add', parsed, operation);
-        } else {
-          applySkillChange('change', parsed, operation);
-        }
-      } catch {
-        applySkillChange('unlink', existingSkill, operation);
-      }
-
-      const latestSkill = getSkillByName(name);
-      return latestSkill?.enabled ? latestSkill : undefined;
-    })().finally((): void => {
-      latestSkillPromises.delete(name);
-    });
-
-    latestSkillPromises.set(name, nextPromise);
-    return nextPromise;
-  }
-
-  /**
-   * 重新扫描 skill 目录（使用缓存的 api 和 homeDir）。
-   */
-  async function rescan(): Promise<void> {
-    if (!cachedApi || !scanConfig.value.homeDir) {
-      console.warn('Skill rescan called before init');
-      return;
-    }
-    await syncFromDisk();
-  }
-
-  /**
-   * 等待初始化完成。
+   * 等待首次目录扫描完成。
    */
   async function waitForInit(): Promise<void> {
-    if (initialized.value) return;
-    if (initPromise) await initPromise;
+    if (initialized.value) {
+      return;
+    }
+    if (initPromise) {
+      await initPromise;
+    }
   }
 
   return {
@@ -358,16 +495,19 @@ export const useSkillStore = defineStore('skill', () => {
     initialized,
     scanConfig,
     parseErrors,
+    getSkillById,
     getSkillByName,
     getEnabledSkills,
+    getSkill,
+    getSkills,
+    updateSkillContent,
+    handleFileSaved,
     toggleSkill,
-    handleSkillChange,
+    handleSkillDirectory,
+    refreshSkills,
     prepareInitialization,
     finishInitialization,
     init,
-    syncFromDisk,
-    resolveLatestEnabledSkill,
-    rescan,
     waitForInit
   };
 });

@@ -31,7 +31,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { WidgetDefinition } from '@/ai/widget';
+import type { WidgetEntry } from '@/ai/widget';
 import { useWidgetStore } from '@/stores/ai/widget';
 import SettingsPage from '@/views/settings/_components/SettingsPage.vue';
 import SettingsPagination from '@/views/settings/_components/SettingsPagination.vue';
@@ -68,11 +68,21 @@ const currentPage = computed<number>({
 const totalPages = computed<number>(() => Math.max(1, Math.ceil(store.widgets.length / PAGE_SIZE)));
 
 /** 当前页小组件列表。 */
-const pagedWidgets = computed<WidgetDefinition[]>((): WidgetDefinition[] => {
+const pagedWidgets = computed<WidgetEntry[]>((): WidgetEntry[] => {
   const start = (currentPage.value - 1) * PAGE_SIZE;
 
   return store.widgets.slice(start, start + PAGE_SIZE);
 });
+
+/** 当前目录集合变化时加载全部 Widget 入口内容，单项失败由 Store 隔离并保留重试能力。 */
+watch(
+  (): string => store.widgets.map((widget: WidgetEntry): string => widget.id).join('\u0000'),
+  async (): Promise<void> => {
+    await store.waitForInit();
+    await store.getWidgets();
+  },
+  { immediate: true }
+);
 
 /**
  * 打开小组件创建弹窗。

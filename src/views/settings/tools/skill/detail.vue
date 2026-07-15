@@ -1,6 +1,6 @@
 <!--
   @file detail.vue
-  @description Skill 详情独立页面，从路由参数获取 skill 名称并展示详情。
+  @description Skill 详情独立页面，按目录 ID 从 Store 懒加载并展示缓存内容。
 -->
 <template>
   <SettingsPage title="Skill 详情" class="skill-detail">
@@ -11,26 +11,31 @@
         </BButton>
         <div v-if="skill" class="skill-detail__title">
           <div class="skill-detail__name">
-            <div class="skill-detail__name-text">{{ skill.name }}</div>
+            <div class="skill-detail__name-text">{{ skillName }}</div>
           </div>
         </div>
       </div>
     </template>
 
     <template #extra>
-      <ASwitch v-if="skill" :checked="skill.enabled" :disabled="!!skill.parseError" @change="handleToggle" />
+      <ASwitch v-if="skill" :checked="skill.enabled" :disabled="!!parseError" @change="handleToggle" />
     </template>
 
     <template v-if="skill">
       <header class="skill-detail__header">
         <div class="skill-detail__meta">
-          <div class="skill-detail__desc">{{ skill.description }}</div>
+          <div class="skill-detail__desc">{{ skillDescription }}</div>
         </div>
       </header>
 
-      <div v-if="skill.parseError" class="skill-detail__parse-error">
+      <div v-if="parseError" class="skill-detail__parse-error">
         <Icon icon="lucide:alert-triangle" :width="14" />
-        <span>{{ skill.parseError }}</span>
+        <span>{{ parseError }}</span>
+      </div>
+
+      <div v-else-if="skill.loadError" class="skill-detail__parse-error">
+        <Icon icon="lucide:alert-triangle" :width="14" />
+        <span>{{ skill.loadError }}</span>
       </div>
 
       <div class="skill-detail__path">
@@ -40,7 +45,15 @@
         </BButton>
       </div>
 
-      <SkillPreview :root-path="skill.dirPath" :initial-file-path="skill.filePath" />
+      <SkillPreview
+        v-if="skill.sourceContent !== undefined"
+        :root-path="skill.dirPath"
+        :initial-file-path="skill.filePath"
+        :initial-content="skill.sourceContent"
+      />
+      <div v-else-if="!skill.loadError" class="skill-detail__empty">
+        <span>正在加载技能内容…</span>
+      </div>
     </template>
 
     <div v-else class="skill-detail__empty">
@@ -51,9 +64,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
+import type { SkillEntry } from '@/ai/skill';
 import { useClipboard } from '@/hooks/useClipboard';
 import { useSkillStore } from '@/stores/ai/skill';
 import SettingsPage from '@/views/settings/_components/SettingsPage.vue';
@@ -64,16 +78,54 @@ const router = useRouter();
 const store = useSkillStore();
 const { clipboard } = useClipboard();
 
-/** 从路由参数获取 skill 名称。 */
-const skillName = computed(() => decodeURIComponent(route.params.name as string));
+/** 当前详情条目。 */
+const skill = ref<SkillEntry | null>(null);
+/** 异步路由加载版本，用于丢弃迟到结果。 */
+let loadVersion = 0;
 
-/** 当前查看的 Skill 对象。 */
-const skill = computed(() => store.getSkillByName(skillName.value) ?? null);
+/** 从路由参数读取 Skill 目录 ID。 */
+const skillId = computed<string>((): string => {
+  const value = route.params.id;
+  return decodeURIComponent(Array.isArray(value) ? value[0] ?? '' : String(value ?? ''));
+});
+
+/** Skill 展示名称，内容未加载时回退到目录 ID。 */
+const skillName = computed<string>((): string => skill.value?.definition?.name || skill.value?.id || '');
+
+/** Skill 展示描述，读取失败时展示错误。 */
+const skillDescription = computed<string>((): string => {
+  return skill.value?.definition?.description || skill.value?.loadError || '未加载技能描述';
+});
+
+/** 当前 Skill 解析错误。 */
+const parseError = computed<string>((): string => skill.value?.definition?.parseError || '');
+
+/**
+ * 按目录 ID 从 Store 获取 Skill 内容。
+ * @param id - Skill 目录 ID
+ */
+async function loadSkill(id: string): Promise<void> {
+  const version = ++loadVersion;
+  await store.waitForInit();
+  if (version !== loadVersion) {
+    return;
+  }
+
+  skill.value = id ? store.getSkillById(id) ?? null : null;
+  if (!id || !skill.value) {
+    return;
+  }
+
+  const loaded = await store.getSkill(id);
+  if (version === loadVersion) {
+    skill.value = loaded ?? store.getSkillById(id) ?? null;
+  }
+}
 
 /** 切换 Skill 启用状态。 */
 function handleToggle(): void {
   if (skill.value) {
-    store.toggleSkill(skill.value.name);
+    store.toggleSkill(skill.value.id);
   }
 }
 
@@ -84,14 +136,19 @@ function handleCopyPath(): void {
   }
 }
 
-/**
- * 返回技能列表页。
- * 优先沿用浏览器历史，以保留列表页的 `?page=` 等查询参数；
- * 当无历史记录（如直接通过 URL 进入、刷新详情页）时回退到列表路由。
- */
+/** 返回技能列表页。 */
 function handleGoBack(): void {
   router.push({ name: 'skill-list' });
 }
+
+/** 路由目录 ID 变化时重新获取对应 Store 条目。 */
+watch(
+  skillId,
+  async (id: string): Promise<void> => {
+    await loadSkill(id);
+  },
+  { immediate: true }
+);
 </script>
 
 <style scoped lang="less">

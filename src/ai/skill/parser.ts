@@ -90,7 +90,6 @@ export function parseSkillMarkdown(markdown: string, filePath: string, options: 
       filePath: normalizedFilePath,
       dirPath,
       source,
-      enabled: true,
       parsedAt,
       parseError: 'Missing YAML frontmatter. SKILL.md must start with --- delimited frontmatter containing name and description.'
     };
@@ -107,7 +106,6 @@ export function parseSkillMarkdown(markdown: string, filePath: string, options: 
       filePath: normalizedFilePath,
       dirPath,
       source,
-      enabled: true,
       parsedAt,
       parseError: fmError
     };
@@ -125,7 +123,6 @@ export function parseSkillMarkdown(markdown: string, filePath: string, options: 
       filePath: normalizedFilePath,
       dirPath,
       source,
-      enabled: true,
       parsedAt,
       parseError: 'Missing required frontmatter field: name'
     };
@@ -140,7 +137,6 @@ export function parseSkillMarkdown(markdown: string, filePath: string, options: 
       filePath: normalizedFilePath,
       dirPath,
       source,
-      enabled: true,
       parsedAt,
       parseError: 'Missing required frontmatter field: description'
     };
@@ -157,7 +153,6 @@ export function parseSkillMarkdown(markdown: string, filePath: string, options: 
     filePath: normalizedFilePath,
     dirPath,
     source,
-    enabled: true,
     parsedAt,
     truncated
   };

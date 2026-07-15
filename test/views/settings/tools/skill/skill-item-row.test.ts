@@ -8,7 +8,7 @@ import { defineComponent } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SkillDefinition } from '@/ai/skill/types';
+import type { SkillEntry } from '@/ai/skill/types';
 import type { DropdownOption, DropdownOptionItem } from '@/components/BDropdown/type';
 import { useSkillStore } from '@/stores/ai/skill';
 import SkillItemRow from '@/views/settings/tools/skill/components/SkillItemRow.vue';
@@ -60,16 +60,27 @@ vi.mock('ant-design-vue', async (importOriginal) => {
   return { ...actual, message: messageMock };
 });
 
-/** Skill 测试定义。 */
-const skill: SkillDefinition = {
-  name: 'weather',
-  description: 'Weather instructions',
-  content: 'Use the weather service.',
-  filePath: '/Users/test/.agents/skills/weather/SKILL.md',
-  dirPath: '/Users/test/.agents/skills/weather',
+/** Skill 测试入口文件原文。 */
+const skillSource = ['---', 'name: weather', 'description: Weather instructions', '---', 'Use the weather service.'].join('\n');
+
+/** Skill 测试 Store 条目。 */
+const skill: SkillEntry = {
+  id: 'weather-directory',
+  filePath: '/Users/test/.agents/skills/weather-directory/SKILL.md',
+  dirPath: '/Users/test/.agents/skills/weather-directory',
   source: 'global',
   enabled: true,
-  parsedAt: 1
+  revision: 1,
+  sourceContent: skillSource,
+  definition: {
+    name: 'weather',
+    description: 'Weather instructions',
+    content: 'Use the weather service.',
+    filePath: '/Users/test/.agents/skills/weather-directory/SKILL.md',
+    dirPath: '/Users/test/.agents/skills/weather-directory',
+    source: 'global',
+    parsedAt: 1
+  }
 };
 
 /** 直接渲染触发器与浮层的下拉菜单测试替身。 */
@@ -139,10 +150,15 @@ function createDeferred<T>(): Deferred<T> {
  * @returns 组件包装器
  */
 function mountRow(): VueWrapper {
-  useSkillStore().handleSkillChange('add', { ...skill });
+  const store = useSkillStore();
+  store.handleSkillDirectory('add', skill.dirPath);
+  const storedSkill = store.updateSkillContent(skill.id, skillSource);
+  if (!storedSkill) {
+    throw new Error('Skill entry missing');
+  }
 
   return mount(SkillItemRow, {
-    props: { skill },
+    props: { skill: storedSkill },
     global: {
       stubs: {
         ASwitch: ASwitchStub,
@@ -190,8 +206,8 @@ describe('SkillItemRow', (): void => {
     await wrapper.trigger('click');
     await wrapper.findComponent({ name: 'ASwitch' }).trigger('click');
 
-    expect(routerPushMock).toHaveBeenCalledWith({ name: 'skill-detail', params: { name: 'weather' } });
-    expect(useSkillStore().getSkillByName('weather')?.enabled).toBe(false);
+    expect(routerPushMock).toHaveBeenCalledWith({ name: 'skill-detail', params: { id: 'weather-directory' } });
+    expect(useSkillStore().getSkillById('weather-directory')?.enabled).toBe(false);
     expect(wrapper.emitted('open')).toBeUndefined();
     expect(wrapper.emitted('toggle')).toBeUndefined();
     expect(wrapper.findComponent({ name: 'BButton' }).props()).toMatchObject({
@@ -235,13 +251,13 @@ describe('SkillItemRow', (): void => {
 
   it('moves the whole Skill directory to trash and rescans internally', async (): Promise<void> => {
     const wrapper = mountRow();
-    const rescan = vi.spyOn(useSkillStore(), 'rescan').mockResolvedValue(undefined);
+    const refreshSkills = vi.spyOn(useSkillStore(), 'refreshSkills').mockResolvedValue(undefined);
     const [, remove] = readItems(wrapper);
 
     await remove?.onClick?.();
 
     expect(nativeMock.trashFile).toHaveBeenCalledWith(skill.dirPath);
-    expect(rescan).toHaveBeenCalledTimes(1);
+    expect(refreshSkills).toHaveBeenCalledTimes(1);
     expect(messageMock.success).toHaveBeenCalledWith('技能 "weather" 已删除');
     expect(wrapper.emitted('delete')).toBeUndefined();
   });
@@ -259,19 +275,19 @@ describe('SkillItemRow', (): void => {
   it('logs and reports a Skill trash failure without rescanning', async (): Promise<void> => {
     nativeMock.trashFile.mockRejectedValue(new Error('EPERM'));
     const wrapper = mountRow();
-    const rescan = vi.spyOn(useSkillStore(), 'rescan').mockResolvedValue(undefined);
+    const refreshSkills = vi.spyOn(useSkillStore(), 'refreshSkills').mockResolvedValue(undefined);
     const [, remove] = readItems(wrapper);
 
     await remove?.onClick?.();
 
-    expect(rescan).not.toHaveBeenCalled();
+    expect(refreshSkills).not.toHaveBeenCalled();
     expect(loggerMock.error).toHaveBeenCalledWith('Delete Skill failed:', expect.any(Error));
     expect(messageMock.error).toHaveBeenCalledWith('删除技能 "weather" 失败：EPERM');
   });
 
   it('logs and warns when rescan fails after deleting the Skill', async (): Promise<void> => {
     const wrapper = mountRow();
-    vi.spyOn(useSkillStore(), 'rescan').mockRejectedValue(new Error('scan failed'));
+    vi.spyOn(useSkillStore(), 'refreshSkills').mockRejectedValue(new Error('scan failed'));
     const [, remove] = readItems(wrapper);
 
     await remove?.onClick?.();
@@ -282,7 +298,7 @@ describe('SkillItemRow', (): void => {
 
   it('executes only one trash operation for repeated delete actions', async (): Promise<void> => {
     const wrapper = mountRow();
-    vi.spyOn(useSkillStore(), 'rescan').mockResolvedValue(undefined);
+    vi.spyOn(useSkillStore(), 'refreshSkills').mockResolvedValue(undefined);
     const [, remove] = readItems(wrapper);
 
     const firstDeletion = remove?.onClick?.();
@@ -297,7 +313,7 @@ describe('SkillItemRow', (): void => {
     const pendingConfirmation = createDeferred<[boolean, boolean]>();
     deleteConfirmMock.mockReturnValue(pendingConfirmation.promise);
     const wrapper = mountRow();
-    vi.spyOn(useSkillStore(), 'rescan').mockResolvedValue(undefined);
+    vi.spyOn(useSkillStore(), 'refreshSkills').mockResolvedValue(undefined);
     const [, remove] = readItems(wrapper);
 
     const deletion = remove?.onClick?.();

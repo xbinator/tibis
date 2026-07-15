@@ -7,17 +7,17 @@
     <div class="skill-settings__item-icon">{{ initial }}</div>
     <div class="skill-settings__item-info">
       <div class="skill-settings__item-name">
-        {{ skill.name }}
-        <span v-if="skill.parseError" class="skill-settings__item-error-badge" :title="skill.parseError">
+        {{ name }}
+        <span v-if="parseError" class="skill-settings__item-error-badge" :title="parseError">
           <Icon icon="lucide:alert-triangle" :width="12" />
         </span>
       </div>
       <div class="skill-settings__desc">{{ description }}</div>
       <!-- 解析错误详情 -->
-      <div v-if="skill.parseError" class="skill-settings__item-parse-error">{{ skill.parseError }}</div>
+      <div v-if="parseError" class="skill-settings__item-parse-error">{{ parseError }}</div>
     </div>
     <div class="skill-settings__item-actions" @click.stop>
-      <ASwitch :checked="skill.enabled" size="small" :disabled="!!skill.parseError" @change="handleToggle" />
+      <ASwitch :checked="skill.enabled" size="small" :disabled="!!parseError" @change="handleToggle" />
       <BDropdown placement="bottomRight" :disabled="deleting">
         <BButton type="ghost" size="small" square icon="lucide:settings" title="技能设置" aria-label="技能设置" :disabled="deleting" />
         <template #overlay>
@@ -33,7 +33,7 @@ import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { message } from 'ant-design-vue';
-import type { SkillDefinition } from '@/ai/skill/types';
+import type { SkillEntry } from '@/ai/skill/types';
 import type { DropdownOption } from '@/components/BDropdown/type';
 import { useOpenFile } from '@/hooks/useOpenFile';
 import { native } from '@/shared/platform';
@@ -45,8 +45,8 @@ import { Modal } from '@/utils/modal';
  * Skill 列表项属性。
  */
 interface Props {
-  /** Skill 定义对象 */
-  skill: SkillDefinition;
+  /** Skill Store 条目。 */
+  skill: SkillEntry;
 }
 
 const props = defineProps<Props>();
@@ -56,12 +56,18 @@ const { openFileByPath } = useOpenFile();
 /** 当前 Skill 是否正在执行删除流程。 */
 const deleting = ref(false);
 
+/** Skill 展示名称，内容未加载时回退到目录 ID。 */
+const name = computed<string>((): string => props.skill.definition?.name || props.skill.id);
+
+/** Skill 解析错误。 */
+const parseError = computed<string>((): string => props.skill.definition?.parseError || '');
+
 /** Skill 名称首字母大写，用于图标展示。 */
-const initial = computed(() => props.skill.name.charAt(0).toUpperCase());
+const initial = computed<string>((): string => name.value.charAt(0).toUpperCase());
 
 /** 展示用描述，移除开头的双引号。 */
 const description = computed<string>(() => {
-  const desc = props.skill.description;
+  const desc = props.skill.definition?.description || props.skill.loadError || '未加载技能描述';
   return desc.startsWith('"') ? desc.slice(1) : desc;
 });
 
@@ -69,14 +75,14 @@ const description = computed<string>(() => {
  * 打开 Skill 只读详情。
  */
 function handleOpen(): void {
-  router.push({ name: 'skill-detail', params: { name: props.skill.name } });
+  router.push({ name: 'skill-detail', params: { id: props.skill.id } });
 }
 
 /**
  * 切换 Skill 启用状态。
  */
 function handleToggle(): void {
-  store.toggleSkill(props.skill.name);
+  store.toggleSkill(props.skill.id);
 }
 
 /**
@@ -91,12 +97,12 @@ async function handleEditSkill(): Promise<void> {
     const openedFile = await openFileByPath(props.skill.filePath);
 
     if (!openedFile) {
-      message.error(`无法打开技能 "${props.skill.name}" 的 SKILL.md`);
+      message.error(`无法打开技能 "${name.value}" 的 SKILL.md`);
     }
   } catch (error: unknown) {
     logger.error('Open SKILL.md failed:', error);
     const reason = error instanceof Error ? error.message : String(error);
-    message.error(`无法打开技能 "${props.skill.name}" 的 SKILL.md：${reason}`);
+    message.error(`无法打开技能 "${name.value}" 的 SKILL.md：${reason}`);
   }
 }
 
@@ -112,7 +118,7 @@ async function handleDeleteSkill(): Promise<void> {
   deleting.value = true;
   let movedToTrash = false;
   try {
-    const [, confirmed] = await Modal.delete(`确定要删除技能 "${props.skill.name}" 吗？整个目录及其中的附属文件都会移入系统回收站。`);
+    const [, confirmed] = await Modal.delete(`确定要删除技能 "${name.value}" 吗？整个目录及其中的附属文件都会移入系统回收站。`);
 
     if (!confirmed) {
       return;
@@ -120,17 +126,17 @@ async function handleDeleteSkill(): Promise<void> {
 
     await native.trashFile(props.skill.dirPath);
     movedToTrash = true;
-    await store.rescan();
-    message.success(`技能 "${props.skill.name}" 已删除`);
+    await store.refreshSkills();
+    message.success(`技能 "${name.value}" 已删除`);
   } catch (error: unknown) {
     // 目录已移入回收站时只提示刷新失败，避免误导用户重复删除。
     if (movedToTrash) {
       logger.warn('Refresh skills after deletion failed:', error);
-      message.warning(`技能 "${props.skill.name}" 已移入回收站，但列表刷新失败`);
+      message.warning(`技能 "${name.value}" 已移入回收站，但列表刷新失败`);
     } else {
       logger.error('Delete Skill failed:', error);
       const reason = error instanceof Error ? error.message : String(error);
-      message.error(`删除技能 "${props.skill.name}" 失败：${reason}`);
+      message.error(`删除技能 "${name.value}" 失败：${reason}`);
     }
   } finally {
     deleting.value = false;

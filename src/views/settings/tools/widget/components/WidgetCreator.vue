@@ -54,7 +54,7 @@ import type { Rule } from 'ant-design-vue/es/form';
 import { reactive, ref, shallowRef, watch } from 'vue';
 import { Form, message } from 'ant-design-vue';
 import { cloneDeep } from 'lodash-es';
-import { importWidgetJsonFile, importWidgetZipFile, joinPath, type WidgetDefinition, type WidgetImportResource, type WidgetImportResult } from '@/ai/widget';
+import { importWidgetJsonFile, importWidgetZipFile, joinPath, type WidgetImportResource, type WidgetImportResult } from '@/ai/widget';
 import type { WidgetData } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { createDefaultWidgetExecuteMethod, isDefaultWidgetExecuteMethod } from '@/components/BWidget/utils/widgetExecuteMethod';
@@ -112,7 +112,7 @@ const creatingWidget = ref(false);
 function isExistingWidgetId(id: string): boolean {
   const normalizedId = id.trim().toLowerCase();
 
-  return store.widgets.some((widget: WidgetDefinition): boolean => widget.id.toLowerCase() === normalizedId);
+  return store.widgets.some((widget): boolean => widget.id.toLowerCase() === normalizedId);
 }
 
 /**
@@ -343,16 +343,7 @@ async function handleConfirm(): Promise<void> {
       name: widgetName,
       description: dataItem.description
     };
-    const createdWidget: WidgetDefinition = {
-      id: widgetId,
-      name: widgetData.name,
-      description: widgetData.description,
-      data: widgetData,
-      filePath: joinPath(widgetDir, 'widget.json'),
-      dirPath: widgetDir,
-      enabled: true,
-      parsedAt: Date.now()
-    };
+    const widgetContent = JSON.stringify(widgetData, null, 2);
 
     await installDirectory({
       api: native,
@@ -363,19 +354,21 @@ async function handleConfirm(): Promise<void> {
     });
     await installLogger.success();
 
-    const [rescanError] = await asyncTo(store.rescan());
-    if (rescanError) {
-      await logger.warn(`[widget-install] rescan-failed resource=${widgetId} error=${formatDirectoryInstallError(rescanError)}`);
+    const [refreshError] = await asyncTo(store.refreshWidgets());
+    // 创建结果由应用明确写回 Store，避免等待目录 watcher 或再次读取入口文件。
+    store.handleWidgetDirectory('add', widgetDir);
+    store.updateWidgetContent(widgetId, widgetContent);
+    if (refreshError) {
+      await logger.warn(`[widget-install] rescan-failed resource=${widgetId} error=${formatDirectoryInstallError(refreshError)}`);
       message.warning(`小组件 "${widgetName}" 创建成功，但刷新列表失败，请稍后重试`);
     }
-    store.upsertWidget(createdWidget);
     visible.value = false;
 
-    const [openEditorError] = await asyncTo(openWidgetFile(createdWidget.id));
+    const [openEditorError] = await asyncTo(openWidgetFile(widgetId));
     if (openEditorError) {
       await logger.warn(`[widget-install] open-editor-failed resource=${widgetId} error=${formatDirectoryInstallError(openEditorError)}`);
       message.warning(`小组件 "${widgetName}" 创建成功，但打开编辑器失败`);
-    } else if (!rescanError) {
+    } else if (!refreshError) {
       message.success(`小组件 "${widgetName}" 创建成功`);
     }
   } catch (installError: unknown) {

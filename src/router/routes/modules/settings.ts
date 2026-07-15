@@ -90,7 +90,7 @@ const routes: AppRouteRecordRaw[] = [
                 meta: { title: '技能' }
               },
               {
-                path: ':name',
+                path: ':id',
                 name: 'skill-detail',
                 component: () => import('@/views/settings/tools/skill/detail.vue'),
                 meta: { title: '技能详情' }

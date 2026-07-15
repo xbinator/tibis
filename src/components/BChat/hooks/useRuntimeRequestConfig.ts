@@ -21,8 +21,8 @@ interface UseRuntimeRequestConfigOptions {
   workspaceRoot: Readonly<Ref<string | null>>;
   /** 解析 Provider 服务配置 */
   resolveServiceConfig: () => Promise<ServiceConfig | undefined>;
-  /** 同步磁盘 AI 资源 */
-  syncAIResources: () => Promise<void>;
+  /** 加载 AI 资源 Store 内容 */
+  getAIResources: () => Promise<void>;
   /** 读取当前候选工具 */
   getActiveTools: () => AIToolExecutor[];
   /** 读取 Skill 内容版本 */
@@ -80,7 +80,7 @@ export function useRuntimeRequestConfig(options: UseRuntimeRequestConfigOptions)
       return null;
     }
 
-    await options.syncAIResources();
+    await options.getAIResources();
     const memorySelection = selectionSource
       ? createMemorySelection({
           content: selectionSource.content,

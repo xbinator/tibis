@@ -5,7 +5,7 @@
 import type { AIToolContext, AIToolExecutionResult, AIToolExecutor } from 'types/ai';
 import type { WidgetContract, WidgetDisplayPayload, WidgetExecutionResult, WidgetRenderContext } from 'types/widget';
 import { cloneDeep, isPlainObject } from 'lodash-es';
-import type { WidgetDefinition } from '@/ai/widget/types';
+import type { WidgetDefinition, WidgetEntry } from '@/ai/widget/types';
 import { createToolFailureResult, createToolSuccessResult } from '../../results';
 
 /** Widget 工具名称。 */
@@ -34,9 +34,9 @@ const OPEN_WIDGET_DESCRIPTION_FOOTER =
  */
 export interface WidgetStoreLike {
   /** 获取已启用的小组件列表 */
-  getEnabledWidgets: () => WidgetDefinition[];
-  /** 执行前解析磁盘中的最新启用小组件 */
-  resolveLatestEnabledWidget?: (id: string) => Promise<WidgetDefinition | undefined>;
+  getEnabledWidgets: () => WidgetEntry[];
+  /** 获取并复用 Widget Store 内容缓存。 */
+  getWidget: (id: string) => Promise<WidgetEntry | undefined>;
   /** 是否已完成初始化 */
   initialized: boolean;
 }
@@ -118,7 +118,7 @@ function createSafeWidgetId(id: string): string {
  * @returns description 字符串
  */
 function buildWidgetListDescription(store: WidgetStoreLike, header: string, footer: string, emptyDescription: string): string {
-  const widgets = store.getEnabledWidgets().filter((widget: WidgetDefinition): boolean => !widget.parseError);
+  const widgets = store.getEnabledWidgets().filter((widget: WidgetEntry): boolean => Boolean(widget.definition && !widget.definition.parseError));
 
   if (widgets.length === 0) {
     return emptyDescription;
@@ -127,7 +127,11 @@ function buildWidgetListDescription(store: WidgetStoreLike, header: string, foot
   const lines: string[] = [];
 
   for (const widget of widgets) {
-    const nextLine = `- ${widget.id}: ${widget.name} - ${widget.description}`;
+    const { definition } = widget;
+    if (!definition) {
+      continue;
+    }
+    const nextLine = `- ${widget.id}: ${definition.name} - ${definition.description}`;
     const omitted = widgets.length - lines.length - 1;
     const omissionLine = omitted > 0 ? `... ${omitted} more widgets omitted to keep this tool description compact.` : '';
     const candidate = [header, ...lines, nextLine, omissionLine, '', footer].filter(Boolean).join('\n');
@@ -220,18 +224,24 @@ function createOpenWidgetInitialState(widget: WidgetDefinition, input: OpenWidge
  * @param id - 小组件 ID
  * @returns 匹配的小组件或 undefined
  */
-function findEnabledWidgetById(store: WidgetStoreLike, id: string): WidgetDefinition | undefined {
-  return store.getEnabledWidgets().find((widget: WidgetDefinition): boolean => widget.id === id && !widget.parseError);
+function findEnabledWidgetById(store: WidgetStoreLike, id: string): WidgetEntry | undefined {
+  return store.getEnabledWidgets().find((widget: WidgetEntry): boolean => widget.id === id && Boolean(widget.definition));
 }
 
 /**
  * 执行前解析最新启用小组件。
  * @param store - Widget store 实例
  * @param id - 小组件 ID
- * @returns 最新小组件或 undefined
+ * @returns Store 缓存条目或 undefined
  */
-async function resolveEnabledWidgetById(store: WidgetStoreLike, id: string): Promise<WidgetDefinition | undefined> {
-  return store.resolveLatestEnabledWidget ? store.resolveLatestEnabledWidget(id) : findEnabledWidgetById(store, id);
+async function resolveEnabledWidgetById(store: WidgetStoreLike, id: string): Promise<WidgetEntry | undefined> {
+  const indexedWidget = findEnabledWidgetById(store, id);
+  if (!indexedWidget) {
+    return undefined;
+  }
+
+  const loadedWidget = await store.getWidget(id);
+  return loadedWidget?.enabled ? loadedWidget : undefined;
 }
 
 /**
@@ -275,8 +285,8 @@ async function createWidgetDisplayPayload(
 function createWidgetNotFoundResult(store: WidgetStoreLike, id: string, toolName: string): AIToolExecutionResult<never> {
   const available = store
     .getEnabledWidgets()
-    .filter((item: WidgetDefinition): boolean => !item.parseError)
-    .map((item: WidgetDefinition): string => item.id)
+    .filter((item: WidgetEntry): boolean => Boolean(item.definition && !item.definition.parseError))
+    .map((item: WidgetEntry): string => item.id)
     .join(', ');
 
   return createToolFailureResult(toolName, 'TOOL_NOT_FOUND', `Widget '${id}' not found. Available widgets: ${available || 'none'}`);
@@ -288,8 +298,12 @@ function createWidgetNotFoundResult(store: WidgetStoreLike, id: string, toolName
  * @param toolName - 当前工具名称
  * @returns 工具失败结果
  */
-function createWidgetInvalidResult(widget: WidgetDefinition, toolName: string): AIToolExecutionResult<never> {
-  return createToolFailureResult(toolName, 'INVALID_INPUT', `Widget '${widget.id}' is invalid: ${widget.parseError ?? 'Unknown parse error'}`);
+function createWidgetInvalidResult(widget: WidgetEntry, toolName: string): AIToolExecutionResult<never> {
+  return createToolFailureResult(
+    toolName,
+    'INVALID_INPUT',
+    `Widget '${widget.id}' is invalid: ${widget.definition?.parseError ?? 'Widget content is unavailable'}`
+  );
 }
 
 /**
@@ -325,11 +339,11 @@ export function createWidgetTool(store: WidgetStoreLike): AIToolExecutor<WidgetT
         return createWidgetNotFoundResult(store, input.id, WIDGET_TOOL_NAME);
       }
 
-      if (widget.parseError) {
+      if (!widget.definition || widget.definition.parseError) {
         return createWidgetInvalidResult(widget, WIDGET_TOOL_NAME);
       }
 
-      return createToolSuccessResult(WIDGET_TOOL_NAME, createWidgetContract(widget));
+      return createToolSuccessResult(WIDGET_TOOL_NAME, createWidgetContract(widget.definition));
     }
   };
 }
@@ -371,11 +385,11 @@ export function createOpenWidgetTool(store: WidgetStoreLike, options: OpenWidget
         return createWidgetNotFoundResult(store, input.id, OPEN_WIDGET_TOOL_NAME);
       }
 
-      if (widget.parseError) {
+      if (!widget.definition || widget.definition.parseError) {
         return createWidgetInvalidResult(widget, OPEN_WIDGET_TOOL_NAME);
       }
 
-      return createToolSuccessResult(OPEN_WIDGET_TOOL_NAME, await createWidgetDisplayPayload(widget, input, context, options));
+      return createToolSuccessResult(OPEN_WIDGET_TOOL_NAME, await createWidgetDisplayPayload(widget.definition, input, context, options));
     }
   };
 }

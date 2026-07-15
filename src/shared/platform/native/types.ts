@@ -108,6 +108,18 @@ export interface FileChangeEvent {
 }
 
 /**
+ * 资源根目录直接子目录变化事件。
+ */
+export interface DirectoryChangeEvent {
+  /** 目录事件类型。 */
+  type: 'add' | 'unlink';
+  /** 被监听的资源根目录。 */
+  rootPath: string;
+  /** 新增或删除的直接子目录。 */
+  dirPath: string;
+}
+
+/**
  * Tibis 工作区根目录信息。
  */
 export interface TibisWorkspaceRoot {
@@ -174,11 +186,14 @@ export interface Native {
 
   onFileChanged(callback: (data: FileChangeEvent) => void): () => void;
 
-  watchDirectory(dirPath: string, globPattern?: string): Promise<void>;
+  /** 监听资源根目录的直接子目录。 */
+  watchResourceDirectory(rootPath: string): Promise<void>;
 
-  unwatchDirectory(dirPath: string, globPattern?: string): Promise<void>;
+  /** 停止监听资源根目录的直接子目录。 */
+  unwatchResourceDirectory(rootPath: string): Promise<void>;
 
-  onSkillChanged(callback: (data: { type: string; filePath: string; content?: string }) => void): () => void;
+  /** 订阅资源目录变化。 */
+  onDirectoryChanged(callback: (data: DirectoryChangeEvent) => void): () => void;
 
   setWindowTitle(title: string): Promise<void>;
 

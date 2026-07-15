@@ -59,6 +59,8 @@ interface Props {
   virtualFiles?: VirtualFile[];
   /** 初始选中文件路径，树加载完成后自动选中 */
   initialFilePath?: string;
+  /** 初始入口文件的 Store 缓存原文。 */
+  initialContent?: string;
 }
 
 // ─── Props / Emits ───────────────────────────────────────────────────────────
@@ -106,6 +108,9 @@ async function readContent(filePath: string): Promise<string> {
     if (content === undefined) throw new Error('文件不在虚拟文件列表中');
     return content;
   }
+  if (filePath === props.initialFilePath && props.initialContent !== undefined) {
+    return props.initialContent;
+  }
   const { content } = await native.readFile(filePath);
   return content;
 }
@@ -133,7 +138,6 @@ async function selectFile(filePath: string): Promise<void> {
 function onTreeLoaded(count: number): void {
   treeFileCount.value = count;
   emit('loaded', count);
-  //
   props.initialFilePath && selectFile(props.initialFilePath);
 }
 
@@ -150,6 +154,19 @@ watch([() => props.rootPath, () => props.virtualFiles], () => {
   selectedFilePath.value = '';
   fileState.value = { status: 'idle' };
 });
+
+// Store 更新当前入口文件原文时，已选中的预览同步采用新缓存且不重新读盘。
+watch(
+  () => props.initialContent,
+  (content: string | undefined): void => {
+    if (content === undefined || selectedFilePath.value !== props.initialFilePath) {
+      return;
+    }
+
+    requestVersion++;
+    fileState.value = { status: 'success', content };
+  }
+);
 </script>
 
 <style scoped lang="less">

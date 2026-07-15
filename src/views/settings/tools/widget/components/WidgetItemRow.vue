@@ -7,16 +7,16 @@
     <div class="widget-settings__item-icon">{{ initial }}</div>
     <div class="widget-settings__item-info">
       <div class="widget-settings__item-name">
-        {{ widget.name }}
-        <span v-if="widget.parseError" class="widget-settings__item-error-badge" :title="widget.parseError">
+        {{ name }}
+        <span v-if="parseError" class="widget-settings__item-error-badge" :title="parseError">
           <Icon icon="lucide:alert-triangle" :width="12" />
         </span>
       </div>
       <div class="widget-settings__desc">{{ description }}</div>
-      <div v-if="widget.parseError" class="widget-settings__item-parse-error">{{ widget.parseError }}</div>
+      <div v-if="parseError" class="widget-settings__item-parse-error">{{ parseError }}</div>
     </div>
     <div class="widget-settings__item-actions" @click.stop>
-      <ASwitch :checked="widget.enabled" size="small" :disabled="!!widget.parseError" @change="handleToggle" />
+      <ASwitch :checked="widget.enabled" size="small" :disabled="!!parseError" @change="handleToggle" />
       <BDropdown placement="bottomRight" :disabled="deleting">
         <BButton type="ghost" size="small" square icon="lucide:settings" title="小组件设置" aria-label="小组件设置" :disabled="deleting" />
         <template #overlay>
@@ -31,7 +31,7 @@
 import { computed, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import { message } from 'ant-design-vue';
-import type { WidgetDefinition } from '@/ai/widget';
+import type { WidgetEntry } from '@/ai/widget';
 import type { DropdownOption } from '@/components/BDropdown/type';
 import { useOpenFile } from '@/hooks/useOpenFile';
 import { native } from '@/shared/platform';
@@ -43,8 +43,8 @@ import { Modal } from '@/utils/modal';
  * 小组件列表项属性。
  */
 interface Props {
-  /** 小组件定义 */
-  widget: WidgetDefinition;
+  /** Widget Store 条目。 */
+  widget: WidgetEntry;
 }
 
 const props = defineProps<Props>();
@@ -53,13 +53,19 @@ const { openWidgetFile } = useOpenFile();
 /** 当前小组件是否正在执行删除流程。 */
 const deleting = ref(false);
 
+/** Widget 展示名称，内容未加载时回退到目录 ID。 */
+const name = computed<string>((): string => props.widget.definition?.name || props.widget.id);
+/** Widget 解析错误。 */
+const parseError = computed<string>((): string => props.widget.definition?.parseError || '');
 /** 小组件名称首字母，用于图标展示。 */
-const initial = computed<string>(() => props.widget.name.charAt(0).toUpperCase());
-/** 展示描述，无描述时回退到文件路径。 */
-const description = computed<string>(() => props.widget.description || props.widget.filePath);
+const initial = computed<string>((): string => name.value.charAt(0).toUpperCase());
+/** 展示描述，未加载或读取失败时提供明确回退。 */
+const description = computed<string>((): string => {
+  return props.widget.definition?.description || props.widget.loadError || '未加载小组件描述';
+});
 
 /**
- * 打开小组件编辑器，正文由目标页面文件会话从磁盘加载。
+ * 打开小组件编辑器，正文由目标页面文件会话从 Store 加载。
  */
 async function handleOpenWidget(): Promise<void> {
   if (deleting.value) {
@@ -93,7 +99,7 @@ async function handleDeleteWidget(): Promise<void> {
   deleting.value = true;
   let movedToTrash = false;
   try {
-    const [, confirmed] = await Modal.delete(`确定要删除小组件 "${props.widget.name}" 吗？整个目录及其中的附属文件都会移入系统回收站。`);
+    const [, confirmed] = await Modal.delete(`确定要删除小组件 "${name.value}" 吗？整个目录及其中的附属文件都会移入系统回收站。`);
 
     if (!confirmed) {
       return;
@@ -101,17 +107,17 @@ async function handleDeleteWidget(): Promise<void> {
 
     await native.trashFile(props.widget.dirPath);
     movedToTrash = true;
-    await store.rescan();
-    message.success(`小组件 "${props.widget.name}" 已删除`);
+    await store.refreshWidgets();
+    message.success(`小组件 "${name.value}" 已删除`);
   } catch (error: unknown) {
     // 目录已移入回收站时只提示刷新失败，避免误导用户重复删除。
     if (movedToTrash) {
       logger.warn('Refresh widgets after deletion failed:', error);
-      message.warning(`小组件 "${props.widget.name}" 已移入回收站，但列表刷新失败`);
+      message.warning(`小组件 "${name.value}" 已移入回收站，但列表刷新失败`);
     } else {
       logger.error('Delete widget failed:', error);
       const reason = error instanceof Error ? error.message : String(error);
-      message.error(`删除小组件 "${props.widget.name}" 失败：${reason}`);
+      message.error(`删除小组件 "${name.value}" 失败：${reason}`);
     }
   } finally {
     deleting.value = false;

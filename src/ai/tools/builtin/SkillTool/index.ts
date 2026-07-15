@@ -3,7 +3,7 @@
  * @description Skill 工具实现，LLM 通过此工具按需加载 Skill 指令。
  */
 import type { AIToolExecutor } from 'types/ai';
-import type { SkillDefinition } from '@/ai/skill/types';
+import type { SkillDefinition, SkillEntry } from '@/ai/skill/types';
 import { createToolFailureResult, createToolSuccessResult } from '../../results';
 
 /** Skill 工具名称。 */
@@ -23,11 +23,11 @@ const SKILL_DESCRIPTION_FOOTER = 'Call this tool with the skill name to load its
  */
 export interface SkillStoreLike {
   /** 获取已启用的 skill 列表 */
-  getEnabledSkills: () => SkillDefinition[];
+  getEnabledSkills: () => SkillEntry[];
   /** 按名称查找 skill */
-  getSkillByName: (name: string) => SkillDefinition | undefined;
-  /** 执行前解析磁盘中的最新启用 Skill */
-  resolveLatestEnabledSkill?: (name: string) => Promise<SkillDefinition | undefined>;
+  getSkillByName: (name: string) => SkillEntry | undefined;
+  /** 获取并复用 Skill Store 内容缓存。 */
+  getSkill: (id: string) => Promise<SkillEntry | undefined>;
   /** 是否已完成初始化 */
   initialized: boolean;
 }
@@ -48,10 +48,14 @@ function buildSkillDescription(store: SkillStoreLike): string {
   }
 
   const lines: string[] = [];
-  const availableSkills = skills.filter((s) => !s.parseError);
+  const availableSkills = skills.filter((skill: SkillEntry): boolean => Boolean(skill.definition && !skill.definition.parseError));
 
   for (const skill of availableSkills) {
-    const nextLine = `- ${skill.name}: ${skill.description}`;
+    const { definition } = skill;
+    if (!definition) {
+      continue;
+    }
+    const nextLine = `- ${definition.name}: ${definition.description}`;
     const omitted = availableSkills.length - lines.length - 1;
     const omissionLine = omitted > 0 ? `... ${omitted} more skills omitted to keep this tool description compact.` : '';
     const candidate = [SKILL_DESCRIPTION_HEADER, ...lines, nextLine, omissionLine, '', SKILL_DESCRIPTION_FOOTER].filter(Boolean).join('\n');
@@ -123,23 +127,29 @@ export function createSkillTool(store: SkillStoreLike): AIToolExecutor<{ name: s
       }
     },
     async execute(input: { name: string }) {
-      const skill = store.resolveLatestEnabledSkill ? await store.resolveLatestEnabledSkill(input.name) : store.getSkillByName(input.name);
+      const indexedSkill = store.getSkillByName(input.name);
+      const skill = indexedSkill?.enabled ? await store.getSkill(indexedSkill.id) : undefined;
 
-      if (!skill) {
+      if (!skill?.enabled) {
         const available = store
           .getEnabledSkills()
-          .filter((s) => !s.parseError)
-          .map((s) => s.name)
+          .filter((entry: SkillEntry): boolean => Boolean(entry.definition && !entry.definition.parseError))
+          .map((entry: SkillEntry): string => entry.definition?.name ?? entry.id)
           .join(', ');
 
         return createToolFailureResult(SKILL_TOOL_NAME, 'TOOL_NOT_FOUND', `Skill '${input.name}' not found. Available skills: ${available || 'none'}`);
       }
 
-      if (skill.parseError) {
-        return createToolFailureResult(SKILL_TOOL_NAME, 'INVALID_INPUT', `Skill '${input.name}' is invalid: ${skill.parseError}`);
+      const { definition } = skill;
+      if (!definition || definition.parseError) {
+        return createToolFailureResult(
+          SKILL_TOOL_NAME,
+          'INVALID_INPUT',
+          `Skill '${input.name}' is invalid: ${definition?.parseError ?? 'Skill content is unavailable'}`
+        );
       }
 
-      const content = buildSkillContent(skill);
+      const content = buildSkillContent(definition);
       return createToolSuccessResult(SKILL_TOOL_NAME, content);
     }
   };

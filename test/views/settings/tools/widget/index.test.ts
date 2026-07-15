@@ -265,13 +265,15 @@ const ATextareaStub = defineComponent({
  * 挂载小组件设置页。
  * @returns 组件包装器
  */
-function mountWidgetSettingsPage(): VueWrapper {
+function mountWidgetSettingsPage(initializeStore = true): VueWrapper {
   // 设置页在生产环境由默认布局初始化资源，单测脱离布局时显式建立相同 Store 前置条件。
-  const scannerApi: WidgetScannerAPI = {
-    readFile: nativeMock.readFile,
-    readWorkspaceDirectory: nativeMock.readWorkspaceDirectory
-  };
-  useWidgetStore().init('/Users/test', scannerApi);
+  if (initializeStore) {
+    const scannerApi: WidgetScannerAPI = {
+      readFile: nativeMock.readFile,
+      readWorkspaceDirectory: nativeMock.readWorkspaceDirectory
+    };
+    useWidgetStore().init('/Users/test', scannerApi);
+  }
 
   return mount(WidgetSettingsPage, {
     global: {
@@ -391,6 +393,23 @@ describe('WidgetSettingsPage', (): void => {
     loggerMock.error.mockResolvedValue(undefined);
     loggerMock.info.mockResolvedValue(undefined);
     loggerMock.warn.mockResolvedValue(undefined);
+  });
+
+  it('waits for Store initialization before loading directory entries', async (): Promise<void> => {
+    const store = useWidgetStore();
+    store.handleWidgetDirectory('add', '/Users/test/.tibis/widgets/weather');
+    const deferred = createDeferred<void>();
+    const waitForInit = vi.spyOn(store, 'waitForInit').mockReturnValue(deferred.promise);
+    const getWidgets = vi.spyOn(store, 'getWidgets').mockResolvedValue([]);
+
+    mountWidgetSettingsPage(false);
+    await flushPromises();
+
+    expect(waitForInit).toHaveBeenCalledOnce();
+    expect(getWidgets).not.toHaveBeenCalled();
+    deferred.resolve(undefined);
+    await flushPromises();
+    expect(getWidgets).toHaveBeenCalledOnce();
   });
 
   it('creates a widget registry JSON from id and name', async (): Promise<void> => {
@@ -705,7 +724,7 @@ describe('WidgetSettingsPage', (): void => {
     const wrapper = mountWidgetSettingsPage();
 
     await flushPromises();
-    vi.spyOn(useWidgetStore(), 'rescan').mockRejectedValueOnce(new Error('scan failed'));
+    vi.spyOn(useWidgetStore(), 'refreshWidgets').mockRejectedValueOnce(new Error('scan failed'));
     await wrapper
       .findAll('button')
       .find((button: DOMWrapper<HTMLButtonElement>): boolean => button.text() === '创建小组件')

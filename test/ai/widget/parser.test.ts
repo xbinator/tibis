@@ -20,6 +20,11 @@ describe('parseWidgetJson content hash', (): void => {
 
     expect(parseWidgetJson(source, '/widgets/broken/widget.json').contentHash).toBe(hashString(source));
   });
+
+  it('leaves enablement ownership to the Widget entry', (): void => {
+    expect(parseWidgetJson('{"name":"天气"}', '/widgets/weather/widget.json')).not.toHaveProperty('enabled');
+    expect(parseWidgetJson('{broken', '/widgets/broken/widget.json')).not.toHaveProperty('enabled');
+  });
 });
 
 describe('parseWidgetJson dirPath', (): void => {

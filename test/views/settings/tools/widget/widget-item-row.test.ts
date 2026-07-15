@@ -8,7 +8,7 @@ import { defineComponent } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { WidgetDefinition } from '@/ai/widget';
+import type { WidgetEntry } from '@/ai/widget';
 import type { DropdownOption, DropdownOptionItem } from '@/components/BDropdown/type';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { useWidgetStore } from '@/stores/ai/widget';
@@ -55,16 +55,26 @@ vi.mock('ant-design-vue', async (importOriginal) => {
   return { ...actual, message: messageMock };
 });
 
-/** Widget 测试定义。 */
-const widget: WidgetDefinition = {
-  id: 'weather',
-  name: '天气',
-  description: '查询天气',
-  data: createDefaultWidgetData('weather'),
-  filePath: '/Users/test/.tibis/widgets/weather/widget.json',
-  dirPath: '/Users/test/.tibis/widgets/weather',
+/** Widget 测试入口文件原文。 */
+const widgetSource = JSON.stringify({ name: '天气', description: '查询天气' });
+
+/** Widget 测试 Store 条目。 */
+const widget: WidgetEntry = {
+  id: 'weather-directory',
+  filePath: '/Users/test/.tibis/widgets/weather-directory/widget.json',
+  dirPath: '/Users/test/.tibis/widgets/weather-directory',
   enabled: true,
-  parsedAt: 1
+  revision: 1,
+  sourceContent: widgetSource,
+  definition: {
+    id: 'weather-directory',
+    name: '天气',
+    description: '查询天气',
+    data: createDefaultWidgetData('weather-directory'),
+    filePath: '/Users/test/.tibis/widgets/weather-directory/widget.json',
+    dirPath: '/Users/test/.tibis/widgets/weather-directory',
+    parsedAt: 1
+  }
 };
 
 /** 直接渲染触发器与浮层的下拉菜单测试替身。 */
@@ -134,10 +144,15 @@ function createDeferred<T>(): Deferred<T> {
  * @returns 组件包装器
  */
 function mountRow(): VueWrapper {
-  useWidgetStore().upsertWidget({ ...widget });
+  const store = useWidgetStore();
+  store.handleWidgetDirectory('add', widget.dirPath);
+  const storedWidget = store.updateWidgetContent(widget.id, widgetSource);
+  if (!storedWidget) {
+    throw new Error('Widget entry missing');
+  }
 
   return mount(WidgetItemRow, {
-    props: { widget },
+    props: { widget: storedWidget },
     global: {
       stubs: {
         ASwitch: ASwitchStub,
@@ -184,8 +199,8 @@ describe('WidgetItemRow', (): void => {
     await flushPromises();
     await wrapper.findComponent({ name: 'ASwitch' }).trigger('click');
 
-    expect(openWidgetFileMock).toHaveBeenCalledWith('weather');
-    expect(useWidgetStore().getWidgetById('weather')?.enabled).toBe(false);
+    expect(openWidgetFileMock).toHaveBeenCalledWith('weather-directory');
+    expect(useWidgetStore().getWidgetById('weather-directory')?.enabled).toBe(false);
     expect(wrapper.emitted('open')).toBeUndefined();
     expect(wrapper.emitted('toggle')).toBeUndefined();
     expect(wrapper.findComponent({ name: 'BButton' }).props()).toMatchObject({
@@ -202,7 +217,7 @@ describe('WidgetItemRow', (): void => {
 
     await edit?.onClick?.();
 
-    expect(openWidgetFileMock).toHaveBeenCalledWith('weather');
+    expect(openWidgetFileMock).toHaveBeenCalledWith('weather-directory');
     expect(wrapper.emitted('edit')).toBeUndefined();
   });
 
@@ -219,13 +234,13 @@ describe('WidgetItemRow', (): void => {
 
   it('moves the whole Widget directory to trash and rescans internally', async (): Promise<void> => {
     const wrapper = mountRow();
-    const rescan = vi.spyOn(useWidgetStore(), 'rescan').mockResolvedValue(undefined);
+    const refreshWidgets = vi.spyOn(useWidgetStore(), 'refreshWidgets').mockResolvedValue(undefined);
     const [, remove] = readItems(wrapper);
 
     await remove?.onClick?.();
 
-    expect(nativeMock.trashFile).toHaveBeenCalledWith('/Users/test/.tibis/widgets/weather');
-    expect(rescan).toHaveBeenCalledTimes(1);
+    expect(nativeMock.trashFile).toHaveBeenCalledWith('/Users/test/.tibis/widgets/weather-directory');
+    expect(refreshWidgets).toHaveBeenCalledTimes(1);
     expect(messageMock.success).toHaveBeenCalledWith('小组件 "天气" 已删除');
     expect(wrapper.emitted('delete')).toBeUndefined();
   });
@@ -243,19 +258,19 @@ describe('WidgetItemRow', (): void => {
   it('logs and reports a Widget trash failure without rescanning', async (): Promise<void> => {
     nativeMock.trashFile.mockRejectedValue(new Error('EPERM'));
     const wrapper = mountRow();
-    const rescan = vi.spyOn(useWidgetStore(), 'rescan').mockResolvedValue(undefined);
+    const refreshWidgets = vi.spyOn(useWidgetStore(), 'refreshWidgets').mockResolvedValue(undefined);
     const [, remove] = readItems(wrapper);
 
     await remove?.onClick?.();
 
-    expect(rescan).not.toHaveBeenCalled();
+    expect(refreshWidgets).not.toHaveBeenCalled();
     expect(loggerMock.error).toHaveBeenCalledWith('Delete widget failed:', expect.any(Error));
     expect(messageMock.error).toHaveBeenCalledWith('删除小组件 "天气" 失败：EPERM');
   });
 
   it('logs and warns when rescan fails after deleting the Widget', async (): Promise<void> => {
     const wrapper = mountRow();
-    vi.spyOn(useWidgetStore(), 'rescan').mockRejectedValue(new Error('scan failed'));
+    vi.spyOn(useWidgetStore(), 'refreshWidgets').mockRejectedValue(new Error('scan failed'));
     const [, remove] = readItems(wrapper);
 
     await remove?.onClick?.();
@@ -266,7 +281,7 @@ describe('WidgetItemRow', (): void => {
 
   it('executes only one trash operation for repeated delete actions', async (): Promise<void> => {
     const wrapper = mountRow();
-    vi.spyOn(useWidgetStore(), 'rescan').mockResolvedValue(undefined);
+    vi.spyOn(useWidgetStore(), 'refreshWidgets').mockResolvedValue(undefined);
     const [, remove] = readItems(wrapper);
 
     const firstDeletion = remove?.onClick?.();
@@ -281,7 +296,7 @@ describe('WidgetItemRow', (): void => {
     const pendingConfirmation = createDeferred<[boolean, boolean]>();
     deleteConfirmMock.mockReturnValue(pendingConfirmation.promise);
     const wrapper = mountRow();
-    vi.spyOn(useWidgetStore(), 'rescan').mockResolvedValue(undefined);
+    vi.spyOn(useWidgetStore(), 'refreshWidgets').mockResolvedValue(undefined);
     const [, remove] = readItems(wrapper);
 
     const deletion = remove?.onClick?.();

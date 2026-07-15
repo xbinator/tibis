@@ -3,7 +3,7 @@
  * @description Skill 文件扫描器测试。
  */
 import { describe, expect, it, type Mock, vi } from 'vitest';
-import { scanSkills, type SkillScannerAPI } from '@/ai/skill';
+import { scanSkillDirectories, type SkillScannerAPI } from '@/ai/skill';
 
 /**
  * Skill 扫描器测试 API。
@@ -41,7 +41,7 @@ function createScannerAPI(): SkillScannerAPIMock {
   };
 }
 
-describe('scanSkills', (): void => {
+describe('scanSkillDirectories', (): void => {
   it('recovers an interrupted replacement before scanning skills', async (): Promise<void> => {
     const api = createScannerAPI();
     api.readWorkspaceDirectory.mockResolvedValueOnce({ entries: [{ name: '.install-test.json', type: 'file' }] }).mockResolvedValueOnce({ entries: [] });
@@ -54,7 +54,7 @@ describe('scanSkills', (): void => {
       isDirectory: path.endsWith('/skills') || path.endsWith('/.bak-test')
     }));
 
-    await scanSkills({ homeDir: '/Users/test' }, api);
+    await scanSkillDirectories({ homeDir: '/Users/test' }, api);
 
     expect(api.renameFile).toHaveBeenCalledWith('/Users/test/.agents/skills/.bak-test', '/Users/test/.agents/skills/demo');
   });
@@ -63,7 +63,7 @@ describe('scanSkills', (): void => {
     const api = createScannerAPI();
     api.getPathStatus.mockResolvedValue({ exists: false, isFile: false, isDirectory: false });
 
-    const skills = await scanSkills({ homeDir: '/Users/test' }, api);
+    const skills = await scanSkillDirectories({ homeDir: '/Users/test' }, api);
 
     expect(api.getPathStatus).toHaveBeenCalledWith('/Users/test/.agents/skills');
     expect(api.readWorkspaceDirectory).not.toHaveBeenCalled();
@@ -74,10 +74,33 @@ describe('scanSkills', (): void => {
     const api = createScannerAPI();
     api.getPathStatus.mockRejectedValue(new Error('permission denied'));
 
-    const skills = await scanSkills({ homeDir: '/Users/test' }, api);
+    const skills = await scanSkillDirectories({ homeDir: '/Users/test' }, api);
 
     expect(api.getPathStatus).toHaveBeenCalledWith('/Users/test/.agents/skills');
     expect(api.readWorkspaceDirectory).not.toHaveBeenCalled();
     expect(skills).toEqual([]);
+  });
+
+  it('returns direct Skill directory indices without reading SKILL.md', async (): Promise<void> => {
+    const api = createScannerAPI();
+    api.readWorkspaceDirectory.mockResolvedValue({
+      entries: [
+        { name: 'weather', type: 'directory' },
+        { name: '.draft', type: 'directory' },
+        { name: 'README.md', type: 'file' }
+      ]
+    });
+
+    const skills = await scanSkillDirectories({ homeDir: '/Users/test' }, api);
+
+    expect(skills).toEqual([
+      {
+        id: 'weather',
+        source: 'global',
+        dirPath: '/Users/test/.agents/skills/weather',
+        filePath: '/Users/test/.agents/skills/weather/SKILL.md'
+      }
+    ]);
+    expect(api.readFile).not.toHaveBeenCalledWith('/Users/test/.agents/skills/weather/SKILL.md');
   });
 });

@@ -146,7 +146,7 @@ const notices = computed<Notice[]>(() => {
   for (const w of parsedWarnings.value) {
     result.push({ type: 'warning', message: w });
   }
-  if (parsedSkill.value && store.skills.some((s) => s.name === parsedSkill.value!.name)) {
+  if (parsedSkill.value && store.skills.some((skill) => skill.id === parsedSkill.value!.name)) {
     result.push({ type: 'conflict', message: `"${parsedSkill.value.name}" 已存在，安装将覆盖原有内容` });
   }
   return result;
@@ -281,10 +281,13 @@ async function handleInstall(): Promise<void> {
     await installLogger.success();
 
     // 磁盘安装完成后刷新 Store；扫描失败不回滚已安装目录。
-    const [rescanErr] = await asyncTo(store.rescan());
-    if (rescanErr) {
-      console.error('Skill rescan after install failed:', rescanErr);
-      await logger.warn(`[skill-install] rescan-failed resource=${skillName} error=${formatDirectoryInstallError(rescanErr)}`);
+    const [refreshError] = await asyncTo(store.refreshSkills());
+    // 安装结果由应用明确写回 Store，避免等待目录 watcher 或再次读取入口文件。
+    store.handleSkillDirectory('add', targetDir);
+    store.updateSkillContent(skillName, rawSkillMd.value);
+    if (refreshError) {
+      console.error('Skill refresh after install failed:', refreshError);
+      await logger.warn(`[skill-install] rescan-failed resource=${skillName} error=${formatDirectoryInstallError(refreshError)}`);
       message.warning(`技能 "${skillName}" 安装成功，但刷新列表失败，请稍后重试`);
     } else {
       message.success(`技能 "${skillName}" 安装成功`);

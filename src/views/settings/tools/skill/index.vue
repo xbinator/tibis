@@ -34,7 +34,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { SkillDefinition } from '@/ai/skill/types';
+import type { SkillEntry } from '@/ai/skill/types';
 import { useSkillStore } from '@/stores/ai/skill';
 import SettingsPage from '@/views/settings/_components/SettingsPage.vue';
 import SettingsPagination from '@/views/settings/_components/SettingsPagination.vue';
@@ -71,10 +71,20 @@ const currentPage = computed<number>({
 const totalPages = computed<number>(() => Math.max(1, Math.ceil(store.skills.length / PAGE_SIZE)));
 
 /** 当前页的 skill 列表。 */
-const pagedSkills = computed<SkillDefinition[]>((): SkillDefinition[] => {
+const pagedSkills = computed<SkillEntry[]>((): SkillEntry[] => {
   const start = (currentPage.value - 1) * PAGE_SIZE;
   return store.skills.slice(start, start + PAGE_SIZE);
 });
+
+/** 当前目录集合变化时加载全部 Skill 入口内容，单项失败由 Store 隔离并保留重试能力。 */
+watch(
+  (): string => store.skills.map((skill: SkillEntry): string => skill.id).join('\u0000'),
+  async (): Promise<void> => {
+    await store.waitForInit();
+    await store.getSkills();
+  },
+  { immediate: true }
+);
 
 /** 当技能列表收缩导致当前页码越界时，自动回退到最后一页。 */
 watch(

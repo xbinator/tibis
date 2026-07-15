@@ -1,6 +1,6 @@
 /**
  * @file ai-resource-init.test.ts
- * @description AI 资源目录监听初始化顺序测试。
+ * @description AI 资源目录监听初始化顺序与清理测试。
  * @vitest-environment jsdom
  */
 import { defineComponent, h } from 'vue';
@@ -8,24 +8,65 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSkillInit } from '@/layouts/default/hooks/useSkillInit';
 import { useWidgetInit } from '@/layouts/default/hooks/useWidgetInit';
+import { storeEvents } from '@/stores/helpers/events';
 
-/** Skill 目录变更事件。 */
-interface SkillChangedEvent {
-  /** 事件类型。 */
-  type: string;
-  /** 变更文件路径。 */
-  filePath: string;
-  /** 文件内容。 */
-  content?: string;
+/**
+ * 资源目录变化事件。
+ */
+interface DirectoryChangedEvent {
+  /** 目录事件类型。 */
+  type: 'add' | 'unlink';
+  /** 被监听的资源根目录。 */
+  rootPath: string;
+  /** 新增或删除的直接子目录。 */
+  dirPath: string;
 }
 
-/** Skill 目录变更回调。 */
-type SkillChangedCallback = (data: SkillChangedEvent) => void;
+/** 资源目录变化回调。 */
+type DirectoryChangedCallback = (event: DirectoryChangedEvent) => void;
+
+/**
+ * 可由测试控制完成时机的 Promise。
+ */
+interface Deferred<T> {
+  /** 延迟 Promise。 */
+  promise: Promise<T>;
+  /** 完成 Promise。 */
+  resolve: (value: T) => void;
+}
+
+/**
+ * 创建可控 Promise。
+ * @returns 可控 Promise
+ */
+function createDeferred<T>(): Deferred<T> {
+  let resolvePromise: (value: T) => void = (): void => undefined;
+  const promise = new Promise<T>((resolve: (value: T) => void): void => {
+    resolvePromise = resolve;
+  });
+  return { promise, resolve: resolvePromise };
+}
 
 const initOrder = vi.hoisted((): string[] => []);
-const skillChangedCallbacks = vi.hoisted((): SkillChangedCallback[] => []);
-const handleSkillChangeMock = vi.hoisted(() => vi.fn());
-const handleWidgetChangeMock = vi.hoisted(() => vi.fn());
+const directoryCallbacks = vi.hoisted((): DirectoryChangedCallback[] => []);
+const handleSkillDirectoryMock = vi.hoisted(() => vi.fn());
+const handleFileSavedMock = vi.hoisted(() => vi.fn());
+const handleWidgetDirectoryMock = vi.hoisted(() => vi.fn());
+const skillInitMock = vi.hoisted(() => vi.fn(async (): Promise<void> => {
+  initOrder.push('skill-init');
+}));
+const widgetInitMock = vi.hoisted(() => vi.fn(async (): Promise<void> => {
+  initOrder.push('widget-init');
+}));
+const watchResourceDirectoryMock = vi.hoisted(() => vi.fn(async (rootPath: string): Promise<void> => {
+  initOrder.push(rootPath.includes('/.agents/') ? 'skill-watch' : 'widget-watch');
+}));
+const unwatchResourceDirectoryMock = vi.hoisted(() => vi.fn(async (): Promise<void> => undefined));
+const onDirectoryChangedMock = vi.hoisted(() => vi.fn((callback: DirectoryChangedCallback): (() => void) => {
+  initOrder.push('listener');
+  directoryCallbacks.push(callback);
+  return vi.fn();
+}));
 
 vi.mock('@/shared/platform', () => ({
   native: {
@@ -40,15 +81,9 @@ vi.mock('@/shared/platform', () => ({
       })
     ),
     trashFile: vi.fn(async (): Promise<void> => undefined),
-    onSkillChanged: vi.fn((callback: SkillChangedCallback): (() => void) => {
-      initOrder.push('listener');
-      skillChangedCallbacks.push(callback);
-      return vi.fn();
-    }),
-    watchDirectory: vi.fn(async (): Promise<void> => {
-      initOrder.push('watch');
-    }),
-    unwatchDirectory: vi.fn(async (): Promise<void> => undefined)
+    onDirectoryChanged: onDirectoryChangedMock,
+    watchResourceDirectory: watchResourceDirectoryMock,
+    unwatchResourceDirectory: unwatchResourceDirectoryMock
   }
 }));
 
@@ -58,10 +93,9 @@ vi.mock('@/stores/ai/skill', () => ({
       initOrder.push('skill-prepare');
     }),
     finishInitialization: vi.fn(),
-    init: vi.fn(async (): Promise<void> => {
-      initOrder.push('skill-init');
-    }),
-    handleSkillChange: handleSkillChangeMock
+    init: skillInitMock,
+    handleSkillDirectory: handleSkillDirectoryMock,
+    handleFileSaved: handleFileSavedMock
   }))
 }));
 
@@ -71,24 +105,49 @@ vi.mock('@/stores/ai/widget', () => ({
       initOrder.push('widget-prepare');
     }),
     finishInitialization: vi.fn(),
-    init: vi.fn(async (): Promise<void> => {
-      initOrder.push('widget-init');
-    }),
-    handleWidgetChange: handleWidgetChangeMock
+    init: widgetInitMock,
+    handleWidgetDirectory: handleWidgetDirectoryMock
   }))
 }));
 
 /**
- * 创建同时启用 Skill 与 Widget 初始化 hook 的测试组件。
+ * 创建仅启用 Skill 初始化 hook 的测试组件。
  * @returns Vue 测试组件
  */
-function createResourceInitHarness(): ReturnType<typeof defineComponent> {
+function createSkillHarness(): ReturnType<typeof defineComponent> {
+  return defineComponent({
+    name: 'SkillInitHarness',
+    setup() {
+      useSkillInit();
+      return (): ReturnType<typeof h> => h('div');
+    }
+  });
+}
+
+/**
+ * 创建仅启用 Widget 初始化 hook 的测试组件。
+ * @returns Vue 测试组件
+ */
+function createWidgetHarness(): ReturnType<typeof defineComponent> {
+  return defineComponent({
+    name: 'WidgetInitHarness',
+    setup() {
+      useWidgetInit();
+      return (): ReturnType<typeof h> => h('div');
+    }
+  });
+}
+
+/**
+ * 创建同时启用两个资源初始化 hook 的测试组件。
+ * @returns Vue 测试组件
+ */
+function createResourceHarness(): ReturnType<typeof defineComponent> {
   return defineComponent({
     name: 'AIResourceInitHarness',
     setup() {
       useSkillInit();
       useWidgetInit();
-
       return (): ReturnType<typeof h> => h('div');
     }
   });
@@ -97,88 +156,90 @@ function createResourceInitHarness(): ReturnType<typeof defineComponent> {
 describe('AI resource initialization', (): void => {
   beforeEach((): void => {
     initOrder.splice(0);
-    skillChangedCallbacks.splice(0);
-    handleSkillChangeMock.mockClear();
-    handleWidgetChangeMock.mockClear();
+    directoryCallbacks.splice(0);
+    handleSkillDirectoryMock.mockClear();
+    handleFileSavedMock.mockClear();
+    handleWidgetDirectoryMock.mockClear();
+    skillInitMock.mockClear();
+    widgetInitMock.mockClear();
+    onDirectoryChangedMock.mockClear();
+    unwatchResourceDirectoryMock.mockClear();
+    watchResourceDirectoryMock.mockReset().mockImplementation(async (rootPath: string): Promise<void> => {
+      initOrder.push(rootPath.includes('/.agents/') ? 'skill-watch' : 'widget-watch');
+    });
   });
 
-  it('subscribes to change events before asynchronous scans and directory watches', async (): Promise<void> => {
-    const wrapper = mount(createResourceInitHarness());
+  it('registers the Skill listener and watcher before scanning directories', async (): Promise<void> => {
+    const wrapper = mount(createSkillHarness());
 
     await flushPromises();
 
-    expect(initOrder.indexOf('skill-prepare')).toBeGreaterThanOrEqual(0);
-    expect(initOrder.indexOf('widget-prepare')).toBeGreaterThanOrEqual(0);
-    expect(initOrder.indexOf('skill-prepare')).toBeLessThan(initOrder.indexOf('listener'));
-    expect(initOrder.indexOf('widget-prepare')).toBeLessThan(initOrder.indexOf('listener'));
-    expect(initOrder.indexOf('listener')).toBeGreaterThanOrEqual(0);
-    expect(initOrder.indexOf('listener')).toBeLessThan(initOrder.indexOf('skill-init'));
-    expect(initOrder.indexOf('listener')).toBeLessThan(initOrder.indexOf('watch'));
+    expect(initOrder).toEqual(['skill-prepare', 'listener', 'skill-watch', 'skill-init']);
+    expect(watchResourceDirectoryMock).toHaveBeenCalledWith('/Users/test/.agents/skills');
     wrapper.unmount();
   });
 
-  it('ignores Skill changes from temporary installer directories', async (): Promise<void> => {
-    const wrapper = mount(createResourceInitHarness());
+  it('registers the Widget listener and watcher before scanning directories', async (): Promise<void> => {
+    const wrapper = mount(createWidgetHarness());
 
     await flushPromises();
 
-    const callback = skillChangedCallbacks[0];
-    if (!callback) {
-      throw new Error('Skill changed callback was not registered');
+    expect(initOrder).toEqual(['widget-prepare', 'listener', 'widget-watch', 'widget-init']);
+    expect(watchResourceDirectoryMock).toHaveBeenCalledWith('/Users/test/.tibis/widgets');
+    wrapper.unmount();
+  });
+
+  it('routes add and unlink events to the matching Store without reading content', async (): Promise<void> => {
+    const wrapper = mount(createResourceHarness());
+    await flushPromises();
+
+    const events: DirectoryChangedEvent[] = [
+      {
+        type: 'add',
+        rootPath: '/Users/test/.agents/skills',
+        dirPath: '/Users/test/.agents/skills/weather'
+      },
+      {
+        type: 'unlink',
+        rootPath: '/Users/test/.tibis/widgets',
+        dirPath: '/Users/test/.tibis/widgets/weather'
+      }
+    ];
+    for (const event of events) {
+      directoryCallbacks.forEach((callback: DirectoryChangedCallback): void => callback(event));
     }
 
-    callback({
-      type: 'add',
-      filePath: 'C:\\Users\\test\\.agents\\skills\\.tmp-abcd1234\\SKILL.md',
-      content: ['---', 'name: demo', 'description: Demo skill', '---', 'body'].join('\n')
-    });
-    callback({
-      type: 'change',
-      filePath: '/Users/test/.agents/skills/.bak-abcd1234/SKILL.md',
-      content: ['---', 'name: demo', 'description: Demo skill', '---', 'body'].join('\n')
-    });
-
-    expect(handleSkillChangeMock).not.toHaveBeenCalled();
+    expect(handleSkillDirectoryMock).toHaveBeenCalledWith('add', '/Users/test/.agents/skills/weather');
+    expect(handleWidgetDirectoryMock).toHaveBeenCalledWith('unlink', '/Users/test/.tibis/widgets/weather');
     wrapper.unmount();
   });
 
-  it('ignores Skill changes from hidden directories under the skills root', async (): Promise<void> => {
-    const wrapper = mount(createResourceInitHarness());
-
+  it('routes saved files to the Skill Store until the hook is unmounted', async (): Promise<void> => {
+    const wrapper = mount(createSkillHarness());
     await flushPromises();
 
-    const callback = skillChangedCallbacks[0];
-    if (!callback) {
-      throw new Error('Skill changed callback was not registered');
-    }
+    storeEvents.emitFileSaved('/Users/test/.agents/skills/weather/SKILL.md', '# saved');
 
-    callback({
-      type: 'add',
-      filePath: '/Users/test/.agents/skills/.draft/SKILL.md',
-      content: ['---', 'name: demo', 'description: Demo skill', '---', 'body'].join('\n')
-    });
-
-    expect(handleSkillChangeMock).not.toHaveBeenCalled();
+    expect(handleFileSavedMock).toHaveBeenCalledWith('/Users/test/.agents/skills/weather/SKILL.md', '# saved');
     wrapper.unmount();
+    storeEvents.emitFileSaved('/Users/test/.agents/skills/weather/SKILL.md', '# newer');
+    expect(handleFileSavedMock).toHaveBeenCalledOnce();
   });
 
-  it('ignores Widget changes from hidden directories under the widgets root', async (): Promise<void> => {
-    const wrapper = mount(createResourceInitHarness());
-
-    await flushPromises();
-
-    const callback = skillChangedCallbacks[1];
-    if (!callback) {
-      throw new Error('Widget changed callback was not registered');
-    }
-
-    callback({
-      type: 'add',
-      filePath: '/Users/test/.tibis/widgets/.draft/widget.json',
-      content: JSON.stringify({ name: '草稿小组件', description: '草稿' })
+  it('unregisters a watcher when unmounted during asynchronous registration', async (): Promise<void> => {
+    const deferred = createDeferred<void>();
+    watchResourceDirectoryMock.mockImplementationOnce((): Promise<void> => deferred.promise);
+    const wrapper = mount(createSkillHarness());
+    await vi.waitFor((): void => {
+      expect(watchResourceDirectoryMock).toHaveBeenCalledOnce();
     });
 
-    expect(handleWidgetChangeMock).not.toHaveBeenCalled();
     wrapper.unmount();
+    deferred.resolve(undefined);
+    await flushPromises();
+
+    expect(unwatchResourceDirectoryMock).toHaveBeenCalledOnce();
+    expect(unwatchResourceDirectoryMock).toHaveBeenCalledWith('/Users/test/.agents/skills');
+    expect(skillInitMock).not.toHaveBeenCalled();
   });
 });

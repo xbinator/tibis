@@ -1,85 +1,78 @@
 /**
  * @file useSkillInit.ts
- * @description 默认布局的 Skill Store 初始化 hook，负责扫描 skill 目录、监听目录变更及增量更新。
+ * @description 默认布局的 Skill 目录索引初始化与直接子目录监听 hook。
  */
-
 import { onMounted, onUnmounted } from 'vue';
-import { joinPath, parseSkillMarkdown } from '@/ai/skill';
+import { joinPath } from '@/ai/skill';
 import { native } from '@/shared/platform';
 import { useSkillStore } from '@/stores/ai/skill';
+import { storeEvents } from '@/stores/helpers/events';
 
 /**
- * 获取 `.agents/skills` 下的目录片段。
- * @param normalizedPath - 已使用 / 统一分隔符的文件路径
- * @returns Skill 根目录之后、文件名之前的路径片段
+ * 统一资源路径分隔符并移除末尾斜杠。
+ * @param resourcePath - 原始资源路径
+ * @returns 规范化路径
  */
-function getSkillDirectorySegments(normalizedPath: string): string[] {
-  const segments = normalizedPath.split('/');
-  const agentsIndex = segments.lastIndexOf('.agents');
-
-  if (agentsIndex === -1 || segments[agentsIndex + 1] !== 'skills') {
-    return [];
-  }
-
-  return segments.slice(agentsIndex + 2, -1);
+function normalizeResourcePath(resourcePath: string): string {
+  return resourcePath.replace(/\\/g, '/').replace(/\/+$/, '');
 }
 
 /**
- * 判断路径是否位于 Skill 隐藏目录。
- * @param normalizedPath - 已使用 / 统一分隔符的文件路径
- * @returns 隐藏目录下的文件返回 true
- */
-function isHiddenSkillPath(normalizedPath: string): boolean {
-  return getSkillDirectorySegments(normalizedPath).some((segment: string): boolean => segment.startsWith('.'));
-}
-
-/**
- * 判断变更路径是否是需要进入 Store 的正式 Skill 文件。
- * @param normalizedPath - 已使用 / 统一分隔符的文件路径
- * @returns 正式 Skill 文件返回 true
- */
-function isManagedSkillFilePath(normalizedPath: string): boolean {
-  return normalizedPath.endsWith('/SKILL.md') && !isHiddenSkillPath(normalizedPath);
-}
-
-/**
- * 初始化 Skill Store：扫描 skill 目录并监听变更。
- * 在组件 onMounted 时自动执行初始化，onUnmounted 时自动清理监听。
+ * 初始化 Skill Store 的目录索引与目录监听。
  */
 export function useSkillInit(): void {
   const skillStore = useSkillStore();
-  // setup 阶段先建立屏障，避免布局 onMounted 前聊天绕过资源初始化。
   skillStore.prepareInitialization();
 
-  /** 组件卸载时需要执行的 skill 监听清理函数。 */
+  /** 组件是否已经卸载。 */
+  let disposed = false;
+  /** 组件卸载时需要执行的监听清理函数。 */
   const cleanupCallbacks: Array<() => void | Promise<void>> = [];
 
-  onMounted(async () => {
-    try {
-      // 先订阅事件，避免异步扫描与 watcher 注册期间丢失磁盘变化。
-      const removeSkillChangedListener = native.onSkillChanged(async (data) => {
-        // 统一规范化路径分隔符，Windows 下 Chokidar 报告 \ 而 scanner 使用 /
-        const normalizedPath = data.filePath.replace(/\\/g, '/');
-        if (!isManagedSkillFilePath(normalizedPath)) return;
+  // 通用编辑器成功写盘后直接同步 Store，避免已缓存内容在当前应用生命周期内过期。
+  cleanupCallbacks.push(
+    storeEvents.onFileSaved(({ filePath, content }): void => {
+      skillStore.handleFileSaved(filePath, content);
+    })
+  );
 
-        if (data.type === 'unlink') {
-          skillStore.handleSkillChange('unlink', { filePath: normalizedPath } as import('@/ai/skill/types').SkillDefinition);
-          return;
-        }
-        // change/add：重新解析文件
-        if (data.content) {
-          const skill = parseSkillMarkdown(data.content, normalizedPath, { source: 'global' });
-          skillStore.handleSkillChange(data.type as 'change' | 'add', skill);
+  /**
+   * 执行并清空当前注册的清理函数。
+   */
+  function runCleanups(): void {
+    for (const cleanup of cleanupCallbacks.splice(0)) {
+      const result = cleanup();
+      if (result instanceof Promise) {
+        result.catch((error: unknown): void => {
+          console.error('Skill cleanup failed:', error);
+        });
+      }
+    }
+  }
+
+  onMounted(async (): Promise<void> => {
+    try {
+      const homeDir = await native.getHomeDir();
+      const resourceRoot = normalizeResourcePath(joinPath(homeDir, '.agents', 'skills'));
+      if (disposed) {
+        return;
+      }
+
+      // 先订阅目录事件，再注册主进程 watcher，避免扫描窗口内遗漏目录增删。
+      const removeDirectoryListener = native.onDirectoryChanged((event): void => {
+        if (normalizeResourcePath(event.rootPath) === resourceRoot) {
+          skillStore.handleSkillDirectory(event.type, normalizeResourcePath(event.dirPath));
         }
       });
-      cleanupCallbacks.push(removeSkillChangedListener);
+      cleanupCallbacks.push(removeDirectoryListener);
 
-      const homeDir = await native.getHomeDir();
-      // 监听用户级全局 skill 目录，事件只关注 SKILL.md。
-      const skillDir = joinPath(homeDir, '.agents', 'skills');
-      await native.watchDirectory(skillDir, '**/SKILL.md');
-      cleanupCallbacks.push(() => native.unwatchDirectory(skillDir, '**/SKILL.md'));
+      await native.watchResourceDirectory(resourceRoot);
+      if (disposed) {
+        await native.unwatchResourceDirectory(resourceRoot);
+        return;
+      }
 
+      cleanupCallbacks.push((): Promise<void> => native.unwatchResourceDirectory(resourceRoot));
       await skillStore.init(homeDir, native);
     } catch (error: unknown) {
       console.error('Skill initialization failed:', error);
@@ -87,14 +80,8 @@ export function useSkillInit(): void {
     }
   });
 
-  onUnmounted(() => {
-    for (const cleanup of cleanupCallbacks.splice(0)) {
-      const result = cleanup();
-      if (result instanceof Promise) {
-        result.catch((error: unknown) => {
-          console.error('Skill cleanup failed:', error);
-        });
-      }
-    }
+  onUnmounted((): void => {
+    disposed = true;
+    runCleanups();
   });
 }

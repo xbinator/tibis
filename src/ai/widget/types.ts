@@ -22,12 +22,38 @@ export interface WidgetDefinition {
   filePath: string;
   /** 小组件目录绝对路径 */
   dirPath: string;
-  /** 是否启用 */
-  enabled: boolean;
   /** 解析时间戳 */
   parsedAt: number;
   /** 解析失败时的错误信息 */
   parseError?: string;
+}
+
+/**
+ * 小组件目录索引。
+ */
+export interface WidgetIndex {
+  /** 小组件目录稳定 ID。 */
+  id: string;
+  /** 小组件目录绝对路径。 */
+  dirPath: string;
+  /** widget.json 文件绝对路径。 */
+  filePath: string;
+}
+
+/**
+ * 小组件目录索引与懒加载内容缓存。
+ */
+export interface WidgetEntry extends WidgetIndex {
+  /** 是否启用。 */
+  enabled: boolean;
+  /** 防止迟到请求覆盖新状态的修订序号。 */
+  revision: number;
+  /** 完整 widget.json 原文，undefined 表示尚未成功加载。 */
+  sourceContent?: string;
+  /** widget.json 解析结果。 */
+  definition?: WidgetDefinition;
+  /** 最近一次入口文件读取错误。 */
+  loadError?: string;
 }
 
 /**

@@ -24,7 +24,6 @@ import { type AdaptedUserMessageInput, type SubmitAction, createUserChoice } fro
 import type { Message } from '@/components/BChat/utils/types';
 import type { FileMentionOption } from '@/components/BText/types';
 import { emitChatFileReferenceInsert } from '@/shared/chat/fileReference';
-import { native } from '@/shared/platform';
 import type { StoredFile } from '@/shared/storage';
 import type { TodoItem } from '@/stores/chat/todo';
 import { useToolPermissionStore } from '@/stores/chat/toolPermission';
@@ -138,11 +137,11 @@ const memoryStoreMock = vi.hoisted(() => ({
 
 const skillStoreMock = vi.hoisted(() => ({
   initialized: true,
-  getEnabledSkills: vi.fn(() => [] as Array<{ name: string; contentHash?: string }>),
+  getEnabledSkills: vi.fn(() => [] as Array<{ id: string; definition?: { name: string; contentHash?: string } }>),
   waitForInit: vi.fn<() => Promise<void>>(() => Promise.resolve()),
-  syncFromDisk: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+  getSkills: vi.fn(() => Promise.resolve([])),
   init: vi.fn<() => Promise<void>>(() => Promise.resolve()),
-  handleSkillChange: vi.fn()
+  handleSkillDirectory: vi.fn()
 }));
 
 const filesStoreMock = vi.hoisted(() => ({
@@ -224,9 +223,6 @@ vi.mock('@/shared/platform', () => ({
     readWorkspaceDirectory: vi.fn(() => []),
     getPathStatus: vi.fn(),
     trashFile: vi.fn(),
-    watchDirectory: vi.fn(),
-    unwatchDirectory: vi.fn(),
-    onSkillChanged: vi.fn(() => vi.fn()),
     getPathForFile: getPathForFileMock
   }
 }));
@@ -632,7 +628,6 @@ describe('BChat sessionId runtime', (): void => {
     promptEditorMockState.replaceTextRange.mockReset();
     getPathForFileMock.mockReset();
     getPathForFileMock.mockReturnValue('/workspace/My Notes/note.md');
-    vi.mocked(native.watchDirectory).mockClear();
     todoStoreMock.todosBySession.clear();
     todoStoreMock.clearTodos.mockReset();
     todoStoreMock.getTodos.mockClear();
@@ -659,7 +654,7 @@ describe('BChat sessionId runtime', (): void => {
     skillStoreMock.getEnabledSkills.mockReset();
     skillStoreMock.getEnabledSkills.mockReturnValue([]);
     skillStoreMock.waitForInit.mockClear();
-    skillStoreMock.syncFromDisk.mockClear();
+    skillStoreMock.getSkills.mockClear();
     filesStoreMock.recentFiles = [];
     filesStoreMock.ensureLoaded.mockReset();
     filesStoreMock.ensureLoaded.mockResolvedValue();
@@ -898,8 +893,11 @@ describe('BChat sessionId runtime', (): void => {
     skillStoreMock.initialized = false;
     skillStoreMock.getEnabledSkills.mockReturnValue([
       {
-        name: 'weather',
-        contentHash: 'weather-hash'
+        id: 'weather-directory',
+        definition: {
+          name: 'weather',
+          contentHash: 'weather-hash'
+        }
       }
     ]);
     const createdSession = createSession('session-created', '查天气');
@@ -919,13 +917,6 @@ describe('BChat sessionId runtime', (): void => {
         }
       })
     );
-  });
-
-  it('does not own application-level Skill or Widget directory watchers', async (): Promise<void> => {
-    mountBChat(null);
-    await flushPromises();
-
-    expect(native.watchDirectory).not.toHaveBeenCalled();
   });
 
   it('uses relevant memory selection and filters edit_memory for normal sends', async (): Promise<void> => {

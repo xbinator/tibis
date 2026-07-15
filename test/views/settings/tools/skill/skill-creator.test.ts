@@ -22,8 +22,12 @@ const electronAPIMock = vi.hoisted(() => ({
   writeFile: vi.fn<(path: string, content: string) => Promise<void>>()
 }));
 
-/** Skill store rescan mock。 */
-const rescanMock = vi.hoisted(() => vi.fn<() => Promise<void>>());
+/** Skill Store 目录刷新 mock。 */
+const refreshSkillsMock = vi.hoisted(() => vi.fn<() => Promise<void>>());
+/** Skill Store 目录新增 mock。 */
+const handleSkillDirectoryMock = vi.hoisted(() => vi.fn());
+/** Skill Store 内容更新 mock。 */
+const updateSkillContentMock = vi.hoisted(() => vi.fn());
 
 /** Ant Design message mock。 */
 const messageMock = vi.hoisted(() => ({
@@ -46,7 +50,9 @@ vi.mock('@/shared/platform/electron-api', () => ({
 vi.mock('@/stores/ai/skill', () => ({
   useSkillStore: () => ({
     skills: [],
-    rescan: rescanMock
+    refreshSkills: refreshSkillsMock,
+    handleSkillDirectory: handleSkillDirectoryMock,
+    updateSkillContent: updateSkillContentMock
   })
 }));
 
@@ -294,7 +300,9 @@ describe('SkillCreator', (): void => {
     electronAPIMock.saveBinaryFile.mockReset();
     electronAPIMock.trashFile.mockReset();
     electronAPIMock.writeFile.mockReset();
-    rescanMock.mockReset();
+    refreshSkillsMock.mockReset();
+    handleSkillDirectoryMock.mockReset();
+    updateSkillContentMock.mockReset();
     messageMock.error.mockReset();
     messageMock.success.mockReset();
     messageMock.warning.mockReset();
@@ -310,7 +318,7 @@ describe('SkillCreator', (): void => {
     electronAPIMock.saveBinaryFile.mockResolvedValue(null);
     electronAPIMock.trashFile.mockResolvedValue(undefined);
     electronAPIMock.writeFile.mockResolvedValue(undefined);
-    rescanMock.mockResolvedValue(undefined);
+    refreshSkillsMock.mockResolvedValue(undefined);
     loggerMock.error.mockResolvedValue(undefined);
     loggerMock.info.mockResolvedValue(undefined);
     loggerMock.warn.mockResolvedValue(undefined);
@@ -327,6 +335,7 @@ describe('SkillCreator', (): void => {
     const savedContent = saveBinaryFileCall?.[0] ?? new ArrayBuffer(0);
 
     expect(electronAPIMock.writeFile).toHaveBeenCalledWith(expect.stringContaining('/SKILL.md'), workerSuccessResponse.rawSkillMd);
+    expect(updateSkillContentMock).toHaveBeenCalledWith('demo-skill', workerSuccessResponse.rawSkillMd);
     expect(saveBinaryFileCall?.[1]).toMatch(/\/assets\/icon\.bin$/u);
     expect(Array.from(new Uint8Array(savedContent))).toEqual([5, 6, 7]);
   });
@@ -349,7 +358,7 @@ describe('SkillCreator', (): void => {
   });
 
   it('keeps a completed install successful when list refresh fails', async (): Promise<void> => {
-    rescanMock.mockRejectedValueOnce(new Error('scan failed'));
+    refreshSkillsMock.mockRejectedValueOnce(new Error('scan failed'));
     const wrapper = mountSkillCreator();
 
     await uploadSkillPackage(wrapper);

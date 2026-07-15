@@ -4,6 +4,7 @@ import { ref, watch } from 'vue';
 import type { FileAutoSaveController } from '@/hooks/useFileAutoSave';
 import type { FileChangeEvent } from '@/shared/platform/native/types';
 import type { StoredFile } from '@/shared/storage/files/types';
+import { storeEvents } from '@/stores/helpers/events';
 import { useFilesStore } from '@/stores/workspace/files';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import { parseFileName } from '../utils/filePath';
@@ -121,6 +122,8 @@ export function useFileState(options: SessionPersistenceOptions): SessionPersist
     hasSavedContentBaseline.value = true;
     hasUnsavedDraft.value = false;
     tabsStore.clearDirty(fileId.value);
+    // 外部内容已由用户接受且与磁盘一致，资源 Store 可直接复用该快照。
+    storeEvents.emitFileSaved(event.filePath, event.content);
     persistCurrentFile().catch((error: unknown) => {
       console.error('Failed to persist externally changed file:', error);
     });

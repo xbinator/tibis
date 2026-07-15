@@ -10,7 +10,6 @@ import { flushPromises, mount, type DOMWrapper, type VueWrapper } from '@vue/tes
 import JSZip from 'jszip';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WidgetData } from '@/components/BWidget/types';
-import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { createDefaultWidgetExecuteMethod } from '@/components/BWidget/utils/widgetExecuteMethod';
 import { useWidgetStore } from '@/stores/ai/widget';
 import type { DirectoryInstallFile } from '@/utils/file/directory';
@@ -304,7 +303,10 @@ describe('WidgetCreator', (): void => {
 
     expect(readInstallRequest()).toMatchObject({ targetDir: '/home/test/.tibis/widgets/weather_01', conflictStrategy: 'reject' });
     expect(readInstalledWidgetData()).toMatchObject({ name: '天气', description: '查询指定城市天气' });
-    expect(useWidgetStore().getWidgetById('weather_01')).toMatchObject({ name: '天气', description: '查询指定城市天气' });
+    expect(useWidgetStore().getWidgetById('weather_01')?.definition).toMatchObject({ name: '天气', description: '查询指定城市天气' });
+    expect(useWidgetStore().getWidgetById('weather_01')?.sourceContent).toBe(
+      readInstallRequest().files.find((file: DirectoryInstallFile): boolean => file.kind === 'text' && file.relativePath === 'widget.json')?.content
+    );
     expect(openWidgetFileMock).toHaveBeenCalledWith('weather_01');
     expect(wrapper.emitted('update:open')?.at(-1)).toEqual([false]);
   });
@@ -432,16 +434,7 @@ describe('WidgetCreator', (): void => {
   });
 
   it('does not install when identifier already exists in the widget store', async (): Promise<void> => {
-    useWidgetStore().upsertWidget({
-      id: 'weather',
-      name: '天气',
-      description: '',
-      data: createDefaultWidgetData('weather'),
-      filePath: '/home/test/.tibis/widgets/weather/widget.json',
-      dirPath: '/home/test/.tibis/widgets/weather',
-      enabled: true,
-      parsedAt: 1
-    });
+    useWidgetStore().handleWidgetDirectory('add', '/home/test/.tibis/widgets/weather');
     const wrapper = mountWidgetCreator();
 
     await wrapper.find('.widget-creator__id input').setValue(' Weather ');

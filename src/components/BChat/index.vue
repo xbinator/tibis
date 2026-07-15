@@ -254,7 +254,7 @@ watch(messages, (loadedMessages: Message[]): void => {
 /** Todo 面板状态和回退恢复能力。 */
 const { currentSessionTodos, todoPanelVisible, todoPanelDismissed, restoreTodoSnapshotsForMessages } = useTodoPanel({ activeSessionId });
 /** Runtime 内置工具能力。 */
-const { workspaceRoot, getActiveTools, syncAIResources, getSkillContentHashes, openDraft, openFileByPath } = useRuntimeTools({
+const { workspaceRoot, getActiveTools, getAIResources, getSkillContentHashes, openDraft, openFileByPath } = useRuntimeTools({
   messages,
   confirm: confirmationController.createAdapter(),
   getSessionId: (): string | undefined => activeSessionId.value ?? undefined,
@@ -367,7 +367,7 @@ const { prepareRuntimeRequest, resolveRuntimeRequestConfig } = useRuntimeRequest
   contextWindow,
   workspaceRoot,
   resolveServiceConfig: chatServiceConfig.resolveServiceConfig,
-  syncAIResources,
+  getAIResources,
   getActiveTools,
   getSkillContentHashes,
   resolveRuntimeSystemPrompt,

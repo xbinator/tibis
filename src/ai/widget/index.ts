@@ -10,5 +10,5 @@ export {
   type WidgetImportResource,
   type WidgetImportResult
 } from './importer';
-export { scanWidgets, type WidgetScannerAPI } from './scanner';
-export type { WidgetDefinition, WidgetScanConfig } from './types';
+export { scanWidgetDirectories, type WidgetScannerAPI } from './scanner';
+export type { WidgetDefinition, WidgetEntry, WidgetIndex, WidgetScanConfig } from './types';

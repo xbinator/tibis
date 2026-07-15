@@ -39,11 +39,11 @@ export function registerWorkspaceHandlers(): void {
     await fileWatchService.unwatchAll();
   });
 
-  ipcMain.handle('fs:watchDirectory', async (_event, dirPath: string, globPattern?: string) => {
-    await fileWatchService.watchDirectory(dirPath, globPattern);
+  ipcMain.handle('fs:watchResourceDirectory', async (_event, rootPath: string) => {
+    await fileWatchService.watchResourceDirectory(rootPath);
   });
 
-  ipcMain.handle('fs:unwatchDirectory', async (_event, dirPath: string, globPattern?: string) => {
-    await fileWatchService.unwatchDirectory(dirPath, globPattern);
+  ipcMain.handle('fs:unwatchResourceDirectory', async (_event, rootPath: string) => {
+    await fileWatchService.unwatchResourceDirectory(rootPath);
   });
 }
