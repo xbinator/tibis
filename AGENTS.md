@@ -251,42 +251,27 @@ import { debounce } from 'lodash'
 import { debounce } from 'lodash-es'
 ```
 
+## 异步错误处理规范
+
+- ✅ **必须**: 异步上下文使用 `src/utils/asyncTo.ts` 的 `asyncTo(promise)` 归一化错误
+- ❌ **禁止**: 异步场景手写 `try { ... } catch (error) { console.error(...) }`
+- 同步 `try/catch`（JSON 解析、Proxy getter 防御等）**不受此约束**
+
 ## 样式规范
 
 ### 禁止使用 `&` 省略类名
-- ❌ **禁止**: 在 Less/SCSS 中使用 `&` 省略父选择器生成 BEM 子类名
-- ✅ **推荐**: 写出完整的类名选择器，便于全局搜索定位
+- ❌ **禁止**: 用 `&__xxx` 嵌套生成 BEM 子类名（搜索时无法直接命中样式定义）
+- ✅ **推荐**: 写出完整的类名选择器
 
-**原因**: 使用 `&__xxx` 嵌套后，搜索 `excalidraw-page__toolbar` 无法直接命中样式定义，降低代码可搜索性。
-
-**错误示例**:
 ```less
+// ❌ 反例
 .excalidraw-page {
-  display: flex;
-
-  &__toolbar {
-    display: flex;
-  }
-
-  &__title {
-    font-size: 14px;
-  }
-}
-```
-
-**正确示例**:
-```less
-.excalidraw-page {
-  display: flex;
+  &__toolbar { display: flex; }
 }
 
-.excalidraw-page__toolbar {
-  display: flex;
-}
-
-.excalidraw-page__title {
-  font-size: 14px;
-}
+// ✅ 正例
+.excalidraw-page { display: flex; }
+.excalidraw-page__toolbar { display: flex; }
 ```
 
 ### 使用 `createNamespace` 生成 BEM 类名
