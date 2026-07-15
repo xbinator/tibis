@@ -29,13 +29,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { WidgetDefinition } from '@/ai/widget';
-import { native } from '@/shared/platform';
-import type { ReadWorkspaceDirectoryOptions } from '@/shared/platform/native/types';
 import { useWidgetStore } from '@/stores/ai/widget';
-import logger from '@/utils/logger';
 import SettingsPage from '@/views/settings/_components/SettingsPage.vue';
 import SettingsPagination from '@/views/settings/_components/SettingsPagination.vue';
 import SettingsSection from '@/views/settings/_components/SettingsSection.vue';
@@ -49,8 +46,6 @@ const PAGE_SIZE = 8;
 const route = useRoute();
 const router = useRouter();
 const store = useWidgetStore();
-/** 是否正在初始化扫描。 */
-const initializing = ref(false);
 /** 创建弹窗开关。 */
 const createModalOpen = ref(false);
 
@@ -80,29 +75,6 @@ const pagedWidgets = computed<WidgetDefinition[]>((): WidgetDefinition[] => {
 });
 
 /**
- * 初始化小组件扫描。
- * @returns 初始化完成信号
- */
-async function initWidgetStore(): Promise<void> {
-  if (store.initialized || initializing.value) {
-    return;
-  }
-
-  initializing.value = true;
-  try {
-    const homeDir = await native.getHomeDir();
-    await store.init(homeDir, {
-      readFile: (filePath: string) => native.readFile(filePath).then((result) => ({ content: result.content })),
-      readWorkspaceDirectory: (options: ReadWorkspaceDirectoryOptions) => native.readWorkspaceDirectory(options)
-    });
-  } catch (error: unknown) {
-    logger.error('Widget settings initialization failed:', error);
-  } finally {
-    initializing.value = false;
-  }
-}
-
-/**
  * 打开小组件创建弹窗。
  */
 function openCreateModal(): void {
@@ -118,12 +90,6 @@ watch(
   },
   { immediate: true }
 );
-
-onMounted((): void => {
-  initWidgetStore().catch((error: unknown): void => {
-    logger.error('Widget settings initialization failed:', error);
-  });
-});
 </script>
 
 <style scoped lang="less">

@@ -9,6 +9,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import JSZip from 'jszip';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { WidgetScannerAPI } from '@/ai/widget';
 import { createDefaultWidgetExecuteMethod } from '@/components/BWidget/utils/widgetExecuteMethod';
 import { useWidgetStore } from '@/stores/ai/widget';
 import WidgetSettingsPage from '@/views/settings/tools/widget/index.vue';
@@ -265,6 +266,13 @@ const ATextareaStub = defineComponent({
  * @returns 组件包装器
  */
 function mountWidgetSettingsPage(): VueWrapper {
+  // 设置页在生产环境由默认布局初始化资源，单测脱离布局时显式建立相同 Store 前置条件。
+  const scannerApi: WidgetScannerAPI = {
+    readFile: nativeMock.readFile,
+    readWorkspaceDirectory: nativeMock.readWorkspaceDirectory
+  };
+  useWidgetStore().init('/Users/test', scannerApi);
+
   return mount(WidgetSettingsPage, {
     global: {
       components: {
@@ -618,7 +626,7 @@ describe('WidgetSettingsPage', (): void => {
     confirmButton?.element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await flushPromises();
 
-    expect(nativeMock.getHomeDir).toHaveBeenCalledTimes(2);
+    expect(nativeMock.getHomeDir).toHaveBeenCalledTimes(1);
     expect(nativeMock.ensureDir).not.toHaveBeenCalled();
 
     deferredHomeDir.resolve('/Users/test');
