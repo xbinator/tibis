@@ -6,8 +6,8 @@ import type { AIToolConfirmationAdapter, AIToolConfirmationRequest } from '../co
 import type { AIToolContext, AIToolExecutionError, AIToolExecutionResult } from 'types/ai';
 import { isDocumentRecord, recentFilesStorage } from '@/shared/storage';
 import type { StoredDocumentRecord } from '@/shared/storage/files/types';
-import { isAbsoluteFilePath, isPathInsideWorkspace, resolvePathAgainstWorkspace } from '@/shared/workspace/pathUtils';
 import { isUnsavedPath as isUnsavedPathUtil } from '@/utils/file/unsaved';
+import { workspace } from '@/utils/file/workspace';
 import { createToolCancelledResult, createToolFailureResult, createToolSuccessResult } from '../results';
 
 /** 重新导出 isUnsavedPath，方便调用方统一从本模块导入。 */
@@ -74,22 +74,22 @@ export function resolveTargetPath(filePath: string, workspaceRoot: string | null
   }
 
   if (!workspaceRoot) {
-    if (!isAbsoluteFilePath(filePath)) {
+    if (!workspace.isAbsoluteFilePath(filePath)) {
       return { draft: true, originalPath: filePath };
     }
 
     return { path: filePath };
   }
 
-  if (isAbsoluteFilePath(filePath)) {
-    if (!isPathInsideWorkspace(filePath, workspaceRoot)) {
+  if (workspace.isAbsoluteFilePath(filePath)) {
+    if (!contains(workspaceRoot, filePath)) {
       return { path: filePath, outsideWorkspace: true };
     }
 
     return { path: filePath };
   }
 
-  const resolvedPath = resolvePathAgainstWorkspace(filePath, workspaceRoot);
+  const resolvedPath = workspace.resolveWithin(filePath, workspaceRoot);
   if (!resolvedPath) {
     return { error: createToolFailureResult(toolName, 'PERMISSION_DENIED', '相对路径超出了当前工作区范围') };
   }

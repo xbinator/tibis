@@ -9,7 +9,7 @@ import { createDefaultWidgetData, normalizeWidgetDataContract } from '@/componen
 import { hashString } from '@/shared/utils/hash';
 import { posix } from '@/utils/file/posix';
 
-export { joinFilePath as joinPath } from '@/shared/workspace/pathUtils';
+export { join as joinPath } from '@/utils/file/posix';
 
 /**
  * 判断值是否为普通记录。

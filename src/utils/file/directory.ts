@@ -3,7 +3,8 @@
  * @description 通用目录安装事务，统一文件写入、冲突策略、重命名重试、回滚与清理。
  */
 import { nanoid } from 'nanoid';
-import { isSafeFilePathSegment, joinFilePath, normalizeFilePathSeparators, normalizeSafeRelativeFilePath } from '@/shared/workspace/pathUtils';
+import { path } from '@/utils/file/path';
+import { posix } from '@/utils/file/posix';
 
 /** 目录安装冲突策略。 */
 export type DirectoryInstallConflictStrategy = 'replace' | 'reject';
@@ -152,10 +153,8 @@ export function formatDirectoryInstallError(error: unknown): string {
  * @param path - 文件或目录路径
  * @returns 父目录路径
  */
-function readParentPath(path: string): string {
-  const normalized = normalizeFilePathSeparators(path).replace(/\/+$/gu, '');
-  const index = normalized.lastIndexOf('/');
-  return index > 0 ? normalized.slice(0, index) : '/';
+function readParentPath(filePath: string): string {
+  return posix.dirname(filePath);
 }
 
 /**
@@ -163,10 +162,8 @@ function readParentPath(path: string): string {
  * @param path - 文件或目录路径
  * @returns 最后一个非空路径片段
  */
-function readBaseName(path: string): string {
-  const normalized = normalizeFilePathSeparators(path).replace(/\/+$/gu, '');
-  const index = normalized.lastIndexOf('/');
-  return normalized.slice(index + 1);
+function readBaseName(filePath: string): string {
+  return posix.basename(filePath);
 }
 
 /**
@@ -175,7 +172,7 @@ function readBaseName(path: string): string {
  * @returns 使用 `/` 分隔的安全相对路径
  */
 export function normalizeDirectoryInstallRelativePath(relativePath: string): string {
-  return normalizeSafeRelativeFilePath(relativePath, '安装文件路径');
+  return path.validatePath(relativePath, '安装文件路径');
 }
 
 /**
@@ -184,7 +181,7 @@ export function normalizeDirectoryInstallRelativePath(relativePath: string): str
  * @returns 父目录片段，无父目录时返回空字符串
  */
 function readRelativeParentPath(relativePath: string): string {
-  const normalized = normalizeFilePathSeparators(relativePath).replace(/^\/+|\/+$/gu, '');
+  const normalized = posix.slashify(relativePath).replace(/^\/+|\/+$/gu, '');
   const index = normalized.lastIndexOf('/');
   return index > -1 ? normalized.slice(0, index) : '';
 }
@@ -294,10 +291,10 @@ function renameDirectory(options: DirectoryInstallerOptions, oldPath: string, ne
 async function writeInstallFile(options: DirectoryInstallerOptions, temporaryDir: string, file: DirectoryInstallFile): Promise<void> {
   const normalizedRelativePath = normalizeDirectoryInstallRelativePath(file.relativePath);
   const parentPath = readRelativeParentPath(normalizedRelativePath);
-  const filePath = joinFilePath(temporaryDir, normalizedRelativePath);
+  const filePath = posix.join(temporaryDir, normalizedRelativePath);
 
   if (parentPath) {
-    await options.api.ensureDir(joinFilePath(temporaryDir, parentPath));
+    await options.api.ensureDir(posix.join(temporaryDir, parentPath));
   }
 
   if (file.kind === 'text') {
@@ -315,9 +312,9 @@ async function writeInstallFile(options: DirectoryInstallerOptions, temporaryDir
  * @param target - 临时或备份目录标记
  * @returns 清理完成信号
  */
-async function cleanupDirectory(options: DirectoryInstallerOptions, path: string, target: 'temporary' | 'backup' | 'transaction'): Promise<boolean> {
+async function cleanupDirectory(options: DirectoryInstallerOptions, filePath: string, target: 'temporary' | 'backup' | 'transaction'): Promise<boolean> {
   try {
-    await options.api.trashFile(path);
+    await options.api.trashFile(filePath);
     return true;
   } catch (error: unknown) {
     await emitInstallEvent(options.onEvent, { type: 'cleanup-failed', target, error });
@@ -338,7 +335,7 @@ function parseTransactionRecord(content: string): DirectoryInstallTransactionRec
       typeof value.targetName !== 'string' ||
       typeof value.temporaryName !== 'string' ||
       typeof value.backupName !== 'string' ||
-      !isSafeFilePathSegment(value.targetName) ||
+      !path.isValidSegment(value.targetName) ||
       !/^\.tmp-[A-Za-z0-9_-]+$/u.test(value.temporaryName) ||
       !/^\.bak-[A-Za-z0-9_-]+$/u.test(value.backupName)
     ) {
@@ -363,7 +360,7 @@ async function recoverTransaction(
   api: DirectoryInstallRecoveryAPI,
   onFailure: DirectoryInstallRecoveryFailureHandler | undefined
 ): Promise<void> {
-  const transactionPath = joinFilePath(parentDir, transactionName);
+  const transactionPath = posix.join(parentDir, transactionName);
   let lockToken: string | null = null;
 
   try {
@@ -372,7 +369,7 @@ async function recoverTransaction(
       return;
     }
 
-    const initialTargetDir = joinFilePath(parentDir, initialRecord.targetName);
+    const initialTargetDir = posix.join(parentDir, initialRecord.targetName);
     lockToken = await api.acquireDirectoryInstallLock(initialTargetDir);
 
     // 等待锁期间事务可能已由正常安装流程完成，必须在锁内重新读取记录。
@@ -381,9 +378,9 @@ async function recoverTransaction(
       return;
     }
 
-    const targetDir = joinFilePath(parentDir, record.targetName);
-    const temporaryDir = joinFilePath(parentDir, record.temporaryName);
-    const backupDir = joinFilePath(parentDir, record.backupName);
+    const targetDir = posix.join(parentDir, record.targetName);
+    const temporaryDir = posix.join(parentDir, record.temporaryName);
+    const backupDir = posix.join(parentDir, record.backupName);
     const [targetStatus, temporaryStatus, backupStatus] = await Promise.all([
       api.getPathStatus(targetDir),
       api.getPathStatus(temporaryDir),
@@ -450,7 +447,7 @@ async function installDirectoryUnlocked(options: DirectoryInstallerOptions): Pro
     normalizeDirectoryInstallRelativePath(file.relativePath);
   });
 
-  const targetDir = joinFilePath(options.targetDir);
+  const targetDir = posix.join(options.targetDir);
   const parentDir = readParentPath(targetDir);
   const targetName = readBaseName(targetDir);
   const scratchNameFactory = options.scratchNameFactory ?? ((kind: 'temporary' | 'backup'): string => `.${kind === 'temporary' ? 'tmp' : 'bak'}-${nanoid(8)}`);
@@ -458,16 +455,16 @@ async function installDirectoryUnlocked(options: DirectoryInstallerOptions): Pro
   const backupName = scratchNameFactory('backup');
   const transactionName = options.transactionNameFactory?.() ?? `.install-${nanoid(8)}.json`;
   if (
-    !isSafeFilePathSegment(targetName) ||
+    !path.isValidSegment(targetName) ||
     !/^\.tmp-[A-Za-z0-9_-]+$/u.test(temporaryName) ||
     !/^\.bak-[A-Za-z0-9_-]+$/u.test(backupName) ||
     !TRANSACTION_FILE_PATTERN.test(transactionName)
   ) {
     throw new Error('目录安装事务路径不安全');
   }
-  const temporaryDir = joinFilePath(parentDir, temporaryName);
-  const backupDir = joinFilePath(parentDir, backupName);
-  const transactionPath = joinFilePath(parentDir, transactionName);
+  const temporaryDir = posix.join(parentDir, temporaryName);
+  const backupDir = posix.join(parentDir, backupName);
+  const transactionPath = posix.join(parentDir, transactionName);
   let backupCreated = false;
   let temporaryActive = false;
   let transactionActive = false;
@@ -559,7 +556,7 @@ async function installDirectoryUnlocked(options: DirectoryInstallerOptions): Pro
  * @returns 安装完成信号
  */
 export async function installDirectory(options: DirectoryInstallerOptions): Promise<void> {
-  const token = await options.api.acquireDirectoryInstallLock(joinFilePath(options.targetDir));
+  const token = await options.api.acquireDirectoryInstallLock(posix.join(options.targetDir));
   try {
     await installDirectoryUnlocked(options);
   } finally {

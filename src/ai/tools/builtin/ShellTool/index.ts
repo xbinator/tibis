@@ -8,7 +8,7 @@ import type { AIToolExecutor } from 'types/ai';
 import type { ElectronShellCommandRunResult, ElectronShellCommandSafetyReport, ElectronShellCommandShell } from 'types/electron-api';
 import { nanoid } from 'nanoid';
 import { native } from '@/shared/platform';
-import { isPathInsideWorkspace } from '@/shared/workspace/pathUtils';
+import { workspace } from '@/utils/file/workspace';
 import { createToolCancelledResult, createToolFailureResult, createToolSuccessResult } from '../../results';
 
 /** run_shell_command 工具名称。 */
@@ -168,11 +168,11 @@ function extractLeadingCdTarget(command: string): string | null {
  * @returns 匹配到的工作区根目录
  */
 function resolveShellWorkspaceRoot(cwd: string, primaryWorkspaceRoot: string | null, additionalWorkspaceRoots: string[]): string | null {
-  if (primaryWorkspaceRoot && isPathInsideWorkspace(cwd, primaryWorkspaceRoot)) {
+  if (primaryWorkspaceRoot && workspace.contains(primaryWorkspaceRoot, cwd)) {
     return primaryWorkspaceRoot;
   }
 
-  const matchedAdditionalRoot = additionalWorkspaceRoots.find((root) => isPathInsideWorkspace(cwd, root));
+  const matchedAdditionalRoot = additionalWorkspaceRoots.find((root) => workspace.contains(root, cwd));
   if (matchedAdditionalRoot) {
     return matchedAdditionalRoot;
   }
@@ -192,7 +192,7 @@ function inferCwdFromLeadingCd(command: string, additionalWorkspaceRoots: string
     return null;
   }
 
-  const matchedAdditionalRoot = additionalWorkspaceRoots.find((root) => isPathInsideWorkspace(leadingCdTarget, root));
+  const matchedAdditionalRoot = additionalWorkspaceRoots.find((root) => workspace.contains(root, leadingCdTarget));
   return matchedAdditionalRoot ? leadingCdTarget : null;
 }
 

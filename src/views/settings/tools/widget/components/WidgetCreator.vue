@@ -62,10 +62,10 @@ import { useOpenFile } from '@/hooks/useOpenFile';
 import { logger } from '@/shared/logger';
 import { createDirectoryInstallLogger } from '@/shared/logger/directoryInstall';
 import { native } from '@/shared/platform';
-import { isWindowsReservedFileName, PORTABLE_RESOURCE_ID_PATTERN } from '@/shared/workspace/pathUtils';
 import { useWidgetStore } from '@/stores/ai/widget';
 import { asyncTo } from '@/utils/asyncTo';
 import { formatDirectoryInstallError, installDirectory, type DirectoryInstallFile } from '@/utils/file/directory';
+import { path, PORTABLE_RESOURCE_ID_PATTERN } from '@/utils/file/path';
 
 /**
  * 创建小组件表单数据。
@@ -136,7 +136,7 @@ function validateWidgetIdUnique(_rule: Rule, value: string): Promise<void> {
  * @returns 校验完成信号
  */
 function validateWidgetIdSafe(_rule: Rule, value: string): Promise<void> {
-  if (value && isWindowsReservedFileName(value)) {
+  if (value && path.isWindowsReservedFileName(value)) {
     return Promise.reject(new Error('小组件标识不能使用 Windows 保留名称'));
   }
 

@@ -8,8 +8,8 @@ import type { WebviewOperateInput, WebviewPressKey, WebviewToolContext } from '@
 import type { OpenDraftInput, OpenDraftResult } from '@/ai/tools/shared/types';
 import { isDocumentRecord } from '@/shared/storage';
 import type { StoredDocumentRecord } from '@/shared/storage/files/types';
-import { isAbsoluteFilePath } from '@/shared/workspace/pathUtils';
 import { isUnsavedPath, parseUnsavedPath } from '@/utils/file/unsaved';
+import { workspace } from '@/utils/file/workspace';
 
 /** Bridge settings domain types. */
 /** 可通过 ChatRuntime 暴露给模型的设置键。 */
@@ -259,7 +259,7 @@ function readDocumentSnapshot(dependencies: BChatRuntimeBridgeDependencies): BCh
  * @returns 可用于查找文件的绝对路径，无法解析时返回空字符串
  */
 function resolveEditorFilePath(filePath: string, workspaceRoot: string | null | undefined): string {
-  if (isAbsoluteFilePath(filePath)) {
+  if (workspace.isAbsoluteFilePath(filePath)) {
     return filePath;
   }
 

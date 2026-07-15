@@ -4,9 +4,9 @@
  */
 import type { ChatMessageFilePartInput, ChatMessageTextPart } from 'types/chat';
 import { nanoid } from 'nanoid';
-import { isAbsoluteFilePath } from '@/shared/workspace/pathUtils';
 import { findFileReferenceTokens, type FileReferenceTokenMatch } from '@/utils/file/reference';
 import { isUnsavedPath } from '@/utils/file/unsaved';
+import { workspace } from '@/utils/file/workspace';
 
 /** Renderer 发送给 ChatRuntime 的用户输入片段。 */
 export type BChatUserInputPart = ChatMessageTextPart | ChatMessageFilePartInput;
@@ -41,7 +41,7 @@ function createLineSearchParams(match: FileReferenceTokenMatch): URLSearchParams
  * @returns 可用于 file URL 的文件路径
  */
 function createAbsoluteFilePath(rawPath: string, workspaceRoot: string | undefined): string {
-  if (isAbsoluteFilePath(rawPath) || !workspaceRoot) return rawPath;
+  if (workspace.isAbsoluteFilePath(rawPath) || !workspaceRoot) return rawPath;
   return `${workspaceRoot.replace(/[\\/]+$/, '')}/${rawPath.replace(/^[\\/]+/, '')}`;
 }
 

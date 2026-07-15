@@ -3,7 +3,7 @@
  * @description 通用 zip 包根文件与资源文件解析工具。
  */
 import JSZip from 'jszip';
-import { normalizeSafeRelativeFilePath } from '@/shared/workspace/pathUtils';
+import { path } from '@/utils/file/path';
 
 /** zip 文件 magic bytes（PK\x03\x04）。 */
 const ZIP_MAGIC = new Uint8Array([0x50, 0x4b, 0x03, 0x04]);
@@ -71,7 +71,7 @@ export function isZipPackageBuffer(buffer: ArrayBuffer): boolean {
  * @returns 安全相对路径
  */
 export function normalizeZipEntryPath(entryName: string): string {
-  return normalizeSafeRelativeFilePath(entryName, 'zip 条目路径');
+  return path.validatePath(entryName, 'zip 条目路径');
 }
 
 /**
