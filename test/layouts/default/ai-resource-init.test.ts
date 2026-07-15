@@ -6,8 +6,8 @@
 import { defineComponent, h } from 'vue';
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useSkillInit } from '@/layouts/default/hooks/useSkillInit';
-import { useWidgetInit } from '@/layouts/default/hooks/useWidgetInit';
+import { useWatchSkillResource } from '@/layouts/default/hooks/useWatchSkillResource';
+import { useWatchWidgetResource } from '@/layouts/default/hooks/useWatchWidgetResource';
 
 /** Skill 目录变更事件。 */
 interface SkillChangedEvent {
@@ -86,8 +86,8 @@ function createResourceInitHarness(): ReturnType<typeof defineComponent> {
   return defineComponent({
     name: 'AIResourceInitHarness',
     setup() {
-      useSkillInit();
-      useWidgetInit();
+      useWatchSkillResource();
+      useWatchWidgetResource();
 
       return (): ReturnType<typeof h> => h('div');
     }
