@@ -102,8 +102,8 @@ import { useFileActive } from './hooks/useFileActive';
 import { useHelpActive } from './hooks/useHelpActive';
 import { useKeepAlive } from './hooks/useKeepAlive';
 import { useViewActive } from './hooks/useViewActive';
-import { useWatchSkillResource } from './hooks/useWatchSkillResource';
-import { useWatchWidgetResource } from './hooks/useWatchWidgetResource';
+import { useWatchSkill } from './hooks/useWatchSkill';
+import { useWatchWidget } from './hooks/useWatchWidget';
 
 const currentRoute = useRoute();
 const router = useRouter();
@@ -116,8 +116,8 @@ const tabsStore = useTabsStore();
 const { getRouteCacheKey, getRouteCacheComponent } = useKeepAlive();
 
 /** 应用级 Skill 与 Widget 资源扫描和目录监听。 */
-useWatchSkillResource();
-useWatchWidgetResource();
+useWatchSkill();
+useWatchWidget();
 
 /** 快捷键帮助抽屉仅在打开时加载，减少默认布局首屏组件体积。 */
 const ShortcutsHelp = defineAsyncComponent(() => import('./components/ShortcutsHelp.vue'));

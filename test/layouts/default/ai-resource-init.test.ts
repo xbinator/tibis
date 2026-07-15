@@ -6,8 +6,8 @@
 import { defineComponent, h } from 'vue';
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useWatchSkillResource } from '@/layouts/default/hooks/useWatchSkillResource';
-import { useWatchWidgetResource } from '@/layouts/default/hooks/useWatchWidgetResource';
+import { useWatchSkill } from '@/layouts/default/hooks/useWatchSkill';
+import { useWatchWidget } from '@/layouts/default/hooks/useWatchWidget';
 
 /** Skill 目录变更事件。 */
 interface SkillChangedEvent {
@@ -54,11 +54,11 @@ vi.mock('@/shared/platform', () => ({
 
 vi.mock('@/stores/ai/skill', () => ({
   useSkillStore: vi.fn(() => ({
-    prepareInitialization: vi.fn((): void => {
+    beforeInitialize: vi.fn((): void => {
       initOrder.push('skill-prepare');
     }),
-    finishInitialization: vi.fn(),
-    init: vi.fn(async (): Promise<void> => {
+    afterInitialize: vi.fn(),
+    initialize: vi.fn(async (): Promise<void> => {
       initOrder.push('skill-init');
     }),
     handleSkillChange: handleSkillChangeMock
@@ -67,11 +67,11 @@ vi.mock('@/stores/ai/skill', () => ({
 
 vi.mock('@/stores/ai/widget', () => ({
   useWidgetStore: vi.fn(() => ({
-    prepareInitialization: vi.fn((): void => {
+    beforeInitialize: vi.fn((): void => {
       initOrder.push('widget-prepare');
     }),
-    finishInitialization: vi.fn(),
-    init: vi.fn(async (): Promise<void> => {
+    afterInitialize: vi.fn(),
+    initialize: vi.fn(async (): Promise<void> => {
       initOrder.push('widget-init');
     }),
     handleWidgetChange: handleWidgetChangeMock
@@ -86,8 +86,8 @@ function createResourceInitHarness(): ReturnType<typeof defineComponent> {
   return defineComponent({
     name: 'AIResourceInitHarness',
     setup() {
-      useWatchSkillResource();
-      useWatchWidgetResource();
+      useWatchSkill();
+      useWatchWidget();
 
       return (): ReturnType<typeof h> => h('div');
     }

@@ -23,76 +23,53 @@ export interface WatchResourceConfig<TDefinition> {
   /** 监听该目录时的 glob 模式，例如 `**\/SKILL.md`、`**\/widget.json`。 */
   watchGlob: string;
 
-  /** Store 准备初始化方法（建立屏障）。 */
-  prepareInitialization: () => void;
-  /** Store 初始化方法（执行扫描）。 */
-  init: (homeDir: string, api: Native) => Promise<void>;
-  /** Store 初始化结束方法（释放屏障）。 */
-  finishInitialization: () => void;
-  /** Store 处理变更方法。 */
-  handleChange: (type: 'change' | 'add' | 'unlink', definition: TDefinition) => void;
+  /** 初始化之前触发（建立屏障），由 hook 在 setup 阶段同步调用。 */
+  onBeforeInitialize: () => void;
+  /** 执行初始化（扫描 Store），由 hook 在 onMounted 异步调用。 */
+  onInitialize: (homeDir: string, api: Native) => Promise<void>;
+  /** 初始化完成之后触发（释放屏障），初始化成功或失败时各调用一次。 */
+  onAfterInitialize: () => void;
+  /** 处理变化事件（add / change / unlink），由 hook 在收到变更通知时调用。 */
+  onChange: (type: 'change' | 'add' | 'unlink', definition: TDefinition) => void;
 
   /**
-   * 解析文件内容。
+   * 文件解析回调，将磁盘内容解析为 Store 定义。
    * @param content - 文件内容
    * @param filePath - 文件绝对路径
    * @returns 解析后的定义
    */
-  parseFile: (content: string, filePath: string) => TDefinition;
+  onParseFile: (content: string, filePath: string) => TDefinition;
   /**
-   * 为 unlink 事件构造仅含路径信息的占位定义。
+   * 为 unlink 事件创建占位定义（仅含路径信息），便于 Store 在 unlink 路径命中失败时仍可按 id 兜底。
    * @param filePath - 规范化后的文件绝对路径
    * @returns 用于通知 Store 删除的占位定义
    */
-  createUnlinkPayload: (filePath: string) => TDefinition;
+  onCreateUnlinkPayload: (filePath: string) => TDefinition;
   /**
-   * 判断变更路径是否需要进入 Store。
+   * 判断是否目标文件：业务谓词，匹配当前资源关心的文件。
+   * 隐藏目录过滤已由 useWatchResource 内部基于 rootDir / subDir 统一处理，调用方无需关心。
    * @param normalizedPath - 已使用 / 统一分隔符的文件路径
    * @returns 是否需要处理
    */
-  isTargetFile: (normalizedPath: string) => boolean;
+  onIsTargetFile: (normalizedPath: string) => boolean;
   /** 初始化失败时的日志标签，例如 'Skill' / 'Widget'。 */
   logLabel: string;
 }
 
 /**
- * 获取 `${rootDir}/${subDir}` 下的目录片段。
- * @param normalizedPath - 已使用 / 统一分隔符的文件路径
- * @param rootDir - 根目录名（带 `.`）
- * @param subDir - 子目录名
- * @returns 根目录之后、文件名之前的路径片段
- */
-function getDirectorySegments(normalizedPath: string, rootDir: string, subDir: string): string[] {
-  const segments = normalizedPath.split('/');
-  const rootIndex = segments.lastIndexOf(rootDir);
-
-  if (rootIndex === -1 || segments[rootIndex + 1] !== subDir) {
-    return [];
-  }
-
-  return segments.slice(rootIndex + 2, -1);
-}
-
-/**
- * 判断路径是否位于隐藏目录。
+ * 判断路径是否位于被监听根目录/子目录下的隐藏目录（用于过滤安装器临时目录等）。
  * @param normalizedPath - 已使用 / 统一分隔符的文件路径
  * @param rootDir - 根目录名（带 `.`）
  * @param subDir - 子目录名
  * @returns 隐藏目录下的文件返回 true
  */
 function isHiddenPath(normalizedPath: string, rootDir: string, subDir: string): boolean {
-  return getDirectorySegments(normalizedPath, rootDir, subDir).some((segment: string): boolean => segment.startsWith('.'));
-}
-
-/**
- * 创建判断资源文件路径的工具函数：先排除隐藏目录，再交由业务谓词判断。
- * @param rootDir - 根目录名（带 `.`）
- * @param subDir - 子目录名
- * @param predicate - 业务自定义的最终匹配条件
- * @returns 路径判断函数
- */
-export function createResourceMatcher(rootDir: string, subDir: string, predicate: (normalizedPath: string) => boolean): (normalizedPath: string) => boolean {
-  return (normalizedPath: string): boolean => !isHiddenPath(normalizedPath, rootDir, subDir) && predicate(normalizedPath);
+  const segments = normalizedPath.split('/');
+  const rootIndex = segments.lastIndexOf(rootDir);
+  if (rootIndex === -1 || segments[rootIndex + 1] !== subDir) {
+    return false;
+  }
+  return segments.slice(rootIndex + 2, -1).some((segment: string): boolean => segment.startsWith('.'));
 }
 
 /**
@@ -106,12 +83,16 @@ async function startWatching<TDefinition>(config: WatchResourceConfig<TDefinitio
   const removeChangeListener = native.onSkillChanged((data: { type: string; filePath: string; content?: string }): void => {
     // 统一规范化路径分隔符，Windows 下 Chokidar 报告 \ 而 scanner 使用 /
     const normalizedPath = data.filePath.replace(/\\/g, '/');
-    if (!config.isTargetFile(normalizedPath)) {
+    // 过滤掉安装器等写入的隐藏临时目录，避免在 unlink 时找不到 Store 中已删除的条目
+    if (isHiddenPath(normalizedPath, config.rootDir, config.subDir)) {
+      return;
+    }
+    if (!config.onIsTargetFile(normalizedPath)) {
       return;
     }
 
     if (data.type === 'unlink') {
-      config.handleChange('unlink', config.createUnlinkPayload(normalizedPath));
+      config.onChange('unlink', config.onCreateUnlinkPayload(normalizedPath));
       return;
     }
 
@@ -119,7 +100,7 @@ async function startWatching<TDefinition>(config: WatchResourceConfig<TDefinitio
       return;
     }
 
-    config.handleChange(data.type as 'change' | 'add', config.parseFile(data.content, normalizedPath));
+    config.onChange(data.type as 'change' | 'add', config.onParseFile(data.content, normalizedPath));
   });
   cleanupCallbacks.push(removeChangeListener);
 
@@ -129,7 +110,7 @@ async function startWatching<TDefinition>(config: WatchResourceConfig<TDefinitio
   await native.watchDirectory(targetDir, config.watchGlob);
   cleanupCallbacks.push((): Promise<void> => native.unwatchDirectory(targetDir, config.watchGlob));
 
-  await config.init(homeDir, native);
+  await config.onInitialize(homeDir, native);
 }
 
 /**
@@ -151,7 +132,7 @@ async function runCleanup(cleanupCallbacks: Array<() => void | Promise<void>>): 
  */
 export function useWatchResource<TDefinition>(config: WatchResourceConfig<TDefinition>): void {
   // setup 阶段先建立屏障，避免布局 onMounted 前聊天绕过资源初始化。
-  config.prepareInitialization();
+  config.onBeforeInitialize();
 
   /** 组件卸载时需要执行的清理函数。 */
   const cleanupCallbacks: Array<() => void | Promise<void>> = [];
@@ -159,7 +140,7 @@ export function useWatchResource<TDefinition>(config: WatchResourceConfig<TDefin
   onMounted(async () => {
     const [error] = await asyncTo(startWatching(config, cleanupCallbacks));
 
-    error && config.finishInitialization();
+    error && config.onAfterInitialize();
   });
 
   onUnmounted(() => {

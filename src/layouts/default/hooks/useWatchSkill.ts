@@ -1,20 +1,13 @@
 /**
- * @file useWatchSkillResource.ts
+ * @file useWatchSkill.ts
  * @description 默认布局的 Skill 资源监听 hook，委托给通用 useWatchResource。
  */
 
 import { parseSkillMarkdown } from '@/ai/skill';
 import type { SkillDefinition } from '@/ai/skill/types';
-import { useWatchResource, createResourceMatcher } from '@/hooks/useWatchResource';
+import { useWatchResource } from '@/hooks/useWatchResource';
 import { native } from '@/shared/platform';
 import { useSkillStore } from '@/stores/ai/skill';
-
-/**
- * 判断变更路径是否是需要进入 Store 的正式 Skill 文件。
- * @param normalizedPath - 已使用 / 统一分隔符的文件路径
- * @returns 正式 Skill 文件返回 true
- */
-const isManagedSkillFile = createResourceMatcher('.agents', 'skills', (normalizedPath: string): boolean => normalizedPath.endsWith('/SKILL.md'));
 
 /**
  * 为 unlink 事件构造仅含路径信息的占位定义。
@@ -38,7 +31,7 @@ function createUnlinkPayload(filePath: string): SkillDefinition {
  * 监听 skill 目录并同步到 Skill Store：扫描文件、订阅变更、增量更新。
  * 在组件 onMounted 时自动执行初始化，onUnmounted 时自动清理监听。
  */
-export function useWatchSkillResource(): void {
+export function useWatchSkill(): void {
   const skillStore = useSkillStore();
 
   useWatchResource<SkillDefinition>({
@@ -46,12 +39,13 @@ export function useWatchSkillResource(): void {
     subDir: 'skills',
     watchGlob: '**/SKILL.md',
     logLabel: 'Skill',
-    prepareInitialization: (): void => skillStore.prepareInitialization(),
-    finishInitialization: (): void => skillStore.finishInitialization(),
-    init: (homeDir: string): Promise<void> => skillStore.init(homeDir, native),
-    handleChange: (type, definition): void => skillStore.handleSkillChange(type, definition),
-    parseFile: (content: string, filePath: string): SkillDefinition => parseSkillMarkdown(content, filePath, { source: 'global' }),
-    createUnlinkPayload,
-    isTargetFile: isManagedSkillFile
+    onBeforeInitialize: (): void => skillStore.beforeInitialize(),
+    onAfterInitialize: (): void => skillStore.afterInitialize(),
+    onInitialize: (homeDir: string): Promise<void> => skillStore.initialize(homeDir, native),
+    onChange: (type, definition): void => skillStore.handleSkillChange(type, definition),
+    onParseFile: (content: string, filePath: string): SkillDefinition => parseSkillMarkdown(content, filePath, { source: 'global' }),
+    onCreateUnlinkPayload: createUnlinkPayload,
+    // 路径以 /SKILL.md 结尾即为正式 Skill 文件；隐藏目录过滤已由 useWatchResource 内部处理
+    onIsTargetFile: (normalizedPath: string): boolean => /\/SKILL\.md$/.test(normalizedPath)
   });
 }
