@@ -7,6 +7,7 @@ import { defineStore } from 'pinia';
 import { DEFAULT_SKILL_MAX_CONTENT_LENGTH, parseSkillMarkdown, scanSkills, type SkillScannerAPI } from '@/ai/skill';
 import type { SkillDefinition, SkillScanConfig } from '@/ai/skill/types';
 import { local } from '@/shared/storage/base';
+import { asyncTo } from '@/utils/asyncTo';
 
 /** localStorage 持久化键名。 */
 const STORAGE_KEY_DISABLED_NAMES = 'skill.disabledNames';
@@ -133,7 +134,7 @@ export const useSkillStore = defineStore('skill', () => {
    * @param operation - 操作序号
    * @returns 本次结果是否成功写回
    */
-  function applySkillChange(type: 'change' | 'add' | 'unlink', updatedSkill: SkillDefinition, operation: number): boolean {
+  function updateSkillChange(type: 'change' | 'add' | 'unlink', updatedSkill: SkillDefinition, operation: number): boolean {
     const { filePath } = updatedSkill;
     if (filePath && !canApplyResourceOperation(filePath, operation)) {
       return false;
@@ -143,10 +144,16 @@ export const useSkillStore = defineStore('skill', () => {
       appliedOperationByPath.set(filePath, operation);
     }
 
-    const index =
-      type === 'unlink' && filePath
-        ? skills.value.findIndex((skill: SkillDefinition): boolean => skill.filePath === filePath)
-        : skills.value.findIndex((skill: SkillDefinition): boolean => skill.filePath === filePath || (!!updatedSkill.name && skill.name === updatedSkill.name));
+    // unlink 事件只按文件路径匹配；其它事件允许按 filePath 或 name 兜底
+    const index = skills.value.findIndex((skill: SkillDefinition): boolean => {
+      if (skill.filePath === filePath) {
+        return true;
+      }
+      if (type === 'unlink') {
+        return false;
+      }
+      return !!updatedSkill.name && skill.name === updatedSkill.name;
+    });
     const existingSkill = index !== -1 ? skills.value[index] : undefined;
 
     if (type === 'unlink') {
@@ -186,13 +193,13 @@ export const useSkillStore = defineStore('skill', () => {
 
     const discoveredPaths = new Set(discovered.map((skill: SkillDefinition): string => skill.filePath));
     for (const skill of discovered) {
-      applySkillChange('change', skill, operation);
+      updateSkillChange('change', skill, operation);
     }
 
     // 扫描开始后没有被更晚操作触及的缺失路径，才按磁盘删除处理。
     for (const existingSkill of existingSkills) {
       if (!discoveredPaths.has(existingSkill.filePath)) {
-        applySkillChange('unlink', existingSkill, operation);
+        updateSkillChange('unlink', existingSkill, operation);
       }
     }
 
@@ -219,13 +226,13 @@ export const useSkillStore = defineStore('skill', () => {
    * @param updatedSkill - 解析后的 skill（add/change 时提供）
    */
   function handleSkillChange(type: 'change' | 'add' | 'unlink', updatedSkill: SkillDefinition): void {
-    applySkillChange(type, updatedSkill, nextResourceOperation());
+    updateSkillChange(type, updatedSkill, nextResourceOperation());
   }
 
   /**
    * 在异步布局挂载前建立初始化等待屏障。
    */
-  function prepareInitialization(): void {
+  function beforeInitialize(): void {
     if (initialized.value || initPromise) {
       return;
     }
@@ -238,7 +245,7 @@ export const useSkillStore = defineStore('skill', () => {
   /**
    * 完成初始化等待屏障，初始化失败时也允许聊天继续降级运行。
    */
-  function finishInitialization(): void {
+  function afterInitialize(): void {
     initialized.value = true;
     resolveInitPromise?.();
     resolveInitPromise = null;
@@ -250,23 +257,19 @@ export const useSkillStore = defineStore('skill', () => {
    * @param homeDir - 用户主目录路径
    * @param api - electronAPI 实例
    */
-  async function init(homeDir: string, api: SkillScannerAPI): Promise<void> {
+  async function initialize(homeDir: string, api: SkillScannerAPI): Promise<void> {
     if (initTaskPromise) {
       return initTaskPromise;
     }
 
-    prepareInitialization();
+    beforeInitialize();
     scanConfig.value.homeDir = homeDir;
     cachedApi = api;
 
     initTaskPromise = (async (): Promise<void> => {
-      try {
-        await scanAndApplySkills();
-      } catch (error: unknown) {
-        console.error('Skill scan failed:', error);
-      } finally {
-        finishInitialization();
-      }
+      // 错误日志由 asyncTo 内部统一处理，无论成败都释放初始化屏障
+      await asyncTo(scanAndApplySkills());
+      afterInitialize();
     })();
 
     return initTaskPromise;
@@ -307,21 +310,22 @@ export const useSkillStore = defineStore('skill', () => {
 
     const operation = nextResourceOperation();
     const nextPromise = (async (): Promise<SkillDefinition | undefined> => {
-      try {
-        const { content } = await cachedApi.readFile(existingSkill.filePath);
-        const parsed = parseSkillMarkdown(content, existingSkill.filePath, {
+      // 错误日志由 asyncTo 内部统一处理；读取失败视为文件已被删除，回退为 unlink
+      const [error, result] = await asyncTo(cachedApi.readFile(existingSkill.filePath));
+      if (error || !result) {
+        updateSkillChange('unlink', existingSkill, operation);
+      } else {
+        const parsed = parseSkillMarkdown(result.content, existingSkill.filePath, {
           source: existingSkill.source,
           maxContentLength: scanConfig.value.maxContentLength ?? DEFAULT_SKILL_MAX_CONTENT_LENGTH
         });
 
         if (parsed.name && parsed.name !== name) {
-          applySkillChange('unlink', existingSkill, operation);
-          applySkillChange('add', parsed, operation);
+          updateSkillChange('unlink', existingSkill, operation);
+          updateSkillChange('add', parsed, operation);
         } else {
-          applySkillChange('change', parsed, operation);
+          updateSkillChange('change', parsed, operation);
         }
-      } catch {
-        applySkillChange('unlink', existingSkill, operation);
       }
 
       const latestSkill = getSkillByName(name);
@@ -362,9 +366,9 @@ export const useSkillStore = defineStore('skill', () => {
     getEnabledSkills,
     toggleSkill,
     handleSkillChange,
-    prepareInitialization,
-    finishInitialization,
-    init,
+    beforeInitialize,
+    afterInitialize,
+    initialize,
     syncFromDisk,
     resolveLatestEnabledSkill,
     rescan,

@@ -271,7 +271,7 @@ function mountWidgetSettingsPage(): VueWrapper {
     readFile: nativeMock.readFile,
     readWorkspaceDirectory: nativeMock.readWorkspaceDirectory
   };
-  useWidgetStore().init('/Users/test', scannerApi);
+  useWidgetStore().initialize('/Users/test', scannerApi);
 
   return mount(WidgetSettingsPage, {
     global: {

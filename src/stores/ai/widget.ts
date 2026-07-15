@@ -7,6 +7,7 @@ import { defineStore } from 'pinia';
 import { parseWidgetJson, scanWidgets, type WidgetScannerAPI } from '@/ai/widget';
 import type { WidgetDefinition, WidgetScanConfig } from '@/ai/widget/types';
 import { local } from '@/shared/storage/base';
+import { asyncTo } from '@/utils/asyncTo';
 
 /** localStorage 持久化键名。 */
 const STORAGE_KEY_DISABLED_IDS = 'widget.disabledIds';
@@ -142,7 +143,7 @@ export const useWidgetStore = defineStore('widget', () => {
    * @param operation - 操作序号
    * @returns 本次结果是否成功写回
    */
-  function applyWidgetChange(type: 'change' | 'add' | 'unlink', updatedWidget: WidgetDefinition, operation: number): boolean {
+  function updateWidgetChange(type: 'change' | 'add' | 'unlink', updatedWidget: WidgetDefinition, operation: number): boolean {
     const { filePath } = updatedWidget;
     if (filePath && !canApplyResourceOperation(filePath, operation)) {
       return false;
@@ -152,12 +153,16 @@ export const useWidgetStore = defineStore('widget', () => {
       appliedOperationByPath.set(filePath, operation);
     }
 
-    const index =
-      type === 'unlink' && filePath
-        ? widgets.value.findIndex((widget: WidgetDefinition): boolean => widget.filePath === filePath)
-        : widgets.value.findIndex(
-            (widget: WidgetDefinition): boolean => widget.filePath === filePath || (!!updatedWidget.id && widget.id === updatedWidget.id)
-          );
+    // unlink 事件只按文件路径匹配；其它事件允许按 filePath 或 id 兜底
+    const index = widgets.value.findIndex((widget: WidgetDefinition): boolean => {
+      if (widget.filePath === filePath) {
+        return true;
+      }
+      if (type === 'unlink') {
+        return false;
+      }
+      return !!updatedWidget.id && widget.id === updatedWidget.id;
+    });
     const existingWidget = index !== -1 ? widgets.value[index] : undefined;
 
     if (type === 'unlink') {
@@ -182,7 +187,7 @@ export const useWidgetStore = defineStore('widget', () => {
    * @param widget - 小组件定义
    */
   function upsertWidget(widget: WidgetDefinition): void {
-    applyWidgetChange('change', widget, nextResourceOperation());
+    updateWidgetChange('change', widget, nextResourceOperation());
   }
 
   /**
@@ -199,13 +204,13 @@ export const useWidgetStore = defineStore('widget', () => {
     const discoveredPaths = new Set(discovered.map((widget: WidgetDefinition): string => widget.filePath));
 
     for (const widget of discovered) {
-      applyWidgetChange('change', widget, operation);
+      updateWidgetChange('change', widget, operation);
     }
 
     // 扫描开始后没有被更晚操作触及的缺失路径，才按磁盘删除处理。
     for (const existingWidget of existingWidgets) {
       if (!discoveredPaths.has(existingWidget.filePath)) {
-        applyWidgetChange('unlink', existingWidget, operation);
+        updateWidgetChange('unlink', existingWidget, operation);
       }
     }
 
@@ -218,13 +223,13 @@ export const useWidgetStore = defineStore('widget', () => {
    * @param updatedWidget - 解析后的小组件定义
    */
   function handleWidgetChange(type: 'change' | 'add' | 'unlink', updatedWidget: WidgetDefinition): void {
-    applyWidgetChange(type, updatedWidget, nextResourceOperation());
+    updateWidgetChange(type, updatedWidget, nextResourceOperation());
   }
 
   /**
    * 在异步布局挂载前建立初始化等待屏障。
    */
-  function prepareInitialization(): void {
+  function beforeInitialize(): void {
     if (initialized.value || initPromise) {
       return;
     }
@@ -237,7 +242,7 @@ export const useWidgetStore = defineStore('widget', () => {
   /**
    * 完成初始化等待屏障，初始化失败时也允许聊天继续降级运行。
    */
-  function finishInitialization(): void {
+  function afterInitialize(): void {
     initialized.value = true;
     resolveInitPromise?.();
     resolveInitPromise = null;
@@ -250,22 +255,18 @@ export const useWidgetStore = defineStore('widget', () => {
    * @param api - 扫描依赖 API
    * @returns 初始化完成信号
    */
-  async function init(homeDir: string, api: WidgetScannerAPI): Promise<void> {
+  async function initialize(homeDir: string, api: WidgetScannerAPI): Promise<void> {
     if (initTaskPromise) {
       return initTaskPromise;
     }
 
-    prepareInitialization();
+    beforeInitialize();
     scanConfig.value.homeDir = homeDir;
     cachedApi = api;
     initTaskPromise = (async (): Promise<void> => {
-      try {
-        await scanAndApplyWidgets();
-      } catch (error: unknown) {
-        console.error('Widget scan failed:', error);
-      } finally {
-        finishInitialization();
-      }
+      // 错误日志由 asyncTo 内部统一处理，无论成败都释放初始化屏障
+      await asyncTo(scanAndApplyWidgets());
+      afterInitialize();
     })();
 
     return initTaskPromise;
@@ -306,18 +307,19 @@ export const useWidgetStore = defineStore('widget', () => {
 
     const operation = nextResourceOperation();
     const nextPromise = (async (): Promise<WidgetDefinition | undefined> => {
-      try {
-        const { content } = await cachedApi.readFile(existingWidget.filePath);
-        const parsed = parseWidgetJson(content, existingWidget.filePath);
+      // 错误日志由 asyncTo 内部统一处理；读取失败视为文件已被删除，回退为 unlink
+      const [error, result] = await asyncTo(cachedApi.readFile(existingWidget.filePath));
+      if (error || !result) {
+        updateWidgetChange('unlink', existingWidget, operation);
+      } else {
+        const parsed = parseWidgetJson(result.content, existingWidget.filePath);
 
         if (parsed.id !== id) {
-          applyWidgetChange('unlink', existingWidget, operation);
-          applyWidgetChange('add', parsed, operation);
+          updateWidgetChange('unlink', existingWidget, operation);
+          updateWidgetChange('add', parsed, operation);
         } else {
-          applyWidgetChange('change', parsed, operation);
+          updateWidgetChange('change', parsed, operation);
         }
-      } catch {
-        applyWidgetChange('unlink', existingWidget, operation);
       }
 
       const latestWidget = getWidgetById(id);
@@ -366,9 +368,9 @@ export const useWidgetStore = defineStore('widget', () => {
     toggleWidget,
     upsertWidget,
     handleWidgetChange,
-    prepareInitialization,
-    finishInitialization,
-    init,
+    beforeInitialize,
+    afterInitialize,
+    initialize,
     syncFromDisk,
     resolveLatestEnabledWidget,
     rescan,

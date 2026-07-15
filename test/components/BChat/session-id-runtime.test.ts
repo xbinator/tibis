@@ -141,7 +141,7 @@ const skillStoreMock = vi.hoisted(() => ({
   getEnabledSkills: vi.fn(() => [] as Array<{ name: string; contentHash?: string }>),
   waitForInit: vi.fn<() => Promise<void>>(() => Promise.resolve()),
   syncFromDisk: vi.fn<() => Promise<void>>(() => Promise.resolve()),
-  init: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+  initialize: vi.fn<() => Promise<void>>(() => Promise.resolve()),
   handleSkillChange: vi.fn()
 }));
 

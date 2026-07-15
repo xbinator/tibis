@@ -71,7 +71,7 @@ describe('widget store', (): void => {
     });
     const store = useWidgetStore();
 
-    await store.init('/Users/test', api);
+    await store.initialize('/Users/test', api);
 
     expect(store.initialized).toBe(true);
     expect(store.widgets[0]?.id).toBe('weather');
@@ -82,7 +82,7 @@ describe('widget store', (): void => {
 
     setActivePinia(createPinia());
     const nextStore = useWidgetStore();
-    await nextStore.init('/Users/test', api);
+    await nextStore.initialize('/Users/test', api);
 
     expect(nextStore.getWidgetById('weather')?.enabled).toBe(false);
   });
@@ -171,7 +171,7 @@ describe('widget store', (): void => {
     api.readWorkspaceDirectory.mockResolvedValue({ entries: [{ name: 'weather', type: 'directory' }] });
     api.readFile.mockResolvedValue({ content: JSON.stringify({ name: '天气', description: '旧描述' }) });
     const store = useWidgetStore();
-    await store.init('/Users/test', api);
+    await store.initialize('/Users/test', api);
     store.toggleWidget('weather');
     api.readFile.mockResolvedValue({ content: JSON.stringify({ name: '天气', description: '磁盘新描述' }) });
 
@@ -186,7 +186,7 @@ describe('widget store', (): void => {
     api.readWorkspaceDirectory.mockResolvedValue({ entries: [{ name: 'weather', type: 'directory' }] });
     api.readFile.mockResolvedValue({ content: JSON.stringify({ name: '天气', description: '旧描述' }) });
     const store = useWidgetStore();
-    await store.init('/Users/test', api);
+    await store.initialize('/Users/test', api);
     api.readFile.mockResolvedValue({ content: JSON.stringify({ name: '天气', description: '执行时新描述' }) });
 
     const widget = await store.resolveLatestEnabledWidget('weather');
@@ -200,7 +200,7 @@ describe('widget store', (): void => {
     api.readWorkspaceDirectory.mockResolvedValue({ entries: [{ name: 'weather', type: 'directory' }] });
     api.readFile.mockResolvedValue({ content: JSON.stringify({ name: '天气', description: '初始描述' }) });
     const store = useWidgetStore();
-    await store.init('/Users/test', api);
+    await store.initialize('/Users/test', api);
     const staleRead = createDeferred<{ content: string }>();
     api.readFile.mockImplementationOnce((): Promise<{ content: string }> => staleRead.promise);
 
@@ -223,7 +223,7 @@ describe('widget store', (): void => {
     api.readWorkspaceDirectory.mockResolvedValue({ entries: [{ name: 'weather', type: 'directory' }] });
     api.readFile.mockResolvedValue({ content: JSON.stringify({ name: '天气', description: '初始描述' }) });
     const store = useWidgetStore();
-    await store.init('/Users/test', api);
+    await store.initialize('/Users/test', api);
     const staleWeatherRead = createDeferred<{ content: string }>();
     api.readWorkspaceDirectory.mockResolvedValue({
       entries: [
@@ -259,7 +259,7 @@ describe('widget store', (): void => {
     const api = createScannerAPI();
     api.readWorkspaceDirectory.mockResolvedValue({ entries: [] });
     const store = useWidgetStore();
-    store.prepareInitialization();
+    store.beforeInitialize();
     let completed = false;
     const waiting = store.waitForInit().then((): void => {
       completed = true;
@@ -267,7 +267,7 @@ describe('widget store', (): void => {
     await Promise.resolve();
 
     expect(completed).toBe(false);
-    await store.init('/Users/test', api);
+    await store.initialize('/Users/test', api);
     await waiting;
     expect(completed).toBe(true);
   });
@@ -277,7 +277,7 @@ describe('widget store', (): void => {
     api.readWorkspaceDirectory.mockResolvedValue({ entries: [{ name: 'weather', type: 'directory' }] });
     api.readFile.mockResolvedValue({ content: JSON.stringify({ name: '天气', description: '天气描述' }) });
     const store = useWidgetStore();
-    await store.init('/Users/test', api);
+    await store.initialize('/Users/test', api);
     store.toggleWidget('weather');
     api.readWorkspaceDirectory.mockResolvedValue({ entries: [] });
     await store.syncFromDisk();

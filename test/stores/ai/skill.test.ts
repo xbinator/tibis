@@ -77,7 +77,7 @@ describe('skill store disk freshness', (): void => {
   it('synchronizes external disk changes while preserving disabled state', async (): Promise<void> => {
     const api = createScannerAPI(createSkillMarkdown('old instructions'));
     const store = useSkillStore();
-    await store.init('/Users/test', api);
+    await store.initialize('/Users/test', api);
     store.toggleSkill('weather');
     api.readFile.mockResolvedValue({ content: createSkillMarkdown('new instructions') });
 
@@ -90,7 +90,7 @@ describe('skill store disk freshness', (): void => {
   it('resolves the latest enabled Skill directly from disk', async (): Promise<void> => {
     const api = createScannerAPI(createSkillMarkdown('old instructions'));
     const store = useSkillStore();
-    await store.init('/Users/test', api);
+    await store.initialize('/Users/test', api);
     api.readFile.mockResolvedValue({ content: createSkillMarkdown('execution-time instructions') });
 
     const skill = await store.resolveLatestEnabledSkill('weather');
@@ -102,7 +102,7 @@ describe('skill store disk freshness', (): void => {
   it('does not let a slow execution read overwrite a newer watcher result', async (): Promise<void> => {
     const api = createScannerAPI(createSkillMarkdown('initial instructions'));
     const store = useSkillStore();
-    await store.init('/Users/test', api);
+    await store.initialize('/Users/test', api);
     const staleRead = createDeferred<{ content: string }>();
     api.readFile.mockImplementationOnce((): Promise<{ content: string }> => staleRead.promise);
 
@@ -120,7 +120,7 @@ describe('skill store disk freshness', (): void => {
   it('merges unrelated scan results when a watcher changes one Skill during the scan', async (): Promise<void> => {
     const api = createScannerAPI(createSkillMarkdown('initial instructions'));
     const store = useSkillStore();
-    await store.init('/Users/test', api);
+    await store.initialize('/Users/test', api);
     const staleWeatherRead = createDeferred<{ content: string }>();
     api.readWorkspaceDirectory.mockResolvedValue({
       entries: [
@@ -152,7 +152,7 @@ describe('skill store disk freshness', (): void => {
   it('keeps the latest parse error visible after a full disk sync', async (): Promise<void> => {
     const api = createScannerAPI(createSkillMarkdown('initial instructions'));
     const store = useSkillStore();
-    await store.init('/Users/test', api);
+    await store.initialize('/Users/test', api);
     api.readFile.mockResolvedValue({ content: 'invalid skill markdown' });
 
     await store.syncFromDisk();
@@ -163,7 +163,7 @@ describe('skill store disk freshness', (): void => {
   it('waits for initialization after the layout declares it pending', async (): Promise<void> => {
     const api = createScannerAPI(createSkillMarkdown('instructions'));
     const store = useSkillStore();
-    store.prepareInitialization();
+    store.beforeInitialize();
     let completed = false;
     const waiting = store.waitForInit().then((): void => {
       completed = true;
@@ -171,7 +171,7 @@ describe('skill store disk freshness', (): void => {
     await Promise.resolve();
 
     expect(completed).toBe(false);
-    await store.init('/Users/test', api);
+    await store.initialize('/Users/test', api);
     await waiting;
     expect(completed).toBe(true);
   });
@@ -179,7 +179,7 @@ describe('skill store disk freshness', (): void => {
   it('preserves a disabled preference when a Skill is removed and added again', async (): Promise<void> => {
     const api = createScannerAPI(createSkillMarkdown('instructions'));
     const store = useSkillStore();
-    await store.init('/Users/test', api);
+    await store.initialize('/Users/test', api);
     store.toggleSkill('weather');
     api.readWorkspaceDirectory.mockResolvedValue({ entries: [] });
     await store.syncFromDisk();
