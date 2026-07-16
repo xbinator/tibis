@@ -27,7 +27,9 @@ type ToolModelMessageContent = Array<{
 }>;
 
 /** User 模型消息内容片段。 */
-type UserModelMessageContent = Array<{ type: 'text'; text: string } | { type: 'image'; image: string; mediaType?: string }>;
+type UserModelMessageContent = Array<
+  { type: 'text'; text: string } | { type: 'file'; data: URL; mediaType: string; filename?: string }
+>;
 
 /** Runtime 工具结果类型。 */
 type RuntimeToolResult = NonNullable<ChatMessageToolPart['result']>;
@@ -305,7 +307,12 @@ function toUserModelMessage(message: RuntimeUserMessageRecord): ModelMessage | u
   const contentParts: UserModelMessageContent = [];
   if (userText) contentParts.push({ type: 'text', text: userText });
   for (const file of imageFiles) {
-    contentParts.push({ type: 'image', image: file.url as string, mediaType: file.mimeType });
+    contentParts.push({
+      type: 'file',
+      data: new URL(file.url as string),
+      mediaType: file.mimeType || 'image',
+      filename: file.name
+    });
   }
 
   return { role: 'user', content: contentParts };

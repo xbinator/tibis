@@ -99,9 +99,11 @@ async function closeSession(serverId: string): Promise<void> {
 /**
  * 连接指定 MCP server 并刷新 discovery cache。
  * @param server - MCP server 配置
+ * @param abortSignal - 调用方总截止时间或主动取消信号
  * @returns discovery 刷新结果
  */
-export async function connectMcpServer(server: MCPServerConfig): Promise<MCPDiscoveryRefreshResult> {
+export async function connectMcpServer(server: MCPServerConfig, abortSignal?: AbortSignal): Promise<MCPDiscoveryRefreshResult> {
+  abortSignal?.throwIfAborted();
   const runnableError = getServerRunnableError(server);
   if (runnableError) {
     setStatus(server.id, server.enabled ? 'failed' : 'disabled', undefined, runnableError);
@@ -109,6 +111,12 @@ export async function connectMcpServer(server: MCPServerConfig): Promise<MCPDisc
   }
 
   setStatus(server.id, 'connecting', 'refreshing');
+
+  let connectingWrapper: MCPClientWrapper | undefined;
+  const disconnectOnAbort = (): void => {
+    void connectingWrapper?.disconnect();
+  };
+  abortSignal?.addEventListener('abort', disconnectOnAbort, { once: true });
 
   try {
     let authProvider: TibisOAuthProvider | undefined;
@@ -122,9 +130,12 @@ export async function connectMcpServer(server: MCPServerConfig): Promise<MCPDisc
     });
 
     const wrapper = await createMcpClient(server, transport);
+    connectingWrapper = wrapper;
     await wrapper.connect();
+    abortSignal?.throwIfAborted();
 
     const tools = await wrapper.listTools();
+    abortSignal?.throwIfAborted();
 
     await closeSession(server.id);
     sessionsByServerId.set(server.id, wrapper);
@@ -163,6 +174,8 @@ export async function connectMcpServer(server: MCPServerConfig): Promise<MCPDisc
     setStatus(server.id, classified.status, 'failed', classified.message);
 
     return createDiscoveryFailureResult(server.id, classified.code, classified.message);
+  } finally {
+    abortSignal?.removeEventListener('abort', disconnectOnAbort);
   }
 }
 
@@ -213,13 +226,16 @@ export async function refreshMcpDiscovery(server: MCPServerConfig): Promise<MCPD
  * @param server - MCP server 配置
  * @param toolName - MCP tool 名称
  * @param input - tool 输入
+ * @param abortSignal - AI SDK 工具调用中止信号
  * @returns MCP tool 调用结果
  */
-export async function executeMcpTool(server: MCPServerConfig, toolName: string, input: unknown): Promise<unknown> {
+export async function executeMcpTool(server: MCPServerConfig, toolName: string, input: unknown, abortSignal?: AbortSignal): Promise<unknown> {
+  abortSignal?.throwIfAborted();
   let wrapper = sessionsByServerId.get(server.id);
 
   if (!wrapper || !wrapper.isConnected()) {
     const result = await connectMcpServer(server);
+    abortSignal?.throwIfAborted();
     if (!result.ok) {
       throw new Error(result.message ?? `MCP server failed to connect: ${server.id}`);
     }
@@ -231,7 +247,7 @@ export async function executeMcpTool(server: MCPServerConfig, toolName: string, 
   }
 
   try {
-    return await wrapper.callTool(toolName, input);
+    return await wrapper.callTool(toolName, input, abortSignal);
   } catch (error) {
     const classified = classifyMcpError(error);
     if (classified.status === 'failed') {

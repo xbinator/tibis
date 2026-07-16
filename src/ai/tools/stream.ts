@@ -18,6 +18,8 @@ const TODO_WRITE_TOOL_NAME = 'todowrite';
 export interface ToolExecutionMetadata {
   /** 触发工具请求的 runtime ID */
   runtimeId?: string;
+  /** Renderer 本地工具中止信号。 */
+  abortSignal?: AbortSignal;
 }
 
 /**
@@ -99,7 +101,8 @@ function createExecutionInput(toolName: string, input: unknown, toolCallId: stri
 
   return {
     ...input,
-    commandId: toolCallId
+    commandId: toolCallId,
+    ...(metadata.abortSignal ? { abortSignal: metadata.abortSignal } : {})
   };
 }
 

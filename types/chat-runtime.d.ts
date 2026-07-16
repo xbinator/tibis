@@ -31,6 +31,7 @@ export type ChatRuntimeEventName =
   | 'chat:runtime:message-deleted'
   | 'chat:runtime:context-usage-updated'
   | 'chat:runtime:tool-request'
+  | 'chat:runtime:tool-cancelled'
   | 'chat:runtime:confirmation-requested'
   | 'chat:runtime:bridge-requested'
   | 'chat:runtime:error'
@@ -415,6 +416,12 @@ export interface ChatRuntimeToolRequestEvent extends ChatRuntimeEventBase {
   input: unknown;
 }
 
+/** Runtime renderer tool cancellation sent to renderer. */
+export interface ChatRuntimeToolCancelledEvent extends ChatRuntimeEventBase {
+  /** Tool call id to abort locally. */
+  toolCallId: string;
+}
+
 /** Runtime confirmation request sent to renderer. */
 export interface ChatRuntimeConfirmationRequestEvent extends ChatRuntimeEventBase {
   /** Confirmation request id. */
@@ -492,6 +499,7 @@ export interface ChatRuntimeEventMap {
   'chat:runtime:message-deleted': ChatRuntimeMessageDeletedEvent;
   'chat:runtime:context-usage-updated': ChatRuntimeContextUsageEvent;
   'chat:runtime:tool-request': ChatRuntimeToolRequestEvent;
+  'chat:runtime:tool-cancelled': ChatRuntimeToolCancelledEvent;
   'chat:runtime:confirmation-requested': ChatRuntimeConfirmationRequestEvent;
   'chat:runtime:bridge-requested': ChatRuntimeBridgeRequestEvent;
   'chat:runtime:error': ChatRuntimeErrorEvent;

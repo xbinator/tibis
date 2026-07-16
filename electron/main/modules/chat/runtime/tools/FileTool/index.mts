@@ -719,7 +719,7 @@ async function executeGlobTool(input: ChatRuntimeMainToolExecutionInput, deps: M
       pattern: normalizedInput.pattern,
       limit: DEFAULT_FILE_SEARCH_LIMIT,
       excludedDirs: DEFAULT_FILE_SEARCH_EXCLUDED_DIRS,
-      signal: input.runtime.abortController.signal
+      signal: input.signal ?? input.runtime.abortController.signal
     });
     return createMainToolSuccessResult(GLOB_TOOL_NAME, { path: searchTarget.filePath, ...data });
   } catch (error) {
@@ -760,7 +760,7 @@ async function executeGrepTool(input: ChatRuntimeMainToolExecutionInput, deps: M
       stdoutLimitBytes: DEFAULT_GREP_STDOUT_LIMIT_BYTES,
       stderrLimitBytes: DEFAULT_GREP_STDERR_LIMIT_BYTES,
       lineTextLimit: DEFAULT_GREP_LINE_TEXT_LIMIT,
-      signal: input.runtime.abortController.signal
+      signal: input.signal ?? input.runtime.abortController.signal
     });
     return createMainToolSuccessResult(GREP_TOOL_NAME, { path: searchTarget.filePath, ...data });
   } catch (error) {

@@ -27,6 +27,8 @@ export interface RuntimeBridgeRequestInput {
   kind: string;
   /** Bridge 请求载荷。 */
   payload?: unknown;
+  /** 关联工具调用的中止信号。 */
+  signal?: AbortSignal;
 }
 
 /** Bridge 请求管理器依赖。 */
@@ -72,6 +74,8 @@ interface PendingRuntimeBridgeRequest {
   reject: (error: Error) => void;
   /** 请求超时定时器。 */
   timeoutId: ReturnType<typeof setTimeout>;
+  /** 移除中止监听器。 */
+  removeAbortListener?: () => void;
 }
 
 /**
@@ -99,6 +103,9 @@ export function createRuntimeBridgeRequests(dependencies: RuntimeBridgeRequestsD
      * @returns renderer bridge 结果
      */
     request(input: RuntimeBridgeRequestInput): Promise<ChatRuntimeBridgeResult> {
+      if (input.signal?.aborted) {
+        return Promise.resolve({ status: 'failure', error: { code: 'TOOL_TIMEOUT', message: 'Renderer bridge request was aborted' } });
+      }
       const runtime = dependencies.getRuntime(input.runtimeId);
       if (!runtime) {
         throw new ChatRuntimeError('RUNTIME_NOT_ACTIVE', `Runtime ${input.runtimeId} is not active`);
@@ -118,14 +125,25 @@ export function createRuntimeBridgeRequests(dependencies: RuntimeBridgeRequestsD
         payload: input.payload
       };
       return new Promise<ChatRuntimeBridgeResult>((resolve, reject) => {
-        const timeoutId = setTimeout((): void => {
+        let timeoutId: ReturnType<typeof setTimeout>;
+        const resolveAborted = (): void => {
           pendingBridgeRequests.delete(key);
+          clearTimeout(timeoutId);
+          resolve({ status: 'failure', error: { code: 'TOOL_TIMEOUT', message: 'Renderer bridge request was aborted' } });
+        };
+        timeoutId = setTimeout((): void => {
+          pendingBridgeRequests.delete(key);
+          input.signal?.removeEventListener('abort', resolveAborted);
           resolve({
             status: 'failure',
             error: { code: 'TOOL_TIMEOUT', message: 'Renderer bridge request timed out' }
           });
         }, dependencies.timeoutMs);
-        pendingBridgeRequests.set(key, { event, resolve, reject, timeoutId });
+        const removeAbortListener = input.signal
+          ? (): void => input.signal?.removeEventListener('abort', resolveAborted)
+          : undefined;
+        input.signal?.addEventListener('abort', resolveAborted, { once: true });
+        pendingBridgeRequests.set(key, { event, resolve, reject, timeoutId, removeAbortListener });
         dependencies.emit('chat:runtime:bridge-requested', event);
       });
     },
@@ -141,6 +159,7 @@ export function createRuntimeBridgeRequests(dependencies: RuntimeBridgeRequestsD
 
       pendingBridgeRequests.delete(key);
       clearTimeout(pendingRequest.timeoutId);
+      pendingRequest.removeAbortListener?.();
       pendingRequest.resolve(input.result);
     },
 
@@ -154,6 +173,7 @@ export function createRuntimeBridgeRequests(dependencies: RuntimeBridgeRequestsD
         if (!key.startsWith(`${runtimeId}:`)) continue;
 
         clearTimeout(request.timeoutId);
+        request.removeAbortListener?.();
         request.reject(new ChatRuntimeError('EDITOR_UNAVAILABLE', reason));
         pendingBridgeRequests.delete(key);
       }

@@ -14,6 +14,7 @@ import type {
   ChatRuntimeHandlerResult,
   ChatRuntimeMessageDeletedEvent,
   ChatRuntimeMessageEvent,
+  ChatRuntimeToolCancelledEvent,
   ChatRuntimeToolRequestEvent
 } from 'types/chat-runtime';
 import { onScopeDispose } from 'vue';
@@ -134,6 +135,17 @@ function assertRuntimeResult(result: ChatRuntimeHandlerResult<void>): void {
  */
 export function useChatRuntimeEvents(actorSystem: ChatActorSystem): void {
   const electronAPI = getElectronAPI();
+  const toolAbortControllers = new Map<string, AbortController>();
+
+  /**
+   * 创建 renderer 工具调用的稳定索引。
+   * @param runtimeId - Runtime ID
+   * @param toolCallId - 工具调用 ID
+   * @returns 工具执行索引
+   */
+  function createToolAbortKey(runtimeId: string, toolCallId: string): string {
+    return `${runtimeId}:${toolCallId}`;
+  }
   const toolPermissionStore = useToolPermissionStore();
 
   /**
@@ -203,13 +215,16 @@ export function useChatRuntimeEvents(actorSystem: ChatActorSystem): void {
   async function handleToolRequest(event: ChatRuntimeToolRequestEvent): Promise<void> {
     const capabilities = actorSystem.getRuntimeCapabilities(event.runtimeId);
     if (!shouldHandle(event) || !capabilities) return;
+    const abortKey = createToolAbortKey(event.runtimeId, event.toolCallId);
+    const abortController = new AbortController();
+    toolAbortControllers.set(abortKey, abortController);
 
     try {
       const executed = await executeToolCall(
         { toolCallId: event.toolCallId, toolName: event.toolName, input: event.input },
         [...capabilities.tools],
         capabilities.getToolContext(),
-        { runtimeId: event.runtimeId }
+        { runtimeId: event.runtimeId, abortSignal: abortController.signal }
       );
       assertRuntimeResult(await electronAPI.chatRuntimeSubmitToolResult({ runtimeId: event.runtimeId, toolCallId: event.toolCallId, result: executed.result }));
     } catch (error: unknown) {
@@ -220,7 +235,15 @@ export function useChatRuntimeEvents(actorSystem: ChatActorSystem): void {
           result: createToolFailure(event.toolName, error)
         })
       );
+    } finally {
+      toolAbortControllers.delete(abortKey);
     }
+  }
+
+  /** 中止 main 已停止等待的 renderer 本地工具。 */
+  function handleToolCancelled(event: ChatRuntimeToolCancelledEvent): void {
+    if (!shouldHandle(event)) return;
+    toolAbortControllers.get(createToolAbortKey(event.runtimeId, event.toolCallId))?.abort();
   }
 
   /** 将确认请求路由到目标 Session UI 和 Agent。 */
@@ -272,6 +295,7 @@ export function useChatRuntimeEvents(actorSystem: ChatActorSystem): void {
     electronAPI.chatRuntimeOnToolRequest((event) => {
       handleToolRequest(event).catch(() => undefined);
     }),
+    electronAPI.chatRuntimeOnToolCancelled(handleToolCancelled),
     electronAPI.chatRuntimeOnConfirmationRequested((event) => {
       handleConfirmationRequest(event).catch(() => undefined);
     }),
@@ -283,6 +307,8 @@ export function useChatRuntimeEvents(actorSystem: ChatActorSystem): void {
   ];
 
   onScopeDispose((): void => {
+    for (const controller of toolAbortControllers.values()) controller.abort();
+    toolAbortControllers.clear();
     for (const dispose of disposers) dispose();
   });
 }

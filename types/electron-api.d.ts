@@ -39,6 +39,7 @@ import type {
   ChatRuntimeSubmitMessagePartInput,
   ChatRuntimeSubmitUserChoiceInput,
   ChatRuntimeSubmitToolResultInput,
+  ChatRuntimeToolCancelledEvent,
   ChatRuntimeToolRequestEvent
 } from './chat-runtime';
 import type { RequestInput, RequestResponse } from './request';
@@ -603,6 +604,7 @@ export interface ElectronAPI {
   chatRuntimeOnMessageDeleted: (callback: (event: ChatRuntimeMessageDeletedEvent) => void) => () => void;
   chatRuntimeOnContextUsageUpdated: (callback: (event: ChatRuntimeContextUsageEvent) => void) => () => void;
   chatRuntimeOnToolRequest: (callback: (event: ChatRuntimeToolRequestEvent) => void) => () => void;
+  chatRuntimeOnToolCancelled: (callback: (event: ChatRuntimeToolCancelledEvent) => void) => () => void;
   chatRuntimeOnConfirmationRequested: (callback: (event: ChatRuntimeConfirmationRequestEvent) => void) => () => void;
   chatRuntimeOnBridgeRequested: (callback: (event: ChatRuntimeBridgeRequestEvent) => void) => () => void;
   chatRuntimeOnError: (callback: (event: ChatRuntimeEventMap['chat:runtime:error']) => void) => () => void;

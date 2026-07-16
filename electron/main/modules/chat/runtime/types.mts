@@ -146,6 +146,8 @@ export interface ChatRuntimeRendererToolExecutionInput {
   toolName: string;
   /** 工具输入。 */
   input: unknown;
+  /** 当前工具调用的组合中止信号。 */
+  signal?: AbortSignal;
 }
 
 /** Renderer 工具执行函数。 */
@@ -161,6 +163,8 @@ export interface ChatRuntimeMainToolExecutionInput {
   toolName: string;
   /** 工具输入。 */
   input: unknown;
+  /** 当前工具调用的组合中止信号。 */
+  signal?: AbortSignal;
 }
 
 /** 主进程工具执行函数。 */

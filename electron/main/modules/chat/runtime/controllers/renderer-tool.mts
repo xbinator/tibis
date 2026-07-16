@@ -53,6 +53,8 @@ interface PendingRendererToolRequest {
   reject: (error: Error) => void;
   /** 请求超时定时器。 */
   timeoutId: ReturnType<typeof setTimeout>;
+  /** 移除工具级中止监听器。 */
+  removeAbortListener?: () => void;
 }
 
 /**
@@ -73,6 +75,21 @@ function createToolRequestKey(runtimeId: string, toolCallId: string): string {
 export function createRuntimeRendererToolRequests(dependencies: RuntimeRendererToolRequestsDependencies): RuntimeRendererToolRequests {
   const pendingRendererToolRequests = new Map<string, PendingRendererToolRequest>();
 
+  /**
+   * 通知 renderer 停止尚未结束的本地工具工作。
+   * @param event - 原工具请求事件
+   */
+  function emitToolCancelled(event: ChatRuntimeToolRequestEvent): void {
+    dependencies.emit('chat:runtime:tool-cancelled', {
+      runtimeId: event.runtimeId,
+      sessionId: event.sessionId,
+      clientId: event.clientId,
+      agentId: event.agentId,
+      parentRuntimeId: event.parentRuntimeId,
+      toolCallId: event.toolCallId
+    });
+  }
+
   return {
     /**
      * 请求 renderer 执行本地工具。
@@ -80,6 +97,13 @@ export function createRuntimeRendererToolRequests(dependencies: RuntimeRendererT
      * @returns 工具执行结果
      */
     request(input: ChatRuntimeRendererToolExecutionInput): Promise<AIToolExecutionResult> {
+      if (input.signal?.aborted) {
+        return Promise.resolve({
+          toolName: input.toolName,
+          status: 'failure',
+          error: { code: 'TOOL_TIMEOUT', message: 'Renderer tool request was aborted' }
+        });
+      }
       if (!dependencies.getRuntime(input.runtime.runtimeId)) {
         throw new ChatRuntimeError('RUNTIME_NOT_ACTIVE', `Runtime ${input.runtime.runtimeId} is not active`);
       }
@@ -96,15 +120,32 @@ export function createRuntimeRendererToolRequests(dependencies: RuntimeRendererT
         input: input.input
       };
       return new Promise<AIToolExecutionResult>((resolve, reject) => {
-        const timeoutId = setTimeout((): void => {
+        let timeoutId: ReturnType<typeof setTimeout>;
+        const resolveAborted = (): void => {
           pendingRendererToolRequests.delete(key);
+          clearTimeout(timeoutId);
+          emitToolCancelled(event);
+          resolve({
+            toolName: input.toolName,
+            status: 'failure',
+            error: { code: 'TOOL_TIMEOUT', message: 'Renderer tool request was aborted' }
+          });
+        };
+        timeoutId = setTimeout((): void => {
+          pendingRendererToolRequests.delete(key);
+          input.signal?.removeEventListener('abort', resolveAborted);
+          emitToolCancelled(event);
           resolve({
             toolName: input.toolName,
             status: 'failure',
             error: { code: 'TOOL_TIMEOUT', message: 'Renderer tool request timed out' }
           });
         }, dependencies.timeoutMs);
-        pendingRendererToolRequests.set(key, { event, resolve, reject, timeoutId });
+        const removeAbortListener = input.signal
+          ? (): void => input.signal?.removeEventListener('abort', resolveAborted)
+          : undefined;
+        input.signal?.addEventListener('abort', resolveAborted, { once: true });
+        pendingRendererToolRequests.set(key, { event, resolve, reject, timeoutId, removeAbortListener });
         dependencies.emit('chat:runtime:tool-request', event);
       });
     },
@@ -120,6 +161,7 @@ export function createRuntimeRendererToolRequests(dependencies: RuntimeRendererT
 
       pendingRendererToolRequests.delete(key);
       clearTimeout(pendingRequest.timeoutId);
+      pendingRequest.removeAbortListener?.();
       pendingRequest.resolve(input.result);
     },
 
@@ -133,6 +175,8 @@ export function createRuntimeRendererToolRequests(dependencies: RuntimeRendererT
         if (!key.startsWith(`${runtimeId}:`)) continue;
 
         clearTimeout(request.timeoutId);
+        request.removeAbortListener?.();
+        emitToolCancelled(request.event);
         request.reject(new ChatRuntimeError('TOOL_REQUEST_CANCELLED', reason));
         pendingRendererToolRequests.delete(key);
       }

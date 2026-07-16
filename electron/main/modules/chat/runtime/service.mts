@@ -40,7 +40,7 @@ import { groupBy } from 'lodash-es';
 import { nanoid } from 'nanoid';
 import { AI_ERROR_CODE, createAIServiceError, isAIServiceError } from '../../ai/errors/codes.mjs';
 import { aiService } from '../../ai/service.mjs';
-import { getLoopStopReason, getTaskTimeout, type ToolLoopStopReason, type ToolStepSnapshot } from '../../ai/tool-loop-policy.mjs';
+import { AI_TASK_TIMEOUT_MS, getLoopStopReason, getTaskTimeout, type ToolLoopStopReason, type ToolStepSnapshot } from '../../ai/tool-loop-policy.mjs';
 import { log } from '../../logger/service.mjs';
 import { chatSessionManager } from '../service.mjs';
 import { createArtifactRegistry } from './compaction/artifact-registry.mjs';
@@ -195,7 +195,8 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   const now = dependencies.now ?? (() => new Date().toISOString());
   const requestModelResolver = createDefaultChatModelResolver();
   const resolveModel = dependencies.resolveModel ?? (() => requestModelResolver.resolve());
-  const compactionGenerateText = dependencies.compactionGenerateText ?? ((createOptions, request) => aiService.generateText(createOptions, request));
+  const compactionGenerateText =
+    dependencies.compactionGenerateText ?? ((createOptions, request, callOptions) => aiService.generateText(createOptions, request, callOptions));
   const autoNameResolver = dependencies.autoNameResolveModel ?? (() => createDefaultChatModelResolver().resolve());
   const autoNameGenerateText = dependencies.autoNameGenerateText ?? ((createOptions, request) => aiService.generateText(createOptions, request));
   const autoNameUpdateSessionTitle = dependencies.autoNameUpdateSessionTitle ?? ((sessionId, title) => chatSessionManager.updateSessionTitle(sessionId, title));
@@ -584,7 +585,8 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
             modelSnapshot,
             system: runtime.system,
             tools: runtime.tools,
-            skillContentHashes: runtime.skillContentHashes
+            skillContentHashes: runtime.skillContentHashes,
+            taskDeadlineAt: runtime.createdAt + AI_TASK_TIMEOUT_MS
           })
         ]);
         activeCompactionSources.delete(runtime.runtimeId);
@@ -627,6 +629,39 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   }
 
   /**
+   * 在任务剩余截止时间内完成模型解析与上下文压缩准备。
+   * @param runtime - 当前 runtime
+   * @param rawMessages - 原始消息上下文
+   * @param userMessage - 当前用户消息
+   * @param assistantMessage - 当前 assistant 草稿
+   * @param timeoutMs - 当前任务剩余毫秒数
+   * @returns 模型请求上下文投影
+   */
+  async function prepareContextBeforeDeadline(
+    runtime: ActiveChatRuntime,
+    rawMessages: ChatMessageRecord[],
+    userMessage: ChatMessageRecord,
+    assistantMessage: ChatMessageRecord,
+    timeoutMs: number
+  ): Promise<ChatMessageRecord[]> {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        prepareRequestContext(runtime, rawMessages, userMessage, assistantMessage),
+        new Promise<ChatMessageRecord[]>((_resolve, reject) => {
+          timeoutId = setTimeout((): void => {
+            void compactionExecutor.cancel(runtime.runtimeId);
+            void streamAbort(runtime.runtimeId);
+            reject(createAIServiceError(AI_ERROR_CODE.REQUEST_FAILED, '本次 AI 任务已达到固定的 300 秒总时限'));
+          }, timeoutMs);
+        })
+      ]);
+    } finally {
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+    }
+  }
+
+  /**
    * 执行模型流与工具续轮，并把多轮 usage 汇总回 assistant。
    * @param runtime - runtime 状态
    * @param sourceMessages - 当前源消息
@@ -648,16 +683,16 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     const toolSteps: ToolStepSnapshot[] = [];
 
     while (shouldRun) {
-      // 每个模型请求边界都重新预算，并且只把 projection 交给模型。
-      // eslint-disable-next-line no-await-in-loop
-      const projectedMessages = await prepareRequestContext(runtime, currentSourceMessages, userMessage, assistantMessage);
-      if (!activeRuntimes.has(runtime.runtimeId)) {
-        throw new ChatRuntimeError('RUNTIME_NOT_ACTIVE', `Runtime ${runtime.runtimeId} is not active`);
-      }
-
       const totalTimeoutMs = getTaskTimeout(runtime.createdAt);
       if (totalTimeoutMs <= 0) {
         throw createAIServiceError(AI_ERROR_CODE.REQUEST_FAILED, '本次 AI 任务已达到固定的 300 秒总时限');
+      }
+
+      // 每个模型请求边界都重新预算，并且只把 projection 交给模型。
+      // eslint-disable-next-line no-await-in-loop
+      const projectedMessages = await prepareContextBeforeDeadline(runtime, currentSourceMessages, userMessage, assistantMessage, totalTimeoutMs);
+      if (!activeRuntimes.has(runtime.runtimeId)) {
+        throw new ChatRuntimeError('RUNTIME_NOT_ACTIVE', `Runtime ${runtime.runtimeId} is not active`);
       }
 
       runtime.currentToolStep = { toolCalls: [] };
@@ -835,7 +870,8 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
           modelSnapshot,
           system: runtime.system,
           tools: runtime.tools,
-          skillContentHashes: runtime.skillContentHashes
+          skillContentHashes: runtime.skillContentHashes,
+          taskDeadlineAt: runtime.createdAt + AI_TASK_TIMEOUT_MS
         })
       ]);
       if (executionResult.status === 'rejected' && !assistantMessage.parts.some((part: ChatMessagePart): boolean => part.type === 'compaction')) {

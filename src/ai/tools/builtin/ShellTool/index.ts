@@ -8,6 +8,7 @@ import type { AIToolExecutor } from 'types/ai';
 import type { ElectronShellCommandRunResult, ElectronShellCommandSafetyReport, ElectronShellCommandShell } from 'types/electron-api';
 import { nanoid } from 'nanoid';
 import { native } from '@/shared/platform';
+import { asyncTo } from '@/utils/asyncTo';
 import { workspace } from '@/utils/file/workspace';
 import { createToolCancelledResult, createToolFailureResult, createToolSuccessResult } from '../../results';
 
@@ -37,6 +38,8 @@ export interface RunShellCommandInput {
   cwd?: unknown;
   /** 超时时间，单位毫秒。 */
   timeoutMs?: unknown;
+  /** Runtime 注入的本地执行中止信号，不进入模型 schema。 */
+  abortSignal?: unknown;
 }
 
 /**
@@ -280,15 +283,29 @@ export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommand
         }
         await options.confirm.onExecutionStart?.(confirmationRequest);
       }
+      const commandId = typeof input.commandId === 'string' && input.commandId.trim().length > 0 ? input.commandId.trim() : nanoid();
+      const abortSignal = input.abortSignal instanceof AbortSignal ? input.abortSignal : undefined;
+      if (abortSignal?.aborted) {
+        return createToolCancelledResult(RUN_SHELL_COMMAND_TOOL_NAME);
+      }
+      const cancelCommand = (): void => {
+        asyncTo(native.cancelShellCommand(commandId)).then((): undefined => undefined);
+      };
+      abortSignal?.addEventListener('abort', cancelCommand, { once: true });
+
       try {
         const runResult = await native.runShellCommand({
-          commandId: typeof input.commandId === 'string' && input.commandId.trim().length > 0 ? input.commandId.trim() : nanoid(),
+          commandId,
           shell: input.shell as ElectronShellCommandShell,
           command,
           cwd,
           workspaceRoot: resolvedWorkspaceRoot,
           timeoutMs
         });
+
+        if (abortSignal?.aborted) {
+          return createToolCancelledResult(RUN_SHELL_COMMAND_TOOL_NAME);
+        }
 
         const toolResult: RunShellCommandToolResult = {
           ...runResult,
@@ -318,11 +335,16 @@ export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommand
         }
         return createToolSuccessResult(RUN_SHELL_COMMAND_TOOL_NAME, toolResult);
       } catch (error) {
+        if (abortSignal?.aborted) {
+          return createToolCancelledResult(RUN_SHELL_COMMAND_TOOL_NAME);
+        }
         const message = error instanceof Error ? error.message : '执行 Shell 命令失败';
         if (confirmationRequest) {
           await options.confirm.onExecutionComplete?.(confirmationRequest, { status: 'failure', errorMessage: message });
         }
         return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'EXECUTION_FAILED', message);
+      } finally {
+        abortSignal?.removeEventListener('abort', cancelCommand);
       }
     }
   };

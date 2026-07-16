@@ -8,6 +8,7 @@ import type { AIUsage, AIToolExecutionResult } from 'types/ai';
 import { AI_ERROR_CODE, createAIServiceError } from '../../../ai/errors/codes.mjs';
 import { AI_TASK_TIMEOUT_MS } from '../../../ai/tool-loop-policy.mjs';
 import { toRuntimeStreamChunk } from './chunks.mjs';
+import { sanitizeFinalText } from './final-text.mjs';
 import {
   appendReasoningDelta,
   appendTextDelta,
@@ -68,12 +69,18 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
     let allToolsContinueable = true;
     let anyToolStopped = false;
     let isWaitingForUserInput = false;
+    let finalTextBuffer = '';
     const runtimeToolTimeoutMs = Math.min(normalizeRendererToolTimeoutMs(dependencies.rendererToolTimeoutMs), totalTimeoutMs);
 
     for await (const rawChunk of result.stream) {
       const chunk = toRuntimeStreamChunk(rawChunk);
 
       if (chunk.type === 'text-delta') {
+        if (forceFinal) {
+          // 收口调用先完整缓冲，避免跨 chunk 的协议标记在流式 UI 中短暂泄漏。
+          finalTextBuffer += chunk.text;
+          continue;
+        }
         appendTextDelta(assistantMessage, chunk.text);
         await updateAssistant(assistantMessage);
       } else if (chunk.type === 'reasoning-delta') {
@@ -145,6 +152,11 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
         await updateAssistant(assistantMessage);
         if (anyToolStopped) break;
       }
+    }
+
+    if (forceFinal && finalTextBuffer) {
+      appendTextDelta(assistantMessage, sanitizeFinalText(finalTextBuffer));
+      await updateAssistant(assistantMessage);
     }
 
     // 流结束时仍未收到 tool-result 的 tool-call，按未注册工具兜底失败，

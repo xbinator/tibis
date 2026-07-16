@@ -22,6 +22,7 @@ import type {
   ChatRuntimeMessageDeletedEvent,
   ChatRuntimeMessageEvent,
   ChatRuntimeRecoverySnapshot,
+  ChatRuntimeToolCancelledEvent,
   ChatRuntimeToolRequestEvent
 } from 'types/chat-runtime';
 import type { ElectronAPI, ElectronShellCommandOutputChunk, ElectronSpeechInstallProgress, FileChangeEvent } from 'types/electron-api';
@@ -599,6 +600,20 @@ const electronAPI: ElectronAPI = {
     ipcRenderer.on('chat:runtime:tool-request', handler);
     return () => {
       ipcRenderer.removeListener('chat:runtime:tool-request', handler);
+    };
+  },
+
+  /**
+   * 监听 ChatRuntime renderer 工具取消事件。
+   * @param callback - 事件回调
+   * @returns 取消监听函数
+   */
+  chatRuntimeOnToolCancelled: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: ChatRuntimeToolCancelledEvent) => callback(payload);
+
+    ipcRenderer.on('chat:runtime:tool-cancelled', handler);
+    return () => {
+      ipcRenderer.removeListener('chat:runtime:tool-cancelled', handler);
     };
   },
 

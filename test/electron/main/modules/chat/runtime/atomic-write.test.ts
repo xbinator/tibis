@@ -8,6 +8,21 @@ import * as path from 'node:path';
 import { writeFile as writeFileAtomically } from 'atomically';
 import { describe, expect, it } from 'vitest';
 
+/**
+ * 等待 atomically 的失败清理在高并发测试负载下完成。
+ * @param directory - 临时文件所在目录
+ * @returns 清理后的目录项
+ */
+async function waitForTempCleanup(directory: string): Promise<string[]> {
+  const deadlineAt = Date.now() + 1_000;
+  let entries = await fs.readdir(directory);
+  while (entries.some((entry: string): boolean => entry.includes('.tmp-')) && Date.now() < deadlineAt) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    entries = await fs.readdir(directory);
+  }
+  return entries;
+}
+
 describe('atomic file write', (): void => {
   it('removes the temporary file when final replacement fails', async (): Promise<void> => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-atomic-write-'));
@@ -17,7 +32,7 @@ describe('atomic file write', (): void => {
 
       await expect(writeFileAtomically(targetPath, 'content', { encoding: 'utf8', timeout: 0 })).rejects.toBeInstanceOf(Error);
 
-      const remainingEntries = await fs.readdir(tempRoot);
+      const remainingEntries = await waitForTempCleanup(tempRoot);
       expect(remainingEntries).toEqual(['target.md']);
       expect(remainingEntries.some((entry: string): boolean => entry.includes('.tmp-'))).toBe(false);
     } finally {

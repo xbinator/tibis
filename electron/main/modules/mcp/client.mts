@@ -21,7 +21,7 @@ export interface MCPClientWrapper {
   /** 获取工具列表 */
   listTools(): Promise<MCPDiscoveredToolSnapshot[]>;
   /** 调用工具 */
-  callTool(name: string, args: unknown): Promise<unknown>;
+  callTool(name: string, args: unknown, abortSignal?: AbortSignal): Promise<unknown>;
   /** 是否已连接 */
   isConnected(): boolean;
 }
@@ -61,9 +61,9 @@ export async function createMcpClient(server: MCPServerConfig, transport: Transp
       }));
     },
 
-    async callTool(name: string, args: unknown): Promise<unknown> {
+    async callTool(name: string, args: unknown, abortSignal?: AbortSignal): Promise<unknown> {
       const safeArgs = args !== null && typeof args === 'object' && !Array.isArray(args) ? (args as Record<string, unknown>) : {};
-      const result = await client.callTool({ name, arguments: safeArgs });
+      const result = await client.callTool({ name, arguments: safeArgs }, undefined, { signal: abortSignal });
       return result;
     },
 

@@ -78,6 +78,7 @@ const electronAPIMock = vi.hoisted(() => ({
     return vi.fn();
   }),
   chatRuntimeOnToolRequest: vi.fn(() => vi.fn()),
+  chatRuntimeOnToolCancelled: vi.fn(() => vi.fn()),
   chatRuntimeOnConfirmationRequested: vi.fn((callback: NonNullable<typeof runtimeListeners.confirmationRequest>) => {
     runtimeListeners.confirmationRequest = callback;
     return vi.fn();
@@ -625,6 +626,7 @@ describe('BChat sessionId runtime', (): void => {
     electronAPIMock.chatRuntimeOnMessageDeleted.mockClear();
     electronAPIMock.chatRuntimeOnContextUsageUpdated.mockClear();
     electronAPIMock.chatRuntimeOnToolRequest.mockClear();
+    electronAPIMock.chatRuntimeOnToolCancelled.mockClear();
     electronAPIMock.chatRuntimeOnConfirmationRequested.mockClear();
     electronAPIMock.chatRuntimeOnBridgeRequested.mockClear();
     electronAPIMock.chatRuntimeOnError.mockClear();

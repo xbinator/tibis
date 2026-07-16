@@ -2504,7 +2504,7 @@ describe('runtime stream executor', (): void => {
             role: 'user',
             content: [
               { type: 'text', text: 'describe this image' },
-              { type: 'image', image: 'https://example.com/test.png', mediaType: 'image/png' }
+              { type: 'file', data: new URL('https://example.com/test.png'), mediaType: 'image/png', filename: 'test.png' }
             ]
           }
         ]

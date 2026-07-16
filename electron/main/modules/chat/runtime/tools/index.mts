@@ -18,11 +18,20 @@ import { executeWebviewTool, isWebviewTool } from './WebviewTool/index.mjs';
  */
 export function createMainToolExecutor(deps: MainToolsDependencies): MainToolExecutor {
   return async (input: ChatRuntimeMainToolExecutionInput) => {
-    if (isReadTool(input.toolName)) return executeReadTool(input, deps);
-    if (isFileTool(input.toolName)) return executeFileTool(input, deps);
-    if (isSettingsTool(input.toolName)) return executeSettingsTool(input, deps);
-    if (isResourceTool(input.toolName)) return executeResourceTool(input, deps);
-    if (isWebviewTool(input.toolName)) return executeWebviewTool(input, deps);
+    // 工具无需逐个手动透传 signal，统一在依赖边界注入到所有 bridge 与确认请求。
+    const toolDeps: MainToolsDependencies = input.signal
+      ? {
+          ...deps,
+          requestBridge: (request) => deps.requestBridge({ ...request, signal: input.signal }),
+          requestConfirmation: (request) => deps.requestConfirmation({ ...request, signal: input.signal })
+        }
+      : deps;
+
+    if (isReadTool(input.toolName)) return executeReadTool(input, toolDeps);
+    if (isFileTool(input.toolName)) return executeFileTool(input, toolDeps);
+    if (isSettingsTool(input.toolName)) return executeSettingsTool(input, toolDeps);
+    if (isResourceTool(input.toolName)) return executeResourceTool(input, toolDeps);
+    if (isWebviewTool(input.toolName)) return executeWebviewTool(input, toolDeps);
 
     return createMainToolFailureResult(input.toolName, 'TOOL_NOT_FOUND', `Unsupported main-process tool: ${input.toolName}`);
   };

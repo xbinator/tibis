@@ -26,6 +26,8 @@ export interface RuntimeConfirmationRequestInput {
   confirmationId?: string;
   /** 确认请求详情。 */
   request: ChatRuntimeConfirmationRequest;
+  /** 关联工具调用的中止信号。 */
+  signal?: AbortSignal;
 }
 
 /** 确认请求管理器依赖。 */
@@ -69,6 +71,8 @@ interface PendingRuntimeConfirmationRequest {
   reject: (error: Error) => void;
   /** 请求超时定时器。 */
   timeoutId?: ReturnType<typeof setTimeout>;
+  /** 移除中止监听器。 */
+  removeAbortListener?: () => void;
 }
 
 /**
@@ -96,6 +100,9 @@ export function createRuntimeConfirmationRequests(dependencies: RuntimeConfirmat
      * @returns renderer 确认决策
      */
     request(input: RuntimeConfirmationRequestInput): Promise<ChatRuntimeConfirmationDecision> {
+      if (input.signal?.aborted) {
+        return Promise.reject(new ChatRuntimeError('CONFIRMATION_DISMISSED', 'Tool confirmation request was aborted'));
+      }
       const runtime = dependencies.getRuntime(input.runtimeId);
       if (!runtime) {
         throw new ChatRuntimeError('RUNTIME_NOT_ACTIVE', `Runtime ${input.runtimeId} is not active`);
@@ -114,7 +121,15 @@ export function createRuntimeConfirmationRequests(dependencies: RuntimeConfirmat
         request: input.request
       };
       return new Promise<ChatRuntimeConfirmationDecision>((resolve, reject) => {
-        pendingConfirmationRequests.set(key, { event, resolve, reject });
+        const rejectAborted = (): void => {
+          pendingConfirmationRequests.delete(key);
+          reject(new ChatRuntimeError('CONFIRMATION_DISMISSED', 'Tool confirmation request was aborted'));
+        };
+        const removeAbortListener = input.signal
+          ? (): void => input.signal?.removeEventListener('abort', rejectAborted)
+          : undefined;
+        input.signal?.addEventListener('abort', rejectAborted, { once: true });
+        pendingConfirmationRequests.set(key, { event, resolve, reject, removeAbortListener });
         dependencies.emit('chat:runtime:confirmation-requested', event);
       });
     },
@@ -130,6 +145,7 @@ export function createRuntimeConfirmationRequests(dependencies: RuntimeConfirmat
 
       pendingConfirmationRequests.delete(key);
       if (pendingRequest.timeoutId !== undefined) clearTimeout(pendingRequest.timeoutId);
+      pendingRequest.removeAbortListener?.();
       pendingRequest.resolve(input.decision);
     },
 
@@ -143,6 +159,7 @@ export function createRuntimeConfirmationRequests(dependencies: RuntimeConfirmat
         if (!key.startsWith(`${runtimeId}:`)) continue;
 
         if (request.timeoutId !== undefined) clearTimeout(request.timeoutId);
+        request.removeAbortListener?.();
         request.reject(new ChatRuntimeError('CONFIRMATION_DISMISSED', reason));
         pendingConfirmationRequests.delete(key);
       }

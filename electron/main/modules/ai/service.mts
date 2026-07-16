@@ -10,7 +10,7 @@ import { connectMcpServer, executeMcpTool, getMcpDiscoveryCache } from '../mcp/s
 import { createMcpSdkTools, resolveMcpExposedTools } from '../mcp/tools.mjs';
 import { AI_ERROR_CODE } from './errors/codes.mjs';
 import { AIProviderRegistry } from './providers/_index.mjs';
-import { createRequestTimeout, prepareToolStep } from './tool-loop-policy.mjs';
+import { AI_TASK_TIMEOUT_MS, appendFinalInstructions, createRequestTimeout, prepareToolStep } from './tool-loop-policy.mjs';
 import { normalizeAIUsage } from './usage.mjs';
 
 // ─── 纯工具函数 ──────────────────────────────────────────────────────────────
@@ -410,19 +410,22 @@ function isMcpServerRunnableForRequest(server: NonNullable<AIRequestOptions['mcp
  * @param mcp - 当前请求的 MCP 配置
  * @returns 可用于注册 AI SDK 工具的 discovery 工具列表
  */
-async function prepareMcpDiscoveredTools(mcp: AIRequestOptions['mcp']): Promise<MCPDiscoveredToolSnapshot[]> {
+async function prepareMcpDiscoveredTools(mcp: AIRequestOptions['mcp'], abortSignal?: AbortSignal): Promise<MCPDiscoveredToolSnapshot[]> {
   if (!mcp) return [];
+  abortSignal?.throwIfAborted();
 
   const runnableServers = mcp.servers.filter((server) => isMcpServerRunnableForRequest(server, mcp));
   const toolGroups = await Promise.all(
     runnableServers.map(async (server): Promise<MCPDiscoveredToolSnapshot[]> => {
+      abortSignal?.throwIfAborted();
       // 优先复用设置页或上一轮聊天已经写入的 discovery cache，避免重复启动 server。
       const cache = getMcpDiscoveryCache(server.id);
       if (cache && !Array.isArray(cache)) {
         return cache.tools;
       }
 
-      const result = await connectMcpServer(server);
+      const result = await connectMcpServer(server, abortSignal);
+      abortSignal?.throwIfAborted();
       if (result.ok && result.cache) {
         return result.cache.tools;
       }
@@ -453,13 +456,18 @@ function appendMcpToolInstructions(system: string | undefined, mcp: AIRequestOpt
  * 将前端工具定义与 Tavily 工具合并为 AI SDK 兼容的工具集。
  * 合并结果为空时返回 undefined，避免向 SDK 传入空对象。
  */
-async function toSdkTools(tools: AIRequestOptions['tools'], tavily: AIRequestOptions['tavily'], mcp: AIRequestOptions['mcp']): Promise<ToolSet | undefined> {
+async function toSdkTools(
+  tools: AIRequestOptions['tools'],
+  tavily: AIRequestOptions['tavily'],
+  mcp: AIRequestOptions['mcp'],
+  abortSignal?: AbortSignal
+): Promise<ToolSet | undefined> {
   let rendererTools: ToolSet = {};
   if (tools?.length) {
     rendererTools = Object.fromEntries(tools.map((item) => [item.name, tool({ description: item.description, inputSchema: jsonSchema(item.parameters) })]));
   }
 
-  const mcpDiscoveredTools = await prepareMcpDiscoveredTools(mcp);
+  const mcpDiscoveredTools = await prepareMcpDiscoveredTools(mcp, abortSignal);
 
   let mcpTools: ToolSet = {};
   if (mcp && mcpDiscoveredTools.length > 0) {
@@ -471,12 +479,12 @@ async function toSdkTools(tools: AIRequestOptions['tools'], tavily: AIRequestOpt
         mcp,
         mcpDiscoveredTools
       ),
-      async ({ serverId, toolName, input }) => {
+      async ({ serverId, toolName, input }, options) => {
         const server = mcp.servers.find((item) => item.id === serverId);
         if (!server) {
           throw new Error(`MCP server not found for tool execution: ${serverId}`);
         }
-        return executeMcpTool(server, toolName, input);
+        return executeMcpTool(server, toolName, input, options?.abortSignal);
       }
     );
   }
@@ -664,13 +672,19 @@ class AIService {
   /**
    * 构建 generateText / streamText 共用的基础选项。
    */
-  private async buildBaseOptions(createOptions: AICreateOptions, request: AIRequestOptions, callOptions: AIServiceCallOptions = {}) {
-    const tools = await toSdkTools(request.tools, request.tavily, request.mcp);
+  private async buildBaseOptions(
+    createOptions: AICreateOptions,
+    request: AIRequestOptions,
+    callOptions: AIServiceCallOptions = {},
+    abortSignal?: AbortSignal
+  ) {
+    const tools = await toSdkTools(request.tools, request.tavily, request.mcp, abortSignal);
     const hasExecutableTools = hasTavilyHttpTools(request.tavily) || hasMcpSdkTools(request.mcp);
+    const instructions = appendMcpToolInstructions(request.system, request.mcp);
 
     return {
       model: this.createModel(createOptions, request.modelId),
-      instructions: appendMcpToolInstructions(request.system, request.mcp),
+      instructions: callOptions.forceFinal ? appendFinalInstructions(instructions) : instructions,
       temperature: request.temperature,
       maxOutputTokens: request.maxOutputTokens,
       providerOptions: this.aiProvider.createProviderOptions(createOptions.providerType, request),
@@ -704,13 +718,20 @@ class AIService {
   /**
    * 同步生成文本。
    */
-  async generateText(createOptions: AICreateOptions, request: AIRequestOptions): Promise<[AIServiceError] | [undefined, AIInvokeResult]> {
+  async generateText(
+    createOptions: AICreateOptions,
+    request: AIRequestOptions,
+    callOptions: AIServiceCallOptions = {}
+  ): Promise<[AIServiceError] | [undefined, AIInvokeResult]> {
     try {
       log.info(`[AIService] generateText request:`, createRequestLog(request));
+      const manualSignal = this.registerAbortSignal(request.requestId);
+      const deadlineSignal = AbortSignal.timeout(Math.max(1, Math.min(AI_TASK_TIMEOUT_MS, callOptions.totalTimeoutMs ?? AI_TASK_TIMEOUT_MS)));
+      const abortSignal = manualSignal ? AbortSignal.any([manualSignal, deadlineSignal]) : deadlineSignal;
 
       const baseOptions = {
-        ...(await this.buildBaseOptions(createOptions, request)),
-        abortSignal: this.registerAbortSignal(request.requestId),
+        ...(await this.buildBaseOptions(createOptions, request, callOptions, abortSignal)),
+        abortSignal,
         output: toOutput(request.output)
       };
 
@@ -739,10 +760,13 @@ class AIService {
   ): Promise<[AIServiceError] | [undefined, AIStreamResult]> {
     try {
       log.info(`[AIService] streamText request:`, createRequestLog(request));
+      const manualSignal = this.registerAbortSignal(request.requestId);
+      const deadlineSignal = AbortSignal.timeout(Math.max(1, Math.min(AI_TASK_TIMEOUT_MS, callOptions.totalTimeoutMs ?? AI_TASK_TIMEOUT_MS)));
+      const abortSignal = manualSignal ? AbortSignal.any([manualSignal, deadlineSignal]) : deadlineSignal;
 
       const baseOptions = {
-        ...(await this.buildBaseOptions(createOptions, request, callOptions)),
-        abortSignal: this.registerAbortSignal(request.requestId),
+        ...(await this.buildBaseOptions(createOptions, request, callOptions, abortSignal)),
+        abortSignal,
         // ChatRuntime 直接消费完整流时没有 IPC finally，由 v7 onEnd 统一释放请求控制器。
         ...(request.requestId ? { onEnd: this.removeController.bind(this, request.requestId) } : {})
       };

@@ -158,6 +158,18 @@ export function shouldStopStreamAfterToolResult(result: AIToolExecutionResult): 
 }
 
 /**
+ * 创建带不可枚举中止信号的工具输入，避免信号进入日志、快照或结构化比较。
+ * @param input - 原始工具执行输入
+ * @param signal - 组合中止信号
+ * @returns 可供执行器读取 signal 的工具输入副本
+ */
+function attachToolSignal<TInput extends { signal?: AbortSignal }>(input: TInput, signal: AbortSignal): TInput {
+  const executionInput = { ...input };
+  Object.defineProperty(executionInput, 'signal', { value: signal, enumerable: false });
+  return executionInput;
+}
+
+/**
  * 执行 renderer 本地工具，并把异常或超时转换为工具失败结果。
  * @param executeRendererTool - renderer 工具执行器
  * @param input - renderer 工具输入
@@ -170,13 +182,17 @@ export async function executeRendererToolSafely(
   timeoutMs: number
 ): Promise<AIToolExecutionResult> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutController = new AbortController();
+  const signal = AbortSignal.any([input.runtime.abortController.signal, timeoutController.signal]);
+  const executionInput = attachToolSignal(input, signal);
 
   try {
     return await Promise.race([
-      executeRendererTool(input),
+      executeRendererTool(executionInput),
       new Promise<AIToolExecutionResult>((resolve) => {
         timeoutId = setTimeout(() => {
           resolve(createRendererToolTimeoutResult(input.toolName, timeoutMs));
+          timeoutController.abort(new DOMException('Renderer tool execution timed out', 'TimeoutError'));
         }, timeoutMs);
       })
     ]);
@@ -202,13 +218,17 @@ export async function executeMainToolSafely(
   timeoutMs: number
 ): Promise<AIToolExecutionResult> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutController = new AbortController();
+  const signal = AbortSignal.any([input.runtime.abortController.signal, timeoutController.signal]);
+  const executionInput = attachToolSignal(input, signal);
 
   try {
     return await Promise.race([
-      executeMainTool(input),
+      executeMainTool(executionInput),
       new Promise<AIToolExecutionResult>((resolve) => {
         timeoutId = setTimeout(() => {
           resolve(createMainToolTimeoutResult(input.toolName, timeoutMs));
+          timeoutController.abort(new DOMException('Main tool execution timed out', 'TimeoutError'));
         }, timeoutMs);
       })
     ]);

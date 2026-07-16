@@ -18,6 +18,8 @@ export interface MainToolBridgeRequest {
   kind: string;
   /** Bridge payload。 */
   payload?: unknown;
+  /** 当前工具调用中止信号。 */
+  signal?: AbortSignal;
 }
 
 /** 主进程工具确认请求输入。 */
@@ -28,6 +30,8 @@ export interface MainToolConfirmationRequest {
   toolCallId: string;
   /** 确认请求。 */
   request: ChatRuntimeConfirmationRequest;
+  /** 当前工具调用中止信号。 */
+  signal?: AbortSignal;
 }
 
 /** 主进程工具依赖。 */

@@ -23,6 +23,44 @@ describe('tool loop policy', (): void => {
     ).toBe('repeated-tool-call');
   });
 
+  it('keeps running when adjacent batches only partially overlap', (): void => {
+    expect(
+      getLoopStopReason([
+        {
+          toolCalls: [
+            { toolName: 'read', input: { path: 'a.ts' } },
+            { toolName: 'read', input: { path: 'b.ts' } }
+          ]
+        },
+        {
+          toolCalls: [
+            { toolName: 'read', input: { path: 'a.ts' } },
+            { toolName: 'read', input: { path: 'c.ts' } }
+          ]
+        }
+      ])
+    ).toBeUndefined();
+  });
+
+  it('treats reordered equivalent batches as repeated', (): void => {
+    expect(
+      getLoopStopReason([
+        {
+          toolCalls: [
+            { toolName: 'read', input: { path: 'a.ts' } },
+            { toolName: 'search', input: { query: 'sdk' } }
+          ]
+        },
+        {
+          toolCalls: [
+            { toolName: 'search', input: { query: 'sdk' } },
+            { toolName: 'read', input: { path: 'a.ts' } }
+          ]
+        }
+      ])
+    ).toBe('repeated-tool-call');
+  });
+
   it('uses the fixed internal timeout policy', (): void => {
     expect(AI_REQUEST_TIMEOUT).toEqual({
       totalMs: 300_000,

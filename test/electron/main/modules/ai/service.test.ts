@@ -189,6 +189,7 @@ describe('AI SDK 7 service integration', (): void => {
     expect(aiSdkMocks.streamText).toHaveBeenCalledWith(
       expect.objectContaining({
         toolChoice: 'none',
+        instructions: expect.stringContaining('Do not emit tool-call markup'),
         timeout: {
           totalMs: 12_345,
           stepMs: 120_000,

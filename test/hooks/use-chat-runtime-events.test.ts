@@ -51,6 +51,7 @@ vi.mock('@/shared/platform/electron-api', () => ({
       return vi.fn();
     }),
     chatRuntimeOnToolRequest: vi.fn((): (() => void) => vi.fn()),
+    chatRuntimeOnToolCancelled: vi.fn((): (() => void) => vi.fn()),
     chatRuntimeOnConfirmationRequested: vi.fn((listener: (event: ChatRuntimeConfirmationRequestEvent) => void): (() => void) => {
       runtimeListeners.confirmation = listener;
       return vi.fn();
