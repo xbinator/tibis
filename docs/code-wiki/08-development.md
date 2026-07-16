@@ -2,7 +2,7 @@
 
 ## 环境要求
 
-- Node.js >= 18
+- Node.js >= 22
 - pnpm（推荐）
 
 ## 常用命令（package.json scripts）
