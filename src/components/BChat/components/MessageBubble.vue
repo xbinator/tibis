@@ -47,16 +47,16 @@
 
     <!-- 助手消息工具栏 -->
     <div v-if="showAssistantToolbar" :class="bem('toolbar')">
-      <BButton type="text" size="mini" square icon="lucide:git-branch" @click="$emit('branch', message)" />
-      <BButton square type="text" size="mini" icon="lucide:refresh-cw" @click="$emit('regenerate', message)" />
-      <BButton type="text" size="mini" square icon="lucide:copy" @click="handleCopy(message)" />
+      <BButton type="text" size="small" square icon="lucide:git-branch" @click="$emit('branch', message)" />
+      <BButton square type="text" size="small" icon="lucide:refresh-cw" @click="$emit('regenerate', message)" />
+      <BButton type="text" size="small" square icon="lucide:copy" @click="handleCopy(message)" />
     </div>
 
     <!-- 用户消息底部：时间戳 + 回退按钮 + 复制按钮（hover 可见） -->
     <div v-if="isUserMessage && message.finished" :class="bem('toolbar', { right: isUserMessage })">
       <span :class="bem('time')">{{ formatMessageTime(message.createdAt) }}</span>
-      <BButton v-if="showRollback" type="text" size="mini" square icon="lucide:undo-2" @click="handleRollbackClick" />
-      <BButton v-if="showContainer" type="text" size="mini" square icon="lucide:copy" @click="handleCopy(message)" />
+      <BButton v-if="showRollback" type="text" size="small" square icon="lucide:undo-2" @click="handleRollbackClick" />
+      <BButton v-if="showContainer" type="text" size="small" square icon="lucide:copy" @click="handleCopy(message)" />
     </div>
 
     <!-- 回退二次确认条（inline） -->
