@@ -45,4 +45,22 @@ describe('chat regeneration policy', (): void => {
     expect(findRegenerationStartIndex(messages, 'user-1')).toBe(-1);
     expect(createRegenerationSlice(messages, 'missing')).toBeNull();
   });
+
+  it('retains complete messages without slicing checkpoint parts', (): void => {
+    const userOne = createMessage('user-1', 'user');
+    const assistantOne = createMessage('assistant-1', 'assistant');
+    assistantOne.parts = [
+      { id: 'source-1', type: 'text', text: '第一轮回答' },
+      { id: 'checkpoint-1', type: 'compaction', status: 'skipped', trigger: 'manual', errorCode: 'NO_NEW_CONTENT', createdAt: 1, completedAt: 2 }
+    ];
+    const userTwo = createMessage('user-2', 'user');
+    const assistantTwo = createMessage('assistant-2', 'assistant');
+    const messages = [userOne, assistantOne, userTwo, assistantTwo];
+
+    const slice = createRegenerationSlice(messages, 'assistant-2');
+
+    expect(slice?.sourceMessages).toEqual([userOne, assistantOne, userTwo]);
+    expect(slice?.sourceMessages[1].parts).toEqual(assistantOne.parts);
+    expect(slice?.removedMessages).toEqual([assistantTwo]);
+  });
 });

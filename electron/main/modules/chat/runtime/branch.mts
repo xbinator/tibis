@@ -3,7 +3,9 @@
  * @description 聊天会话分支的数据验证、消息克隆与引用重建工具。
  */
 import type { AIUsage } from 'types/ai';
-import type { ChatMessagePart, ChatMessageRecord, ChatSession } from 'types/chat';
+import type { ChatMessageCompactionPart, ChatMessagePart, ChatMessageRecord, ChatSession, StructuredContextSummary } from 'types/chat';
+import { buildSourceFingerprint, createFingerprintInput } from './compaction/fingerprint.mjs';
+import { indexMessageParts, removeInvalidCheckpoints } from './compaction/topology.mjs';
 
 /**
  * 创建会话分支所需源数据。
@@ -74,14 +76,59 @@ function sumUsage(messages: ChatMessageRecord[]): AIUsage | undefined {
 }
 
 /**
- * 克隆消息片段并重建片段 ID。
+ * 重写结构化摘要中的所有证据 Part 引用，同时保留业务 identity。
+ * @param summary - 源结构化摘要
+ * @param partIds - 源 Part 到分支 Part 的映射
+ * @returns 引用已重写的摘要
+ */
+function rewriteSummarySources(summary: StructuredContextSummary, partIds: ReadonlyMap<string, string>): StructuredContextSummary {
+  const cloned = structuredClone(summary);
+  const sources: Array<{ sourcePartIds: string[] }> = [
+    ...cloned.objectives,
+    ...cloned.facts,
+    ...cloned.artifacts,
+    ...cloned.completedActions,
+    ...cloned.pendingActions,
+    ...cloned.openQuestions,
+    ...cloned.failures
+  ];
+  for (const source of sources) {
+    // 缺失引用保留原 ID，后续统一拓扑校验会移除该 checkpoint 及其后代。
+    source.sourcePartIds = source.sourcePartIds.map((sourcePartId: string): string => partIds.get(sourcePartId) ?? sourcePartId);
+  }
+
+  return cloned;
+}
+
+/**
+ * 重写 checkpoint 中所有 Part 引用并丢弃不能复制的旧指纹。
+ * @param part - 源 checkpoint
+ * @param partIds - 源 Part 到分支 Part 的映射
+ * @returns 待重新计算指纹的 checkpoint
+ */
+function rewriteCheckpoint(part: ChatMessageCompactionPart, partIds: ReadonlyMap<string, string>): ChatMessageCompactionPart {
+  const rewritten = structuredClone(part);
+  rewritten.boundaryPartId = part.boundaryPartId ? partIds.get(part.boundaryPartId) ?? part.boundaryPartId : undefined;
+  rewritten.parentCheckpointId = part.parentCheckpointId ? partIds.get(part.parentCheckpointId) ?? part.parentCheckpointId : undefined;
+  rewritten.summary = part.summary ? rewriteSummarySources(part.summary, partIds) : undefined;
+  rewritten.sourceFingerprint = undefined;
+
+  return rewritten;
+}
+
+/**
+ * 克隆消息片段并使用预分配 ID 重写内部引用。
  * @param part - 源消息片段
- * @param createId - 唯一 ID 工厂
+ * @param partIds - 源 Part 到分支 Part 的映射
  * @returns 新分支消息片段
  */
-function clonePart(part: ChatMessagePart, createId: () => string): ChatMessagePart {
+function clonePart(part: ChatMessagePart, partIds: ReadonlyMap<string, string>): ChatMessagePart {
   const cloned = structuredClone(part);
-  return { ...cloned, id: createId() };
+  const id = partIds.get(part.id);
+  if (!id) throw new Error(`会话分支缺少 Part ID 映射: ${part.id}`);
+  const rewritten = part.type === 'compaction' ? rewriteCheckpoint(part, partIds) : cloned;
+
+  return { ...rewritten, id };
 }
 
 /**
@@ -89,12 +136,12 @@ function clonePart(part: ChatMessagePart, createId: () => string): ChatMessagePa
  * @param message - 源消息
  * @param sessionId - 新会话 ID
  * @param messageId - 新消息 ID
- * @param createId - 唯一 ID 工厂
+ * @param partIds - 源 Part 到分支 Part 的映射
  * @returns 可写入新会话的消息
  */
-function cloneMessage(message: ChatMessageRecord, sessionId: string, messageId: string, createId: () => string): ChatMessageRecord {
+function cloneMessage(message: ChatMessageRecord, sessionId: string, messageId: string, partIds: ReadonlyMap<string, string>): ChatMessageRecord {
   const cloned = structuredClone(message);
-  const parts = cloned.parts.map((part: ChatMessagePart): ChatMessagePart => clonePart(part, createId));
+  const parts = cloned.parts.map((part: ChatMessagePart): ChatMessagePart => clonePart(part, partIds));
 
   return {
     ...cloned,
@@ -104,6 +151,51 @@ function cloneMessage(message: ChatMessageRecord, sessionId: string, messageId: 
     runtimeId: undefined,
     parentRuntimeId: undefined
   };
+}
+
+/**
+ * 使用分支后的实际消息、Part ID 和保存快照重新计算全部可重建指纹。
+ * @param messages - 已完成 ID 与引用重写的分支消息
+ */
+function recomputeFingerprints(messages: ChatMessageRecord[]): void {
+  const positions = indexMessageParts(messages);
+  const positionsById = new Map(
+    positions.map((position, absoluteIndex): [string, { absoluteIndex: number; part: ChatMessagePart }] => [
+      position.part.id,
+      { absoluteIndex, part: position.part }
+    ])
+  );
+
+  for (const [checkpointIndex, position] of positions.entries()) {
+    const checkpoint = position.part;
+    if (checkpoint.type !== 'compaction' || !checkpoint.boundaryPartId || !checkpoint.modelSnapshot || !checkpoint.budgetSnapshot) continue;
+    const boundary = positionsById.get(checkpoint.boundaryPartId);
+    if (!boundary || boundary.absoluteIndex >= checkpointIndex) continue;
+
+    let sourceStartIndex = -1;
+    if (checkpoint.parentCheckpointId) {
+      const parentPosition = positionsById.get(checkpoint.parentCheckpointId);
+      const parent = parentPosition?.part;
+      if (!parent || parent.type !== 'compaction' || parent.status !== 'success' || !parent.boundaryPartId) continue;
+      const parentBoundary = positionsById.get(parent.boundaryPartId);
+      if (!parentBoundary) continue;
+      sourceStartIndex = parentBoundary.absoluteIndex;
+    }
+
+    const sources = positions
+      .slice(sourceStartIndex + 1, boundary.absoluteIndex + 1)
+      .filter((source): boolean => source.part.type !== 'compaction')
+      .map((source): { messageId: string; part: ChatMessagePart } => ({ messageId: source.messageId, part: source.part }));
+    checkpoint.sourceFingerprint = buildSourceFingerprint(
+      createFingerprintInput({
+        modelSnapshot: checkpoint.modelSnapshot,
+        budgetSnapshot: checkpoint.budgetSnapshot,
+        parentCheckpointId: checkpoint.parentCheckpointId,
+        boundaryPartId: checkpoint.boundaryPartId,
+        sources
+      })
+    );
+  }
 }
 
 /**
@@ -122,9 +214,18 @@ export function createSessionBranchData(input: CreateSessionBranchInput): Sessio
   const sessionId = createId();
   const sourceMessages = input.sourceMessages.slice(0, targetIndex + 1);
   const messageIds = new Map(sourceMessages.map((message: ChatMessageRecord): [string, string] => [message.id, createId()]));
-  const messages = sourceMessages.map(
-    (message: ChatMessageRecord): ChatMessageRecord => cloneMessage(message, sessionId, messageIds.get(message.id) as string, createId)
+  const partIds = new Map(
+    sourceMessages.flatMap(
+      (message: ChatMessageRecord): Array<[string, string]> => message.parts.map((part: ChatMessagePart): [string, string] => [part.id, createId()])
+    )
   );
+  const clonedMessages = sourceMessages.map((message: ChatMessageRecord): ChatMessageRecord => {
+    const messageId = messageIds.get(message.id);
+    if (!messageId) throw new Error(`会话分支缺少消息 ID 映射: ${message.id}`);
+    return cloneMessage(message, sessionId, messageId, partIds);
+  });
+  recomputeFingerprints(clonedMessages);
+  const messages = removeInvalidCheckpoints(clonedMessages);
   const session: ChatSession = {
     id: sessionId,
     type: input.sourceSession.type,

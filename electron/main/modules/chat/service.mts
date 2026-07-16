@@ -19,6 +19,7 @@ import dayjs from 'dayjs';
 import { nanoid } from 'nanoid';
 import { dbExecute, dbSelect, transaction } from '../database/service.mjs';
 import { createSessionBranchData, type SessionBranchData } from './runtime/branch.mjs';
+import { removeInvalidCheckpoints } from './runtime/compaction/topology.mjs';
 
 // ==================== 常量 ====================
 
@@ -114,6 +115,13 @@ const SELECT_ALL_MESSAGES_BY_SESSION_SQL = `
          agent_id, runtime_id, parent_runtime_id
   FROM chat_messages
   WHERE session_id = ?
+`;
+const SELECT_PENDING_COMPACTION_MESSAGES_SQL = `
+  SELECT id, session_id, role, content, parts_json, thinking, files_json, usage_json, created_at, loading, finished,
+         agent_id, runtime_id, parent_runtime_id
+  FROM chat_messages
+  WHERE parts_json LIKE '%"type":"compaction"%'
+    AND parts_json LIKE '%"status":"pending"%'
 `;
 const UPSERT_MESSAGE_SQL = `
   INSERT OR REPLACE INTO chat_messages
@@ -558,6 +566,19 @@ class ChatSessionManager {
     return sortMessages(rows.map(mapBranchMessageRow));
   }
 
+  /**
+   * 扫描可能包含遗留 pending checkpoint 的消息。
+   * @returns 仍实际包含 pending compaction Part 的完整消息
+   */
+  listPendingCompactionMessages(): ChatMessageRecord[] {
+    const rows = dbSelect<ChatMessageRow>(SELECT_PENDING_COMPACTION_MESSAGES_SQL);
+    return rows
+      .map(mapMessageRow)
+      .filter((message: ChatMessageRecord): boolean =>
+        message.parts.some((part: ChatMessagePart): boolean => part.type === 'compaction' && part.status === 'pending')
+      );
+  }
+
   addMessage(message: ChatMessageRecord): void {
     transaction(() => {
       dbExecute(UPSERT_MESSAGE_SQL, buildMessageUpsertParams(message));
@@ -606,16 +627,22 @@ class ChatSessionManager {
     dbExecute(DELETE_MESSAGE_SQL, [sessionId, messageId]);
   }
 
+  /**
+   * 原子替换会话消息，并在写入前清理截断后依赖不完整的 checkpoint 链。
+   * @param sessionId - 会话 ID
+   * @param messages - 完整消息级截断结果
+   */
   setSessionMessages(sessionId: string, messages: ChatMessageRecord[]): void {
+    const normalizedMessages = removeInvalidCheckpoints(messages);
     transaction(() => {
       dbExecute(DELETE_MESSAGES_BY_SESSION_SQL, [sessionId]);
-      for (const msg of messages) {
+      for (const msg of normalizedMessages) {
         dbExecute(UPSERT_MESSAGE_SQL, buildMessageUpsertParams(msg));
       }
-      if (messages.length > 0) {
-        dbExecute(UPDATE_SESSION_LAST_MESSAGE_AT_SQL, [messages[messages.length - 1].createdAt, sessionId]);
+      if (normalizedMessages.length > 0) {
+        dbExecute(UPDATE_SESSION_LAST_MESSAGE_AT_SQL, [normalizedMessages[normalizedMessages.length - 1].createdAt, sessionId]);
       }
-      const totalUsage = messages.reduce<AIUsage | undefined>((sum, m) => (m.usage ? addUsage(sum, m.usage) : sum), undefined);
+      const totalUsage = normalizedMessages.reduce<AIUsage | undefined>((sum, m) => (m.usage ? addUsage(sum, m.usage) : sum), undefined);
       dbExecute(UPDATE_SESSION_USAGE_SQL, [stringifyJson(totalUsage), sessionId]);
     });
   }

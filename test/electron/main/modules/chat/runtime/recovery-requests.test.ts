@@ -3,10 +3,12 @@
  * @description ChatRuntime 待处理 renderer 请求恢复投影测试。
  */
 import type { ActiveChatRuntime } from '../../../../../../electron/main/modules/chat/runtime/types.mjs';
+import type { ChatMessageRecord } from 'types/chat';
 import { describe, expect, it, vi } from 'vitest';
 import { createRuntimeBridgeRequests } from '../../../../../../electron/main/modules/chat/runtime/controllers/bridge.mjs';
 import { createRuntimeConfirmationRequests } from '../../../../../../electron/main/modules/chat/runtime/controllers/confirmation.mjs';
 import { createRuntimeRendererToolRequests } from '../../../../../../electron/main/modules/chat/runtime/controllers/renderer-tool.mjs';
+import { createChatRuntimeService } from '../../../../../../electron/main/modules/chat/runtime/service.mjs';
 
 /** 创建活跃 Runtime 测试夹具。 */
 function createRuntime(): ActiveChatRuntime {
@@ -23,6 +25,70 @@ function createRuntime(): ActiveChatRuntime {
 }
 
 describe('chat runtime recovery request projections', (): void => {
+  it('marks interrupted pending compactions failed while preserving successful checkpoints', async (): Promise<void> => {
+    const messages: ChatMessageRecord[] = [
+      {
+        id: 'assistant-interrupted-compaction',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: '',
+        parts: [
+          { id: 'checkpoint-pending', type: 'compaction', status: 'pending', trigger: 'automatic', createdAt: 1 },
+          {
+            id: 'checkpoint-success',
+            type: 'compaction',
+            status: 'success',
+            trigger: 'automatic',
+            boundaryPartId: 'source-1',
+            sourceFingerprint: 'sha256:success',
+            modelSnapshot: { providerType: 'openai', providerId: 'provider-1', modelId: 'model-1', contextWindow: 20_000 },
+            budgetSnapshot: {
+              outputReserve: 2_000,
+              safetyReserve: 1_000,
+              usableInputTokens: 17_000,
+              triggerTokens: 13_600,
+              targetTokens: 9_350,
+              summaryMaxTokens: 2_000,
+              rawTailMaxTokens: 4_000
+            },
+            summary: {
+              schemaVersion: 1,
+              objectives: [],
+              facts: [],
+              artifacts: [],
+              completedActions: [],
+              pendingActions: [],
+              openQuestions: [],
+              failures: []
+            },
+            createdAt: 1,
+            completedAt: 2
+          }
+        ],
+        createdAt: '2026-07-16T00:00:00.000Z',
+        loading: true,
+        finished: false
+      }
+    ];
+    const updateMessage = vi.fn(async (message: ChatMessageRecord): Promise<void> => {
+      messages[0] = structuredClone(message);
+    });
+    const service = createChatRuntimeService({
+      emit: vi.fn(),
+      messageReader: { getMessages: (): ChatMessageRecord[] => [] },
+      messageWriter: { addMessage: vi.fn(), updateMessage },
+      listPendingCompactionMessages: (): ChatMessageRecord[] => structuredClone(messages),
+      now: () => '2026-07-16T00:00:03.000Z'
+    });
+
+    await service.recoverInterruptedCompactions();
+
+    expect(updateMessage).toHaveBeenCalledOnce();
+    expect(messages[0]).toMatchObject({ loading: false, finished: true });
+    expect(messages[0].parts[0]).toMatchObject({ status: 'failed', errorCode: 'INTERRUPTED', completedAt: Date.parse('2026-07-16T00:00:03.000Z') });
+    expect(messages[0].parts[1]).toMatchObject({ status: 'success', sourceFingerprint: 'sha256:success' });
+  });
+
   it('lists and removes pending confirmation events', async (): Promise<void> => {
     const runtime = createRuntime();
     const requests = createRuntimeConfirmationRequests({ emit: vi.fn(), getRuntime: () => runtime });

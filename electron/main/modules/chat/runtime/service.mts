@@ -34,6 +34,7 @@ import type {
   ChatRuntimeSubmitToolResultInput
 } from 'types/chat-runtime';
 import { BrowserWindow } from 'electron';
+import { groupBy } from 'lodash-es';
 import { nanoid } from 'nanoid';
 import { AI_ERROR_CODE, createAIServiceError, isAIServiceError } from '../../ai/errors/codes.mjs';
 import { aiService } from '../../ai/service.mjs';
@@ -176,6 +177,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   const emit = dependencies.emit ?? createDefaultEmitter();
   const messageWriter = dependencies.messageWriter ?? createDefaultMessageWriter();
   const messageReader = dependencies.messageReader ?? createDefaultMessageReader();
+  const listPendingCompactionMessages = dependencies.listPendingCompactionMessages ?? (() => chatSessionManager.listPendingCompactionMessages());
   const materializeFileParts = dependencies.materializeFileParts ?? materializeRuntimeFileParts;
   const streamAbort = dependencies.streamAbort ?? createDefaultStreamAborter();
   const createMessageId = dependencies.createMessageId ?? createDefaultMessageId;
@@ -193,6 +195,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   const activeCompactionSources = new Map<string, ChatMessageRecord[]>();
   const activeCompactionModels = new Map<string, Awaited<ReturnType<typeof resolveModel>>>();
   const activeCompactionRuntimes = new Map<string, ActiveChatRuntime>();
+  let interruptedCompactionRecovery: Promise<void> | undefined;
   const getRuntime = (runtimeId: string): ActiveChatRuntime | undefined => activeRuntimes.get(runtimeId);
   const confirmationRequests = createRuntimeConfirmationRequests({ emit, getRuntime });
   const bridgeRequests = createRuntimeBridgeRequests({
@@ -778,6 +781,59 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     if (activeRuntimes.has(runtime.runtimeId)) completeRuntime(runtime);
   }
 
+  /**
+   * 把单条消息中的遗留 pending checkpoint 转为稳定失败终态。
+   * @param message - 应用重启后扫描出的消息
+   * @returns 不修改输入的恢复消息
+   */
+  function interruptPendingCheckpoints(message: ChatMessageRecord): ChatMessageRecord {
+    const recovered = structuredClone(message);
+    const completedAt = getCompactionNow();
+    recovered.parts = recovered.parts.map((part: ChatMessagePart): ChatMessagePart => {
+      if (part.type !== 'compaction' || part.status !== 'pending') return part;
+      return {
+        ...part,
+        status: 'failed',
+        errorCode: 'INTERRUPTED',
+        completedAt
+      };
+    });
+    recovered.loading = false;
+    recovered.finished = true;
+    return recovered;
+  }
+
+  /**
+   * 在独占 session 写锁下恢复一组同会话遗留 checkpoint。
+   * @param sessionId - 会话 ID
+   * @param messages - 同会话 pending 消息
+   */
+  async function recoverCompactionSession(sessionId: string, messages: ChatMessageRecord[]): Promise<void> {
+    const runtimeId = `recovery-${nanoid()}`;
+    const lock = locks.acquireWritingLock({ sessionId, runtimeId });
+    if (!lock.ok) return;
+
+    const writes = messages.map(
+      (message: ChatMessageRecord): Promise<void> =>
+        Promise.resolve()
+          .then(() => messageWriter.updateMessage(interruptPendingCheckpoints(message)))
+          .then((): void => undefined)
+    );
+    await Promise.allSettled(writes);
+    locks.releaseWritingLock({ sessionId, runtimeId });
+  }
+
+  /**
+   * 扫描并恢复应用重启遗留的 pending checkpoint。
+   */
+  async function runInterruptedRecovery(): Promise<void> {
+    const [messagesResult] = await Promise.allSettled([Promise.resolve().then(() => listPendingCompactionMessages())]);
+    if (messagesResult.status === 'rejected') return;
+
+    const messagesBySession = groupBy(messagesResult.value, (message: ChatMessageRecord): string => message.sessionId);
+    await Promise.allSettled(Object.entries(messagesBySession).map(([sessionId, messages]): Promise<void> => recoverCompactionSession(sessionId, messages)));
+  }
+
   return {
     /**
      * 启动一轮 ChatRuntime。
@@ -1202,6 +1258,14 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
             ]
           })
         );
+    },
+
+    /**
+     * 在暴露 Runtime recovery 快照前只执行一次遗留 checkpoint 恢复。
+     */
+    recoverInterruptedCompactions(): Promise<void> {
+      interruptedCompactionRecovery ??= runInterruptedRecovery();
+      return interruptedCompactionRecovery;
     },
 
     /**

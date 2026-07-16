@@ -8,6 +8,7 @@ import { registerChatRuntimeHandlers } from '../../../../../../electron/main/mod
 
 const mocks = vi.hoisted(() => ({
   handlers: new Map<string, (...args: unknown[]) => Promise<unknown>>(),
+  recoverInterruptedCompactions: vi.fn(),
   listRecoverySnapshots: vi.fn(),
   compact: vi.fn()
 }));
@@ -22,6 +23,7 @@ vi.mock('electron', () => ({
 
 vi.mock('../../../../../../electron/main/modules/chat/runtime/service.mjs', () => ({
   chatRuntimeService: {
+    recoverInterruptedCompactions: mocks.recoverInterruptedCompactions,
     listRecoverySnapshots: mocks.listRecoverySnapshots,
     compact: mocks.compact
   }
@@ -30,6 +32,8 @@ vi.mock('../../../../../../electron/main/modules/chat/runtime/service.mjs', () =
 describe('chat runtime recovery IPC', (): void => {
   beforeEach((): void => {
     mocks.handlers.clear();
+    mocks.recoverInterruptedCompactions.mockReset();
+    mocks.recoverInterruptedCompactions.mockResolvedValue(undefined);
     mocks.listRecoverySnapshots.mockReset();
     mocks.compact.mockReset();
   });
@@ -53,6 +57,7 @@ describe('chat runtime recovery IPC', (): void => {
     if (!handler) throw new Error('list-active handler was not registered');
     const result = (await handler({})) as ChatRuntimeHandlerResult<ChatRuntimeRecoverySnapshot[]>;
 
+    expect(mocks.recoverInterruptedCompactions).toHaveBeenCalledOnce();
     expect(result).toEqual({ ok: true, data: snapshots });
   });
 

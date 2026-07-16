@@ -155,6 +155,62 @@ describe('chat main service runtime fields', (): void => {
     expect(databaseMock.dbExecute).not.toHaveBeenCalledWith('UPDATE chat_sessions SET usage_json = ? WHERE id = ?', expect.any(Array));
   });
 
+  it('removes invalid checkpoint chains before replacing persisted session messages', (): void => {
+    const message: ChatMessageRecord = {
+      id: 'assistant-truncated',
+      sessionId: 'session-1',
+      role: 'assistant',
+      content: '保留正文',
+      parts: [
+        { id: 'source-retained', type: 'text', text: '保留正文' },
+        {
+          id: 'checkpoint-invalid-after-truncate',
+          type: 'compaction',
+          status: 'success',
+          trigger: 'automatic',
+          boundaryPartId: 'missing-boundary',
+          sourceFingerprint: 'sha256:stale',
+          modelSnapshot: {
+            providerType: 'openai',
+            providerId: 'provider-1',
+            modelId: 'model-1',
+            contextWindow: 20_000
+          },
+          budgetSnapshot: {
+            outputReserve: 2_000,
+            safetyReserve: 1_000,
+            usableInputTokens: 17_000,
+            triggerTokens: 13_600,
+            targetTokens: 9_350,
+            summaryMaxTokens: 2_000,
+            rawTailMaxTokens: 4_000
+          },
+          summary: {
+            schemaVersion: 1,
+            objectives: [],
+            facts: [],
+            artifacts: [],
+            completedActions: [],
+            pendingActions: [],
+            openQuestions: [],
+            failures: []
+          },
+          createdAt: 1,
+          completedAt: 2
+        }
+      ],
+      createdAt: '2026-07-16T00:00:00.000Z',
+      loading: false,
+      finished: true
+    };
+
+    chatSessionManager.setSessionMessages('session-1', [message]);
+
+    const upsertCall = databaseMock.dbExecute.mock.calls.find(([sql]) => String(sql).includes('INSERT OR REPLACE INTO chat_messages'));
+    const params = upsertCall?.[1] as unknown[] | undefined;
+    expect(JSON.parse(String(params?.[4]))).toEqual([{ id: 'source-retained', type: 'text', text: '保留正文' }]);
+  });
+
   it('creates a session branch from the complete history in one transaction', (): void => {
     databaseMock.dbSelect
       .mockReturnValueOnce([

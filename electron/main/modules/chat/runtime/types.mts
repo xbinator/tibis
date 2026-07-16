@@ -202,6 +202,8 @@ export interface ChatRuntimeServiceDependencies {
   compactionGenerateText: SummaryGeneratorDependencies['generateText'];
   /** 可选的上下文压缩 executor 测试替身。 */
   compactionExecutor?: CompactionExecutor;
+  /** 扫描应用重启后遗留 pending checkpoint 的消息。 */
+  listPendingCompactionMessages: () => Promise<ChatMessageRecord[]> | ChatMessageRecord[];
   /** 文件 part 固化函数。 */
   materializeFileParts: RuntimeFilePartMaterializer;
   /** runtime 流式中止函数。 */

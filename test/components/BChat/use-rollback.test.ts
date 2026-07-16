@@ -59,4 +59,32 @@ describe('useRollback', (): void => {
 
     expect(canRollback(userMessage)).toBe(true);
   });
+
+  it('retains complete earlier messages when truncating a checkpoint-bearing conversation', async (): Promise<void> => {
+    const firstUser = createMessage('user-1', 'user');
+    const firstAssistant = createMessage('assistant-1', 'assistant');
+    firstAssistant.parts = [
+      { id: 'source-1', type: 'text', text: '第一轮回答' },
+      { id: 'checkpoint-1', type: 'compaction', status: 'skipped', trigger: 'manual', errorCode: 'NO_NEW_CONTENT', createdAt: 1, completedAt: 2 }
+    ];
+    const secondUser = createMessage('user-2', 'user');
+    const secondAssistant = createMessage('assistant-2', 'assistant');
+    const messages = ref<Message[]>([firstUser, firstAssistant, secondUser, secondAssistant]);
+    const persistMessages = vi.fn(async (): Promise<void> => undefined);
+    const rollback = useRollback({
+      messages,
+      getSessionId: (): string => 'session-1',
+      fetchAllPriorHistory: async (): Promise<Message[]> => [],
+      persistMessages,
+      restoreInput: vi.fn(),
+      expireConfirmation: vi.fn(),
+      focusInput: vi.fn()
+    });
+
+    await rollback.rollback(secondUser);
+
+    expect(messages.value).toEqual([firstUser, firstAssistant]);
+    expect(messages.value[1].parts).toEqual(firstAssistant.parts);
+    expect(persistMessages).toHaveBeenCalledWith('session-1', [firstUser, firstAssistant]);
+  });
 });

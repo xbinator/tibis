@@ -31,7 +31,7 @@ function createCompactionPart(status: ChatMessageCompactionPart['status']): Chat
     boundaryPartId: 'secret-boundary',
     sourceFingerprint: 'secret-fingerprint',
     modelSnapshot: {
-      providerType: 'openai-compatible',
+      providerType: 'openai',
       providerId: 'secret-provider',
       modelId: 'secret-model',
       contextWindow: 100_000

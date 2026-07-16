@@ -56,7 +56,10 @@ function wrapRuntimeHandler<T>(fn: (...args: unknown[]) => Promise<T> | T): (...
 export function registerChatRuntimeHandlers(): void {
   ipcMain.handle(
     'chat:runtime:list-active',
-    wrapRuntimeHandler((): ChatRuntimeRecoverySnapshot[] => chatRuntimeService.listRecoverySnapshots())
+    wrapRuntimeHandler(async (): Promise<ChatRuntimeRecoverySnapshot[]> => {
+      await chatRuntimeService.recoverInterruptedCompactions();
+      return chatRuntimeService.listRecoverySnapshots();
+    })
   );
 
   ipcMain.handle(
