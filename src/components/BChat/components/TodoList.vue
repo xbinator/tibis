@@ -1,9 +1,10 @@
 <!--
   @file TodoList.vue
-  @description 可复用的待办任务列表，统一展示任务进度、状态与优先级。
+  @description 可复用的待办任务列表，统一展示任务状态与空列表提示。
 -->
 <template>
   <div class="todo-list__body">
+    <div v-if="todos.length === 0" class="todo-list__empty">已清空任务列表</div>
     <div v-for="(todo, index) in todos" :key="index" class="todo-list__item" :class="'todo-list__item--' + todo.status">
       <span class="todo-list__status-icon">
         <BIcon v-if="todo.status === 'completed'" icon="lucide:check-circle-2" :size="14" />
@@ -11,7 +12,6 @@
         <BIcon v-else-if="todo.status === 'cancelled'" icon="lucide:x-circle" :size="14" />
         <BIcon v-else icon="lucide:circle" :size="14" />
       </span>
-      <span class="todo-list__priority" :class="'todo-list__priority--' + todo.priority"></span>
       <span class="todo-list__content">{{ todo.content }}</span>
     </div>
   </div>
@@ -20,7 +20,7 @@
 <script setup lang="ts">
 /**
  * @file TodoList.vue
- * @description 可复用的待办任务列表，统一展示任务进度、状态与优先级。
+ * @description 可复用的待办任务列表，统一展示任务状态与空列表提示。
  */
 import type { TodoItem } from '@/stores/chat/todo';
 
@@ -54,6 +54,7 @@ defineProps<TodoListProps>();
 }
 
 .todo-list__item--completed {
+  text-decoration: line-through;
   opacity: 0.5;
 }
 
@@ -85,28 +86,13 @@ defineProps<TodoListProps>();
   color: var(--text-tertiary);
 }
 
-.todo-list__priority {
-  flex-shrink: 0;
-  width: 6px;
-  height: 6px;
-  margin-top: 7px;
-  border-radius: 50%;
-}
-
-.todo-list__priority--high {
-  background: var(--color-error);
-}
-
-.todo-list__priority--medium {
-  background: var(--color-warning);
-}
-
-.todo-list__priority--low {
-  background: var(--color-success);
-}
-
 .todo-list__content {
   font-size: 12px;
   color: var(--text-primary);
+}
+
+.todo-list__empty {
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 </style>

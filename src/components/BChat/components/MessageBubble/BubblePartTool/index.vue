@@ -6,16 +6,18 @@
     <template #title>
       <!-- 状态图标：inputting 旋转、executing 扳手、done 成功/失败 -->
       <BIcon :icon="icon" :class="bem('icon', { spin: part.status === 'inputting' })" :size="14" />
-      <!-- 工具名称（文件操作时显示路径，其余显示别名） -->
-      <BTruncateText :class="bem('name')" :text="title" />
+
       <!-- todowrite 任务进度 -->
-      <span v-if="todoWriteTodos" :class="bem('status', { todo: true })">{{ todoWriteCompletedCount }}/{{ todoWriteTodos.length }}</span>
+      <div v-if="todoWriteTodos">{{ title }} {{ todoWriteCompletedCount }}/{{ todoWriteTodos.length }}</div>
+      <!-- 工具名称（文件操作时显示路径，其余显示别名） -->
+      <BTruncateText v-else :class="bem('name')" :text="title" />
+
       <!-- 执行失败状态标签 -->
       <span v-if="part.status === 'done' && part.result?.status === 'failure'" :class="bem('status', { failure: true })">失败</span>
     </template>
 
     <!-- todowrite 成功结果使用单层任务卡片，避免通用工具气泡和任务面板重复嵌套 -->
-    <TodoList v-if="todoWriteTodos" :todos="todoWriteTodos" variant="tool" />
+    <TodoList v-if="todoWriteTodos" :todos="todoWriteTodos" />
 
     <!-- 提问工具结果：以问答形式展示用户选择 -->
     <template v-else-if="isQuestionResult">
@@ -355,11 +357,6 @@ const questionOtherText = computed(() => {
 .bubble-part-tool__status--failure {
   margin-left: 8px;
   color: var(--color-error);
-}
-
-.bubble-part-tool__status--todo {
-  margin-left: 8px;
-  color: var(--text-tertiary);
 }
 
 .bubble-part-tool__result {

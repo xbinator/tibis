@@ -78,12 +78,12 @@ describe('BubblePartTool todowrite result', (): void => {
       ])
     );
 
-    expect(wrapper.find('.todo-list__summary').text()).toBe('1/3 已完成');
+    expect(wrapper.find('.bubble-part-tool__status--todo').text()).toBe('1/3');
     expect(wrapper.findAll('.todo-list__item')).toHaveLength(3);
     expect(wrapper.find('.todo-list__item--completed [data-icon="lucide:check-circle-2"]').exists()).toBe(true);
     expect(wrapper.find('.todo-list__item--in_progress [data-icon="lucide:circle-dot"]').exists()).toBe(true);
     expect(wrapper.find('.todo-list__priority').exists()).toBe(false);
-    expect(wrapper.find('.message-bubble-part').exists()).toBe(false);
+    expect(wrapper.findAll('.message-bubble-part')).toHaveLength(1);
     expect(wrapper.text()).toContain('更新任务列表样式');
     expect(wrapper.text()).not.toContain('已更新 3 项任务');
   });
@@ -91,7 +91,7 @@ describe('BubblePartTool todowrite result', (): void => {
   it('shows a readable empty state after clearing the task list', (): void => {
     const wrapper = mountTodoTool(createTodoPart([]));
 
-    expect(wrapper.find('.todo-list__summary').text()).toBe('0/0 已完成');
+    expect(wrapper.find('.bubble-part-tool__status--todo').text()).toBe('0/0');
     expect(wrapper.find('.todo-list__empty').text()).toBe('已清空任务列表');
   });
 });
