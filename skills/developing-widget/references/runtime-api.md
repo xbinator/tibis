@@ -1,11 +1,6 @@
 # Runtime API Reference
 
-Use this reference when writing `execute.code`, lifecycle methods, button handlers, HTTP requests, messages, or logger calls. Current source files:
-
-- `types/widget.d.ts`
-- `src/views/widget/constants/methodScriptTypes.ts`
-- `docs/development/widget-runtime-lifecycle.md`
-- `src/components/BWidget/utils/widgetRuntime/index.ts`
+Use this reference when writing `execute.code`, lifecycle methods, button handlers, HTTP requests, messages, or logger calls.
 
 ## Class Protocol
 

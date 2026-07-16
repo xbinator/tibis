@@ -1,12 +1,6 @@
 # Widget Format Reference
 
-Use this reference for package layout, `widget.json`, schemas, import limits, and validation. Current source files:
-
-- `src/components/BWidget/types.ts`
-- `src/ai/widget/scanner.ts`
-- `src/ai/widget/importer.ts`
-- `src/utils/zip/package.ts`
-- `types/widget.d.ts`
+Use this reference for package layout, `widget.json`, schemas, import limits, and validation.
 
 ## Contents
 
@@ -48,7 +42,7 @@ Rules:
 - Writing the file to any path that is not under `.tibis/widgets/` means the widget will not be picked up by the scanner and will not appear in the Widget settings page.
 - When the user has not explicitly asked to install, generate a package directory somewhere else (for example the current workspace) and let the user import it as JSON or ZIP. The Settings → Widgets page provides a “创建小组件” button that calls the official installer with `reject` conflict strategy.
 
-This rule exists because the scanner root is hard-coded in `src/ai/widget/scanner.ts` and `src/layouts/default/hooks/useWidgetInit.ts`; any widget stored outside that root is invisible to the app.
+This rule exists because the scanner root is hard-coded; any widget stored outside that root is invisible to the app.
 
 ## Top-Level WidgetData
 

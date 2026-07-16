@@ -1,11 +1,6 @@
 # Elements And Bindings Reference
 
-Use this reference when creating `elements`, styles, groups, loops, images, buttons, or template bindings. Current source files:
-
-- `src/components/BWidget/types.ts`
-- `src/components/BWidget/elements/*/schema.ts`
-- `src/components/BWidget/elements/index.ts`
-- `src/components/BWidget/utils/widgetBindings.ts`
+Use this reference when creating `elements`, styles, groups, loops, images, buttons, or template bindings.
 
 ## Base Element
 
