@@ -3,16 +3,18 @@
  * @description 默认布局 ChatSider 组件测试。
  * @vitest-environment jsdom
  */
+/* eslint-disable vue/one-component-per-file */
 import type { ChatSession, PaginatedSessionsResult } from 'types/chat';
 import { defineComponent, h, nextTick } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ChatSider from '@/layouts/default/components/ChatSider.vue';
 import { useSettingStore } from '@/stores/ui/setting';
 
 const chatStoreMock = vi.hoisted(() => ({
-  getSessions: vi.fn<() => Promise<PaginatedSessionsResult>>()
+  getSessions: vi.fn<() => Promise<PaginatedSessionsResult>>(),
+  updateSessionTitle: vi.fn<(sessionId: string, title: string) => Promise<void>>()
 }));
 
 const sessionHistoryRefreshMock = vi.hoisted(() => vi.fn<() => Promise<void>>());
@@ -110,6 +112,35 @@ const BPanelSplitterStub = defineComponent({
   }
 });
 
+/** AInput 测试替身，保留 v-model、blur、keydown 与原生聚焦节点。 */
+const AInputStub = defineComponent({
+  name: 'AInput',
+  inheritAttrs: false,
+  props: {
+    value: {
+      type: String,
+      default: ''
+    }
+  },
+  emits: ['update:value', 'blur', 'keydown'],
+  setup(props, { attrs, emit }) {
+    /** 将原生输入值转发为 AInput 的受控值事件。 */
+    function handleInput(event: Event): void {
+      emit('update:value', (event.target as HTMLInputElement).value);
+    }
+
+    return () =>
+      h('input', {
+        class: attrs.class,
+        'aria-label': attrs['aria-label'],
+        value: props.value,
+        onInput: handleInput,
+        onBlur: (event: FocusEvent): void => emit('blur', event),
+        onKeydown: (event: KeyboardEvent): void => emit('keydown', event)
+      });
+  }
+});
+
 /**
  * 挂载 ChatSider。
  * @returns 组件包装器
@@ -118,6 +149,7 @@ function mountChatSider(): ReturnType<typeof mount> {
   return mount(ChatSider, {
     global: {
       stubs: {
+        AInput: AInputStub,
         BIcon: true,
         BPanelSplitter: BPanelSplitterStub
       }
@@ -126,10 +158,16 @@ function mountChatSider(): ReturnType<typeof mount> {
 }
 
 describe('ChatSider', (): void => {
+  afterEach((): void => {
+    vi.useRealTimers();
+  });
+
   beforeEach((): void => {
     setActivePinia(createPinia());
     localStorage.clear();
     chatStoreMock.getSessions.mockReset();
+    chatStoreMock.updateSessionTitle.mockReset();
+    chatStoreMock.updateSessionTitle.mockResolvedValue();
     sessionHistoryRefreshMock.mockReset();
   });
 
@@ -214,6 +252,64 @@ describe('ChatSider', (): void => {
 
     expect(wrapper.text()).toContain('生成标题');
     expect(sessionHistoryRefreshMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('focuses and selects the title input before saving with Enter', async (): Promise<void> => {
+    const latestSession = createSession('session-latest', '原标题');
+    chatStoreMock.getSessions.mockResolvedValue(createSessionPage([latestSession]));
+    const settingStore = useSettingStore();
+    settingStore.setSidebarVisible(true);
+    settingStore.setChatSidebarActiveSessionId('session-latest');
+    const wrapper = mountChatSider();
+    await flushPromises();
+    wrapper.findComponent({ name: 'SessionHistory' }).vm.$emit('update:currentSession', latestSession);
+    await nextTick();
+
+    vi.useFakeTimers();
+    const focusSpy = vi.spyOn(HTMLInputElement.prototype, 'focus');
+    const selectSpy = vi.spyOn(HTMLInputElement.prototype, 'select');
+    await wrapper.find('.chat-sider__title').trigger('dblclick');
+    await nextTick();
+    await vi.advanceTimersByTimeAsync(100);
+    const input = wrapper.find<HTMLInputElement>('.chat-sider__title-input');
+    expect(focusSpy).toHaveBeenCalledOnce();
+    expect(selectSpy).toHaveBeenCalledOnce();
+    focusSpy.mockRestore();
+    selectSpy.mockRestore();
+
+    const titleInput = wrapper.findComponent({ name: 'AInput' });
+    titleInput.vm.$emit('update:value', '  手动标题  ');
+    await nextTick();
+    expect(titleInput.props('value')).toBe('  手动标题  ');
+    await input.trigger('keydown', { key: 'Enter' });
+    await flushPromises();
+
+    expect(chatStoreMock.updateSessionTitle).toHaveBeenCalledWith('session-latest', '手动标题');
+    expect(wrapper.text()).toContain('手动标题');
+    expect(sessionHistoryRefreshMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('saves the edited title when the input loses focus', async (): Promise<void> => {
+    const latestSession = createSession('session-latest', '原标题');
+    chatStoreMock.getSessions.mockResolvedValue(createSessionPage([latestSession]));
+    const settingStore = useSettingStore();
+    settingStore.setSidebarVisible(true);
+    settingStore.setChatSidebarActiveSessionId('session-latest');
+    const wrapper = mountChatSider();
+    await flushPromises();
+    wrapper.findComponent({ name: 'SessionHistory' }).vm.$emit('update:currentSession', latestSession);
+    await nextTick();
+
+    await wrapper.find('.chat-sider__title').trigger('dblclick');
+    const titleInput = wrapper.findComponent({ name: 'AInput' });
+    titleInput.vm.$emit('update:value', '失焦标题');
+    await nextTick();
+    expect(titleInput.props('value')).toBe('失焦标题');
+    titleInput.vm.$emit('blur', new FocusEvent('blur'));
+    await flushPromises();
+
+    expect(chatStoreMock.updateSessionTitle).toHaveBeenCalledWith('session-latest', '失焦标题');
+    expect(wrapper.text()).toContain('失焦标题');
   });
 
   it('clears active session when BChat requests a new draft session', async (): Promise<void> => {

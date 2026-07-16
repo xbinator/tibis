@@ -15,7 +15,16 @@
   >
     <div :class="bem('content')">
       <div :class="bem('header')">
-        <div :class="[bem('title'), 'truncate']">{{ currentTitle }}</div>
+        <AInput
+          v-if="titleEditor.editing"
+          v-model:value="titleEditor.draft"
+          v-focus="{ selectAll: true }"
+          :class="bem('title-input')"
+          size="small"
+          @blur="finishTitleEdit"
+          @keydown.enter.prevent="finishTitleEdit"
+        />
+        <div v-else :class="[bem('title'), 'truncate']" title="双击修改标题" @dblclick="startTitleEdit">{{ currentTitle }}</div>
         <BButton square size="small" type="text" :disabled="isSessionActionDisabled" @click="handleCreateDraftSession">
           <BIcon icon="lucide:message-circle-plus" :size="16" />
         </BButton>
@@ -53,10 +62,14 @@
 
 <script setup lang="ts">
 import type { ChatSession } from 'types/chat';
-import { computed, defineAsyncComponent, onUnmounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, onUnmounted, reactive, ref, watch } from 'vue';
+import { Input as AInput } from 'ant-design-vue';
 import BButton from '@/components/BButton/index.vue';
 import SessionHistory from '@/components/BChat/components/SessionHistory.vue';
+import { vFocus } from '@/directives/focus';
+import { useChatSessionStore } from '@/stores/chat/session';
 import { useSettingStore } from '@/stores/ui/setting';
+import { asyncTo } from '@/utils/asyncTo';
 import { createNamespace } from '@/utils/namespace';
 import { useChatSession } from '../hooks/useChatSession';
 
@@ -66,8 +79,12 @@ const [, bem] = createNamespace('chat-sider', '');
 
 /** 应用设置存储。 */
 const settingStore = useSettingStore();
+/** 聊天会话持久化存储。 */
+const chatStore = useChatSessionStore();
 /** 聊天运行时是否忙碌。 */
 const chatLoading = ref(false);
+/** 会话标题编辑状态。 */
+const titleEditor = reactive({ editing: false, draft: '', saving: false });
 
 const {
   currentSession,
@@ -90,6 +107,39 @@ const isSidebarExpanded = computed<boolean>(() => settingStore.chatSidebarExpand
 const currentTitle = computed<string>(() => currentSession.value?.title || '新会话');
 /** 是否禁用会话切换、新会话和删除操作。 */
 const isSessionActionDisabled = computed<boolean>(() => chatLoading.value || sessionLoading.value);
+
+/**
+ * 双击当前标题后进入编辑态，聚焦与全选交给 v-focus 统一处理。
+ */
+function startTitleEdit(): void {
+  const session = currentSession.value;
+  if (!session || isSessionActionDisabled.value || titleEditor.saving) return;
+
+  titleEditor.draft = session.title;
+  titleEditor.editing = true;
+}
+
+/**
+ * 完成标题编辑并持久化有效变更。
+ */
+async function finishTitleEdit(): Promise<void> {
+  if (!titleEditor.editing) return;
+
+  const session = currentSession.value;
+  const nextTitle = titleEditor.draft.trim();
+  titleEditor.editing = false;
+  if (!session || !nextTitle || nextTitle === session.title) return;
+
+  titleEditor.saving = true;
+  const [error] = await asyncTo(chatStore.updateSessionTitle(session.id, nextTitle));
+  titleEditor.saving = false;
+  if (error) return;
+
+  if (currentSession.value?.id === session.id) {
+    setCurrentSession({ ...currentSession.value, title: nextTitle });
+  }
+  await asyncTo(sessionHistoryRef.value?.refreshSessions() ?? Promise.resolve());
+}
 
 /**
  * 切换聊天侧栏放大状态。
@@ -216,6 +266,12 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.chat-sider__title-input {
+  min-width: 0;
+  height: 26px;
+  font-size: 12px;
 }
 
 .chat-sider__divider {
