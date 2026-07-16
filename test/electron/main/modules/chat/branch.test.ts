@@ -11,7 +11,7 @@ import type {
   StructuredContextSummary
 } from 'types/chat';
 import { describe, expect, it } from 'vitest';
-import { createSessionBranchData } from '../../../../../electron/main/modules/chat/runtime/branch.mts';
+import { createBranchTitle, createSessionBranchData } from '../../../../../electron/main/modules/chat/runtime/branch.mts';
 import { buildSourceFingerprint, createFingerprintInput } from '../../../../../electron/main/modules/chat/runtime/compaction/fingerprint.mts';
 import { validatePartTopology } from '../../../../../electron/main/modules/chat/runtime/compaction/topology.mts';
 
@@ -140,6 +140,14 @@ function createCheckpoint(id: string, boundaryPartId: string, sourcePartIds: str
 }
 
 describe('createSessionBranchData', (): void => {
+  it.each([
+    ['原始标题', '原始标题（2）'],
+    ['原始标题（2）', '原始标题（3）'],
+    ['方案（草稿）', '方案（草稿）（2）']
+  ])('creates the next branch title from %s', (sourceTitle: string, expectedTitle: string): void => {
+    expect(createBranchTitle(sourceTitle)).toBe(expectedTitle);
+  });
+
   it('rejects generated IDs that collide with source branch data', (): void => {
     const sourceMessages = [
       createMessage('user-1', 'user', '问题一', '2026-07-14T08:01:00.000Z'),
@@ -169,7 +177,7 @@ describe('createSessionBranchData', (): void => {
     }).toThrow('无法从该助手消息创建会话分支');
   });
 
-  it('copies through the target assistant message into an independent session with the same title', (): void => {
+  it('copies through the target assistant message into an independently titled session', (): void => {
     const sourceSession = createSourceSession();
     const sourceMessages = [
       createMessage('user-1', 'user', '问题一', '2026-07-14T08:01:00.000Z'),
@@ -193,7 +201,7 @@ describe('createSessionBranchData', (): void => {
     expect(result.session).toMatchObject({
       id: 'branch-id-1',
       type: 'assistant',
-      title: '原始标题',
+      title: '原始标题（2）',
       createdAt: '2026-07-14T12:00:00.000Z',
       updatedAt: '2026-07-14T12:00:00.000Z',
       lastMessageAt: '2026-07-14T12:00:00.000Z',

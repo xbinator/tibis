@@ -7,6 +7,9 @@ import type { ChatMessageCompactionPart, ChatMessagePart, ChatMessageRecord, Cha
 import { buildSourceFingerprint, createFingerprintInput } from './compaction/fingerprint.mjs';
 import { indexMessageParts, removeInvalidCheckpoints } from './compaction/topology.mjs';
 
+/** 分支标题末尾的全角括号序号。 */
+const BRANCH_TITLE_SUFFIX_RE = /^(.*)（(\d+)）$/u;
+
 /**
  * 创建会话分支所需源数据。
  */
@@ -31,6 +34,19 @@ export interface SessionBranchData {
   session: ChatSession;
   /** 重建后的消息。 */
   messages: ChatMessageRecord[];
+}
+
+/**
+ * 创建下一个分支标题，仅递增标题末尾的全角括号数字。
+ * @param sourceTitle - 源会话标题
+ * @returns 带递增分支序号的新标题
+ */
+export function createBranchTitle(sourceTitle: string): string {
+  const match = sourceTitle.match(BRANCH_TITLE_SUFFIX_RE);
+  if (!match) return `${sourceTitle}（2）`;
+
+  const currentSequence = Number.parseInt(match[2], 10);
+  return `${match[1]}（${currentSequence + 1}）`;
 }
 
 /**
@@ -229,7 +245,7 @@ export function createSessionBranchData(input: CreateSessionBranchInput): Sessio
   const session: ChatSession = {
     id: sessionId,
     type: input.sourceSession.type,
-    title: input.sourceSession.title,
+    title: createBranchTitle(input.sourceSession.title),
     createdAt: input.now,
     updatedAt: input.now,
     lastMessageAt: input.now,

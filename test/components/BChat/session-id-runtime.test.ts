@@ -1531,7 +1531,7 @@ describe('BChat sessionId runtime', (): void => {
 
   it('creates a branch from the target assistant message and switches through the existing session event', async (): Promise<void> => {
     const assistantMessage = createAssistantMessage();
-    const branchedSession = createSession('session-branch', '原标题');
+    const branchedSession = createSession('session-branch', '原标题（2）');
     chatStoreMock.branchSession.mockResolvedValue(branchedSession);
     const wrapper = mountBChat('session-active');
     await flushPromises();

@@ -265,7 +265,7 @@ describe('chat main service runtime fields', (): void => {
 
     expect(databaseMock.transaction).toHaveBeenCalledTimes(transactionCallCount + 1);
     expect(databaseMock.dbSelect.mock.calls[1]?.[0]).not.toContain('LIMIT');
-    expect(session).toMatchObject({ type: 'assistant', title: '原标题' });
+    expect(session).toMatchObject({ type: 'assistant', title: '原标题（2）' });
     expect(session.id).not.toBe('session-source');
     expect(databaseMock.dbExecute).toHaveBeenCalledWith(expect.stringMatching(/INSERT INTO chat_sessions/), expect.any(Array));
     expect(databaseMock.dbExecute.mock.calls.filter(([sql]) => String(sql).includes('INSERT INTO chat_messages'))).toHaveLength(2);
