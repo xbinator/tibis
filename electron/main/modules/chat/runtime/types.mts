@@ -63,6 +63,8 @@ export interface ActiveChatRuntime {
   resolvedModel?: ChatModelResolution;
   /** 当前执行阶段。 */
   phase: ChatRuntimePhase;
+  /** 当前压缩阶段的触发来源，仅保留在活跃 Runtime 内存中。 */
+  compactionTrigger?: 'automatic' | 'manual';
   /** 后续模型流和工具执行共用的中止控制器。 */
   abortController: AbortController;
   /** 创建时间戳。 */

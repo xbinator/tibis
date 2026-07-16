@@ -6,7 +6,7 @@ import type { ChatModelResolution } from '../../../../../../electron/main/module
 import type { ChatRuntimeStreamExecutor } from '../../../../../../electron/main/modules/chat/runtime/types.mjs';
 import type { AIInvokeResult, AIServiceError } from 'types/ai';
 import type { ChatMessagePart, ChatMessageRecord, StructuredContextSummary } from 'types/chat';
-import type { ChatRuntimeContinueInput, ChatRuntimeEventMap, ChatRuntimeSendInput } from 'types/chat-runtime';
+import type { ChatRuntimeCompactInput, ChatRuntimeContinueInput, ChatRuntimeEventMap, ChatRuntimeSendInput } from 'types/chat-runtime';
 import { describe, expect, it, vi } from 'vitest';
 import { createChatRuntimeService } from '../../../../../../electron/main/modules/chat/runtime/service.mjs';
 import { chatSessionManager } from '../../../../../../electron/main/modules/chat/service.mjs';
@@ -1387,6 +1387,137 @@ describe('chat runtime service shell', (): void => {
     expect(modelSourceMessages[0]).toMatchObject({ id: expect.stringMatching(/^context-checkpoint:/u) });
     expect(JSON.stringify(modelSourceMessages)).toContain('当前任务必须保留原文');
     expect(JSON.stringify(modelSourceMessages)).not.toContain('x'.repeat(25_000));
+  });
+
+  it('manually compacts into a compaction-only assistant message without creating a user message', async (): Promise<void> => {
+    const collector = createEventCollector();
+    const messages: ChatMessageRecord[] = [
+      {
+        id: 'old-assistant',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: '历史内容',
+        parts: [{ id: 'old-source-part', type: 'text', text: '历史内容' }],
+        createdAt: '2026-07-16T00:00:00.000Z',
+        finished: true
+      }
+    ];
+    const service = createChatRuntimeService({
+      emit: collector.emit,
+      createMessageId: (): string => 'assistant-manual-compaction',
+      now: () => '2026-07-16T00:00:01.000Z',
+      messageReader: { getMessages: (): ChatMessageRecord[] => structuredClone(messages) },
+      messageWriter: {
+        addMessage: async (message: ChatMessageRecord): Promise<void> => {
+          messages.push(structuredClone(message));
+        },
+        updateMessage: async (message: ChatMessageRecord): Promise<void> => {
+          const index = messages.findIndex((candidate: ChatMessageRecord): boolean => candidate.id === message.id);
+          if (index >= 0) messages[index] = structuredClone(message);
+        }
+      },
+      resolveModel: async () => createModelResolution(),
+      compactionGenerateText: async (): Promise<[undefined, AIInvokeResult]> => [undefined, { text: '', output: createCompactionSummary('old-source-part') }],
+      streamExecutor: createNoopStreamExecutor()
+    });
+    const input: ChatRuntimeCompactInput = {
+      runtimeId: 'runtime-manual-compact',
+      sessionId: 'session-1',
+      clientId: 'bchat',
+      agentId: 'primary',
+      contextWindow: 12_000
+    };
+
+    const result = await service.compact(input);
+    await vi.waitFor((): void => {
+      expect(collector.events).toContainEqual(
+        expect.objectContaining({ name: 'chat:runtime:complete', payload: expect.objectContaining({ runtimeId: 'runtime-manual-compact' }) })
+      );
+    });
+
+    expect(result).toEqual({ runtimeId: 'runtime-manual-compact', sessionId: 'session-1' });
+    const createdMessages = messages.filter((message: ChatMessageRecord): boolean => message.id !== 'old-assistant');
+    expect(createdMessages).toHaveLength(1);
+    expect(createdMessages[0]).toMatchObject({ role: 'assistant', content: '', loading: false, finished: true });
+    expect(createdMessages[0].parts).toEqual([expect.objectContaining({ type: 'compaction', status: 'success' })]);
+  });
+
+  it('rejects manual compaction before inserting a message when the session is busy', async (): Promise<void> => {
+    const addedMessages: ChatMessageRecord[] = [];
+    const service = createChatRuntimeService({
+      emit: vi.fn(),
+      messageWriter: {
+        addMessage: async (message: ChatMessageRecord): Promise<void> => {
+          addedMessages.push(structuredClone(message));
+        },
+        updateMessage: async (): Promise<void> => undefined
+      },
+      messageReader: createNoopMessageReader(),
+      streamExecutor: createNoopStreamExecutor(),
+      keepRuntimeOpenForTest: true
+    });
+    await service.send(createInput({ runtimeId: 'runtime-busy-owner' }));
+    const messageCount = addedMessages.length;
+
+    await expect(
+      service.compact({
+        runtimeId: 'runtime-busy-compact',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'primary',
+        contextWindow: 12_000
+      })
+    ).rejects.toMatchObject({ code: 'SESSION_BUSY' });
+    expect(addedMessages).toHaveLength(messageCount);
+  });
+
+  it('preserves a cancelled compaction status when aborted before summary generation starts', async (): Promise<void> => {
+    const collector = createEventCollector();
+    const sourceReady = createDeferred();
+    const messages: ChatMessageRecord[] = [];
+    const service = createChatRuntimeService({
+      emit: collector.emit,
+      createMessageId: (kind): string => `${kind}-early-compact-cancel`,
+      messageReader: {
+        getMessages: async (): Promise<ChatMessageRecord[]> => {
+          await sourceReady.promise;
+          return [];
+        }
+      },
+      messageWriter: {
+        addMessage: async (message: ChatMessageRecord): Promise<void> => {
+          messages.push(structuredClone(message));
+        },
+        updateMessage: async (message: ChatMessageRecord): Promise<void> => {
+          const index = messages.findIndex((candidate: ChatMessageRecord): boolean => candidate.id === message.id);
+          if (index >= 0) messages[index] = structuredClone(message);
+        },
+        deleteMessage: async (_sessionId: string, messageId: string): Promise<void> => {
+          const index = messages.findIndex((message: ChatMessageRecord): boolean => message.id === messageId);
+          if (index >= 0) messages.splice(index, 1);
+        }
+      },
+      resolveModel: async () => createModelResolution(),
+      streamExecutor: createNoopStreamExecutor()
+    });
+
+    await service.compact({
+      runtimeId: 'runtime-early-compact-cancel',
+      sessionId: 'session-1',
+      clientId: 'bchat',
+      agentId: 'primary',
+      contextWindow: 12_000
+    });
+    await service.abort({ runtimeId: 'runtime-early-compact-cancel' });
+    sourceReady.resolve();
+    await flushRuntimeTasks();
+
+    const compactionMessage = messages.find((message: ChatMessageRecord): boolean => message.id === 'assistant-early-compact-cancel');
+    expect(compactionMessage).toMatchObject({ role: 'assistant', loading: false, finished: true });
+    expect(compactionMessage?.parts).toEqual([expect.objectContaining({ type: 'compaction', status: 'cancelled', errorCode: 'USER_CANCELLED' })]);
+    expect(collector.events).not.toContainEqual(
+      expect.objectContaining({ name: 'chat:runtime:message-deleted', payload: expect.objectContaining({ messageId: 'assistant-early-compact-cancel' }) })
+    );
   });
 
   it('continues with the previous projection when automatic compaction fails below the hard limit', async (): Promise<void> => {

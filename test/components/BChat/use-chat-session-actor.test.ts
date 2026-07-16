@@ -76,4 +76,21 @@ describe('useChatSessionActor', (): void => {
     expect(actorSystem.getSession('session-b')?.getSnapshot().status).toBe('active');
     actorSystem.stop();
   });
+
+  it('starts a manual compaction intent without creating a submit intent', (): void => {
+    const actorSystem = createChatActorSystem();
+    actorSystem.start();
+    const activeSessionId = ref<string | null>('session-a');
+    const scope = effectScope();
+    const hook = scope.run(() => useChatSessionActor({ activeSessionId, actorSystem }));
+    if (!hook) throw new Error('Session Actor hook was not created');
+
+    hook.compact();
+
+    expect(hook.snapshot.value?.matches('preparing')).toBe(true);
+    expect(hook.snapshot.value?.context.intent).toEqual({ type: 'compact' });
+
+    scope.stop();
+    actorSystem.stop();
+  });
 });

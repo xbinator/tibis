@@ -5,6 +5,7 @@
 import type { Message } from '../utils/types';
 import type { ChatMessageRecord } from 'types/chat';
 import type {
+  ChatRuntimeCompactInput,
   ChatRuntimeContinueInput,
   ChatRuntimeHandlerResult,
   ChatRuntimeMessageSnapshot,
@@ -52,6 +53,9 @@ export type BChatRuntimeContinueInput = Pick<
   /** renderer 消息列表，发送到主进程前转换为纯快照。 */
   messages: Message[];
 };
+
+/** ChatRuntime 手动压缩输入。 */
+export type BChatRuntimeCompactInput = Omit<ChatRuntimeCompactInput, 'clientId' | 'agentId'>;
 
 /** ChatRuntime 用户选择提交输入。 */
 export type BChatRuntimeSubmitUserChoiceInput = Pick<
@@ -147,6 +151,11 @@ export function useChatRuntime(options: UseChatRuntimeOptions = {}) {
     return unwrapRuntimeResult(await electronAPI.chatRuntimeContinue(toCloneableData({ ...input, clientId, agentId, messages })));
   }
 
+  /** 手动压缩当前会话上下文。 */
+  async function compact(input: BChatRuntimeCompactInput): Promise<ChatRuntimeStartResult> {
+    return unwrapRuntimeResult(await electronAPI.chatRuntimeCompact(toCloneableData({ ...input, clientId, agentId })));
+  }
+
   /** 提交用户选择并续跑。 */
   async function submitUserChoice(input: BChatRuntimeSubmitUserChoiceInput): Promise<ChatRuntimeStartResult> {
     return unwrapRuntimeResult(await electronAPI.chatRuntimeSubmitUserChoice(toCloneableData({ ...input, clientId, agentId })));
@@ -162,5 +171,5 @@ export function useChatRuntime(options: UseChatRuntimeOptions = {}) {
     assertRuntimeResult(await electronAPI.chatRuntimeAbort({ runtimeId }));
   }
 
-  return { abort, continueTurn, send, submitMessagePart, submitUserChoice };
+  return { abort, compact, continueTurn, send, submitMessagePart, submitUserChoice };
 }

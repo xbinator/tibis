@@ -22,6 +22,7 @@ import type {
   ChatRuntimeAutoNameResult,
   ChatRuntimeBridgeRequestEvent,
   ChatRuntimeBridgeResponseInput,
+  ChatRuntimeCompactInput,
   ChatRuntimeConfirmationRequestEvent,
   ChatRuntimeContinueInput,
   ChatRuntimeEventMap,
@@ -585,6 +586,7 @@ export interface ElectronAPI {
   chatRuntimeListActive: () => Promise<ChatRuntimeHandlerResult<ChatRuntimeRecoverySnapshot[]>>;
   chatRuntimeSend: (input: ChatRuntimeSendInput) => Promise<ChatRuntimeHandlerResult<ChatRuntimeStartResult>>;
   chatRuntimeContinue: (input: ChatRuntimeContinueInput) => Promise<ChatRuntimeHandlerResult<ChatRuntimeStartResult>>;
+  chatRuntimeCompact: (input: ChatRuntimeCompactInput) => Promise<ChatRuntimeHandlerResult<ChatRuntimeStartResult>>;
   chatRuntimeSubmitUserChoice: (input: ChatRuntimeSubmitUserChoiceInput) => Promise<ChatRuntimeHandlerResult<ChatRuntimeStartResult>>;
   chatRuntimeSubmitConfirmation: (input: ChatRuntimeSubmitConfirmationInput) => Promise<ChatRuntimeHandlerResult<void>>;
   chatRuntimeSubmitBridgeResponse: (input: ChatRuntimeBridgeResponseInput) => Promise<ChatRuntimeHandlerResult<void>>;

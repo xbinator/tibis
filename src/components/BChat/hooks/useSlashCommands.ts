@@ -14,6 +14,8 @@ type CommandHandlers = {
   createNewSession: () => Promise<void> | void;
   /** 清空输入 */
   clearInput: () => Promise<void> | void;
+  /** 压缩当前会话上下文 */
+  compactContext: () => Promise<void> | void;
   /** 当前是否有活跃任务 */
   isBusy: () => boolean;
   /** 命令因忙碌被拒绝时的回调 */
@@ -33,7 +35,8 @@ type CommandConcurrencyPolicy = 'allowAlways' | 'allowWhenIdleOnly';
 const COMMAND_HANDLER_MAP = {
   model: 'openModelSelector',
   new: 'createNewSession',
-  clear: 'clearInput'
+  clear: 'clearInput',
+  compact: 'compactContext'
 } as const satisfies Record<string, keyof CommandHandlers>;
 
 /** 从映射表键名派生的命令 id 联合类型 */
@@ -45,7 +48,8 @@ type CommandId = keyof typeof COMMAND_HANDLER_MAP;
  */
 const CHAT_COMMAND_DEFINITIONS = [
   { id: 'model', title: '模型', description: '切换当前使用的模型', concurrencyPolicy: 'allowAlways' },
-  { id: 'new', title: '新建聊天', description: '开始一个新的聊天会话', concurrencyPolicy: 'allowWhenIdleOnly' }
+  { id: 'new', title: '新建聊天', description: '开始一个新的聊天会话', concurrencyPolicy: 'allowWhenIdleOnly' },
+  { id: 'compact', title: '压缩上下文', description: '压缩当前长会话上下文', concurrencyPolicy: 'allowWhenIdleOnly' }
 ] satisfies Array<{ id: CommandId; title: string; description: string; concurrencyPolicy: CommandConcurrencyPolicy }>;
 
 /**

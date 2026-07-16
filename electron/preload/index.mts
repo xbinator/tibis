@@ -469,6 +469,13 @@ const electronAPI: ElectronAPI = {
   chatRuntimeContinue: (input) => ipcRenderer.invoke('chat:runtime:continue', input),
 
   /**
+   * 通过主进程 ChatRuntime 手动压缩当前会话上下文。
+   * @param input - 压缩运行时输入
+   * @returns runtime 启动结果
+   */
+  chatRuntimeCompact: (input) => ipcRenderer.invoke('chat:runtime:compact', input),
+
+  /**
    * 通过主进程 ChatRuntime 提交用户选择答案并续跑。
    * @param input - 用户选择提交输入
    * @returns runtime 启动结果

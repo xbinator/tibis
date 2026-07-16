@@ -14,13 +14,14 @@ import type {
   ChatRuntimeStreamExecutor
 } from './types.mjs';
 import type { AIServiceError, AIToolExecutionResult, AIUsage } from 'types/ai';
-import type { ChatMessagePart, ChatMessageRecord, ChatPendingInteraction, CompactionModelSnapshot } from 'types/chat';
+import type { ChatMessageCompactionPart, ChatMessagePart, ChatMessageRecord, ChatPendingInteraction, CompactionModelSnapshot } from 'types/chat';
 import type {
   ChatRuntimeAbortInput,
   ChatRuntimeAutoNameInput,
   ChatRuntimeAutoNameResult,
   ChatRuntimeBridgeResponseInput,
   ChatRuntimeBridgeResult,
+  ChatRuntimeCompactInput,
   ChatRuntimeConfirmationDecision,
   ChatRuntimeCompletionReason,
   ChatRuntimeContinueInput,
@@ -60,7 +61,7 @@ import {
 import { applyUserChoiceAnswer, cloneRuntimeMessage } from './messages/user-choice.mjs';
 import { createAutoNamePrompt, normalizeAutoNameTitle } from './model/auto-name.mjs';
 import { createDefaultChatModelResolver } from './model/resolver.mjs';
-import { createContinuationRuntime, createSendRuntime, createUserChoiceRuntime } from './runners/factory.mjs';
+import { createCompactRuntime, createContinuationRuntime, createSendRuntime, createUserChoiceRuntime } from './runners/factory.mjs';
 import { createRuntimeStreamExecutor } from './stream/index.mjs';
 import { createMainToolExecutor } from './tools/index.mjs';
 
@@ -530,6 +531,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       activeCompactionModels.set(runtime.runtimeId, resolution);
       activeCompactionRuntimes.set(runtime.runtimeId, runtime);
       runtime.phase = 'compacting';
+      runtime.compactionTrigger = 'automatic';
       await Promise.allSettled([
         compactionExecutor.execute({
           runtimeId: runtime.runtimeId,
@@ -547,7 +549,10 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       activeCompactionSources.delete(runtime.runtimeId);
       activeCompactionModels.delete(runtime.runtimeId);
       activeCompactionRuntimes.delete(runtime.runtimeId);
-      if (activeRuntimes.has(runtime.runtimeId)) runtime.phase = 'streaming';
+      if (activeRuntimes.has(runtime.runtimeId)) {
+        runtime.phase = 'streaming';
+        runtime.compactionTrigger = undefined;
+      }
       currentRawMessages = createContinuationSourceMessages(rawMessages, assistantMessage);
       projection = projectContext({
         messages: currentRawMessages,
@@ -661,6 +666,116 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       });
       completeRuntime(runtime);
     }
+  }
+
+  /**
+   * 为无法进入 executor 的手动压缩写入失败终态。
+   * @param assistantMessage - compaction 承载消息
+   * @param errorCode - 稳定失败码
+   */
+  function appendManualFailure(assistantMessage: ChatMessageRecord, errorCode: string): void {
+    const timestamp = getCompactionNow();
+    const checkpoint: ChatMessageCompactionPart = {
+      id: `checkpoint-${nanoid()}`,
+      type: 'compaction',
+      status: 'failed',
+      trigger: 'manual',
+      errorCode,
+      createdAt: timestamp,
+      completedAt: timestamp
+    };
+    assistantMessage.parts.push(checkpoint);
+  }
+
+  /**
+   * 将正在压缩的 assistant 消息立即收敛为取消状态，覆盖尚未进入 executor 的竞态窗口。
+   * @param assistantMessage - compaction 承载消息
+   */
+  function cancelCompactionMessage(assistantMessage: ChatMessageRecord, trigger: 'automatic' | 'manual'): void {
+    const timestamp = getCompactionNow();
+    const pendingIndex = assistantMessage.parts.findIndex((part: ChatMessagePart): boolean => part.type === 'compaction' && part.status === 'pending');
+    if (pendingIndex >= 0) {
+      const pending = assistantMessage.parts[pendingIndex];
+      if (pending.type !== 'compaction') return;
+      assistantMessage.parts[pendingIndex] = {
+        ...structuredClone(pending),
+        status: 'cancelled',
+        errorCode: 'USER_CANCELLED',
+        completedAt: timestamp
+      };
+      return;
+    }
+    if (assistantMessage.parts.some((part: ChatMessagePart): boolean => part.type === 'compaction')) return;
+    assistantMessage.parts.push({
+      id: `checkpoint-${nanoid()}`,
+      type: 'compaction',
+      status: 'cancelled',
+      trigger,
+      errorCode: 'USER_CANCELLED',
+      createdAt: timestamp,
+      completedAt: timestamp
+    });
+  }
+
+  /**
+   * 后台执行手动上下文压缩并通过标准 Runtime 完成事件收尾。
+   * @param runtime - 手动压缩 runtime
+   * @param assistantMessage - compaction-only assistant 消息
+   */
+  async function runManualCompaction(runtime: ActiveChatRuntime, assistantMessage: ChatMessageRecord): Promise<void> {
+    const [sourceResult, resolutionResult] = await Promise.allSettled([
+      Promise.resolve().then(() => messageReader.getMessages(runtime.sessionId)),
+      resolveModel()
+    ]);
+    if (!activeRuntimes.has(runtime.runtimeId)) return;
+
+    if (sourceResult.status === 'rejected') {
+      appendManualFailure(assistantMessage, 'CAPTURE_FAILED');
+    } else if (resolutionResult.status === 'rejected' || !resolutionResult.value) {
+      appendManualFailure(assistantMessage, 'MODEL_NOT_FOUND');
+    } else {
+      const sourceMessages = structuredClone(sourceResult.value).filter((message: ChatMessageRecord): boolean => message.id !== assistantMessage.id);
+      const resolution = resolutionResult.value;
+      const contextWindow = runtime.contextWindow ?? 0;
+      const modelSnapshot: CompactionModelSnapshot = {
+        providerType: resolution.createOptions.providerType,
+        providerId: resolution.createOptions.providerId,
+        modelId: resolution.modelId,
+        contextWindow
+      };
+      runtime.resolvedModel = resolution;
+      initializeArtifactRegistry(runtime, sourceMessages);
+      activeCompactionSources.set(runtime.runtimeId, sourceMessages);
+      activeCompactionModels.set(runtime.runtimeId, resolution);
+      activeCompactionRuntimes.set(runtime.runtimeId, runtime);
+      const [executionResult] = await Promise.allSettled([
+        compactionExecutor.execute({
+          runtimeId: runtime.runtimeId,
+          sessionId: runtime.sessionId,
+          trigger: 'manual',
+          assistantMessage,
+          contextWindow,
+          modelSnapshot,
+          system: runtime.system,
+          tools: runtime.tools,
+          skillContentHashes: runtime.skillContentHashes
+        })
+      ]);
+      if (executionResult.status === 'rejected' && !assistantMessage.parts.some((part: ChatMessagePart): boolean => part.type === 'compaction')) {
+        appendManualFailure(assistantMessage, 'EXECUTION_FAILED');
+      }
+    }
+
+    activeCompactionSources.delete(runtime.runtimeId);
+    activeCompactionModels.delete(runtime.runtimeId);
+    activeCompactionRuntimes.delete(runtime.runtimeId);
+    runtime.resolvedModel = undefined;
+    if (!activeRuntimes.has(runtime.runtimeId)) return;
+
+    assistantMessage.loading = false;
+    assistantMessage.finished = true;
+    await Promise.allSettled([updateAssistantMessage(runtime, assistantMessage)]);
+    if (activeRuntimes.has(runtime.runtimeId)) completeRuntime(runtime);
   }
 
   return {
@@ -808,6 +923,47 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       }
 
       return { runtimeId, sessionId: runtime.sessionId };
+    },
+
+    /**
+     * 启动一次不创建用户消息的手动上下文压缩。
+     * @param input - 压缩配置与现有会话 ID
+     * @returns 已启动 runtime 标识
+     */
+    async compact(input: ChatRuntimeCompactInput): Promise<ChatRuntimeStartResult> {
+      const { runtimeId, sessionId } = input;
+      assertRuntimeIdAvailable(runtimeId);
+      const lock = locks.acquireWritingLock({ sessionId, runtimeId });
+      if (!lock.ok) {
+        throw new ChatRuntimeError('SESSION_BUSY', `Session ${sessionId} is already running ${lock.ownerRuntimeId}`);
+      }
+
+      const runtime = createCompactRuntime(input, runtimeId);
+      activeRuntimes.set(runtimeId, runtime);
+      const assistantMessage = createRuntimeAssistantPlaceholder(runtime, createMessageId('assistant'), now());
+      activeAssistantMessages.set(runtimeId, assistantMessage);
+
+      const [writeResult] = await Promise.allSettled([messageWriter.addMessage(assistantMessage)]);
+      if (writeResult.status === 'rejected') {
+        activeRuntimes.delete(runtimeId);
+        activeAssistantMessages.delete(runtimeId);
+        locks.releaseWritingLock({ sessionId, runtimeId });
+        throw writeResult.reason;
+      }
+      emit('chat:runtime:message-created', {
+        runtimeId,
+        sessionId,
+        clientId: runtime.clientId,
+        agentId: runtime.agentId,
+        parentRuntimeId: runtime.parentRuntimeId,
+        message: assistantMessage
+      });
+
+      if (!dependencies.keepRuntimeOpenForTest) {
+        runManualCompaction(runtime, assistantMessage).catch(() => undefined);
+      }
+
+      return { runtimeId, sessionId };
     },
 
     /**
@@ -959,6 +1115,8 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       await streamAbort(runtime.runtimeId);
 
       if (!assistantMessage) return;
+
+      if (runtime.phase === 'compacting') cancelCompactionMessage(assistantMessage, runtime.compactionTrigger ?? 'automatic');
 
       if (!hasAssistantResponseContent(assistantMessage)) {
         await deleteAssistantMessage(runtime, assistantMessage);

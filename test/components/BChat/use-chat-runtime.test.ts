@@ -3,7 +3,7 @@
  * @description BChat ChatRuntime 无状态 IPC 命令适配器测试。
  * @vitest-environment jsdom
  */
-import type { ChatRuntimeContinueInput, ChatRuntimeSendInput, ChatRuntimeSubmitUserChoiceInput } from 'types/chat-runtime';
+import type { ChatRuntimeCompactInput, ChatRuntimeContinueInput, ChatRuntimeSendInput, ChatRuntimeSubmitUserChoiceInput } from 'types/chat-runtime';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useChatRuntime } from '@/components/BChat/hooks/useChatRuntime';
 import type { Message } from '@/components/BChat/utils/types';
@@ -11,6 +11,7 @@ import type { Message } from '@/components/BChat/utils/types';
 const electronAPIMock = vi.hoisted(() => ({
   chatRuntimeSend: vi.fn(),
   chatRuntimeContinue: vi.fn(),
+  chatRuntimeCompact: vi.fn(),
   chatRuntimeSubmitUserChoice: vi.fn(),
   chatRuntimeSubmitMessagePart: vi.fn(),
   chatRuntimeAbort: vi.fn()
@@ -48,6 +49,7 @@ describe('useChatRuntime', (): void => {
     for (const command of Object.values(electronAPIMock)) command.mockReset();
     electronAPIMock.chatRuntimeSend.mockResolvedValue({ ok: true, data: { runtimeId: 'runtime-send', sessionId: 'session-1' } });
     electronAPIMock.chatRuntimeContinue.mockResolvedValue({ ok: true, data: { runtimeId: 'runtime-continue', sessionId: 'session-1' } });
+    electronAPIMock.chatRuntimeCompact.mockResolvedValue({ ok: true, data: { runtimeId: 'runtime-compact', sessionId: 'session-1' } });
     electronAPIMock.chatRuntimeSubmitUserChoice.mockResolvedValue({ ok: true, data: { runtimeId: 'runtime-choice', sessionId: 'session-1' } });
     electronAPIMock.chatRuntimeSubmitMessagePart.mockResolvedValue({ ok: true });
     electronAPIMock.chatRuntimeAbort.mockResolvedValue({ ok: true });
@@ -83,6 +85,16 @@ describe('useChatRuntime', (): void => {
 
     const [input] = electronAPIMock.chatRuntimeSubmitUserChoice.mock.calls[0] as [ChatRuntimeSubmitUserChoiceInput];
     expect(input).toMatchObject({ runtimeId: 'runtime-choice', clientId: 'bchat', agentId: 'primary', answer });
+  });
+
+  it('starts manual compaction without a user message payload', async (): Promise<void> => {
+    const runtime = useChatRuntime();
+
+    await runtime.compact({ runtimeId: 'runtime-compact', sessionId: 'session-1', contextWindow: 12_000 });
+
+    const [input] = electronAPIMock.chatRuntimeCompact.mock.calls[0] as [ChatRuntimeCompactInput];
+    expect(input).toEqual({ runtimeId: 'runtime-compact', sessionId: 'session-1', contextWindow: 12_000, clientId: 'bchat', agentId: 'primary' });
+    expect(input).not.toHaveProperty('content');
   });
 
   it('submits renderer message parts and aborts an explicitly addressed runtime', async (): Promise<void> => {

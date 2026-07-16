@@ -17,5 +17,6 @@ describe('BChat command panel model entry', (): void => {
     expect(chatSource).not.toContain("import BCommandPanel from '@/components/BCommandPanel/index.vue';");
     expect(chatSource).not.toContain("import BModelSelect from '@/components/BModel/select.vue';");
     expect(chatSource).not.toContain('modelSelectOpen');
+    expect(chatSource).toContain('compactContext: workflow.compactContext');
   });
 });

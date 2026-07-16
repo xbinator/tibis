@@ -3,7 +3,7 @@
  * @description ChatRuntime 活跃 runtime 状态创建工厂。
  */
 import type { ActiveChatRuntime } from '../types.mjs';
-import type { ChatRuntimeContinueInput, ChatRuntimeSendInput, ChatRuntimeSubmitUserChoiceInput } from 'types/chat-runtime';
+import type { ChatRuntimeCompactInput, ChatRuntimeContinueInput, ChatRuntimeSendInput, ChatRuntimeSubmitUserChoiceInput } from 'types/chat-runtime';
 
 /**
  * 创建普通发送 runtime 状态。
@@ -57,6 +57,32 @@ export function createContinuationRuntime(input: ChatRuntimeContinueInput, runti
     mcp: input.mcp,
     status: 'running',
     phase: 'streaming',
+    abortController: new AbortController(),
+    createdAt: Date.now()
+  };
+}
+
+/**
+ * 创建手动上下文压缩 runtime 状态。
+ * @param input - 压缩输入
+ * @param runtimeId - runtime id
+ * @returns runtime 状态
+ */
+export function createCompactRuntime(input: ChatRuntimeCompactInput, runtimeId: string): ActiveChatRuntime {
+  return {
+    runtimeId,
+    sessionId: input.sessionId,
+    clientId: input.clientId,
+    agentId: input.agentId,
+    capabilities: input.capabilities,
+    contextWindow: input.contextWindow,
+    system: input.system,
+    workspaceRoot: input.workspaceRoot,
+    tools: input.tools,
+    skillContentHashes: input.skillContentHashes,
+    status: 'running',
+    phase: 'compacting',
+    compactionTrigger: 'manual',
     abortController: new AbortController(),
     createdAt: Date.now()
   };

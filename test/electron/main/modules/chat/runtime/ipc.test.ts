@@ -8,7 +8,8 @@ import { registerChatRuntimeHandlers } from '../../../../../../electron/main/mod
 
 const mocks = vi.hoisted(() => ({
   handlers: new Map<string, (...args: unknown[]) => Promise<unknown>>(),
-  listRecoverySnapshots: vi.fn()
+  listRecoverySnapshots: vi.fn(),
+  compact: vi.fn()
 }));
 
 vi.mock('electron', () => ({
@@ -21,7 +22,8 @@ vi.mock('electron', () => ({
 
 vi.mock('../../../../../../electron/main/modules/chat/runtime/service.mjs', () => ({
   chatRuntimeService: {
-    listRecoverySnapshots: mocks.listRecoverySnapshots
+    listRecoverySnapshots: mocks.listRecoverySnapshots,
+    compact: mocks.compact
   }
 }));
 
@@ -29,6 +31,7 @@ describe('chat runtime recovery IPC', (): void => {
   beforeEach((): void => {
     mocks.handlers.clear();
     mocks.listRecoverySnapshots.mockReset();
+    mocks.compact.mockReset();
   });
 
   it('returns active runtime recovery snapshots through the standard result envelope', async (): Promise<void> => {
@@ -51,5 +54,18 @@ describe('chat runtime recovery IPC', (): void => {
     const result = (await handler({})) as ChatRuntimeHandlerResult<ChatRuntimeRecoverySnapshot[]>;
 
     expect(result).toEqual({ ok: true, data: snapshots });
+  });
+
+  it('registers the manual compaction command with the standard result envelope', async (): Promise<void> => {
+    mocks.compact.mockResolvedValue({ runtimeId: 'runtime-compact', sessionId: 'session-1' });
+    registerChatRuntimeHandlers();
+
+    const handler = mocks.handlers.get('chat:runtime:compact');
+    if (!handler) throw new Error('compact handler was not registered');
+    const input = { runtimeId: 'runtime-compact', sessionId: 'session-1', clientId: 'bchat', agentId: 'primary', contextWindow: 12_000 };
+    const result = await handler({}, input);
+
+    expect(mocks.compact).toHaveBeenCalledWith(input);
+    expect(result).toEqual({ ok: true, data: { runtimeId: 'runtime-compact', sessionId: 'session-1' } });
   });
 });

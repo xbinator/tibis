@@ -442,6 +442,7 @@ const { handleSlashCommand } = useSlashCommands({
   openModelSelector: openModelCommandPanel,
   createNewSession: createDraftSession,
   clearInput: inputEvents.clear,
+  compactContext: workflow.compactContext,
   isBusy: (): boolean => loading.value
 });
 

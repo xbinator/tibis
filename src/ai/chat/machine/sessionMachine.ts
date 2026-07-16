@@ -43,6 +43,7 @@ export type SessionMachineEvent =
   | { type: 'session.recoverRuntime'; snapshot: ChatRuntimeRecoverySnapshot }
   | { type: 'session.recoverInteraction'; interaction: PendingInteraction }
   | { type: 'session.submit'; input: ChatSubmitInput }
+  | { type: 'session.compact' }
   | { type: 'session.regenerate'; targetMessageId: string }
   | { type: 'session.userChoiceSubmitted'; answer: AIUserChoiceAnswerData }
   | { type: 'session.userChoiceSubmissionFailed'; error: ChatWorkflowError }
@@ -67,6 +68,9 @@ export type SessionMachineEvent =
 function readNewTurnIntent(event: SessionMachineEvent): ChatIntent | undefined {
   if (event.type === 'session.submit') {
     return { type: 'submit', input: event.input };
+  }
+  if (event.type === 'session.compact') {
+    return { type: 'compact' };
   }
   if (event.type === 'session.regenerate') {
     return { type: 'regenerate', targetMessageId: event.targetMessageId };
@@ -230,6 +234,10 @@ export const sessionMachine = setup({
           }
         ],
         'session.submit': {
+          target: 'preparing',
+          actions: 'startNewTurn'
+        },
+        'session.compact': {
           target: 'preparing',
           actions: 'startNewTurn'
         },

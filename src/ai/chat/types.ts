@@ -52,6 +52,7 @@ export interface ChatSubmitInput {
  */
 export type ChatIntent =
   | { type: 'submit'; input: ChatSubmitInput }
+  | { type: 'compact' }
   | { type: 'regenerate'; targetMessageId: string }
   | { type: 'continue'; answer: AIUserChoiceAnswerData }
   | { type: 'recover'; runtimeId: string };

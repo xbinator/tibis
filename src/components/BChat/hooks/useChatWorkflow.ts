@@ -99,6 +99,8 @@ interface UseChatWorkflowReturn {
   rollbackController: UseRollbackReturns;
   /** 重新生成指定消息 */
   handleRegenerate: (message: Message) => Promise<void>;
+  /** 手动压缩当前会话上下文 */
+  compactContext: () => Promise<void>;
   /** 发送用户文本消息 */
   submitUserTextMessage: (content: string, images?: ChatMessageFile[], clearDraft?: boolean) => Promise<void>;
   /** 中止当前流程 */
@@ -288,6 +290,49 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
     options.sessionActor.regenerate(nextMessage.id);
     if (!(await startRuntimeRegenerate(nextMessage))) {
       options.sessionActor.markPreparationFailed({ code: 'preparation_failed', message: '重新生成准备未完成' });
+    }
+  }
+
+  /**
+   * 通过当前选中模型手动压缩会话，不创建用户消息。
+   */
+  async function compactContext(): Promise<void> {
+    const sessionId = options.activeSessionId.value;
+    if (!sessionId || loading.value) return;
+
+    const operationId = beginOperation();
+    let managedRuntimeId: string | undefined;
+    preflightLoading.value = true;
+    options.sessionActor.compact();
+    try {
+      const prepared = await prepareRuntimeWithCapabilities();
+      if (!prepared) {
+        options.sessionActor.markPreparationFailed({ code: 'preparation_failed', message: '上下文压缩准备未完成' });
+        return;
+      }
+
+      const runtimeId = runtimeLauncher.start(prepared);
+      managedRuntimeId = runtimeId;
+      const result = await chatRuntime.compact({
+        runtimeId,
+        sessionId,
+        ...prepared.config
+      });
+      if (!isCurrentOperation(operationId)) return;
+      runtimeLauncher.finish(result, runtimeId);
+    } catch (error: unknown) {
+      if (!isCurrentOperation(operationId)) return;
+      if (managedRuntimeId) options.actorSystem.unregisterRuntime(managedRuntimeId);
+      const workflowError = {
+        code: 'runtime_start_failed',
+        message: error instanceof Error ? error.message : '上下文压缩失败',
+        cause: error
+      } as const;
+      if (managedRuntimeId) options.sessionActor.markFailed(workflowError);
+      else options.sessionActor.markPreparationFailed(workflowError);
+      options.showRuntimeError(workflowError.message);
+    } finally {
+      if (isCurrentOperation(operationId)) preflightLoading.value = false;
     }
   }
 
@@ -564,6 +609,7 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
     chatSubmitter,
     rollbackController,
     handleRegenerate,
+    compactContext,
     submitUserTextMessage,
     abort,
     cancel,

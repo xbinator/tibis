@@ -46,6 +46,8 @@ export interface UseChatSessionActorReturn {
   activeRuntimeId: ComputedRef<string | undefined>;
   /** 提交用户消息 */
   submit: (input: ChatSubmitInput) => void;
+  /** 请求手动压缩当前会话上下文。 */
+  compact: () => void;
   /** 提交用户选择 */
   continueWithAnswer: (answer: AIUserChoiceAnswerData) => void;
   /** 从持久化消息恢复用户交互。 */
@@ -132,6 +134,11 @@ export function useChatSessionActor(options: UseChatSessionActorOptions): UseCha
     send({ type: 'session.submit', input });
   }
 
+  /** 请求手动压缩当前会话上下文。 */
+  function compact(): void {
+    send({ type: 'session.compact' });
+  }
+
   /** 提交用户选择。 */
   function continueWithAnswer(answer: AIUserChoiceAnswerData): void {
     send({ type: 'session.userChoiceSubmitted', answer });
@@ -173,6 +180,7 @@ export function useChatSessionActor(options: UseChatSessionActorOptions): UseCha
       () => snapshot.value?.context.turnRef?.getSnapshot().context.primaryAgentRef?.getSnapshot().context.runtimeId
     ),
     submit,
+    compact,
     continueWithAnswer,
     recoverInteraction,
     regenerate,

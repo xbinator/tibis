@@ -165,6 +165,23 @@ describe('sessionMachine', (): void => {
     expect(actor.getSnapshot().context.error?.message).toBe('model missing');
   });
 
+  it('runs manual compaction through the normal preparing and running lifecycle', (): void => {
+    const actor = createActor(sessionMachine, { input: { sessionId: 'session-1' } });
+    actor.start();
+
+    actor.send({ type: 'session.compact' });
+    expect(actor.getSnapshot().matches('preparing')).toBe(true);
+    expect(actor.getSnapshot().context.intent).toEqual({ type: 'compact' });
+    expect(actor.getSnapshot().hasTag('busy')).toBe(true);
+
+    actor.send({ type: 'session.prepared' });
+    expect(actor.getSnapshot().matches('running')).toBe(true);
+    expect(actor.getSnapshot().hasTag('abortable')).toBe(true);
+
+    actor.send({ type: 'session.completed' });
+    expect(actor.getSnapshot().matches('idle')).toBe(true);
+  });
+
   it('cancels an active Turn before applying rollback', (): void => {
     const actor = createActor(sessionMachine, { input: { sessionId: 'session-1' } });
     actor.start();
