@@ -1,12 +1,12 @@
 /**
- * @file compaction-part.component.test.ts
- * @description BChat 上下文压缩状态片段组件测试。
+ * @file status-part.component.test.ts
+ * @description BChat 统一状态片段组件测试。
  * @vitest-environment jsdom
  */
 import type { ChatMessageCompactionPart } from 'types/chat';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
-import BubblePartCompaction from '@/components/BChat/components/MessageBubble/BubblePartCompaction/index.vue';
+import BubblePartStatus from '@/components/BChat/components/MessageBubble/BubblePartStatus/index.vue';
 
 /** 压缩状态与唯一可见文案。 */
 const STATUS_LABELS = {
@@ -50,16 +50,29 @@ function createCompactionPart(status: ChatMessageCompactionPart['status']): Chat
   };
 }
 
-describe('BubblePartCompaction', (): void => {
-  it.each(Object.entries(STATUS_LABELS))('renders only the public %s label', (status, expectedLabel): void => {
-    const wrapper = mount(BubblePartCompaction, {
-      props: { part: createCompactionPart(status as ChatMessageCompactionPart['status']) },
-      global: { stubs: { BIcon: true } }
-    });
+/** 挂载统一状态片段。 */
+function mountStatus(part?: ChatMessageCompactionPart): ReturnType<typeof mount> {
+  return mount(BubblePartStatus, {
+    props: { part }
+  });
+}
+
+describe('BubblePartStatus', (): void => {
+  it('renders the interrupt state without a compaction part', (): void => {
+    const wrapper = mountStatus();
+
+    expect(wrapper.text()).toBe('已中断');
+    expect(wrapper.attributes('aria-live')).toBe('polite');
+    expect(wrapper.attributes('role')).toBe('status');
+  });
+
+  it.each(Object.entries(STATUS_LABELS))('renders only the public compaction %s label', (status, expectedLabel): void => {
+    const wrapper = mountStatus(createCompactionPart(status as ChatMessageCompactionPart['status']));
 
     expect(wrapper.text()).toBe(expectedLabel);
     expect(wrapper.attributes('aria-live')).toBe('polite');
     expect(wrapper.attributes('role')).toBe('status');
+    expect(wrapper.find('svg').exists()).toBe(false);
     expect(wrapper.html()).not.toMatch(/secret-boundary|secret-fingerprint|secret-provider|secret-model|SECRET_ERROR_DETAIL|100000|80000|55000/u);
   });
 });

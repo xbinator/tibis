@@ -39,7 +39,7 @@
 
             <BubblePartWidget v-else-if="item.kind === 'widget'" :message-id="message.id" :part="item.part" :submit-action="submitAction" />
 
-            <BubblePartCompaction v-else-if="item.kind === 'compaction'" :part="item.part" />
+            <BubblePartStatus v-else-if="item.kind === 'status'" :part="item.part" />
           </template>
         </template>
       </div>
@@ -47,16 +47,16 @@
 
     <!-- 助手消息工具栏 -->
     <div v-if="showAssistantToolbar" :class="bem('toolbar')">
-      <BButton type="text" size="small" square icon="lucide:git-branch" @click="$emit('branch', message)" />
-      <BButton square type="text" size="small" icon="lucide:refresh-cw" @click="$emit('regenerate', message)" />
-      <BButton type="text" size="small" square icon="lucide:copy" @click="handleCopy(message)" />
+      <BButton type="text" size="mini" square icon="lucide:git-branch" @click="$emit('branch', message)" />
+      <BButton square type="text" size="mini" icon="lucide:refresh-cw" @click="$emit('regenerate', message)" />
+      <BButton type="text" size="mini" square icon="lucide:copy" @click="handleCopy(message)" />
     </div>
 
     <!-- 用户消息底部：时间戳 + 回退按钮 + 复制按钮（hover 可见） -->
     <div v-if="isUserMessage && message.finished" :class="bem('toolbar', { right: isUserMessage })">
       <span :class="bem('time')">{{ formatMessageTime(message.createdAt) }}</span>
-      <BButton v-if="showRollback" type="text" size="small" square icon="lucide:undo-2" @click="handleRollbackClick" />
-      <BButton v-if="showContainer" type="text" size="small" square icon="lucide:copy" @click="handleCopy(message)" />
+      <BButton v-if="showRollback" type="text" size="mini" square icon="lucide:undo-2" @click="handleRollbackClick" />
+      <BButton v-if="showContainer" type="text" size="mini" square icon="lucide:copy" @click="handleCopy(message)" />
     </div>
 
     <!-- 回退二次确认条（inline） -->
@@ -95,7 +95,6 @@ import { useImagePreview } from '@/hooks/useImagePreview';
 import { createNamespace } from '@/utils/namespace';
 import { extractLastTextPart, isAwaitingUserChoiceResult, isWidgetToolPart, type WidgetToolPart } from '../utils/messageHelper';
 import { formatMessageTime } from '../utils/timeFormat';
-import BubblePartCompaction from './MessageBubble/BubblePartCompaction/index.vue';
 import BubblePartStatus from './MessageBubble/BubblePartStatus/index.vue';
 import BubblePartText from './MessageBubble/BubblePartText/index.vue';
 import BubblePartThinking from './MessageBubble/BubblePartThinking/index.vue';
@@ -135,7 +134,7 @@ type MessageBubbleRenderItem =
   | { key: string; kind: 'question'; question: AIAwaitingUserChoiceQuestion }
   | { key: string; kind: 'tool'; part: ChatMessageToolPart }
   | { key: string; kind: 'widget'; part: WidgetToolPart }
-  | { key: string; kind: 'compaction'; part: ChatMessageCompactionPart };
+  | { key: string; kind: 'status'; part: ChatMessageCompactionPart };
 
 /**
  * 判断消息片段是否为文本或错误片段。
@@ -200,7 +199,7 @@ const renderItems = computed<MessageBubbleRenderItem[]>(() =>
     if (part.type === 'confirmation') return [];
     if (isTextLikePart(part)) return [{ key, kind: 'text', part }];
     if (part.type === 'thinking') return [{ key, kind: 'thinking', part }];
-    if (part.type === 'compaction') return [{ key, kind: 'compaction', part }];
+    if (part.type === 'compaction') return [{ key, kind: 'status', part }];
     if (!props.disabled && isAwaitingUserChoiceResult(part)) return [{ key, kind: 'question', question: part.result.data }];
     if (isWidgetToolPart(part)) return [{ key: `widget:${part.toolCallId}`, kind: 'widget', part }];
     if (part.type === 'tool') return [{ key, kind: 'tool', part }];

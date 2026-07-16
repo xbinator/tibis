@@ -834,10 +834,9 @@ git commit -m "feat(chat): 添加手动上下文压缩命令"
 
 **Files:**
 
-- Create: `src/components/BChat/components/MessageBubble/BubblePartCompaction/index.vue`
-- Create: `src/components/BChat/components/MessageBubble/BubblePartCompaction/index.less`
+- Modify: `src/components/BChat/components/MessageBubble/BubblePartStatus/index.vue`
 - Modify: `src/components/BChat/components/MessageBubble.vue`
-- Create: `test/components/BChat/compaction-part.component.test.ts`
+- Create: `test/components/BChat/status-part.component.test.ts`
 - Modify: `test/components/BChat/message-bubble.component.test.ts`
 
 - [ ] **Step 1: 写组件红测**
@@ -862,27 +861,27 @@ DOM 不得包含摘要、Token、比例、boundary、fingerprint、model snapsho
 
 - [ ] **Step 3: 运行红测**
 
-Run: `pnpm exec vitest run test/components/BChat/compaction-part.component.test.ts test/components/BChat/message-bubble.component.test.ts`
+Run: `pnpm exec vitest run test/components/BChat/status-part.component.test.ts test/components/BChat/message-bubble.component.test.ts`
 
 Expected: FAIL。
 
 - [ ] **Step 4: 实现状态组件**
 
-组件接收 `ChatMessageCompactionPart`，用 `createNamespace('bubble-part-compaction')` 生成 BEM 类名，样式选择器写完整类名，不使用 `&__...`。pending 可使用轻量旋转图标，其余使用中性状态图标；所有状态只读 part.status。
+复用 `BubblePartStatus`，可选接收 `ChatMessageCompactionPart`，用 `createNamespace('bubble-part-status')` 生成 BEM 类名，样式选择器写完整类名，不使用 `&__...`。无 part 时展示中断状态，有 part 时只读取 part.status；所有状态仅展示文字，不使用图标。
 
 - [ ] **Step 5: 接入 MessageBubble**
 
 将 render item 联合加入：
 
 ```ts
-| { key: string; kind: 'compaction'; part: ChatMessageCompactionPart }
+| { key: string; kind: 'status'; part: ChatMessageCompactionPart }
 ```
 
-在 `flatMap` 中按 part 原始位置产生 item，并在 template 渲染 `BubblePartCompaction`。新增 `hasAssistantContent`，只有 text/tool/widget 等用户可操作内容才展示 assistant toolbar，compaction-only 不展示。
+在 `flatMap` 中按 part 原始位置产生 item，并在 template 渲染 `BubblePartStatus`。新增 `hasAssistantContent`，只有 text/tool/widget 等用户可操作内容才展示 assistant toolbar，compaction-only 不展示。
 
 - [ ] **Step 6: 运行组件和样式测试**
 
-Run: `pnpm exec vitest run test/components/BChat/compaction-part.component.test.ts test/components/BChat/message-bubble.component.test.ts`
+Run: `pnpm exec vitest run test/components/BChat/status-part.component.test.ts test/components/BChat/message-bubble.component.test.ts`
 
 Expected: PASS。
 
@@ -893,7 +892,7 @@ Expected: PASS。
 - [ ] **Step 7: 提交 UI**
 
 ```bash
-git add src/components/BChat/components/MessageBubble/BubblePartCompaction/index.vue src/components/BChat/components/MessageBubble/BubblePartCompaction/index.less src/components/BChat/components/MessageBubble.vue test/components/BChat/compaction-part.component.test.ts test/components/BChat/message-bubble.component.test.ts
+git add src/components/BChat/components/MessageBubble/BubblePartStatus/index.vue src/components/BChat/components/MessageBubble.vue test/components/BChat/status-part.component.test.ts test/components/BChat/message-bubble.component.test.ts
 git commit -m "feat(chat): 展示上下文压缩状态"
 ```
 
@@ -993,7 +992,7 @@ executor 只记录：runtime/session/checkpoint ID、trigger/status、fingerprin
 
 - [ ] **Step 4: 运行全部 compaction 与关联回归**
 
-Run: `pnpm exec vitest run test/electron/main/modules/chat/runtime/compaction test/electron/main/modules/chat/runtime/service.test.ts test/electron/main/modules/chat/runtime/stream/executor.test.ts test/electron/main/modules/chat/branch.test.ts test/components/BChat/compaction-part.component.test.ts test/components/BChat/message-bubble.component.test.ts test/ai/chat/session-machine.test.ts`
+Run: `pnpm exec vitest run test/electron/main/modules/chat/runtime/compaction test/electron/main/modules/chat/runtime/service.test.ts test/electron/main/modules/chat/runtime/stream/executor.test.ts test/electron/main/modules/chat/branch.test.ts test/components/BChat/status-part.component.test.ts test/components/BChat/message-bubble.component.test.ts test/ai/chat/session-machine.test.ts`
 
 Expected: PASS，且无未处理 rejection、无 snapshot 泄密输出。
 
@@ -1037,7 +1036,7 @@ Run: `git diff --name-only -- electron/main/modules/database electron/main/modul
 
 Expected: 无输出。
 
-Run: `rg -n "apiKey|baseUrl|82K|24K|summaryMaxTokens" src/components/BChat/components/MessageBubble/BubblePartCompaction src/components/BChat/components/MessageBubble.vue`
+Run: `rg -n "apiKey|baseUrl|82K|24K|summaryMaxTokens" src/components/BChat/components/MessageBubble/BubblePartStatus src/components/BChat/components/MessageBubble.vue`
 
 Expected: 无输出；UI 不暴露模型、预算或摘要信息。
 
