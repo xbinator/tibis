@@ -4,6 +4,7 @@
  */
 import type {
   ChatRuntimeConfirmationRequestEvent,
+  ChatRuntimeContextUsageEvent,
   ChatRuntimeErrorEvent,
   ChatRuntimeCompleteEvent,
   ChatRuntimeMessageDeletedEvent,
@@ -17,6 +18,7 @@ export type ChatSessionUIEvent =
   | { type: 'messageCreated'; event: ChatRuntimeMessageEvent }
   | { type: 'messageUpdated'; event: ChatRuntimeMessageEvent }
   | { type: 'messageDeleted'; event: ChatRuntimeMessageDeletedEvent }
+  | { type: 'contextUsageUpdated'; event: ChatRuntimeContextUsageEvent }
   | { type: 'confirmationRequested'; event: ChatRuntimeConfirmationRequestEvent }
   | { type: 'runtimeCompleted'; event: ChatRuntimeCompleteEvent }
   | { type: 'runtimeError'; event: ChatRuntimeErrorEvent };

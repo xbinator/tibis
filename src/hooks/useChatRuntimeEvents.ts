@@ -8,6 +8,7 @@ import type {
   ChatRuntimeBridgeResult,
   ChatRuntimeCompleteEvent,
   ChatRuntimeConfirmationRequestEvent,
+  ChatRuntimeContextUsageEvent,
   ChatRuntimeErrorEvent,
   ChatRuntimeEventBase,
   ChatRuntimeHandlerResult,
@@ -161,6 +162,11 @@ export function useChatRuntimeEvents(actorSystem: ChatActorSystem): void {
     if (shouldHandle(event)) actorSystem.emitSessionEvent(event.sessionId, { type: 'messageDeleted', event });
   }
 
+  /** 发布 Runtime 上下文用量更新事件。 */
+  function handleContextUsage(event: ChatRuntimeContextUsageEvent): void {
+    if (shouldHandle(event)) actorSystem.emitSessionEvent(event.sessionId, { type: 'contextUsageUpdated', event });
+  }
+
   /** 完成目标 Agent 并释放 Runtime。 */
   function handleComplete(event: ChatRuntimeCompleteEvent): void {
     if (!shouldHandle(event)) return;
@@ -262,6 +268,7 @@ export function useChatRuntimeEvents(actorSystem: ChatActorSystem): void {
     electronAPI.chatRuntimeOnMessageCreated(handleMessageCreated),
     electronAPI.chatRuntimeOnMessageUpdated(handleMessageUpdated),
     electronAPI.chatRuntimeOnMessageDeleted(handleMessageDeleted),
+    electronAPI.chatRuntimeOnContextUsageUpdated(handleContextUsage),
     electronAPI.chatRuntimeOnToolRequest((event) => {
       handleToolRequest(event).catch(() => undefined);
     }),

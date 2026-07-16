@@ -18,6 +18,8 @@
 
       <div class="toolbar-space"></div>
 
+      <ContextUsage v-if="selectedModel" :used-tokens="contextUsedTokens" :context-window="contextWindow" />
+
       <ModelSelector ref="modelSelectorRef" :model="selectedModel" @update:model="handleModelChange" />
     </template>
 
@@ -43,6 +45,7 @@
 import { computed, ref } from 'vue';
 import BButton from '@/components/BButton/index.vue';
 import type { SelectedModel } from '@/stores/ai/serviceModel';
+import ContextUsage from './InputToolbar/ContextUsage.vue';
 import ModelSelector from './InputToolbar/ModelSelector.vue';
 import VoiceInput from './InputToolbar/VoiceInput.vue';
 import VoiceWaveform from './InputToolbar/VoiceWaveform.vue';
@@ -57,6 +60,10 @@ interface Props {
   inputValue: string;
   /** 当前选中的模型标识。 */
   selectedModel?: SelectedModel;
+  /** 当前模型输入投影估算 Token 数。 */
+  contextUsedTokens: number;
+  /** 当前模型最大上下文窗口 Token 数。 */
+  contextWindow: number;
   /** 当前模型是否支持视觉识别。 */
   supportsVision: boolean;
   /** 当前是否允许提交。 */
@@ -65,6 +72,8 @@ interface Props {
 
 withDefaults(defineProps<Props>(), {
   selectedModel: undefined,
+  contextUsedTokens: 0,
+  contextWindow: 200_000,
   supportsVision: false,
   canSubmit: false
 });

@@ -25,6 +25,9 @@ import type {
   ChatRuntimeCompactInput,
   ChatRuntimeConfirmationRequestEvent,
   ChatRuntimeContinueInput,
+  ChatRuntimeContextUsageEvent,
+  ChatRuntimeContextUsageSnapshot,
+  ChatRuntimeEstimateContextInput,
   ChatRuntimeEventMap,
   ChatRuntimeHandlerResult,
   ChatRuntimeMessageDeletedEvent,
@@ -584,6 +587,7 @@ export interface ElectronAPI {
 
   // Chat runtime 操作
   chatRuntimeListActive: () => Promise<ChatRuntimeHandlerResult<ChatRuntimeRecoverySnapshot[]>>;
+  chatRuntimeEstimateContext: (input: ChatRuntimeEstimateContextInput) => Promise<ChatRuntimeHandlerResult<ChatRuntimeContextUsageSnapshot>>;
   chatRuntimeSend: (input: ChatRuntimeSendInput) => Promise<ChatRuntimeHandlerResult<ChatRuntimeStartResult>>;
   chatRuntimeContinue: (input: ChatRuntimeContinueInput) => Promise<ChatRuntimeHandlerResult<ChatRuntimeStartResult>>;
   chatRuntimeCompact: (input: ChatRuntimeCompactInput) => Promise<ChatRuntimeHandlerResult<ChatRuntimeStartResult>>;
@@ -597,6 +601,7 @@ export interface ElectronAPI {
   chatRuntimeOnMessageCreated: (callback: (event: ChatRuntimeMessageEvent) => void) => () => void;
   chatRuntimeOnMessageUpdated: (callback: (event: ChatRuntimeMessageEvent) => void) => () => void;
   chatRuntimeOnMessageDeleted: (callback: (event: ChatRuntimeMessageDeletedEvent) => void) => () => void;
+  chatRuntimeOnContextUsageUpdated: (callback: (event: ChatRuntimeContextUsageEvent) => void) => () => void;
   chatRuntimeOnToolRequest: (callback: (event: ChatRuntimeToolRequestEvent) => void) => () => void;
   chatRuntimeOnConfirmationRequested: (callback: (event: ChatRuntimeConfirmationRequestEvent) => void) => () => void;
   chatRuntimeOnBridgeRequested: (callback: (event: ChatRuntimeBridgeRequestEvent) => void) => () => void;

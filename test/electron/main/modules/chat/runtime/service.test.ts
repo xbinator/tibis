@@ -385,6 +385,55 @@ describe('chat runtime service shell', (): void => {
     });
   });
 
+  it('emits projected context usage before and after the model response', async (): Promise<void> => {
+    const collector = createEventCollector();
+    const service = createChatRuntimeService({
+      emit: collector.emit,
+      messageWriter: createNoopMessageWriter(),
+      messageReader: createNoopMessageReader(),
+      streamExecutor: createNoopStreamExecutor(),
+      resolveModel: async () => null
+    });
+
+    await service.send(
+      createInput({
+        content: 'measure this context',
+        contextWindow: 1_000_000,
+        system: 'system context'
+      })
+    );
+    await flushRuntimeTasks();
+
+    const usageEvents = collector.events.filter((event): boolean => event.name === 'chat:runtime:context-usage-updated');
+    expect(usageEvents).toHaveLength(2);
+    expect(usageEvents[0]?.payload).toMatchObject({
+      sessionId: 'session-1',
+      snapshot: {
+        usedTokens: expect.any(Number),
+        contextWindow: 1_000_000
+      }
+    });
+    const firstUsage = usageEvents[0]?.payload as ChatRuntimeEventMap['chat:runtime:context-usage-updated'];
+    expect(firstUsage.snapshot.usedTokens).toBeGreaterThan(0);
+  });
+
+  it('estimates persisted context usage for an idle session', async (): Promise<void> => {
+    const service = createChatRuntimeService({
+      emit: vi.fn(),
+      messageReader: {
+        getMessages: (): ChatMessageRecord[] => [createMessageRecord('user-existing', 'user', 'persisted context', '2026-07-16T00:00:00.000Z')]
+      }
+    });
+
+    const snapshot = await service.estimateContext({
+      sessionId: 'session-1',
+      contextWindow: 1_000_000
+    });
+
+    expect(snapshot.contextWindow).toBe(1_000_000);
+    expect(snapshot.usedTokens).toBeGreaterThan(0);
+  });
+
   it('persists and emits user and assistant shell messages when sending', async (): Promise<void> => {
     const collector = createEventCollector();
     const addedMessages: ChatMessageRecord[] = [];
@@ -1625,7 +1674,7 @@ describe('chat runtime service shell', (): void => {
     expect(failed).toMatchObject({ status: 'failed', errorCode: 'MODEL_CALL_FAILED' });
   });
 
-  it('checks compaction after complete tool results, prunes earlier active-turn output, and keeps the checkpoint in the same message', async (): Promise<void> => {
+  it('prunes earlier active-turn output before same-message compaction', async (): Promise<void> => {
     const messages: ChatMessageRecord[] = [
       {
         id: 'old-assistant',

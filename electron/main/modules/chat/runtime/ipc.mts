@@ -8,6 +8,7 @@ import type {
   ChatRuntimeBridgeResponseInput,
   ChatRuntimeCompactInput,
   ChatRuntimeContinueInput,
+  ChatRuntimeEstimateContextInput,
   ChatRuntimeHandlerResult,
   ChatRuntimeRecoverySnapshot,
   ChatRuntimeSendInput,
@@ -60,6 +61,11 @@ export function registerChatRuntimeHandlers(): void {
       await chatRuntimeService.recoverInterruptedCompactions();
       return chatRuntimeService.listRecoverySnapshots();
     })
+  );
+
+  ipcMain.handle(
+    'chat:runtime:estimate-context',
+    wrapRuntimeHandler((_event, input) => chatRuntimeService.estimateContext(input as ChatRuntimeEstimateContextInput))
   );
 
   ipcMain.handle(

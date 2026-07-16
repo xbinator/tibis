@@ -5,6 +5,7 @@
 import type {
   ChatRuntimeBridgeRequestEvent,
   ChatRuntimeConfirmationRequestEvent,
+  ChatRuntimeContextUsageEvent,
   ChatRuntimeEventMap,
   ChatRuntimeMessageDeletedEvent,
   ChatRuntimeMessageEvent,
@@ -19,6 +20,8 @@ export interface RuntimeEventListeners {
   messageUpdated?: (event: ChatRuntimeMessageEvent) => void;
   /** 消息删除监听器。 */
   messageDeleted?: (event: ChatRuntimeMessageDeletedEvent) => void;
+  /** 上下文用量监听器。 */
+  contextUsage?: (event: ChatRuntimeContextUsageEvent) => void;
   /** 完成监听器。 */
   complete?: (event: ChatRuntimeEventMap['chat:runtime:complete']) => void;
   /** 错误监听器。 */
@@ -53,6 +56,7 @@ export function resetRuntimeEventListeners(listeners: RuntimeEventListeners): vo
   listeners.messageCreated = undefined;
   listeners.messageUpdated = undefined;
   listeners.messageDeleted = undefined;
+  listeners.contextUsage = undefined;
   listeners.complete = undefined;
   listeners.error = undefined;
   listeners.toolRequest = undefined;

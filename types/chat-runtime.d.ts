@@ -29,6 +29,7 @@ export type ChatRuntimeEventName =
   | 'chat:runtime:message-created'
   | 'chat:runtime:message-updated'
   | 'chat:runtime:message-deleted'
+  | 'chat:runtime:context-usage-updated'
   | 'chat:runtime:tool-request'
   | 'chat:runtime:confirmation-requested'
   | 'chat:runtime:bridge-requested'
@@ -356,6 +357,14 @@ export interface ChatRuntimeStartResult {
   completed?: boolean;
 }
 
+/** Read-only context usage estimate input for an idle session. */
+export interface ChatRuntimeEstimateContextInput {
+  /** Session whose persisted messages should be projected. */
+  sessionId: string;
+  /** Maximum context window for the currently selected model. */
+  contextWindow: number;
+}
+
 /** Common event envelope fields. */
 export interface ChatRuntimeEventBase {
   /** Runtime id. */
@@ -380,6 +389,20 @@ export interface ChatRuntimeMessageEvent extends ChatRuntimeEventBase {
 export interface ChatRuntimeMessageDeletedEvent extends ChatRuntimeEventBase {
   /** Deleted message id. */
   messageId: string;
+}
+
+/** Current model-input context usage snapshot. */
+export interface ChatRuntimeContextUsageSnapshot {
+  /** Estimated tokens in the current model request projection. */
+  usedTokens: number;
+  /** Maximum context window captured for the selected model. */
+  contextWindow: number;
+}
+
+/** Context usage event emitted after the runtime projects model input. */
+export interface ChatRuntimeContextUsageEvent extends ChatRuntimeEventBase {
+  /** Context usage snapshot for the addressed session. */
+  snapshot: ChatRuntimeContextUsageSnapshot;
 }
 
 /** Runtime tool execution request sent to renderer. */
@@ -467,6 +490,7 @@ export interface ChatRuntimeEventMap {
   'chat:runtime:message-created': ChatRuntimeMessageEvent;
   'chat:runtime:message-updated': ChatRuntimeMessageEvent;
   'chat:runtime:message-deleted': ChatRuntimeMessageDeletedEvent;
+  'chat:runtime:context-usage-updated': ChatRuntimeContextUsageEvent;
   'chat:runtime:tool-request': ChatRuntimeToolRequestEvent;
   'chat:runtime:confirmation-requested': ChatRuntimeConfirmationRequestEvent;
   'chat:runtime:bridge-requested': ChatRuntimeBridgeRequestEvent;

@@ -8,7 +8,7 @@ import type { createChatConfirmationController } from '../utils/confirmationCont
 import type { Message } from '../utils/types';
 import type { AIServiceError, AIToolExecutor } from 'types/ai';
 import type { ChatMessageFile } from 'types/chat';
-import type { ChatRuntimeBridgeRequestEvent, ChatRuntimeUserInputPart } from 'types/chat-runtime';
+import type { ChatRuntimeBridgeRequestEvent, ChatRuntimeContextUsageSnapshot, ChatRuntimeUserInputPart } from 'types/chat-runtime';
 import type { ComputedRef, Ref } from 'vue';
 import { computed, nextTick, ref } from 'vue';
 import { cloneDeep } from 'lodash-es';
@@ -79,6 +79,8 @@ interface UseChatWorkflowOptions {
   scrollToBottom: () => void;
   /** Runtime 完成后的页面级处理 */
   onRuntimeComplete: (message: Message) => Promise<void> | void;
+  /** Runtime 投影完成后的上下文用量处理 */
+  onContextUsageUpdated: (snapshot: ChatRuntimeContextUsageSnapshot) => void;
   /** 模型配置不存在 */
   onModelNotFound: () => void;
   /** 展示普通 Runtime 错误 */
@@ -550,6 +552,10 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
 
   /** 处理切回会话时重放的待确认交互。 */
   async function handleSessionUIEvent(event: ChatSessionUIEvent): Promise<void> {
+    if (event.type === 'contextUsageUpdated') {
+      options.onContextUsageUpdated(event.event.snapshot);
+      return;
+    }
     if (event.type === 'messageCreated' || event.type === 'messageUpdated') {
       const nextMessage = userChoice.normalizePendingState(event.event.message as Message);
       const index = options.messages.value.findIndex((message): boolean => message.id === nextMessage.id);

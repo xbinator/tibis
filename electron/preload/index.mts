@@ -16,6 +16,7 @@ import type {
 import type {
   ChatRuntimeBridgeRequestEvent,
   ChatRuntimeConfirmationRequestEvent,
+  ChatRuntimeContextUsageEvent,
   ChatRuntimeEventMap,
   ChatRuntimeHandlerResult,
   ChatRuntimeMessageDeletedEvent,
@@ -455,6 +456,13 @@ const electronAPI: ElectronAPI = {
   chatRuntimeListActive: (): Promise<ChatRuntimeHandlerResult<ChatRuntimeRecoverySnapshot[]>> => ipcRenderer.invoke('chat:runtime:list-active'),
 
   /**
+   * 估算空闲会话当前持久化消息的上下文用量。
+   * @param input - 会话与当前模型上下文窗口
+   * @returns 上下文用量快照
+   */
+  chatRuntimeEstimateContext: (input) => ipcRenderer.invoke('chat:runtime:estimate-context', input),
+
+  /**
    * 通过主进程 ChatRuntime 发送一轮对话。
    * @param input - 本轮发送内容与 renderer 快照
    * @returns runtime 启动结果
@@ -563,6 +571,20 @@ const electronAPI: ElectronAPI = {
     ipcRenderer.on('chat:runtime:message-deleted', handler);
     return () => {
       ipcRenderer.removeListener('chat:runtime:message-deleted', handler);
+    };
+  },
+
+  /**
+   * 监听 ChatRuntime 上下文用量更新事件。
+   * @param callback - 事件回调
+   * @returns 取消监听函数
+   */
+  chatRuntimeOnContextUsageUpdated: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: ChatRuntimeContextUsageEvent) => callback(payload);
+
+    ipcRenderer.on('chat:runtime:context-usage-updated', handler);
+    return () => {
+      ipcRenderer.removeListener('chat:runtime:context-usage-updated', handler);
     };
   },
 

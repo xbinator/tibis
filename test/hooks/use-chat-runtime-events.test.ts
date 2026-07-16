@@ -6,6 +6,7 @@
 import type {
   ChatRuntimeCompleteEvent,
   ChatRuntimeConfirmationRequestEvent,
+  ChatRuntimeContextUsageEvent,
   ChatRuntimeErrorEvent,
   ChatRuntimeMessageDeletedEvent,
   ChatRuntimeMessageEvent
@@ -21,6 +22,7 @@ const runtimeListeners = vi.hoisted(() => ({
   messageCreated: undefined as ((event: ChatRuntimeMessageEvent) => void) | undefined,
   messageUpdated: undefined as ((event: ChatRuntimeMessageEvent) => void) | undefined,
   messageDeleted: undefined as ((event: ChatRuntimeMessageDeletedEvent) => void) | undefined,
+  contextUsage: undefined as ((event: ChatRuntimeContextUsageEvent) => void) | undefined,
   confirmation: undefined as ((event: ChatRuntimeConfirmationRequestEvent) => void) | undefined,
   complete: undefined as ((event: ChatRuntimeCompleteEvent) => void) | undefined,
   error: undefined as ((event: ChatRuntimeErrorEvent) => void) | undefined
@@ -42,6 +44,10 @@ vi.mock('@/shared/platform/electron-api', () => ({
     }),
     chatRuntimeOnMessageDeleted: vi.fn((listener: (event: ChatRuntimeMessageDeletedEvent) => void): (() => void) => {
       runtimeListeners.messageDeleted = listener;
+      return vi.fn();
+    }),
+    chatRuntimeOnContextUsageUpdated: vi.fn((listener: (event: ChatRuntimeContextUsageEvent) => void): (() => void) => {
+      runtimeListeners.contextUsage = listener;
       return vi.fn();
     }),
     chatRuntimeOnToolRequest: vi.fn((): (() => void) => vi.fn()),
@@ -157,6 +163,10 @@ describe('useChatRuntimeEvents', (): void => {
 
     runtimeListeners.messageDeleted?.({ ...createEventBase(), messageId: 'assistant-1' });
     expect(visibleEvents).toHaveBeenCalledWith(expect.objectContaining({ type: 'messageDeleted', event: expect.objectContaining({ sessionId: 'session-1' }) }));
+    runtimeListeners.contextUsage?.({ ...createEventBase(), snapshot: { usedTokens: 54_700, contextWindow: 1_000_000 } });
+    expect(visibleEvents).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'contextUsageUpdated', event: expect.objectContaining({ snapshot: { usedTokens: 54_700, contextWindow: 1_000_000 } }) })
+    );
     runtimeListeners.confirmation?.({
       ...createEventBase(),
       confirmationId: 'confirmation-visible',

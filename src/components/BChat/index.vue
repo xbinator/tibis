@@ -58,6 +58,8 @@
           :loading="loading"
           :input-value="inputContent"
           :selected-model="selectedModel"
+          :context-used-tokens="contextUsage?.usedTokens ?? 0"
+          :context-window="contextWindow"
           :supports-vision="supportsVision"
           :can-submit="canSubmit"
           @submit="handleChatSubmit"
@@ -76,6 +78,7 @@
 <script setup lang="ts">
 import type { BChatProps, Message } from './utils/types';
 import type { ChatMessageConfirmationAction, ChatSession } from 'types/chat';
+import type { ChatRuntimeContextUsageSnapshot } from 'types/chat-runtime';
 import { computed, h, onUnmounted, provide, ref, toRef, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { findPendingInteraction } from '@/ai/chat/policies/pendingInteraction';
@@ -84,6 +87,7 @@ import BTextEditor from '@/components/BText/Editor.vue';
 import type { BTextEditorExpose } from '@/components/BText/types';
 import { useChatActorSystem } from '@/hooks/useChatActorSystem';
 import { useNavigate } from '@/hooks/useNavigate';
+import { getElectronAPI } from '@/shared/platform/electron-api';
 import { useProviderStore } from '@/stores/ai/provider';
 import { useChatSessionStore } from '@/stores/chat/session';
 import { useCommandPanelStore } from '@/stores/ui/commandPanel';
@@ -170,6 +174,10 @@ const {
 const { inputContent, inputImages, ...inputEvents } = composer.input;
 /** 模型选择状态与操作。 */
 const { selectedModel, supportsVision, contextWindow, ...modelSelectionEvents } = composer.model;
+/** 当前会话最近一次模型投影得到的上下文用量。 */
+const contextUsage = ref<ChatRuntimeContextUsageSnapshot>();
+/** 空闲估算请求序号，用于阻止旧会话结果覆盖实时 Runtime 快照。 */
+let contextUsageEstimateSequence = 0;
 /** 全局命令面板 Store。 */
 const commandPanelStore = useCommandPanelStore();
 /** Provider 数据源。 */
@@ -353,9 +361,37 @@ const workflow = useChatWorkflow({
   focusInput,
   scrollToBottom: (): void => conversationRef.value?.scrollToBottom({ behavior: 'auto' }),
   onRuntimeComplete: handleRuntimeComplete,
+  onContextUsageUpdated: (snapshot: ChatRuntimeContextUsageSnapshot): void => {
+    contextUsageEstimateSequence += 1;
+    contextUsage.value = snapshot;
+  },
   onModelNotFound: showNoModelToast,
   showRuntimeError: (message: string): void => interactionAPI.showToast({ type: 'error', content: message }),
   restoreTodoSnapshots: restoreTodoSnapshotsForMessages
+});
+
+/**
+ * 读取空闲会话的持久化上下文投影，避免已有会话在首次发送前显示为零。
+ */
+async function refreshContextUsage(): Promise<void> {
+  const requestSequence = contextUsageEstimateSequence + 1;
+  contextUsageEstimateSequence = requestSequence;
+  contextUsage.value = undefined;
+  const sessionId = activeSessionId.value;
+  if (!sessionId) return;
+
+  const [error, result] = await asyncTo(
+    getElectronAPI().chatRuntimeEstimateContext({
+      sessionId,
+      contextWindow: contextWindow.value
+    })
+  );
+  if (error || requestSequence !== contextUsageEstimateSequence || activeSessionId.value !== sessionId) return;
+  if (result.ok && result.data) contextUsage.value = result.data;
+}
+
+watch([activeSessionId, () => selectedModel.value?.providerId, () => selectedModel.value?.modelId], async (): Promise<void> => refreshContextUsage(), {
+  immediate: true
 });
 handleSessionUIEvent = (event: ChatSessionUIEvent): void => {
   workflow.handleSessionUIEvent(event).catch((error: unknown): void => {

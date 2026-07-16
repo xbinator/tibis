@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   handlers: new Map<string, (...args: unknown[]) => Promise<unknown>>(),
   recoverInterruptedCompactions: vi.fn(),
   listRecoverySnapshots: vi.fn(),
+  estimateContext: vi.fn(),
   compact: vi.fn()
 }));
 
@@ -25,6 +26,7 @@ vi.mock('../../../../../../electron/main/modules/chat/runtime/service.mjs', () =
   chatRuntimeService: {
     recoverInterruptedCompactions: mocks.recoverInterruptedCompactions,
     listRecoverySnapshots: mocks.listRecoverySnapshots,
+    estimateContext: mocks.estimateContext,
     compact: mocks.compact
   }
 }));
@@ -35,6 +37,7 @@ describe('chat runtime recovery IPC', (): void => {
     mocks.recoverInterruptedCompactions.mockReset();
     mocks.recoverInterruptedCompactions.mockResolvedValue(undefined);
     mocks.listRecoverySnapshots.mockReset();
+    mocks.estimateContext.mockReset();
     mocks.compact.mockReset();
   });
 
@@ -72,5 +75,19 @@ describe('chat runtime recovery IPC', (): void => {
 
     expect(mocks.compact).toHaveBeenCalledWith(input);
     expect(result).toEqual({ ok: true, data: { runtimeId: 'runtime-compact', sessionId: 'session-1' } });
+  });
+
+  it('registers the idle context estimate query with the standard result envelope', async (): Promise<void> => {
+    const input = { sessionId: 'session-1', contextWindow: 1_000_000 };
+    const snapshot = { usedTokens: 54_700, contextWindow: 1_000_000 };
+    mocks.estimateContext.mockResolvedValue(snapshot);
+    registerChatRuntimeHandlers();
+
+    const handler = mocks.handlers.get('chat:runtime:estimate-context');
+    if (!handler) throw new Error('estimate-context handler was not registered');
+    const result = await handler({}, input);
+
+    expect(mocks.estimateContext).toHaveBeenCalledWith(input);
+    expect(result).toEqual({ ok: true, data: snapshot });
   });
 });

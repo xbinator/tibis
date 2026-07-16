@@ -25,6 +25,8 @@ import type {
   ChatRuntimeConfirmationDecision,
   ChatRuntimeCompletionReason,
   ChatRuntimeContinueInput,
+  ChatRuntimeContextUsageSnapshot,
+  ChatRuntimeEstimateContextInput,
   ChatRuntimeRecoverySnapshot,
   ChatRuntimeSendInput,
   ChatRuntimeStartResult,
@@ -210,6 +212,28 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     getRuntime,
     timeoutMs: RUNTIME_RENDERER_REQUEST_TIMEOUT_MS
   });
+
+  /**
+   * 将模型输入投影的 Token 估算广播给对应会话。
+   * @param runtime - 当前 runtime
+   * @param usedTokens - 当前模型输入投影估算 Token 数
+   */
+  function emitContextUsage(runtime: ActiveChatRuntime, usedTokens: number): void {
+    const { contextWindow } = runtime;
+    if (!contextWindow || contextWindow < 1) return;
+
+    emit('chat:runtime:context-usage-updated', {
+      runtimeId: runtime.runtimeId,
+      sessionId: runtime.sessionId,
+      clientId: runtime.clientId,
+      agentId: runtime.agentId,
+      parentRuntimeId: runtime.parentRuntimeId,
+      snapshot: {
+        usedTokens: Math.max(0, Math.round(usedTokens)),
+        contextWindow
+      }
+    });
+  }
 
   /**
    * 为 compaction executor 读取冻结 raw source，并在 pending 写入后合并活动 assistant。
@@ -590,6 +614,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       throw createAIServiceError(AI_ERROR_CODE.INVALID_REQUEST, '当前任务与不可压缩上下文已达到模型输入上限');
     }
 
+    emitContextUsage(runtime, projection.estimatedTokens);
     return projection.messages;
   }
 
@@ -649,6 +674,14 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       assistantMessage.usage = accumulatedUsage;
       await updateAssistantMessage(runtime, assistantMessage);
     }
+
+    const completedProjection = projectContext({
+      messages: createContinuationSourceMessages(currentSourceMessages, assistantMessage),
+      system: runtime.system,
+      tools: runtime.tools,
+      skillContentHashes: runtime.skillContentHashes
+    });
+    emitContextUsage(runtime, completedProjection.estimatedTokens);
 
     return accumulatedUsage;
   }
@@ -748,13 +781,17 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       resolveModel()
     ]);
     if (!activeRuntimes.has(runtime.runtimeId)) return;
+    const capturedMessages =
+      sourceResult.status === 'fulfilled'
+        ? structuredClone(sourceResult.value).filter((message: ChatMessageRecord): boolean => message.id !== assistantMessage.id)
+        : undefined;
 
     if (sourceResult.status === 'rejected') {
       appendManualFailure(assistantMessage, 'CAPTURE_FAILED');
     } else if (resolutionResult.status === 'rejected' || !resolutionResult.value) {
       appendManualFailure(assistantMessage, 'MODEL_NOT_FOUND');
     } else {
-      const sourceMessages = structuredClone(sourceResult.value).filter((message: ChatMessageRecord): boolean => message.id !== assistantMessage.id);
+      const sourceMessages = capturedMessages ?? [];
       const resolution = resolutionResult.value;
       const contextWindow = runtime.contextWindow ?? 0;
       const modelSnapshot: CompactionModelSnapshot = {
@@ -795,6 +832,15 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     assistantMessage.loading = false;
     assistantMessage.finished = true;
     await Promise.allSettled([updateAssistantMessage(runtime, assistantMessage)]);
+    if (capturedMessages) {
+      const projection = projectContext({
+        messages: [...capturedMessages, assistantMessage],
+        system: runtime.system,
+        tools: runtime.tools,
+        skillContentHashes: runtime.skillContentHashes
+      });
+      emitContextUsage(runtime, projection.estimatedTokens);
+    }
     if (activeRuntimes.has(runtime.runtimeId)) completeRuntime(runtime);
   }
 
@@ -1260,6 +1306,23 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
 
       assistantMessage.parts.splice(partIndex, 1, { ...input.part });
       await updateAssistantMessage(runtime, assistantMessage);
+    },
+
+    /**
+     * 读取空闲会话消息并按 checkpoint 投影估算当前上下文用量。
+     * Runtime 启动后的精确值仍由包含 system 与工具 schema 的实时投影事件覆盖。
+     * @param input - 会话与当前模型上下文窗口
+     * @returns 初始上下文用量快照
+     */
+    async estimateContext(input: ChatRuntimeEstimateContextInput): Promise<ChatRuntimeContextUsageSnapshot> {
+      const messages = await messageReader.getMessages(input.sessionId);
+      const projection = projectContext({ messages });
+      const contextWindow = Number.isFinite(input.contextWindow) ? Math.max(1, Math.round(input.contextWindow)) : 1;
+
+      return {
+        usedTokens: Math.max(0, Math.round(projection.estimatedTokens)),
+        contextWindow
+      };
     },
 
     /**

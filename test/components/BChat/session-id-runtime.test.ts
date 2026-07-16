@@ -53,6 +53,7 @@ const getAvailableServiceConfigMock = vi.hoisted(() => vi.fn());
 const getModelToolSupportMock = vi.hoisted(() => vi.fn());
 const runtimeListeners = vi.hoisted<RuntimeEventListeners>(() => ({}));
 const electronAPIMock = vi.hoisted(() => ({
+  chatRuntimeEstimateContext: vi.fn(),
   chatRuntimeSend: vi.fn(),
   chatRuntimeContinue: vi.fn(),
   chatRuntimeSubmitUserChoice: vi.fn(),
@@ -70,6 +71,10 @@ const electronAPIMock = vi.hoisted(() => ({
   }),
   chatRuntimeOnMessageDeleted: vi.fn((callback: NonNullable<typeof runtimeListeners.messageDeleted>) => {
     runtimeListeners.messageDeleted = callback;
+    return vi.fn();
+  }),
+  chatRuntimeOnContextUsageUpdated: vi.fn((callback: NonNullable<typeof runtimeListeners.contextUsage>) => {
+    runtimeListeners.contextUsage = callback;
     return vi.fn();
   }),
   chatRuntimeOnToolRequest: vi.fn(() => vi.fn()),
@@ -352,6 +357,14 @@ const InputToolbarStub = defineComponent({
     loading: {
       type: Boolean,
       default: false
+    },
+    contextUsedTokens: {
+      type: Number,
+      default: 0
+    },
+    contextWindow: {
+      type: Number,
+      default: 0
     }
   },
   emits: ['submit', 'abort', 'image-select', 'model-change', 'voice-start', 'voice-partial', 'voice-complete'],
@@ -600,6 +613,7 @@ describe('BChat sessionId runtime', (): void => {
     chatStoreMock.getSessionMessages.mockReset();
     chatStoreMock.getSessions.mockReset();
     electronAPIMock.chatRuntimeSend.mockReset();
+    electronAPIMock.chatRuntimeEstimateContext.mockReset();
     electronAPIMock.chatRuntimeContinue.mockReset();
     electronAPIMock.chatRuntimeSubmitUserChoice.mockReset();
     electronAPIMock.chatRuntimeAbort.mockReset();
@@ -609,6 +623,7 @@ describe('BChat sessionId runtime', (): void => {
     electronAPIMock.chatRuntimeOnMessageCreated.mockClear();
     electronAPIMock.chatRuntimeOnMessageUpdated.mockClear();
     electronAPIMock.chatRuntimeOnMessageDeleted.mockClear();
+    electronAPIMock.chatRuntimeOnContextUsageUpdated.mockClear();
     electronAPIMock.chatRuntimeOnToolRequest.mockClear();
     electronAPIMock.chatRuntimeOnConfirmationRequested.mockClear();
     electronAPIMock.chatRuntimeOnBridgeRequested.mockClear();
@@ -676,6 +691,13 @@ describe('BChat sessionId runtime', (): void => {
     electronAPIMock.chatRuntimeSubmitToolResult.mockResolvedValue({ ok: true });
     electronAPIMock.chatRuntimeSubmitConfirmation.mockResolvedValue({ ok: true });
     electronAPIMock.chatRuntimeSubmitBridgeResponse.mockResolvedValue({ ok: true });
+    electronAPIMock.chatRuntimeEstimateContext.mockResolvedValue({
+      ok: true,
+      data: {
+        usedTokens: 12_300,
+        contextWindow: 200_000
+      }
+    });
     getAvailableServiceConfigMock.mockResolvedValue({
       providerId: 'provider-1',
       modelId: 'model-1'
@@ -772,6 +794,42 @@ describe('BChat sessionId runtime', (): void => {
     );
     expect(wrapper.findComponent(ConversationViewStub).props('messages')).toEqual([]);
     expect(chatStoreMock.addSessionMessage).not.toHaveBeenCalledWith('session-created', expect.objectContaining({ role: 'user', content: 'hello' }));
+  });
+
+  it('loads persisted context usage before an existing session sends again', async (): Promise<void> => {
+    const wrapper = mountBChat('session-1');
+    await flushPromises();
+
+    expect(electronAPIMock.chatRuntimeEstimateContext).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      contextWindow: 200_000
+    });
+    expect(wrapper.findComponent(InputToolbarStub).props('contextUsedTokens')).toBe(12_300);
+    wrapper.unmount();
+  });
+
+  it('shows the latest projected context usage in the input toolbar', async (): Promise<void> => {
+    const wrapper = mountBChat('session-1');
+    await flushPromises();
+    const runtimeId = await submitTextAndReadRuntimeId(wrapper, 'hello');
+
+    emitRuntimeEvent(runtimeListeners, 'contextUsage', {
+      runtimeId,
+      sessionId: 'session-1',
+      clientId: 'bchat',
+      agentId: 'primary',
+      snapshot: {
+        usedTokens: 54_700,
+        contextWindow: 200_000
+      }
+    });
+    await flushPromises();
+
+    expect(wrapper.findComponent(InputToolbarStub).props()).toMatchObject({
+      contextUsedTokens: 54_700,
+      contextWindow: 200_000
+    });
+    wrapper.unmount();
   });
 
   it('routes Runtime events emitted before the start IPC resolves', async (): Promise<void> => {
