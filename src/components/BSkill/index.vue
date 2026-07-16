@@ -1,34 +1,28 @@
 <!--
-  @file SkillPreview.vue
-  @description Skill 文件预览组件，支持文件系统模式（rootPath）和虚拟文件模式（virtualFiles）
+  @file index.vue
+  @description BSkill 入口组件，文件预览：支持文件系统模式（rootPath）和虚拟文件模式（virtualFiles）。
 -->
 <template>
-  <div class="skill-preview">
-    <div class="skill-preview__body">
+  <div :class="bem()">
+    <div :class="bem('body')">
       <BPanelSplitter v-show="showFileTree" position="right" :size="220" :min-width="160" :max-width="300" :closable="false">
-        <SkillFileTree
-          :root-path="rootPath"
-          :virtual-paths="virtualPaths"
-          :selected-file-path="selectedFilePath"
-          @select-file="selectFile"
-          @loaded="onTreeLoaded"
-        />
+        <FileTree :root-path="rootPath" :virtual-paths="virtualPaths" :selected-file-path="selectedFilePath" @select-file="selectFile" @loaded="onTreeLoaded" />
       </BPanelSplitter>
 
-      <div class="skill-preview__preview">
-        <div class="skill-preview__preview-header">
+      <div :class="bem('pane')">
+        <div :class="bem('header')">
           <span>{{ selectedFileName }}</span>
           <BButton v-if="fileState.status === 'success'" type="text" square size="small" title="复制内容" @click="copyContent">
             <Icon icon="lucide:copy" :width="12" />
           </BButton>
         </div>
 
-        <BScrollbar class="skill-preview__preview-body">
-          <div v-if="fileState.status === 'loading'" class="skill-preview__preview-empty">正在读取文件…</div>
-          <div v-else-if="fileState.status === 'error'" class="skill-preview__preview-error">
+        <BScrollbar :class="bem('content-wrapper')">
+          <div v-if="fileState.status === 'loading'" :class="bem('empty')">正在读取文件…</div>
+          <div v-else-if="fileState.status === 'error'" :class="bem('error')">
             {{ fileState.message }}
           </div>
-          <pre v-else-if="fileState.status === 'success'" class="skill-preview__preview-content"><code>{{ fileState.content }}</code></pre>
+          <pre v-else-if="fileState.status === 'success'" :class="bem('content')"><code>{{ fileState.content }}</code></pre>
         </BScrollbar>
       </div>
     </div>
@@ -36,32 +30,20 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * @file index.vue
+ * @description BSkill 入口组件，文件预览：支持文件系统模式（rootPath）和虚拟文件模式（virtualFiles）。
+ */
+
+import type { BSkillProps as Props } from './types';
 import { computed, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useClipboard } from '@/hooks/useClipboard';
 import { native } from '@/shared/platform';
-import SkillFileTree from './SkillFileTree.vue';
+import { createNamespace } from '@/utils/namespace';
+import FileTree from './components/FileTree.vue';
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-/** 虚拟文件描述 */
-export interface VirtualFile {
-  path: string;
-  content: string;
-}
-
-type FileState = { status: 'idle' } | { status: 'loading' } | { status: 'success'; content: string } | { status: 'error'; message: string };
-
-interface Props {
-  /** 文件系统根目录路径与 virtualFiles 互斥 */
-  rootPath?: string;
-  /** 虚拟文件列表（内存内容）与 rootPath 互斥 */
-  virtualFiles?: VirtualFile[];
-  /** 初始选中文件路径，树加载完成后自动选中 */
-  initialFilePath?: string;
-}
-
-// ─── Props / Emits ───────────────────────────────────────────────────────────
+const [, bem] = createNamespace('skill');
 
 const props = defineProps<Props>();
 
@@ -70,8 +52,12 @@ const emit = defineEmits<{
 }>();
 
 if (import.meta.env.DEV && props.rootPath && props.virtualFiles) {
-  console.warn('[SkillPreview] rootPath 与 virtualFiles 互斥，同时传入时仅 virtualFiles 生效');
+  console.warn('[BSkill] rootPath 与 virtualFiles 互斥，同时传入时仅 virtualFiles 生效');
 }
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type FileState = { status: 'idle' } | { status: 'loading' } | { status: 'success'; content: string } | { status: 'error'; message: string };
 
 // ─── State ───────────────────────────────────────────────────────────────────
 
@@ -150,17 +136,24 @@ watch([() => props.rootPath, () => props.virtualFiles], () => {
   selectedFilePath.value = '';
   fileState.value = { status: 'idle' };
 });
+
+// ─── Expose ───────────────────────────────────────────────────────────────────
+
+defineExpose({
+  selectFile,
+  copyContent
+});
 </script>
 
 <style scoped lang="less">
-.skill-preview {
+.b-skill {
   display: flex;
   flex: 1;
   min-height: 0;
   user-select: text;
 }
 
-.skill-preview__body {
+.b-skill__body {
   display: flex;
   flex: 1;
   min-height: 0;
@@ -169,7 +162,7 @@ watch([() => props.rootPath, () => props.virtualFiles], () => {
   border-radius: 6px;
 }
 
-.skill-preview__preview {
+.b-skill__pane {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -177,12 +170,12 @@ watch([() => props.rootPath, () => props.virtualFiles], () => {
   background: var(--bg-primary);
 }
 
-.skill-preview__preview-body {
+.b-skill__content-wrapper {
   flex: 1;
   min-height: 0;
 }
 
-.skill-preview__preview-header {
+.b-skill__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -194,7 +187,7 @@ watch([() => props.rootPath, () => props.virtualFiles], () => {
   border-bottom: 1px solid var(--border-tertiary);
 }
 
-.skill-preview__preview-content {
+.b-skill__content {
   flex: 1;
   min-height: 0;
   padding: 12px;
@@ -207,14 +200,14 @@ watch([() => props.rootPath, () => props.virtualFiles], () => {
   white-space: pre-wrap;
 }
 
-.skill-preview__preview-empty,
-.skill-preview__preview-error {
+.b-skill__empty,
+.b-skill__error {
   padding: 12px;
   font-size: 12px;
   color: var(--text-secondary);
 }
 
-.skill-preview__preview-error {
+.b-skill__error {
   color: var(--color-danger, #ff4d4f);
 }
 </style>

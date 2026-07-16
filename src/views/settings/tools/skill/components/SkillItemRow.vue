@@ -66,10 +66,10 @@ const description = computed<string>(() => {
 });
 
 /**
- * 打开 Skill 只读详情。
+ * 打开 Skill 独立详情页。
  */
 function handleOpen(): void {
-  router.push({ name: 'skill-detail', params: { name: props.skill.name } });
+  router.push({ name: 'skill', params: { name: props.skill.name } });
 }
 
 /**

@@ -61,7 +61,7 @@
       </div>
 
       <!-- 文件预览 -->
-      <SkillPreview :virtual-files="previewFiles" initial-file-path="SKILL.md" />
+      <BSkill :virtual-files="previewFiles" initial-file-path="SKILL.md" />
 
       <!-- 通知区域：截断警告 / 解析警告 / 冲突警告 统一渲染 -->
       <div v-if="notices.length > 0" class="skill-creator__notices">
@@ -80,12 +80,12 @@
 </template>
 
 <script setup lang="ts">
-import type { VirtualFile } from './SkillPreview.vue';
 import { computed, ref, shallowRef, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { message } from 'ant-design-vue';
 import type { SkillPackageResource } from '@/ai/skill/package';
 import type { SkillDefinition } from '@/ai/skill/types';
+import type { VirtualFile } from '@/components/BSkill/types';
 import { logger } from '@/shared/logger';
 import { createDirectoryInstallLogger } from '@/shared/logger/directoryInstall';
 import { getElectronAPI } from '@/shared/platform/electron-api';
@@ -93,7 +93,6 @@ import { useSkillStore } from '@/stores/ai/skill';
 import { asyncTo } from '@/utils/asyncTo';
 import { formatDirectoryInstallError, installDirectory, type DirectoryInstallFile } from '@/utils/file/directory';
 import { posix } from '@/utils/file/posix';
-import SkillPreview from './SkillPreview.vue';
 
 /** Worker 解析返回数据结构。 */
 interface WorkerParseResult {
