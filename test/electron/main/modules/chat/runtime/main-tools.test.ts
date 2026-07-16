@@ -112,7 +112,7 @@ describe('createMainToolExecutor', (): void => {
 
     expect(result.status).toBe('success');
     expect(result.toolName).toBe('read_current_document');
-    expect(result.data).toMatchObject({ id: 'doc-1', title: 'Notes', content: 'hello' });
+    expect(result.data).toMatchObject({ id: 'doc-1', artifactId: 'doc-1', title: 'Notes', content: 'hello' });
     expect(bridgeRequests).toEqual([
       {
         runtimeId: 'runtime-1',

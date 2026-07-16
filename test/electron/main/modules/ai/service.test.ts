@@ -124,6 +124,58 @@ describe('AIService.generateText abort', (): void => {
   });
 });
 
+describe('AIService sensitive logging', (): void => {
+  it('logs only invocation metadata without prompt or structured output', async (): Promise<void> => {
+    const promptSecret = 'PRIVATE_COMPACTION_SOURCE_CONTENT';
+    const outputSecret = 'PRIVATE_STRUCTURED_SUMMARY_CONTENT';
+    const infoSpy = vi.spyOn(log, 'info').mockImplementation((): void => undefined);
+    vi.spyOn(aiService.aiProvider, 'create').mockReturnValue({} as ReturnType<typeof aiService.aiProvider.create>);
+    generateTextMock.mockResolvedValueOnce({
+      text: '',
+      output: { secret: outputSecret },
+      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 }
+    });
+
+    await aiService.generateText(
+      { providerType: 'openai', providerId: 'provider-1', providerName: 'OpenAI' },
+      {
+        requestId: 'summary-runtime-sensitive',
+        modelId: 'model-1',
+        prompt: promptSecret,
+        output: { schema: { type: 'object' } }
+      }
+    );
+
+    const serializedLogs = JSON.stringify(infoSpy.mock.calls);
+    expect(serializedLogs).toContain('summary-runtime-sensitive');
+    expect(serializedLogs).toContain('model-1');
+    expect(serializedLogs).not.toContain(promptSecret);
+    expect(serializedLogs).not.toContain(outputSecret);
+    infoSpy.mockRestore();
+  });
+
+  it('does not log provider errors that may echo private request content', async (): Promise<void> => {
+    const errorSecret = 'PRIVATE_PROVIDER_REQUEST_ECHO';
+    const errorSpy = vi.spyOn(log, 'error').mockImplementation((): void => undefined);
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation((): void => undefined);
+    vi.spyOn(aiService.aiProvider, 'create').mockReturnValue({} as ReturnType<typeof aiService.aiProvider.create>);
+    generateTextMock.mockRejectedValueOnce(new Error(errorSecret));
+
+    await aiService.generateText(
+      { providerType: 'openai', providerId: 'provider-1', providerName: 'OpenAI' },
+      { requestId: 'summary-runtime-error', modelId: 'model-1', prompt: 'private prompt' }
+    );
+
+    const loggedText = [...errorSpy.mock.calls, ...warnSpy.mock.calls]
+      .flat()
+      .map((value: unknown): string => (value instanceof Error ? `${value.message}\n${value.stack ?? ''}` : String(value)))
+      .join('\n');
+    expect(loggedText).not.toContain(errorSecret);
+    errorSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
+});
+
 describe('DeepSeekProvider.createProviderOptions', (): void => {
   it('maps disabled generic reasoning to DeepSeek thinking disabled options', (): void => {
     const provider = new DeepSeekProvider();

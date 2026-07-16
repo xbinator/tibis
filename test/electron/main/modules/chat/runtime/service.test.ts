@@ -2,6 +2,11 @@
  * @file service.test.ts
  * @description ChatRuntime 主进程服务骨架测试。
  */
+import type {
+  CompactionExecuteInput,
+  CompactionExecuteResult,
+  CompactionExecutor
+} from '../../../../../../electron/main/modules/chat/runtime/compaction/executor.mjs';
 import type { ChatModelResolution } from '../../../../../../electron/main/modules/chat/runtime/model/resolver.mjs';
 import type { ChatRuntimeStreamExecutor } from '../../../../../../electron/main/modules/chat/runtime/types.mjs';
 import type { AIInvokeResult, AIServiceError } from 'types/ai';
@@ -1344,8 +1349,8 @@ describe('chat runtime service shell', (): void => {
         id: 'old-assistant',
         sessionId: 'session-1',
         role: 'assistant',
-        content: 'x'.repeat(25_000),
-        parts: [{ id: 'old-source-part', type: 'text', text: 'x'.repeat(25_000) }],
+        content: 'x'.repeat(13_000),
+        parts: [{ id: 'old-source-part', type: 'text', text: 'x'.repeat(13_000) }],
         createdAt: '2026-07-16T00:00:00.000Z',
         finished: true
       }
@@ -1386,7 +1391,7 @@ describe('chat runtime service shell', (): void => {
     expect(order.slice(0, 3)).toEqual(['write:pending', 'write:success', 'stream']);
     expect(modelSourceMessages[0]).toMatchObject({ id: expect.stringMatching(/^context-checkpoint:/u) });
     expect(JSON.stringify(modelSourceMessages)).toContain('当前任务必须保留原文');
-    expect(JSON.stringify(modelSourceMessages)).not.toContain('x'.repeat(25_000));
+    expect(JSON.stringify(modelSourceMessages)).not.toContain('x'.repeat(13_000));
   });
 
   it('manually compacts into a compaction-only assistant message without creating a user message', async (): Promise<void> => {
@@ -1520,14 +1525,74 @@ describe('chat runtime service shell', (): void => {
     );
   });
 
+  it('keeps the session lock until an aborted compaction reaches a persisted terminal state', async (): Promise<void> => {
+    const executionGate = createDeferred();
+    const executionStarted = createDeferred();
+    const compactionExecutor: CompactionExecutor = {
+      execute: async (input: CompactionExecuteInput): Promise<CompactionExecuteResult> => {
+        const pendingPart = {
+          id: 'checkpoint-abort-lock',
+          type: 'compaction' as const,
+          status: 'pending' as const,
+          trigger: input.trigger,
+          createdAt: 1
+        };
+        input.assistantMessage.parts.push(pendingPart);
+        executionStarted.resolve();
+        await executionGate.promise;
+        const cancelledPart = { ...pendingPart, status: 'cancelled' as const, errorCode: 'USER_CANCELLED', completedAt: 2 };
+        input.assistantMessage.parts.splice(input.assistantMessage.parts.indexOf(pendingPart), 1, cancelledPart);
+        return { status: 'cancelled', checkpoint: cancelledPart };
+      },
+      cancel: async (): Promise<void> => executionGate.promise
+    };
+    const service = createChatRuntimeService({
+      emit: vi.fn(),
+      createMessageId: (kind): string => `${kind}-abort-lock`,
+      messageReader: createNoopMessageReader(),
+      messageWriter: createNoopMessageWriter(),
+      resolveModel: async () => createModelResolution(),
+      compactionExecutor,
+      streamExecutor: createNoopStreamExecutor()
+    });
+
+    await service.compact({
+      runtimeId: 'runtime-abort-lock',
+      sessionId: 'session-1',
+      clientId: 'bchat',
+      agentId: 'primary',
+      contextWindow: 12_000
+    });
+    await executionStarted.promise;
+    const abortPromise = service.abort({ runtimeId: 'runtime-abort-lock' });
+    await flushRuntimeTasks();
+
+    let concurrentError: unknown;
+    let concurrentRuntimeId: string | undefined;
+    try {
+      const concurrent = await service.send(createInput({ runtimeId: 'runtime-during-abort' }));
+      concurrentRuntimeId = concurrent.runtimeId;
+    } catch (error: unknown) {
+      concurrentError = error;
+    }
+    executionGate.resolve();
+    await abortPromise;
+    if (concurrentRuntimeId) await service.abort({ runtimeId: concurrentRuntimeId });
+
+    expect(concurrentError).toMatchObject({ code: 'SESSION_BUSY' });
+    const afterAbort = await service.send(createInput({ runtimeId: 'runtime-after-abort' }));
+    expect(afterAbort.sessionId).toBe('session-1');
+    await service.abort({ runtimeId: afterAbort.runtimeId });
+  });
+
   it('continues with the previous projection when automatic compaction fails below the hard limit', async (): Promise<void> => {
     const messages: ChatMessageRecord[] = [
       {
         id: 'old-assistant',
         sessionId: 'session-1',
         role: 'assistant',
-        content: 'x'.repeat(25_000),
-        parts: [{ id: 'old-source-part', type: 'text', text: 'x'.repeat(25_000) }],
+        content: 'x'.repeat(13_000),
+        parts: [{ id: 'old-source-part', type: 'text', text: 'x'.repeat(13_000) }],
         createdAt: '2026-07-16T00:00:00.000Z',
         finished: true
       }
@@ -1566,8 +1631,8 @@ describe('chat runtime service shell', (): void => {
         id: 'old-assistant',
         sessionId: 'session-1',
         role: 'assistant',
-        content: 'x'.repeat(17_000),
-        parts: [{ id: 'old-source-part', type: 'text', text: 'x'.repeat(17_000) }],
+        content: 'x'.repeat(11_000),
+        parts: [{ id: 'old-source-part', type: 'text', text: 'x'.repeat(11_000) }],
         createdAt: '2026-07-16T00:00:00.000Z',
         finished: true
       }
@@ -1581,7 +1646,7 @@ describe('chat runtime service shell', (): void => {
           toolName: 'read_file',
           status: 'done',
           input: { path: 'src/large.ts' },
-          result: { toolName: 'read_file', status: 'success', data: { path: 'src/large.ts', content: 'y'.repeat(5_000) } }
+          result: { toolName: 'read_file', status: 'success', data: { path: 'src/large.ts', content: 'y'.repeat(2_000) } }
         });
         await updateAssistant(assistantMessage);
         return { shouldContinue: true };
@@ -1626,8 +1691,8 @@ describe('chat runtime service shell', (): void => {
         id: 'old-assistant',
         sessionId: 'session-1',
         role: 'assistant',
-        content: 'x'.repeat(25_000),
-        parts: [{ id: 'old-source-part', type: 'text', text: 'x'.repeat(25_000) }],
+        content: 'x'.repeat(13_000),
+        parts: [{ id: 'old-source-part', type: 'text', text: 'x'.repeat(13_000) }],
         createdAt: '2026-07-16T00:00:00.000Z',
         finished: true
       }
@@ -2399,7 +2464,7 @@ describe('chat runtime service shell', (): void => {
       code: 'SESSION_BUSY'
     });
 
-    service.abort({ runtimeId: first.runtimeId });
+    await service.abort({ runtimeId: first.runtimeId });
     const second = await service.send(createInput({ content: 'after abort' }));
     expect(second.sessionId).toBe('session-1');
   });

@@ -38,6 +38,7 @@ import { groupBy } from 'lodash-es';
 import { nanoid } from 'nanoid';
 import { AI_ERROR_CODE, createAIServiceError, isAIServiceError } from '../../ai/errors/codes.mjs';
 import { aiService } from '../../ai/service.mjs';
+import { log } from '../../logger/service.mjs';
 import { chatSessionManager } from '../service.mjs';
 import { createArtifactRegistry } from './compaction/artifact-registry.mjs';
 import { createCompactionBudget, exceedsHardLimit, shouldAutoCompact } from './compaction/budget.mjs';
@@ -195,7 +196,8 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   const activeCompactionSources = new Map<string, ChatMessageRecord[]>();
   const activeCompactionModels = new Map<string, Awaited<ReturnType<typeof resolveModel>>>();
   const activeCompactionRuntimes = new Map<string, ActiveChatRuntime>();
-  let interruptedCompactionRecovery: Promise<void> | undefined;
+  let interruptedCompactionRecovery: Promise<boolean> | undefined;
+  let interruptedCompactionRecovered = false;
   const getRuntime = (runtimeId: string): ActiveChatRuntime | undefined => activeRuntimes.get(runtimeId);
   const confirmationRequests = createRuntimeConfirmationRequests({ emit, getRuntime });
   const bridgeRequests = createRuntimeBridgeRequests({
@@ -280,7 +282,10 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       hasLease: (sessionId: string, runtimeId: string): boolean => locks.getWritingOwner(sessionId) === runtimeId,
       abortSummary: streamAbort,
       createPartId: (): string => `checkpoint-${nanoid()}`,
-      now: getCompactionNow
+      now: getCompactionNow,
+      diagnosticLog: (entry): void => {
+        log.info(`[chat-compaction] ${JSON.stringify(entry)}`);
+      }
     });
 
   /**
@@ -808,30 +813,38 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
    * @param sessionId - 会话 ID
    * @param messages - 同会话 pending 消息
    */
-  async function recoverCompactionSession(sessionId: string, messages: ChatMessageRecord[]): Promise<void> {
+  async function recoverCompactionSession(sessionId: string, messages: ChatMessageRecord[]): Promise<boolean> {
     const runtimeId = `recovery-${nanoid()}`;
     const lock = locks.acquireWritingLock({ sessionId, runtimeId });
-    if (!lock.ok) return;
+    if (!lock.ok) return false;
 
-    const writes = messages.map(
-      (message: ChatMessageRecord): Promise<void> =>
-        Promise.resolve()
-          .then(() => messageWriter.updateMessage(interruptPendingCheckpoints(message)))
-          .then((): void => undefined)
-    );
-    await Promise.allSettled(writes);
-    locks.releaseWritingLock({ sessionId, runtimeId });
+    try {
+      const writes = messages.map(
+        (message: ChatMessageRecord): Promise<void> =>
+          Promise.resolve()
+            .then(() => messageWriter.updateMessage(interruptPendingCheckpoints(message)))
+            .then((): void => undefined)
+      );
+      const results = await Promise.allSettled(writes);
+      return results.every((result): boolean => result.status === 'fulfilled');
+    } finally {
+      locks.releaseWritingLock({ sessionId, runtimeId });
+    }
   }
 
   /**
    * 扫描并恢复应用重启遗留的 pending checkpoint。
+   * @returns 本轮扫描和全部写入是否成功
    */
-  async function runInterruptedRecovery(): Promise<void> {
+  async function runInterruptedRecovery(): Promise<boolean> {
     const [messagesResult] = await Promise.allSettled([Promise.resolve().then(() => listPendingCompactionMessages())]);
-    if (messagesResult.status === 'rejected') return;
+    if (messagesResult.status === 'rejected') return false;
 
     const messagesBySession = groupBy(messagesResult.value, (message: ChatMessageRecord): string => message.sessionId);
-    await Promise.allSettled(Object.entries(messagesBySession).map(([sessionId, messages]): Promise<void> => recoverCompactionSession(sessionId, messages)));
+    const results = await Promise.allSettled(
+      Object.entries(messagesBySession).map(([sessionId, messages]): Promise<boolean> => recoverCompactionSession(sessionId, messages))
+    );
+    return results.every((result): boolean => result.status === 'fulfilled' && result.value);
   }
 
   return {
@@ -1160,45 +1173,49 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       if (!runtime) return;
 
       runtime.abortController.abort();
-      compactionExecutor.cancel(runtime.runtimeId);
+      const compactionCancellation = runtime.phase === 'compacting' ? compactionExecutor.cancel(runtime.runtimeId) : Promise.resolve();
       activeRuntimes.delete(runtime.runtimeId);
       const assistantMessage = activeAssistantMessages.get(runtime.runtimeId);
       activeAssistantMessages.delete(runtime.runtimeId);
       rendererToolRequests.rejectRuntime(runtime.runtimeId, 'Runtime aborted');
       confirmationRequests.rejectRuntime(runtime.runtimeId, 'Runtime aborted');
       bridgeRequests.rejectRuntime(runtime.runtimeId, 'Runtime aborted');
-      locks.releaseWritingLock({ sessionId: runtime.sessionId, runtimeId: runtime.runtimeId });
-      await streamAbort(runtime.runtimeId);
+      try {
+        // compaction cancel 只有在 pending 已持久化为终态后才完成；锁必须覆盖整个收敛与中断消息写入过程。
+        await Promise.allSettled([compactionCancellation, Promise.resolve().then(() => streamAbort(runtime.runtimeId))]);
 
-      if (!assistantMessage) return;
+        if (!assistantMessage) return;
 
-      if (runtime.phase === 'compacting') cancelCompactionMessage(assistantMessage, runtime.compactionTrigger ?? 'automatic');
+        if (runtime.phase === 'compacting') cancelCompactionMessage(assistantMessage, runtime.compactionTrigger ?? 'automatic');
 
-      if (!hasAssistantResponseContent(assistantMessage)) {
-        await deleteAssistantMessage(runtime, assistantMessage);
-      } else {
-        finishAssistantMessageInterrupted(assistantMessage);
-        await messageWriter.updateMessage(assistantMessage);
-        emit('chat:runtime:message-updated', {
+        if (!hasAssistantResponseContent(assistantMessage)) {
+          await deleteAssistantMessage(runtime, assistantMessage);
+        } else {
+          finishAssistantMessageInterrupted(assistantMessage);
+          await messageWriter.updateMessage(assistantMessage);
+          emit('chat:runtime:message-updated', {
+            runtimeId: runtime.runtimeId,
+            sessionId: runtime.sessionId,
+            clientId: runtime.clientId,
+            agentId: runtime.agentId,
+            parentRuntimeId: runtime.parentRuntimeId,
+            message: assistantMessage
+          });
+        }
+
+        const interruptMessage = createRuntimeInterruptMessage(runtime, createMessageId('interrupt'), now());
+        await messageWriter.addMessage(interruptMessage);
+        emit('chat:runtime:message-created', {
           runtimeId: runtime.runtimeId,
           sessionId: runtime.sessionId,
           clientId: runtime.clientId,
           agentId: runtime.agentId,
           parentRuntimeId: runtime.parentRuntimeId,
-          message: assistantMessage
+          message: interruptMessage
         });
+      } finally {
+        locks.releaseWritingLock({ sessionId: runtime.sessionId, runtimeId: runtime.runtimeId });
       }
-
-      const interruptMessage = createRuntimeInterruptMessage(runtime, createMessageId('interrupt'), now());
-      await messageWriter.addMessage(interruptMessage);
-      emit('chat:runtime:message-created', {
-        runtimeId: runtime.runtimeId,
-        sessionId: runtime.sessionId,
-        clientId: runtime.clientId,
-        agentId: runtime.agentId,
-        parentRuntimeId: runtime.parentRuntimeId,
-        message: interruptMessage
-      });
     },
 
     /**
@@ -1263,9 +1280,15 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     /**
      * 在暴露 Runtime recovery 快照前只执行一次遗留 checkpoint 恢复。
      */
-    recoverInterruptedCompactions(): Promise<void> {
+    async recoverInterruptedCompactions(): Promise<void> {
+      if (interruptedCompactionRecovered) return;
       interruptedCompactionRecovery ??= runInterruptedRecovery();
-      return interruptedCompactionRecovery;
+      const activeRecovery = interruptedCompactionRecovery;
+      try {
+        interruptedCompactionRecovered = await activeRecovery;
+      } finally {
+        if (interruptedCompactionRecovery === activeRecovery) interruptedCompactionRecovery = undefined;
+      }
     },
 
     /**

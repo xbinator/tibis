@@ -158,14 +158,46 @@ describe('compaction executor', (): void => {
     expect(Reflect.set(successPart, 'status', 'failed')).toBe(false);
   });
 
+  it('pending 首次写入失败时在内存和后续持久化中收敛为 failed', async (): Promise<void> => {
+    const generateSummary = vi.fn(async (): Promise<SummaryGenerationResult> => createGeneration());
+    const harness = createHarness(generateSummary);
+    const persistedMessages: ChatMessageRecord[] = [];
+    let writeCount = 0;
+    harness.dependencies.writeMessage = async (message: ChatMessageRecord): Promise<void> => {
+      writeCount += 1;
+      if (writeCount === 1) throw new Error('first pending write failed');
+      persistedMessages.push(structuredClone(message));
+    };
+
+    const result = await harness.executor.execute(createInput(harness.assistantMessage));
+
+    expect(result).toEqual({ status: 'failed', errorCode: 'PERSIST_FAILED' });
+    expect(generateSummary).not.toHaveBeenCalled();
+    expect(writeCount).toBe(2);
+    expect(harness.assistantMessage.parts.at(-1)).toMatchObject({ status: 'failed', errorCode: 'PERSIST_FAILED' });
+    expect(persistedMessages.at(-1)?.parts.at(-1)).toMatchObject({ status: 'failed', errorCode: 'PERSIST_FAILED' });
+  });
+
   it('摘要模型失败时原子写入 failed 且不携带 summary', async (): Promise<void> => {
     const harness = createHarness(async (): Promise<SummaryGenerationResult> => ({ status: 'failed', errorCode: 'MODEL_CALL_FAILED' }));
+    const diagnosticLog = vi.fn();
+    harness.dependencies.diagnosticLog = diagnosticLog;
 
     const result = await harness.executor.execute(createInput(harness.assistantMessage));
 
     expect(result).toEqual({ status: 'failed', errorCode: 'MODEL_CALL_FAILED' });
     expect(harness.assistantMessage.parts.at(-1)).toMatchObject({ status: 'failed', errorCode: 'MODEL_CALL_FAILED' });
     expect(harness.assistantMessage.parts.at(-1)).not.toHaveProperty('summary');
+    expect(diagnosticLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        checkpointId: 'checkpoint-1',
+        status: 'failed',
+        errorCode: 'MODEL_CALL_FAILED',
+        modelSnapshot: expect.objectContaining({ providerId: 'provider-1', modelId: 'model-1', contextWindow: 32_000 })
+      })
+    );
   });
 
   it('提交前实际源发生变化时重新计算 fingerprint 并写 SOURCE_CHANGED', async (): Promise<void> => {
@@ -194,17 +226,40 @@ describe('compaction executor', (): void => {
 
   it('用户取消时中止摘要并把 pending 更新为 cancelled', async (): Promise<void> => {
     let resolveGeneration: ((result: SummaryGenerationResult) => void) | undefined;
+    let resolveTerminalWrite: (() => void) | undefined;
+    let terminalWriteStarted = false;
     const generationPromise = new Promise<SummaryGenerationResult>((resolve): void => {
       resolveGeneration = resolve;
     });
+    const terminalWriteGate = new Promise<void>((resolve): void => {
+      resolveTerminalWrite = resolve;
+    });
     const harness = createHarness(async (): Promise<SummaryGenerationResult> => generationPromise);
+    const baseWriteMessage = harness.dependencies.writeMessage;
+    harness.dependencies.writeMessage = async (message: ChatMessageRecord): Promise<void> => {
+      const checkpoint = message.parts.find((part: ChatMessagePart): boolean => part.type === 'compaction');
+      if (checkpoint?.type === 'compaction' && checkpoint.status === 'cancelled') {
+        terminalWriteStarted = true;
+        await terminalWriteGate;
+      }
+      await baseWriteMessage(message);
+    };
     const execution = harness.executor.execute(createInput(harness.assistantMessage));
     await vi.waitFor((): void => {
       expect(harness.writes).toHaveLength(1);
     });
 
-    harness.executor.cancel('runtime-1');
+    let cancellationSettled = false;
+    const cancellation = Promise.resolve(harness.executor.cancel('runtime-1')).then((): void => {
+      cancellationSettled = true;
+    });
     resolveGeneration?.({ status: 'failed', errorCode: 'MODEL_CALL_FAILED' });
+    await vi.waitFor((): void => {
+      expect(terminalWriteStarted).toBe(true);
+    });
+    expect(cancellationSettled).toBe(false);
+    resolveTerminalWrite?.();
+    await cancellation;
     const result = await execution;
 
     expect(harness.dependencies.abortSummary).toHaveBeenCalledWith('runtime-1');

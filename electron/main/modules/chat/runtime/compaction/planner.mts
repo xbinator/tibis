@@ -4,24 +4,15 @@
  */
 import type { CompactionSourceSnapshot, ImmutableChatPart } from './types.mjs';
 import type { AITransportTool } from 'types/ai';
-import type {
-  ChatMessageCompactionPart,
-  ChatMessagePart,
-  ChatMessageRecord,
-  CompactionBudgetSnapshot,
-  CompactionModelSnapshot,
-  StructuredContextSummary
-} from 'types/chat';
+import type { ChatMessageCompactionPart, ChatMessagePart, ChatMessageRecord, CompactionBudgetSnapshot, CompactionModelSnapshot } from 'types/chat';
 import { pruneMessageToolOutputs } from '../context/tool-output-prune.mjs';
 import { findSafeBoundary } from './boundary.mjs';
 import { canGenerateSummary, createCompactionBudget, hasSummaryCapacity, shouldAutoCompact } from './budget.mjs';
 import { buildSourceFingerprint, createFingerprintInput } from './fingerprint.mjs';
 import { projectContext } from './projector.mjs';
-import { estimatePartTokens, estimateRequestTokens, estimateTextTokens } from './token-estimator.mjs';
+import { createSummaryPrompt } from './summary-generator.mjs';
+import { estimateRequestTokens, estimateTextTokens } from './token-estimator.mjs';
 import { indexMessageParts, validatePartTopology } from './topology.mjs';
-
-/** 压缩提示指令和结构化包装的保守固定预算。 */
-const COMPACTION_PROMPT_TOKEN_RESERVE = 512;
 
 /** 压缩无需执行的稳定原因。 */
 export type CompactionSkipReason = 'BELOW_THRESHOLD' | 'NO_SAFE_BOUNDARY' | 'NO_NEW_CONTENT' | 'REPEATED_FAILURE';
@@ -168,15 +159,12 @@ function collectSourceParts(messages: ChatMessageRecord[], boundaryPartId: strin
 }
 
 /**
- * 估算摘要源 token。
- * @param sourceParts - 增量源 Part
- * @param parentSummary - parent 结构化摘要
- * @returns 摘要源估算
+ * 按摘要生成器实际序列化文本估算完整 prompt。
+ * @param snapshot - parent、增量 Part 与 boundary 的冻结快照
+ * @returns 完整摘要 prompt 估算
  */
-function estimateSourceTokens(sourceParts: ImmutableChatPart[], parentSummary?: StructuredContextSummary): number {
-  const parentTokens = parentSummary ? estimateTextTokens(JSON.stringify(parentSummary)) : 0;
-
-  return sourceParts.reduce((total: number, source): number => total + estimatePartTokens(source.part), parentTokens);
+function estimateSummaryTokens(snapshot: CompactionSourceSnapshot): number {
+  return estimateTextTokens(createSummaryPrompt(snapshot));
 }
 
 /**
@@ -281,35 +269,35 @@ export function createCompactionPlan(input: CompactionPlanInput): CompactionPlan
 
   const parentSummary = parent?.part.summary ? structuredClone(parent.part.summary) : undefined;
   let summarySources = fingerprintSources.map((source): ImmutableChatPart => structuredClone(source));
-  let summarySourceTokens = estimateSourceTokens(summarySources, parentSummary);
-  if (
-    !canGenerateSummary({
-      contextWindow: input.contextWindow,
-      sourceTokens: summarySourceTokens,
-      promptTokens: COMPACTION_PROMPT_TOKEN_RESERVE,
-      budget: budgetSnapshot
-    })
-  ) {
-    summarySources = pruneSummarySources(summarySources);
-    summarySourceTokens = estimateSourceTokens(summarySources, parentSummary);
-  }
-  if (
-    !canGenerateSummary({
-      contextWindow: input.contextWindow,
-      sourceTokens: summarySourceTokens,
-      promptTokens: COMPACTION_PROMPT_TOKEN_RESERVE,
-      budget: budgetSnapshot
-    })
-  ) {
-    return { status: 'blocked', errorCode: 'SUMMARY_REQUEST_TOO_LARGE' };
-  }
-
-  const sourceSnapshot: CompactionSourceSnapshot = {
+  let sourceSnapshot: CompactionSourceSnapshot = {
     parentCheckpoint: parentSummary,
     sourceParts: summarySources,
     boundaryPartId: boundary.partId,
     sourceFingerprint
   };
+  let summarySourceTokens = estimateSummaryTokens(sourceSnapshot);
+  if (
+    !canGenerateSummary({
+      contextWindow: input.contextWindow,
+      sourceTokens: summarySourceTokens,
+      promptTokens: 0,
+      budget: budgetSnapshot
+    })
+  ) {
+    summarySources = pruneSummarySources(summarySources);
+    sourceSnapshot = { ...sourceSnapshot, sourceParts: summarySources };
+    summarySourceTokens = estimateSummaryTokens(sourceSnapshot);
+  }
+  if (
+    !canGenerateSummary({
+      contextWindow: input.contextWindow,
+      sourceTokens: summarySourceTokens,
+      promptTokens: 0,
+      budget: budgetSnapshot
+    })
+  ) {
+    return { status: 'blocked', errorCode: 'SUMMARY_REQUEST_TOO_LARGE' };
+  }
 
   return {
     status: 'ready',

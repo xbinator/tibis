@@ -89,6 +89,38 @@ describe('chat runtime recovery request projections', (): void => {
     expect(messages[0].parts[1]).toMatchObject({ status: 'success', sourceFingerprint: 'sha256:success' });
   });
 
+  it('retries interrupted compaction recovery after a persistence failure', async (): Promise<void> => {
+    const pendingMessage: ChatMessageRecord = {
+      id: 'assistant-retry-compaction',
+      sessionId: 'session-retry',
+      role: 'assistant',
+      content: '',
+      parts: [{ id: 'checkpoint-retry', type: 'compaction', status: 'pending', trigger: 'automatic', createdAt: 1 }],
+      createdAt: '2026-07-16T00:00:00.000Z',
+      loading: true,
+      finished: false
+    };
+    let writeAttempt = 0;
+    const recoveredWrites: ChatMessageRecord[] = [];
+    const updateMessage = vi.fn(async (message: ChatMessageRecord): Promise<void> => {
+      writeAttempt += 1;
+      if (writeAttempt === 1) throw new Error('temporary persistence failure');
+      recoveredWrites.push(structuredClone(message));
+    });
+    const service = createChatRuntimeService({
+      emit: vi.fn(),
+      messageReader: { getMessages: (): ChatMessageRecord[] => [] },
+      messageWriter: { addMessage: vi.fn(), updateMessage },
+      listPendingCompactionMessages: (): ChatMessageRecord[] => [structuredClone(pendingMessage)]
+    });
+
+    await service.recoverInterruptedCompactions();
+    await service.recoverInterruptedCompactions();
+
+    expect(updateMessage).toHaveBeenCalledTimes(2);
+    expect(recoveredWrites[0].parts[0]).toMatchObject({ status: 'failed', errorCode: 'INTERRUPTED' });
+  });
+
   it('lists and removes pending confirmation events', async (): Promise<void> => {
     const runtime = createRuntime();
     const requests = createRuntimeConfirmationRequests({ emit: vi.fn(), getRuntime: () => runtime });

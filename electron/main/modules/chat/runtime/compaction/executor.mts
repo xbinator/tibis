@@ -70,6 +70,34 @@ export type CompactionExecuteResult =
   | { status: 'failed'; errorCode: CompactionExecuteErrorCode }
   | { status: 'cancelled'; checkpoint: ChatMessageCompactionPart };
 
+/** 脱敏压缩诊断日志。 */
+export interface CompactionDiagnosticLog {
+  /** Runtime 标识。 */
+  runtimeId: string;
+  /** Session 标识。 */
+  sessionId: string;
+  /** 已创建时的 checkpoint 标识。 */
+  checkpointId?: string;
+  /** 自动或手动触发。 */
+  trigger: 'automatic' | 'manual';
+  /** executor 终态。 */
+  status: CompactionExecuteResult['status'];
+  /** 不足以还原完整指纹的短前缀。 */
+  fingerprintPrefix?: string;
+  /** 规划时的上下文投影估算。 */
+  estimatedTokens?: number;
+  /** 压缩成功必须满足的目标预算。 */
+  targetTokens?: number;
+  /** 成功候选的实际压缩后投影估算。 */
+  projectedTokens?: number;
+  /** executor 总耗时。 */
+  durationMs: number;
+  /** 仅包含脱敏字段的模型快照。 */
+  modelSnapshot: CompactionModelSnapshot;
+  /** 失败、取消或跳过的稳定原因。 */
+  errorCode?: string;
+}
+
 /**
  * executor 依赖。
  */
@@ -88,6 +116,8 @@ export interface CompactionExecutorDependencies {
   createPartId: () => string;
   /** 获取当前时间戳。 */
   now: () => number;
+  /** 接收不包含消息正文、摘要、密钥或完整指纹的诊断日志。 */
+  diagnosticLog?: (entry: CompactionDiagnosticLog) => void;
   /** 可选执行阶段观察器。 */
   onStage?: (stage: CompactionExecutorStage) => void;
 }
@@ -105,8 +135,9 @@ export interface CompactionExecutor {
   /**
    * 取消指定 runtime 的压缩。
    * @param runtimeId - Runtime 标识
+   * @returns pending checkpoint 写入终态后的 Promise
    */
-  cancel(runtimeId: string): void;
+  cancel(runtimeId: string): Promise<void>;
 }
 
 /** Promise 归一化结果。 */
@@ -120,6 +151,30 @@ interface VerificationResult {
   messages: ChatMessageRecord[];
   /** 根据当前实际 Part 重算的 fingerprint。 */
   sourceFingerprint: string;
+}
+
+/** 单次 executor 的脱敏诊断上下文。 */
+interface ActiveDiagnosticState {
+  /** Runtime 标识。 */
+  runtimeId: string;
+  /** Session 标识。 */
+  sessionId: string;
+  /** 自动或手动触发。 */
+  trigger: 'automatic' | 'manual';
+  /** 脱敏模型快照。 */
+  modelSnapshot: CompactionModelSnapshot;
+  /** 开始时间。 */
+  startedAt: number;
+  /** 已分配 checkpoint ID。 */
+  checkpointId?: string;
+  /** 规划得到的完整指纹，仅用于截取短前缀。 */
+  sourceFingerprint?: string;
+  /** 规划时投影估算。 */
+  estimatedTokens?: number;
+  /** 规划目标预算。 */
+  targetTokens?: number;
+  /** 成功候选的实际压缩后投影估算。 */
+  projectedTokens?: number;
 }
 
 /**
@@ -345,6 +400,50 @@ async function writeDirectCheckpoint(
  */
 export function createCompactionExecutor(dependencies: CompactionExecutorDependencies): CompactionExecutor {
   const activeControllers = new Map<string, AbortController>();
+  const activeDiagnostics = new Map<string, ActiveDiagnosticState>();
+  const activeExecutions = new Map<string, Promise<CompactionExecuteResult>>();
+
+  /**
+   * 从 executor 结果读取稳定错误或跳过原因。
+   * @param result - executor 终态
+   * @returns 稳定错误码，不适用时返回 undefined
+   */
+  function readResultError(result: CompactionExecuteResult): string | undefined {
+    if (result.status === 'failed') return result.errorCode;
+    if (result.status === 'skipped') return result.reason;
+    if (result.status === 'cancelled') return result.checkpoint.errorCode;
+    return undefined;
+  }
+
+  /**
+   * 发送严格白名单化的单条终态诊断日志。
+   * @param state - 当前执行诊断上下文
+   * @param result - executor 终态
+   */
+  function emitDiagnostic(state: ActiveDiagnosticState, result: CompactionExecuteResult): void {
+    if (!dependencies.diagnosticLog) return;
+    const checkpoint = 'checkpoint' in result ? result.checkpoint : undefined;
+    const sourceFingerprint = checkpoint?.sourceFingerprint ?? state.sourceFingerprint;
+    const entry: CompactionDiagnosticLog = {
+      runtimeId: state.runtimeId,
+      sessionId: state.sessionId,
+      checkpointId: checkpoint?.id ?? state.checkpointId,
+      trigger: state.trigger,
+      status: result.status,
+      fingerprintPrefix: sourceFingerprint ? sourceFingerprint.slice(0, 15) : undefined,
+      estimatedTokens: state.estimatedTokens,
+      targetTokens: state.targetTokens,
+      projectedTokens: state.projectedTokens,
+      durationMs: Math.max(0, dependencies.now() - state.startedAt),
+      modelSnapshot: structuredClone(state.modelSnapshot),
+      errorCode: readResultError(result)
+    };
+    try {
+      dependencies.diagnosticLog(entry);
+    } catch {
+      // 诊断日志失败不得改变压缩事务终态。
+    }
+  }
 
   /**
    * 清理 runtime controller 并返回结果。
@@ -353,7 +452,10 @@ export function createCompactionExecutor(dependencies: CompactionExecutorDepende
    * @returns 原结果
    */
   function finishExecution(runtimeId: string, result: CompactionExecuteResult): CompactionExecuteResult {
+    const diagnostic = activeDiagnostics.get(runtimeId);
+    if (diagnostic) emitDiagnostic(diagnostic, result);
     activeControllers.delete(runtimeId);
+    activeDiagnostics.delete(runtimeId);
     return result;
   }
 
@@ -365,6 +467,14 @@ export function createCompactionExecutor(dependencies: CompactionExecutorDepende
   async function executeCompaction(input: CompactionExecuteInput): Promise<CompactionExecuteResult> {
     const controller = new AbortController();
     activeControllers.set(input.runtimeId, controller);
+    const diagnostic: ActiveDiagnosticState = {
+      runtimeId: input.runtimeId,
+      sessionId: input.sessionId,
+      trigger: input.trigger,
+      modelSnapshot: structuredClone(input.modelSnapshot),
+      startedAt: dependencies.now()
+    };
+    activeDiagnostics.set(input.runtimeId, diagnostic);
     dependencies.onStage?.('capture');
     const captureResult = await settlePromise(dependencies.readMessages(input.sessionId));
     if (!captureResult.ok) return finishExecution(input.runtimeId, { status: 'failed', errorCode: 'CAPTURE_FAILED' });
@@ -386,6 +496,7 @@ export function createCompactionExecutor(dependencies: CompactionExecutorDepende
       if (input.trigger === 'manual') {
         const checkpoint = await writeDirectCheckpoint(input, 'skipped', planResult.reason, dependencies);
         if (!checkpoint) return finishExecution(input.runtimeId, { status: 'failed', errorCode: 'PERSIST_FAILED' });
+        diagnostic.checkpointId = checkpoint.id;
         return finishExecution(input.runtimeId, { status: 'skipped', reason: planResult.reason, checkpoint });
       }
       return finishExecution(input.runtimeId, { status: 'skipped', reason: planResult.reason });
@@ -393,15 +504,24 @@ export function createCompactionExecutor(dependencies: CompactionExecutorDepende
     if (planResult.status === 'blocked') {
       const checkpoint = await writeDirectCheckpoint(input, 'failed', planResult.errorCode, dependencies);
       if (!checkpoint) return finishExecution(input.runtimeId, { status: 'failed', errorCode: 'PERSIST_FAILED' });
+      diagnostic.checkpointId = checkpoint.id;
       return finishExecution(input.runtimeId, { status: 'failed', errorCode: planResult.errorCode });
     }
 
     const { plan } = planResult;
+    diagnostic.sourceFingerprint = plan.sourceSnapshot.sourceFingerprint;
+    diagnostic.estimatedTokens = plan.projectedTokens;
+    diagnostic.targetTokens = plan.budgetSnapshot.targetTokens;
     const pending = createPendingCheckpoint(input, plan, dependencies.createPartId(), dependencies.now());
+    diagnostic.checkpointId = pending.id;
     appendCheckpoint(input.assistantMessage, pending);
     dependencies.onStage?.('write:pending');
     const pendingWrite = await settlePromise(dependencies.writeMessage(input.assistantMessage));
-    if (!pendingWrite.ok) return finishExecution(input.runtimeId, { status: 'failed', errorCode: 'PERSIST_FAILED' });
+    if (!pendingWrite.ok) {
+      // 首次写入失败也必须先把共享消息中的 pending 收敛，防止后续整消息更新把它重新带入数据库。
+      await writeTerminalCheckpoint(input, pending, 'failed', dependencies, 'PERSIST_FAILED');
+      return finishExecution(input.runtimeId, { status: 'failed', errorCode: 'PERSIST_FAILED' });
+    }
 
     dependencies.onStage?.('generate');
     const generationResult = await settlePromise(
@@ -487,6 +607,7 @@ export function createCompactionExecutor(dependencies: CompactionExecutorDepende
       tools: input.tools,
       skillContentHashes: input.skillContentHashes
     });
+    diagnostic.projectedTokens = projected.estimatedTokens;
     if (projected.estimatedTokens > plan.budgetSnapshot.targetTokens) {
       const checkpoint = await writeTerminalCheckpoint(input, pending, 'failed', dependencies, 'TARGET_BUDGET_EXCEEDED');
       if (!checkpoint) return finishExecution(input.runtimeId, { status: 'failed', errorCode: 'PERSIST_FAILED' });
@@ -504,14 +625,30 @@ export function createCompactionExecutor(dependencies: CompactionExecutorDepende
     return finishExecution(input.runtimeId, { status: 'success', checkpoint: successCheckpoint });
   }
 
+  /**
+   * 跟踪执行 Promise，供取消方等待 pending checkpoint 收敛为终态。
+   * @param input - executor 输入
+   * @returns 压缩终态
+   */
+  async function executeTracked(input: CompactionExecuteInput): Promise<CompactionExecuteResult> {
+    const execution = executeCompaction(input);
+    activeExecutions.set(input.runtimeId, execution);
+    try {
+      return await execution;
+    } finally {
+      if (activeExecutions.get(input.runtimeId) === execution) activeExecutions.delete(input.runtimeId);
+    }
+  }
+
   return {
-    execute: executeCompaction,
-    cancel(runtimeId: string): void {
+    execute: executeTracked,
+    async cancel(runtimeId: string): Promise<void> {
       const controller = activeControllers.get(runtimeId);
       if (!controller) return;
       controller.abort();
-      const abortResult = dependencies.abortSummary?.(runtimeId);
-      if (abortResult instanceof Promise) Promise.allSettled([abortResult]);
+      const abortSummary = Promise.resolve().then((): Promise<void> | void => dependencies.abortSummary?.(runtimeId));
+      const execution = activeExecutions.get(runtimeId);
+      await Promise.allSettled(execution ? [abortSummary, execution] : [abortSummary]);
     }
   };
 }

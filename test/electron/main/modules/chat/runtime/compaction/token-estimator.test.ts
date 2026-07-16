@@ -32,13 +32,15 @@ describe('compaction token estimator', (): void => {
     const shortTokens = estimateTextTokens('hello');
     const longTokens = estimateTextTokens('hello world');
 
-    expect(shortTokens).toBe(2);
+    expect(shortTokens).toBe(3);
     expect(estimateTextTokens('hello')).toBe(shortTokens);
     expect(longTokens).toBeGreaterThan(shortTokens);
   });
 
   it('对 CJK 文本使用比 ASCII 更保守的字符权重', (): void => {
     expect(estimateTextTokens('上下文压缩')).toBeGreaterThan(estimateTextTokens('abcdef'));
+    expect(estimateTextTokens('上下文压缩')).toBeGreaterThanOrEqual(6);
+    expect(estimateTextTokens('🙂')).toBeGreaterThanOrEqual(2);
   });
 
   it('估算 system、tool schema 和模型消息的完整请求', (): void => {

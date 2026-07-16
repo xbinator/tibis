@@ -6,14 +6,14 @@ import type { AITransportTool } from 'types/ai';
 import type { ChatMessagePart, ChatMessageRecord } from 'types/chat';
 import { toRuntimeModelMessages } from '../context/model-message.mjs';
 
-/** ASCII 字符保守权重。 */
-const ASCII_TOKEN_WEIGHT = 0.3;
+/** ASCII 字符保守权重，覆盖随机标识、JSON 标点和压缩字符串。 */
+const ASCII_TOKEN_WEIGHT = 0.5;
 
-/** CJK 字符保守权重。 */
-const CJK_TOKEN_WEIGHT = 0.6;
+/** CJK 字符跨 Provider 保守权重。 */
+const CJK_TOKEN_WEIGHT = 1.2;
 
-/** 其他 Unicode 字符保守权重。 */
-const OTHER_TOKEN_WEIGHT = 0.5;
+/** emoji 与其他 Unicode 字符跨 Provider 保守权重。 */
+const OTHER_TOKEN_WEIGHT = 2;
 
 /** 单条模型消息的协议包装开销。 */
 const MODEL_MESSAGE_OVERHEAD = 4;

@@ -87,7 +87,7 @@ function collectParentSources(summary: StructuredContextSummary | undefined): st
  * @param snapshot - 插入 pending 前冻结的摘要源
  * @returns 模型提示词
  */
-function createSummaryPrompt(snapshot: CompactionSourceSnapshot): string {
+export function createSummaryPrompt(snapshot: CompactionSourceSnapshot): string {
   const source = {
     previousSummary: snapshot.parentCheckpoint,
     sourceParts: snapshot.sourceParts,

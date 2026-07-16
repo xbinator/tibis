@@ -71,7 +71,7 @@ describe('compaction planner', (): void => {
   });
 
   it('达到阈值时冻结 boundary 前源并把当前用户任务留在 raw tail', (): void => {
-    const result = createCompactionPlan(createInput('x'.repeat(25_000)));
+    const result = createCompactionPlan(createInput('x'.repeat(13_000)));
 
     expect(result.status).toBe('ready');
     if (result.status !== 'ready') return;
@@ -153,11 +153,22 @@ describe('compaction planner', (): void => {
     expect(result).toEqual({ status: 'blocked', errorCode: 'SUMMARY_REQUEST_TOO_LARGE' });
   });
 
+  it('按真实序列化 prompt 计算大量小 Part 的摘要输入预算', (): void => {
+    const input = createInput('', 'manual');
+    input.messages[0] = createMessage(
+      'old-assistant',
+      'assistant',
+      Array.from({ length: 400 }, (_unused: unknown, index: number): ChatMessagePart => ({ id: `source-small-${index}`, type: 'text', text: '' }))
+    );
+
+    expect(createCompactionPlan(input)).toEqual({ status: 'blocked', errorCode: 'SUMMARY_REQUEST_TOO_LARGE' });
+  });
+
   it('自动模式不重试相同 failed fingerprint，手动模式仍可重试', (): void => {
-    const first = createCompactionPlan(createInput('x'.repeat(25_000)));
+    const first = createCompactionPlan(createInput('x'.repeat(13_000)));
     expect(first.status).toBe('ready');
     if (first.status !== 'ready') return;
-    const automaticInput = createInput('x'.repeat(25_000));
+    const automaticInput = createInput('x'.repeat(13_000));
     automaticInput.messages.push(
       createMessage('failed-checkpoint', 'assistant', [
         {

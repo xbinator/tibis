@@ -72,6 +72,7 @@ function createRuntimeUnsavedPath(snapshot: RuntimeDocumentSnapshot): string {
 function createReadCurrentDocumentSuccessResult(snapshot: RuntimeDocumentSnapshot): AIToolExecutionResult {
   return createMainToolSuccessResult(READ_CURRENT_DOCUMENT_TOOL_NAME, {
     id: snapshot.id,
+    artifactId: snapshot.id,
     title: snapshot.title,
     path: snapshot.path ?? snapshot.locator ?? createRuntimeUnsavedPath(snapshot),
     content: snapshot.content

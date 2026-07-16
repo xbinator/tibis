@@ -502,6 +502,65 @@ interface GenerateTextResultLike {
   readonly usage?: Partial<AIUsage> | null;
 }
 
+/** AI 请求白名单诊断元数据。 */
+interface AIRequestLogMetadata {
+  /** 可关联取消和 Runtime 的请求标识。 */
+  requestId?: string;
+  /** 当前模型标识。 */
+  modelId: string;
+  /** 是否使用消息数组输入。 */
+  hasMessages: boolean;
+  /** 是否使用单提示词输入。 */
+  hasPrompt: boolean;
+  /** 是否请求结构化输出。 */
+  hasStructuredOutput: boolean;
+  /** 声明的工具数量。 */
+  toolCount: number;
+  /** 是否启用 MCP。 */
+  hasMcp: boolean;
+  /** 是否启用 Tavily。 */
+  hasTavily: boolean;
+}
+
+/** AI 生成结果白名单诊断元数据。 */
+interface AIResultLogMetadata {
+  /** 是否请求结构化输出。 */
+  hasStructuredOutput: boolean;
+  /** Provider 返回的 Token 用量。 */
+  usage?: AIUsage;
+}
+
+/**
+ * 创建不含 prompt、消息、工具参数或 provider secret 的请求日志。
+ * @param request - 原始 AI 请求
+ * @returns 白名单请求元数据
+ */
+function createRequestLog(request: AIRequestOptions): AIRequestLogMetadata {
+  return {
+    requestId: request.requestId,
+    modelId: request.modelId,
+    hasMessages: Boolean(request.messages?.length),
+    hasPrompt: Boolean(request.prompt),
+    hasStructuredOutput: Boolean(request.output),
+    toolCount: request.tools?.length ?? 0,
+    hasMcp: Boolean(request.mcp),
+    hasTavily: Boolean(request.tavily)
+  };
+}
+
+/**
+ * 创建不含正文或结构化输出内容的结果日志。
+ * @param result - 已归一化 AI 调用结果
+ * @param hasStructuredOutput - 是否请求结构化输出
+ * @returns 白名单结果元数据
+ */
+function createResultLog(result: AIInvokeResult, hasStructuredOutput: boolean): AIResultLogMetadata {
+  return {
+    hasStructuredOutput,
+    usage: result.usage ? { ...result.usage } : undefined
+  };
+}
+
 /**
  * 将 AI SDK 文本生成结果转换为渲染进程可消费的调用结果。
  * @param result - AI SDK 文本生成结果
@@ -594,11 +653,12 @@ class AIService {
    */
   private handleError(scope: string, error: unknown, providerType: AICreateOptions['providerType']): [AIServiceError] {
     const normalized = this.aiProvider.normalizeError(error, providerType);
+    const metadata = { code: normalized.code };
 
     if (isExpectedTransientError(normalized)) {
-      log.warn(`[AIService] ${scope} ${normalized.code}:`, normalized.message);
+      log.warn(`[AIService] ${scope} failed:`, metadata);
     } else {
-      log.error(`[AIService] ${scope} error:`, error);
+      log.error(`[AIService] ${scope} failed:`, metadata);
     }
 
     return [normalized];
@@ -611,7 +671,7 @@ class AIService {
    */
   async generateText(createOptions: AICreateOptions, request: AIRequestOptions): Promise<[AIServiceError] | [undefined, AIInvokeResult]> {
     try {
-      log.info(`[AIService] generateText request:`, request);
+      log.info(`[AIService] generateText request:`, createRequestLog(request));
 
       const baseOptions = {
         ...(await this.buildBaseOptions(createOptions, request)),
@@ -623,9 +683,10 @@ class AIService {
         ? await generateText({ ...baseOptions, messages: request.messages })
         : await generateText({ ...baseOptions, prompt: request.prompt ?? '' });
 
-      log.info(`[AIService] generateText result:`, result);
+      const invokeResult = createAIInvokeResult(result, Boolean(request.output));
+      log.info(`[AIService] generateText result:`, createResultLog(invokeResult, Boolean(request.output)));
 
-      return [undefined, createAIInvokeResult(result, Boolean(request.output))];
+      return [undefined, invokeResult];
     } catch (error) {
       return this.handleError('generateText', error, createOptions.providerType);
     } finally {
@@ -638,7 +699,7 @@ class AIService {
    */
   async streamText(createOptions: AICreateOptions, request: AIRequestOptions): Promise<[AIServiceError] | [undefined, AIStreamResult]> {
     try {
-      log.info(`[AIService] streamText request:`, request);
+      log.info(`[AIService] streamText request:`, createRequestLog(request));
 
       const baseOptions = {
         ...(await this.buildBaseOptions(createOptions, request)),
