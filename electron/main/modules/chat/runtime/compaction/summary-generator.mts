@@ -191,7 +191,7 @@ async function invokeSummary(
   return {
     status: 'success',
     output: invokeResult.output,
-    ...(invokeResult.usage ? { usage: invokeResult.usage } : {})
+    ...(invokeResult.totalUsage ? { usage: invokeResult.totalUsage } : {})
   };
 }
 

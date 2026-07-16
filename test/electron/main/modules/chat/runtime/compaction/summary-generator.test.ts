@@ -64,7 +64,7 @@ describe('structured summary generator', (): void => {
     const generateText = vi.fn(async (createOptions: AICreateOptions, request: AIRequestOptions): Promise<[undefined, AIInvokeResult]> => {
       createOptionCalls.push(createOptions);
       requestCalls.push(request);
-      return [undefined, { text: '', output: summary, usage: { inputTokens: 100, outputTokens: 20, totalTokens: 120 } }];
+      return [undefined, { text: '', output: summary, totalUsage: { inputTokens: 100, outputTokens: 20, totalTokens: 120 } }];
     });
 
     const result = await generateStructuredSummary(
@@ -118,8 +118,8 @@ describe('structured summary generator', (): void => {
     const summary = createSummary();
     const generateText = vi
       .fn<SummaryGeneratorDependencies['generateText']>()
-      .mockResolvedValueOnce([undefined, { text: '', output: { schemaVersion: 1 }, usage: { inputTokens: 100, outputTokens: 10, totalTokens: 110 } }])
-      .mockResolvedValueOnce([undefined, { text: '', output: summary, usage: { inputTokens: 120, outputTokens: 20, totalTokens: 140 } }]);
+      .mockResolvedValueOnce([undefined, { text: '', output: { schemaVersion: 1 }, totalUsage: { inputTokens: 100, outputTokens: 10, totalTokens: 110 } }])
+      .mockResolvedValueOnce([undefined, { text: '', output: summary, totalUsage: { inputTokens: 120, outputTokens: 20, totalTokens: 140 } }]);
     const result = await generateStructuredSummary(
       {
         runtimeId: 'runtime-1',

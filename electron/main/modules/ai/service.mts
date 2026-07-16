@@ -10,6 +10,8 @@ import { connectMcpServer, executeMcpTool, getMcpDiscoveryCache } from '../mcp/s
 import { createMcpSdkTools, resolveMcpExposedTools } from '../mcp/tools.mjs';
 import { AI_ERROR_CODE } from './errors/codes.mjs';
 import { AIProviderRegistry } from './providers/_index.mjs';
+import { createRequestTimeout, prepareToolStep, TOOL_LOOP_MAX_STEPS } from './tool-loop-policy.mjs';
+import { normalizeAIUsage } from './usage.mjs';
 
 // ─── 纯工具函数 ──────────────────────────────────────────────────────────────
 
@@ -507,10 +509,20 @@ interface GenerateTextResultLike {
   readonly text: string;
   /** 结构化输出，未请求结构化输出时访问可能抛出 AI SDK 错误。 */
   readonly output?: unknown;
-  /** AI SDK 7 末步结果，用于保持 v6 usage 语义。 */
+  /** AI SDK 7 末步结果。 */
   readonly finalStep?: GenerateTextStepLike;
   /** 顶层 token 使用量；AI SDK 7 中为所有步骤累计值。 */
   readonly usage?: Partial<AIUsage> | null;
+}
+
+/** 主进程内部模型调用策略，不进入 IPC 或用户请求配置。 */
+export interface AIServiceCallOptions {
+  /** 工具续轮是否由 ChatRuntime 统一托管。 */
+  runtimeToolLoop?: boolean;
+  /** 是否强制本次调用只生成最终回答。 */
+  forceFinal?: boolean;
+  /** 当前用户任务剩余的总超时时间。 */
+  totalTimeoutMs?: number;
 }
 
 /** AI 请求白名单诊断元数据。 */
@@ -537,8 +549,10 @@ interface AIRequestLogMetadata {
 interface AIResultLogMetadata {
   /** 是否请求结构化输出。 */
   hasStructuredOutput: boolean;
-  /** Provider 返回的 Token 用量。 */
-  usage?: AIUsage;
+  /** 最后一个模型步骤的 Token 用量。 */
+  stepUsage?: AIUsage;
+  /** 本次 SDK 调用累计的 Token 用量。 */
+  totalUsage?: AIUsage;
 }
 
 /**
@@ -568,7 +582,8 @@ function createRequestLog(request: AIRequestOptions): AIRequestLogMetadata {
 function createResultLog(result: AIInvokeResult, hasStructuredOutput: boolean): AIResultLogMetadata {
   return {
     hasStructuredOutput,
-    usage: result.usage ? { ...result.usage } : undefined
+    stepUsage: result.stepUsage ? { ...result.stepUsage } : undefined,
+    totalUsage: result.totalUsage ? { ...result.totalUsage } : undefined
   };
 }
 
@@ -579,10 +594,12 @@ function createResultLog(result: AIInvokeResult, hasStructuredOutput: boolean): 
  * @returns 主进程 AI 调用结果
  */
 export function createAIInvokeResult(result: GenerateTextResultLike, includeStructuredOutput: boolean): AIInvokeResult {
-  const { inputTokens = 0, outputTokens = 0, totalTokens = 0 } = result.finalStep?.usage ?? result.usage ?? {};
+  const stepUsage = normalizeAIUsage(result.finalStep?.usage ?? result.usage ?? {});
+  const totalUsage = normalizeAIUsage(result.usage ?? result.finalStep?.usage ?? {});
   const invokeResult: AIInvokeResult = {
     text: result.text,
-    usage: { inputTokens, outputTokens, totalTokens }
+    stepUsage,
+    totalUsage
   };
 
   // AI SDK 在没有结构化输出时会通过 getter 抛 NoOutputGeneratedError，因此仅在显式请求 output 时读取。
@@ -647,17 +664,22 @@ class AIService {
   /**
    * 构建 generateText / streamText 共用的基础选项。
    */
-  private async buildBaseOptions(createOptions: AICreateOptions, request: AIRequestOptions) {
+  private async buildBaseOptions(createOptions: AICreateOptions, request: AIRequestOptions, callOptions: AIServiceCallOptions = {}) {
+    const tools = await toSdkTools(request.tools, request.tavily, request.mcp);
+    const hasExecutableTools = hasTavilyHttpTools(request.tavily) || hasMcpSdkTools(request.mcp);
+
     return {
       model: this.createModel(createOptions, request.modelId),
       instructions: appendMcpToolInstructions(request.system, request.mcp),
       temperature: request.temperature,
       maxOutputTokens: request.maxOutputTokens,
       providerOptions: this.aiProvider.createProviderOptions(createOptions.providerType, request),
-      tools: await toSdkTools(request.tools, request.tavily, request.mcp),
+      tools,
+      timeout: createRequestTimeout(callOptions.totalTimeoutMs),
       // 压缩边界的 system 消息由 Tibis 内部生成并持久化，保留其原始消息位置以维持上下文语义。
       ...(request.messages ? { allowSystemInMessages: true } : {}),
-      ...(hasTavilyHttpTools(request.tavily) || hasMcpSdkTools(request.mcp) ? { stopWhen: isStepCount(5) } : {})
+      ...(hasExecutableTools && !callOptions.runtimeToolLoop ? { prepareStep: prepareToolStep, stopWhen: isStepCount(TOOL_LOOP_MAX_STEPS) } : {}),
+      ...(callOptions.forceFinal ? { toolChoice: 'none' as const } : {})
     };
   }
 
@@ -710,13 +732,19 @@ class AIService {
   /**
    * 流式生成文本。
    */
-  async streamText(createOptions: AICreateOptions, request: AIRequestOptions): Promise<[AIServiceError] | [undefined, AIStreamResult]> {
+  async streamText(
+    createOptions: AICreateOptions,
+    request: AIRequestOptions,
+    callOptions: AIServiceCallOptions = {}
+  ): Promise<[AIServiceError] | [undefined, AIStreamResult]> {
     try {
       log.info(`[AIService] streamText request:`, createRequestLog(request));
 
       const baseOptions = {
-        ...(await this.buildBaseOptions(createOptions, request)),
-        abortSignal: this.registerAbortSignal(request.requestId)
+        ...(await this.buildBaseOptions(createOptions, request, callOptions)),
+        abortSignal: this.registerAbortSignal(request.requestId),
+        // ChatRuntime 直接消费完整流时没有 IPC finally，由 v7 onEnd 统一释放请求控制器。
+        ...(request.requestId ? { onEnd: this.removeController.bind(this, request.requestId) } : {})
       };
 
       const result = request.messages
@@ -725,6 +753,7 @@ class AIService {
 
       return [undefined, { stream: result.stream }];
     } catch (error) {
+      if (request.requestId) this.removeController(request.requestId);
       return this.handleError('streamText', error, createOptions.providerType);
     }
   }

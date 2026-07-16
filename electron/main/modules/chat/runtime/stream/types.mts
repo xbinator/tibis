@@ -6,10 +6,21 @@ import type { ChatModelResolver } from '../model/resolver.mjs';
 import type { ChatRuntimeMainToolExecutor, ChatRuntimeRendererToolExecutor } from '../types.mjs';
 import type { AIRequestOptions, AIServiceError, AIStreamFinishReason, AIStreamResult, AIUsage, AIToolExecutionResult } from 'types/ai';
 
+/** ChatRuntime 传给 AI 服务的内部调用策略。 */
+export interface RuntimeStreamCallOptions {
+  /** 工具续轮固定由 ChatRuntime 托管。 */
+  runtimeToolLoop: true;
+  /** 是否强制本次调用只生成最终回答。 */
+  forceFinal: boolean;
+  /** 当前用户任务剩余的总超时时间。 */
+  totalTimeoutMs: number;
+}
+
 /** Runtime 模型流式调用函数。 */
 export type RuntimeStreamText = (
   createOptions: NonNullable<Awaited<ReturnType<ChatModelResolver['resolve']>>>['createOptions'],
-  request: AIRequestOptions
+  request: AIRequestOptions,
+  callOptions: RuntimeStreamCallOptions
 ) => Promise<[AIServiceError] | [undefined, AIStreamResult]>;
 
 /** Runtime 流式执行器依赖。 */
@@ -50,6 +61,14 @@ export interface RuntimeErrorChunk {
   error: unknown;
 }
 
+/** AI SDK 中止 chunk。 */
+export interface RuntimeAbortChunk {
+  /** chunk 类型。 */
+  type: 'abort';
+  /** SDK 提供的可选中止原因。 */
+  reason?: string;
+}
+
 /** AI SDK 完成 chunk。 */
 export interface RuntimeFinishChunk {
   /** chunk 类型。 */
@@ -57,7 +76,15 @@ export interface RuntimeFinishChunk {
   /** 完成原因。 */
   finishReason: AIStreamFinishReason;
   /** 总 usage。 */
-  totalUsage?: Partial<AIUsage>;
+  totalUsage: AIUsage;
+}
+
+/** AI SDK 单步骤完成 chunk。 */
+export interface RuntimeFinishStepChunk {
+  /** chunk 类型。 */
+  type: 'finish-step';
+  /** 当前模型步骤的 usage。 */
+  stepUsage: AIUsage;
 }
 
 /** AI SDK 工具调用 chunk。 */
@@ -71,21 +98,6 @@ export interface RuntimeToolCallChunk {
   /** 工具输入。 */
   input: unknown;
 }
-
-/** AI SDK 工具输入已可执行 chunk。 */
-export interface RuntimeToolInputAvailableChunk {
-  /** chunk 类型。 */
-  type: 'tool-input-available';
-  /** 工具调用 ID。 */
-  toolCallId: string;
-  /** 工具名称。 */
-  toolName: string;
-  /** 工具输入。 */
-  input: unknown;
-}
-
-/** Runtime 可执行工具调用 chunk。 */
-export type RuntimeExecutableToolCallChunk = RuntimeToolCallChunk | RuntimeToolInputAvailableChunk;
 
 /** AI SDK 工具输入开始 chunk。 */
 export interface RuntimeToolInputStartChunk {
@@ -131,6 +143,8 @@ export interface RuntimeToolResultChunk {
 export interface RuntimeUnsupportedChunk {
   /** chunk 类型。 */
   type: 'unsupported';
+  /** 已显式识别但暂不消费的 SDK 事件类型。 */
+  sourceType: string;
 }
 
 /** Runtime 当前支持消费的 AI stream chunk。 */
@@ -138,9 +152,10 @@ export type RuntimeStreamChunk =
   | RuntimeTextDeltaChunk
   | RuntimeReasoningDeltaChunk
   | RuntimeErrorChunk
+  | RuntimeAbortChunk
   | RuntimeFinishChunk
+  | RuntimeFinishStepChunk
   | RuntimeToolCallChunk
-  | RuntimeToolInputAvailableChunk
   | RuntimeToolInputStartChunk
   | RuntimeToolInputDeltaChunk
   | RuntimeToolInputEndChunk

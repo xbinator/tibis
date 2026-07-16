@@ -20,6 +20,13 @@ const runtime: ActiveChatRuntime = {
   createdAt: 0
 };
 
+/** ChatRuntime 默认传给 AI 服务的内部续轮策略。 */
+const RUNTIME_CALL_OPTIONS = {
+  runtimeToolLoop: true,
+  forceFinal: false,
+  totalTimeoutMs: 300_000
+} as const;
+
 /** 测试 user 消息。 */
 const userMessage: ChatMessageRecord = {
   id: 'user-1',
@@ -56,6 +63,7 @@ async function* createTextStream(): AsyncGenerator<unknown> {
   yield { type: 'reasoning-delta', text: 'thinking' };
   yield { type: 'text-delta', text: 'Hello ' };
   yield { type: 'text-delta', text: 'runtime' };
+  yield { type: 'finish-step', usage: { inputTokens: 2, outputTokens: 3, totalTokens: 5 } };
   yield {
     type: 'finish',
     finishReason: 'stop',
@@ -117,16 +125,16 @@ async function* createQuestionToolStream(): AsyncGenerator<unknown> {
 }
 
 /**
- * 创建 AI SDK 6 的工具输入可用事件测试流。
+ * 创建 AI SDK 7 的增量工具输入与最终工具调用测试流。
  * @returns AI stream chunk 序列
  */
-async function* createQuestionToolInputAvailableStream(): AsyncGenerator<unknown> {
-  yield { type: 'tool-input-start', toolCallId: 'tool-call-question', toolName: 'question' };
-  yield { type: 'tool-input-delta', toolCallId: 'tool-call-question', inputTextDelta: '{"question":"确认下单生椰拿铁，实付 9.9?","mode":"single","options":[' };
-  yield { type: 'tool-input-delta', toolCallId: 'tool-call-question', inputTextDelta: '{"label":"确认下单!","value":"confirm"}]}' };
-  yield { type: 'tool-input-end', toolCallId: 'tool-call-question' };
+async function* createQuestionInputStream(): AsyncGenerator<unknown> {
+  yield { type: 'tool-input-start', id: 'tool-call-question', toolName: 'question' };
+  yield { type: 'tool-input-delta', id: 'tool-call-question', delta: '{"question":"确认下单生椰拿铁，实付 9.9?","mode":"single","options":[' };
+  yield { type: 'tool-input-delta', id: 'tool-call-question', delta: '{"label":"确认下单!","value":"confirm"}]}' };
+  yield { type: 'tool-input-end', id: 'tool-call-question' };
   yield {
-    type: 'tool-input-available',
+    type: 'tool-call',
     toolCallId: 'tool-call-question',
     toolName: 'question',
     input: {
@@ -342,9 +350,13 @@ describe('runtime stream executor', (): void => {
         requestId: 'runtime-1',
         modelId: 'gpt-test',
         messages: [{ role: 'user', content: 'hello' }]
-      })
+      }),
+      RUNTIME_CALL_OPTIONS
     );
-    expect(result).toEqual({ usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7 } });
+    expect(result).toEqual({
+      stepUsage: { inputTokens: 2, outputTokens: 3, totalTokens: 5 },
+      totalUsage: { inputTokens: 3, outputTokens: 4, totalTokens: 7 }
+    });
     expect(updates.at(-1)).toMatchObject({
       content: 'Hello runtime',
       parts: [
@@ -407,7 +419,8 @@ describe('runtime stream executor', (): void => {
           { role: 'assistant', content: [{ type: 'text', text: 'prior answer' }] },
           { role: 'user', content: 'hello' }
         ]
-      })
+      }),
+      RUNTIME_CALL_OPTIONS
     );
   });
 
@@ -430,7 +443,11 @@ describe('runtime stream executor', (): void => {
     await executor({ runtime: frozenRuntime, userMessage, assistantMessage }, async () => undefined);
 
     expect(resolve).not.toHaveBeenCalled();
-    expect(streamText).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'provider-frozen' }), expect.objectContaining({ modelId: 'model-frozen' }));
+    expect(streamText).toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: 'provider-frozen' }),
+      expect.objectContaining({ modelId: 'model-frozen' }),
+      RUNTIME_CALL_OPTIONS
+    );
   });
 
   it('streams tool chunks into assistant tool parts', async (): Promise<void> => {
@@ -453,7 +470,7 @@ describe('runtime stream executor', (): void => {
       updates.push({ ...message, parts: [...message.parts] });
     });
 
-    expect(result).toEqual({ usage: { inputTokens: 8, outputTokens: 5, totalTokens: 13 }, shouldContinue: true });
+    expect(result).toEqual({ totalUsage: { inputTokens: 8, outputTokens: 5, totalTokens: 13 }, shouldContinue: true });
     expect(updates.at(-1)).toMatchObject({
       parts: [
         {
@@ -518,7 +535,8 @@ describe('runtime stream executor', (): void => {
           toolInstructions: 'Use MCP tools carefully.'
         },
         tools: [{ name: 'read_file', description: 'Read file', parameters: { type: 'object', properties: {} } }]
-      })
+      }),
+      RUNTIME_CALL_OPTIONS
     );
   });
 
@@ -563,7 +581,7 @@ describe('runtime stream executor', (): void => {
       toolName: 'renderer_echo',
       input: { value: 'ping' }
     });
-    expect(result).toEqual({ usage: { inputTokens: 8, outputTokens: 5, totalTokens: 13 }, shouldContinue: true });
+    expect(result).toEqual({ totalUsage: { inputTokens: 8, outputTokens: 5, totalTokens: 13 }, shouldContinue: true });
     expect(updates.at(-1)).toMatchObject({
       finished: false,
       parts: [
@@ -579,7 +597,7 @@ describe('runtime stream executor', (): void => {
     });
   });
 
-  it('continues after executed tools even when the provider finishes with stop', async (): Promise<void> => {
+  it('does not continue after the provider finishes with stop', async (): Promise<void> => {
     const assistantMessage = createAssistantMessage();
     const executeRendererTool = vi.fn().mockResolvedValue({
       toolName: 'renderer_echo',
@@ -611,7 +629,7 @@ describe('runtime stream executor', (): void => {
       async () => undefined
     );
 
-    expect(result).toEqual({ usage: { inputTokens: 8, outputTokens: 5, totalTokens: 13 }, shouldContinue: true });
+    expect(result).toEqual({ totalUsage: { inputTokens: 8, outputTokens: 5, totalTokens: 13 } });
   });
 
   it('executes read_current_document through the main-process tool executor', async (): Promise<void> => {
@@ -661,7 +679,7 @@ describe('runtime stream executor', (): void => {
       input: {}
     });
     expect(executeRendererTool).not.toHaveBeenCalled();
-    expect(result).toEqual({ usage: { inputTokens: 6, outputTokens: 4, totalTokens: 10 }, shouldContinue: true });
+    expect(result).toEqual({ totalUsage: { inputTokens: 6, outputTokens: 4, totalTokens: 10 }, shouldContinue: true });
     expect(updates.at(-1)).toMatchObject({
       parts: [
         {
@@ -797,7 +815,7 @@ describe('runtime stream executor', (): void => {
     });
   });
 
-  it('executes renderer question tools from AI SDK tool-input-available chunks', async (): Promise<void> => {
+  it('executes renderer question tools after AI SDK 7 incremental input chunks', async (): Promise<void> => {
     const assistantMessage = createAssistantMessage();
     const updates: ChatMessageRecord[] = [];
     const executeRendererTool = vi.fn().mockResolvedValue({
@@ -821,7 +839,7 @@ describe('runtime stream executor', (): void => {
       },
       modelId: 'gpt-test'
     });
-    const streamText = vi.fn().mockResolvedValue([undefined, { stream: createQuestionToolInputAvailableStream() }]);
+    const streamText = vi.fn().mockResolvedValue([undefined, { stream: createQuestionInputStream() }]);
     const executor = createRuntimeStreamExecutor({ resolver: { resolve }, streamText, executeRendererTool });
 
     const result = await executor(
@@ -997,7 +1015,7 @@ describe('runtime stream executor', (): void => {
       input: {}
     });
     expect(executeRendererTool).not.toHaveBeenCalled();
-    expect(result).toEqual({ usage: { inputTokens: 9, outputTokens: 4, totalTokens: 13 }, shouldContinue: true });
+    expect(result).toEqual({ totalUsage: { inputTokens: 9, outputTokens: 4, totalTokens: 13 }, shouldContinue: true });
     expect(updates.at(-1)).toMatchObject({
       parts: [
         {
@@ -1063,7 +1081,7 @@ describe('runtime stream executor', (): void => {
       input: {}
     });
     expect(executeRendererTool).not.toHaveBeenCalled();
-    expect(result).toEqual({ usage: { inputTokens: 5, outputTokens: 4, totalTokens: 9 }, shouldContinue: true });
+    expect(result).toEqual({ totalUsage: { inputTokens: 5, outputTokens: 4, totalTokens: 9 }, shouldContinue: true });
     expect(updates.at(-1)).toMatchObject({
       parts: [
         {
@@ -1134,7 +1152,7 @@ describe('runtime stream executor', (): void => {
       input: { level: 'ERROR', limit: 5 }
     });
     expect(executeRendererTool).not.toHaveBeenCalled();
-    expect(result).toEqual({ usage: { inputTokens: 11, outputTokens: 4, totalTokens: 15 }, shouldContinue: true });
+    expect(result).toEqual({ totalUsage: { inputTokens: 11, outputTokens: 4, totalTokens: 15 }, shouldContinue: true });
     expect(updates.at(-1)).toMatchObject({
       parts: [
         {
@@ -1209,7 +1227,7 @@ describe('runtime stream executor', (): void => {
       input: { path: 'src/index.ts', offset: 1, limit: 2 }
     });
     expect(executeRendererTool).not.toHaveBeenCalled();
-    expect(result).toEqual({ usage: { inputTokens: 12, outputTokens: 4, totalTokens: 16 }, shouldContinue: true });
+    expect(result).toEqual({ totalUsage: { inputTokens: 12, outputTokens: 4, totalTokens: 16 }, shouldContinue: true });
     expect(updates.at(-1)).toMatchObject({
       parts: [
         {
@@ -1280,7 +1298,7 @@ describe('runtime stream executor', (): void => {
       input: { path: 'src' }
     });
     expect(executeRendererTool).not.toHaveBeenCalled();
-    expect(result).toEqual({ usage: { inputTokens: 10, outputTokens: 4, totalTokens: 14 }, shouldContinue: true });
+    expect(result).toEqual({ totalUsage: { inputTokens: 10, outputTokens: 4, totalTokens: 14 }, shouldContinue: true });
     expect(updates.at(-1)).toMatchObject({
       parts: [
         {
@@ -1347,7 +1365,7 @@ describe('runtime stream executor', (): void => {
       input: { keys: ['theme'] }
     });
     expect(executeRendererTool).not.toHaveBeenCalled();
-    expect(result).toEqual({ usage: { inputTokens: 6, outputTokens: 4, totalTokens: 10 }, shouldContinue: true });
+    expect(result).toEqual({ totalUsage: { inputTokens: 6, outputTokens: 4, totalTokens: 10 }, shouldContinue: true });
     expect(updates.at(-1)).toMatchObject({
       parts: [
         {
@@ -1432,7 +1450,7 @@ describe('runtime stream executor', (): void => {
       input: {}
     });
     expect(executeRendererTool).not.toHaveBeenCalled();
-    expect(result).toEqual({ usage: { inputTokens: 7, outputTokens: 4, totalTokens: 11 }, shouldContinue: true });
+    expect(result).toEqual({ totalUsage: { inputTokens: 7, outputTokens: 4, totalTokens: 11 }, shouldContinue: true });
     expect(updates.at(-1)).toMatchObject({
       parts: [
         {
@@ -1514,7 +1532,7 @@ describe('runtime stream executor', (): void => {
       input: { name: 'Local MCP', command: 'npx', args: ['server'] }
     });
     expect(executeRendererTool).not.toHaveBeenCalled();
-    expect(result).toEqual({ usage: { inputTokens: 8, outputTokens: 4, totalTokens: 12 }, shouldContinue: true });
+    expect(result).toEqual({ totalUsage: { inputTokens: 8, outputTokens: 4, totalTokens: 12 }, shouldContinue: true });
     expect(updates.at(-1)).toMatchObject({
       parts: [
         {
@@ -1585,7 +1603,7 @@ describe('runtime stream executor', (): void => {
       input: { serverId: 'mcp-1', patch: { enabled: false } }
     });
     expect(executeRendererTool).not.toHaveBeenCalled();
-    expect(result).toEqual({ usage: { inputTokens: 9, outputTokens: 4, totalTokens: 13 }, shouldContinue: true });
+    expect(result).toEqual({ totalUsage: { inputTokens: 9, outputTokens: 4, totalTokens: 13 }, shouldContinue: true });
     expect(updates.at(-1)).toMatchObject({
       parts: [
         {
@@ -1655,7 +1673,7 @@ describe('runtime stream executor', (): void => {
       input: { serverId: 'mcp-1' }
     });
     expect(executeRendererTool).not.toHaveBeenCalled();
-    expect(result).toEqual({ usage: { inputTokens: 8, outputTokens: 4, totalTokens: 12 }, shouldContinue: true });
+    expect(result).toEqual({ totalUsage: { inputTokens: 8, outputTokens: 4, totalTokens: 12 }, shouldContinue: true });
     expect(updates.at(-1)).toMatchObject({
       parts: [
         {
@@ -1725,7 +1743,7 @@ describe('runtime stream executor', (): void => {
       input: { serverId: 'mcp-1' }
     });
     expect(executeRendererTool).not.toHaveBeenCalled();
-    expect(result).toEqual({ usage: { inputTokens: 10, outputTokens: 4, totalTokens: 14 }, shouldContinue: true });
+    expect(result).toEqual({ totalUsage: { inputTokens: 10, outputTokens: 4, totalTokens: 14 }, shouldContinue: true });
     expect(updates.at(-1)).toMatchObject({
       parts: [
         {
@@ -1792,7 +1810,7 @@ describe('runtime stream executor', (): void => {
       input: { path: 'https://example.com' }
     });
     expect(executeRendererTool).not.toHaveBeenCalled();
-    expect(result).toEqual({ usage: { inputTokens: 8, outputTokens: 4, totalTokens: 12 }, shouldContinue: true });
+    expect(result).toEqual({ totalUsage: { inputTokens: 8, outputTokens: 4, totalTokens: 12 }, shouldContinue: true });
     expect(updates.at(-1)).toMatchObject({
       parts: [
         {
@@ -1859,7 +1877,7 @@ describe('runtime stream executor', (): void => {
       input: { key: 'theme', value: 'dark' }
     });
     expect(executeRendererTool).not.toHaveBeenCalled();
-    expect(result).toEqual({ usage: { inputTokens: 7, outputTokens: 4, totalTokens: 11 }, shouldContinue: true });
+    expect(result).toEqual({ totalUsage: { inputTokens: 7, outputTokens: 4, totalTokens: 11 }, shouldContinue: true });
     expect(updates.at(-1)).toMatchObject({
       parts: [
         {
@@ -1926,7 +1944,7 @@ describe('runtime stream executor', (): void => {
       input: { title: 'Notes', content: '# Notes', ext: 'md' }
     });
     expect(executeRendererTool).not.toHaveBeenCalled();
-    expect(result).toEqual({ usage: { inputTokens: 9, outputTokens: 4, totalTokens: 13 }, shouldContinue: true });
+    expect(result).toEqual({ totalUsage: { inputTokens: 9, outputTokens: 4, totalTokens: 13 }, shouldContinue: true });
     expect(updates.at(-1)).toMatchObject({
       parts: [
         {
@@ -1994,7 +2012,7 @@ describe('runtime stream executor', (): void => {
       input: { path: 'docs/report.md', content: '# Report' }
     });
     expect(executeRendererTool).not.toHaveBeenCalled();
-    expect(result).toEqual({ usage: { inputTokens: 10, outputTokens: 4, totalTokens: 14 }, shouldContinue: true });
+    expect(result).toEqual({ totalUsage: { inputTokens: 10, outputTokens: 4, totalTokens: 14 }, shouldContinue: true });
     expect(updates.at(-1)).toMatchObject({
       parts: [
         {
@@ -2062,7 +2080,7 @@ describe('runtime stream executor', (): void => {
       input: { path: 'docs/report.md', oldString: 'old', newString: 'new' }
     });
     expect(executeRendererTool).not.toHaveBeenCalled();
-    expect(result).toEqual({ usage: { inputTokens: 11, outputTokens: 4, totalTokens: 15 }, shouldContinue: true });
+    expect(result).toEqual({ totalUsage: { inputTokens: 11, outputTokens: 4, totalTokens: 15 }, shouldContinue: true });
     expect(updates.at(-1)).toMatchObject({
       parts: [
         {
@@ -2112,7 +2130,7 @@ describe('runtime stream executor', (): void => {
       }
     );
 
-    expect(result).toEqual({ usage: { inputTokens: 8, outputTokens: 5, totalTokens: 13 }, shouldContinue: true });
+    expect(result).toEqual({ totalUsage: { inputTokens: 8, outputTokens: 5, totalTokens: 13 }, shouldContinue: true });
     expect(updates.at(-1)).toMatchObject({
       parts: [
         {
@@ -2228,7 +2246,7 @@ describe('runtime stream executor', (): void => {
 
       expect(settled).toBe(true);
       await expect(task).resolves.toEqual({
-        usage: { inputTokens: 8, outputTokens: 5, totalTokens: 13 },
+        totalUsage: { inputTokens: 8, outputTokens: 5, totalTokens: 13 },
         shouldContinue: true
       });
       expect(updates.at(-1)).toMatchObject({
@@ -2242,6 +2260,59 @@ describe('runtime stream executor', (): void => {
               toolName: 'renderer_echo',
               status: 'failure',
               error: { code: 'TOOL_TIMEOUT', message: 'Renderer 工具 renderer_echo 执行超时，已等待 5ms' }
+            }
+          }
+        ]
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('times out main-process tool calls within the task deadline', async (): Promise<void> => {
+    vi.useFakeTimers();
+    try {
+      const assistantMessage = createAssistantMessage();
+      const updates: ChatMessageRecord[] = [];
+      const executeMainTool = vi.fn(
+        () =>
+          new Promise<never>(() => {
+            // 保持 pending，用于验证主进程工具超时兜底。
+          })
+      );
+      const resolve = vi.fn().mockResolvedValue({
+        createOptions: {
+          providerId: 'openai',
+          providerName: 'OpenAI',
+          providerType: 'openai',
+          apiKey: 'sk-test',
+          baseUrl: 'https://api.openai.com/v1'
+        },
+        modelId: 'gpt-test'
+      });
+      const streamText = vi.fn().mockResolvedValue([undefined, { stream: createMainReadFileToolCallStream() }]);
+      const executor = createRuntimeStreamExecutor({ resolver: { resolve }, streamText, executeMainTool, rendererToolTimeoutMs: 5 });
+
+      const task = executor({ runtime: { ...runtime }, userMessage, assistantMessage }, async (message) => {
+        updates.push({ ...message, parts: [...message.parts] });
+      });
+
+      await vi.advanceTimersByTimeAsync(5);
+      await expect(task).resolves.toEqual({
+        totalUsage: { inputTokens: 8, outputTokens: 5, totalTokens: 13 },
+        shouldContinue: true
+      });
+      expect(updates.at(-1)).toMatchObject({
+        parts: [
+          {
+            type: 'tool',
+            toolCallId: 'tool-call-1',
+            toolName: 'read_file',
+            status: 'done',
+            result: {
+              toolName: 'read_file',
+              status: 'failure',
+              error: { code: 'TOOL_TIMEOUT', message: '主进程工具 read_file 执行超时，已等待 5ms' }
             }
           }
         ]
@@ -2278,7 +2349,7 @@ describe('runtime stream executor', (): void => {
     });
 
     expect(result).toEqual({
-      usage: { inputTokens: 5, outputTokens: 3, totalTokens: 8 },
+      totalUsage: { inputTokens: 5, outputTokens: 3, totalTokens: 8 },
       shouldContinue: true
     });
     expect(updates.at(-1)?.parts[0]).toMatchObject({
@@ -2437,7 +2508,8 @@ describe('runtime stream executor', (): void => {
             ]
           }
         ]
-      })
+      }),
+      RUNTIME_CALL_OPTIONS
     );
   });
 });

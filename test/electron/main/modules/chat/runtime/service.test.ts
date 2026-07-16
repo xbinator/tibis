@@ -230,7 +230,7 @@ describe('chat runtime service shell', (): void => {
 
   it('auto-names a session through the main process model path', async (): Promise<void> => {
     const updateSessionTitle = vi.fn();
-    const generateText = vi.fn().mockResolvedValue([undefined, { text: '"运行时标题"', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } }]);
+    const generateText = vi.fn().mockResolvedValue([undefined, { text: '"运行时标题"', totalUsage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } }]);
     const service = createChatRuntimeService({
       emit: vi.fn(),
       messageWriter: createNoopMessageWriter(),
@@ -621,7 +621,7 @@ describe('chat runtime service shell', (): void => {
         assistantMessage.usage = { inputTokens: 3, outputTokens: 4, totalTokens: 7 };
         await updateAssistant(assistantMessage);
 
-        return { usage: assistantMessage.usage };
+        return { totalUsage: assistantMessage.usage };
       }
     });
 
@@ -1015,22 +1015,28 @@ describe('chat runtime service shell', (): void => {
     );
   });
 
-  it('marks assistant message finished after continuation rounds stop at the runtime limit', async (): Promise<void> => {
+  it('uses the fifth model step for a forced final answer at the runtime limit', async (): Promise<void> => {
     const updatedMessages: ChatMessageRecord[] = [];
-    const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage }, updateAssistant) => {
+    const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage, runtime }, updateAssistant) => {
+      const callNumber = streamExecutor.mock.calls.length;
       assistantMessage.parts = [
         {
-          id: 'part0092',
+          id: `part-limit-${callNumber}`,
           type: 'tool',
-          toolCallId: 'tool-call-1',
+          toolCallId: `tool-call-limit-${callNumber}`,
           toolName: 'read_file',
           status: 'done',
-          input: { path: 'src/index.ts' },
+          input: { path: `src/file-${callNumber}.ts` },
           result: { toolName: 'read_file', status: 'success', data: { content: 'ok' } }
         }
       ];
       assistantMessage.loading = false;
       assistantMessage.finished = false;
+      // 流式执行器测试替身需要同步写入当前步骤快照，模拟真实 executor 行为。
+      const part = assistantMessage.parts[0];
+      if (part.type === 'tool') {
+        runtime.currentToolStep = { toolCalls: [{ toolName: part.toolName, input: part.input }] };
+      }
       await updateAssistant(assistantMessage);
       return { shouldContinue: true };
     });
@@ -1051,11 +1057,56 @@ describe('chat runtime service shell', (): void => {
     await service.send(createInput({ content: 'inspect file' }));
     await flushRuntimeTasks();
 
-    expect(streamExecutor).toHaveBeenCalledTimes(26);
+    expect(streamExecutor).toHaveBeenCalledTimes(5);
+    expect(streamExecutor.mock.calls.slice(0, 4).every(([input]) => input.forceFinal === false)).toBe(true);
+    expect(streamExecutor.mock.calls[4]?.[0]).toMatchObject({ forceFinal: true });
     expect(updatedMessages.at(-1)).toMatchObject({
       loading: false,
       finished: true
     });
+  });
+
+  it('forces a final answer after two equivalent cross-round tool calls', async (): Promise<void> => {
+    const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage, forceFinal, runtime }, updateAssistant) => {
+      if (forceFinal) {
+        assistantMessage.content = 'final answer from existing results';
+        assistantMessage.parts.push({ id: 'part-final-repeat', type: 'text', text: 'final answer from existing results' });
+        assistantMessage.loading = false;
+        assistantMessage.finished = true;
+        await updateAssistant(assistantMessage);
+        return {};
+      }
+
+      const callNumber = streamExecutor.mock.calls.length;
+      assistantMessage.parts.push({
+        id: `part-repeat-${callNumber}`,
+        type: 'tool',
+        toolCallId: `tool-call-repeat-${callNumber}`,
+        toolName: 'read_file',
+        status: 'done',
+        input: { path: 'src/index.ts' },
+        result: { toolName: 'read_file', status: 'success', data: { content: 'ok' } }
+      });
+      assistantMessage.loading = false;
+      assistantMessage.finished = false;
+      runtime.currentToolStep = { toolCalls: [{ toolName: 'read_file', input: { path: 'src/index.ts' } }] };
+      await updateAssistant(assistantMessage);
+      return { shouldContinue: true };
+    });
+    const service = createChatRuntimeService({
+      emit: createEventCollector().emit,
+      createMessageId: (role) => `${role}-message-repeat`,
+      now: () => '2026-07-16T00:00:00.000Z',
+      messageReader: createNoopMessageReader(),
+      messageWriter: createNoopMessageWriter(),
+      streamExecutor
+    });
+
+    await service.send(createInput({ content: 'inspect the same file' }));
+    await flushRuntimeTasks();
+
+    expect(streamExecutor).toHaveBeenCalledTimes(3);
+    expect(streamExecutor.mock.calls[2]?.[0]).toMatchObject({ forceFinal: true });
   });
 
   it('waits for renderer confirmation decisions through the runtime confirmation bridge', async (): Promise<void> => {
@@ -1866,7 +1917,7 @@ describe('chat runtime service shell', (): void => {
         ];
         assistantMessage.usage = firstUsage;
         await updateAssistant(assistantMessage);
-        return { usage: firstUsage, shouldContinue: true };
+        return { totalUsage: firstUsage, shouldContinue: true };
       }
 
       assistantMessage.content = 'final answer';
@@ -1875,7 +1926,7 @@ describe('chat runtime service shell', (): void => {
       assistantMessage.finished = true;
       assistantMessage.usage = secondUsage;
       await updateAssistant(assistantMessage);
-      return { usage: secondUsage };
+      return { totalUsage: secondUsage };
     });
     const service = createChatRuntimeService({
       emit: collector.emit,

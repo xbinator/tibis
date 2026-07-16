@@ -156,10 +156,52 @@ describe('AI SDK 7 service integration', (): void => {
 
     expect(error).toBeUndefined();
     expect(aiSdkMocks.isStepCount).toHaveBeenCalledWith(5);
-    expect(aiSdkMocks.generateText).toHaveBeenCalledWith(expect.objectContaining({ stopWhen: { count: 5 } }));
+    expect(aiSdkMocks.generateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prepareStep: expect.any(Function),
+        stopWhen: { count: 5 },
+        timeout: {
+          totalMs: 300_000,
+          stepMs: 120_000,
+          chunkMs: 90_000,
+          toolMs: 60_000
+        }
+      })
+    );
   });
 
-  it('preserves final-step usage for generated text', async (): Promise<void> => {
+  it('lets ChatRuntime own the tool loop and force the final model step', async (): Promise<void> => {
+    const stream = createEmptyStream();
+    aiSdkMocks.streamText.mockReturnValue({ stream });
+
+    const [error] = await aiService.streamText(
+      AI_CREATE_OPTIONS,
+      {
+        modelId: 'gpt-test',
+        prompt: 'Finish from existing tool results.',
+        tavily: { enabled: true, apiKey: 'tavily-test-key' }
+      },
+      { runtimeToolLoop: true, forceFinal: true, totalTimeoutMs: 12_345 }
+    );
+
+    expect(error).toBeUndefined();
+    expect(aiSdkMocks.isStepCount).not.toHaveBeenCalled();
+    expect(aiSdkMocks.streamText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolChoice: 'none',
+        timeout: {
+          totalMs: 12_345,
+          stepMs: 120_000,
+          chunkMs: 90_000,
+          toolMs: 60_000
+        }
+      })
+    );
+    expect(aiSdkMocks.streamText.mock.calls[0]?.[0]).not.toHaveProperty('prepareStep');
+    expect(aiSdkMocks.streamText.mock.calls[0]?.[0]).not.toHaveProperty('stopWhen');
+  });
+
+  it('exposes final-step and total usage for generated text', async (): Promise<void> => {
     aiSdkMocks.generateText.mockResolvedValue({
       text: 'Final answer',
       usage: { inputTokens: 12, outputTokens: 8, totalTokens: 20 },
@@ -174,7 +216,8 @@ describe('AI SDK 7 service integration', (): void => {
     });
 
     expect(error).toBeUndefined();
-    expect(result?.usage).toEqual({ inputTokens: 7, outputTokens: 5, totalTokens: 12 });
+    expect(result?.stepUsage).toEqual({ inputTokens: 7, outputTokens: 5, totalTokens: 12 });
+    expect(result?.totalUsage).toEqual({ inputTokens: 12, outputTokens: 8, totalTokens: 20 });
   });
 
   it('returns the v7 full event stream', async (): Promise<void> => {
@@ -189,6 +232,24 @@ describe('AI SDK 7 service integration', (): void => {
     expect(error).toBeUndefined();
     expect(result?.stream).toBe(stream);
   });
+
+  it('releases the abort controller when a runtime stream ends', async (): Promise<void> => {
+    const stream = createEmptyStream();
+    const removeController = vi.spyOn(aiService, 'removeController');
+    aiSdkMocks.streamText.mockReturnValue({ stream });
+
+    const [error] = await aiService.streamText(AI_CREATE_OPTIONS, {
+      requestId: 'runtime-stream-cleanup',
+      modelId: 'gpt-test',
+      prompt: 'Stream a response.'
+    });
+    const onEnd = aiSdkMocks.streamText.mock.calls[0]?.[0].onEnd as (() => void) | undefined;
+
+    expect(error).toBeUndefined();
+    expect(onEnd).toBeTypeOf('function');
+    onEnd?.();
+    expect(removeController).toHaveBeenCalledWith('runtime-stream-cleanup');
+  });
 });
 
 describe('createAIInvokeResult', (): void => {
@@ -197,7 +258,12 @@ describe('createAIInvokeResult', (): void => {
 
     expect(result).toEqual<AIInvokeResult>({
       text: '',
-      usage: {
+      stepUsage: {
+        inputTokens: 737,
+        outputTokens: 150,
+        totalTokens: 887
+      },
+      totalUsage: {
         inputTokens: 737,
         outputTokens: 150,
         totalTokens: 887
@@ -210,7 +276,12 @@ describe('createAIInvokeResult', (): void => {
     expect(createAIInvokeResult(createStructuredResult(), true)).toEqual<AIInvokeResult>({
       text: '',
       output: { title: '摘要' },
-      usage: {
+      stepUsage: {
+        inputTokens: 1,
+        outputTokens: 2,
+        totalTokens: 3
+      },
+      totalUsage: {
         inputTokens: 1,
         outputTokens: 2,
         totalTokens: 3

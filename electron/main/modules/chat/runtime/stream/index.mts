@@ -6,7 +6,8 @@ import type { ChatRuntimeStreamExecutor, ChatRuntimeStreamExecutorResult } from 
 import type { RuntimeStreamExecutorDependencies, RuntimeStreamText } from './types.mjs';
 import type { AIUsage, AIToolExecutionResult } from 'types/ai';
 import { AI_ERROR_CODE, createAIServiceError } from '../../../ai/errors/codes.mjs';
-import { normalizeUsage, toRuntimeStreamChunk } from './chunks.mjs';
+import { AI_TASK_TIMEOUT_MS } from '../../../ai/tool-loop-policy.mjs';
+import { toRuntimeStreamChunk } from './chunks.mjs';
 import {
   appendReasoningDelta,
   appendTextDelta,
@@ -38,7 +39,11 @@ export type { RuntimeStreamText, RuntimeStreamExecutorDependencies };
  * @returns runtime 流式执行器
  */
 export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorDependencies): ChatRuntimeStreamExecutor {
-  return async ({ runtime, sourceMessages, userMessage, assistantMessage }, updateAssistant): Promise<ChatRuntimeStreamExecutorResult> => {
+  return async (
+    { runtime, sourceMessages, userMessage, assistantMessage, forceFinal = false, totalTimeoutMs = AI_TASK_TIMEOUT_MS },
+    updateAssistant
+  ): Promise<ChatRuntimeStreamExecutorResult> => {
+    runtime.currentToolStep = { toolCalls: [] };
     const resolution = runtime.resolvedModel ?? (await dependencies.resolver.resolve());
     if (!resolution) {
       throw createAIServiceError(AI_ERROR_CODE.MODEL_NOT_FOUND, '没有可用的聊天模型');
@@ -46,7 +51,8 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
 
     const [error, result] = await dependencies.streamText(
       resolution.createOptions,
-      createRuntimeStreamRequest(resolution.modelId, runtime, userMessage, sourceMessages)
+      createRuntimeStreamRequest(resolution.modelId, runtime, userMessage, sourceMessages),
+      { runtimeToolLoop: true, forceFinal, totalTimeoutMs }
     );
     if (error) {
       throw error;
@@ -55,16 +61,17 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
       throw createAIServiceError(AI_ERROR_CODE.REQUEST_FAILED, 'ChatRuntime 流式调用未返回结果');
     }
 
-    let usage: AIUsage | undefined;
+    let stepUsage: AIUsage | undefined;
+    let totalUsage: AIUsage | undefined;
+    let finishReason: import('types/ai').AIStreamFinishReason | undefined;
     let executedToolCount = 0;
     let allToolsContinueable = true;
     let anyToolStopped = false;
     let isWaitingForUserInput = false;
-    const rendererToolTimeoutMs = normalizeRendererToolTimeoutMs(dependencies.rendererToolTimeoutMs);
+    const runtimeToolTimeoutMs = Math.min(normalizeRendererToolTimeoutMs(dependencies.rendererToolTimeoutMs), totalTimeoutMs);
 
-    for await (const rawChunk of result.stream as AsyncIterable<unknown>) {
+    for await (const rawChunk of result.stream) {
       const chunk = toRuntimeStreamChunk(rawChunk);
-      if (!chunk) continue;
 
       if (chunk.type === 'text-delta') {
         appendTextDelta(assistantMessage, chunk.text);
@@ -72,10 +79,15 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
       } else if (chunk.type === 'reasoning-delta') {
         appendReasoningDelta(assistantMessage, chunk.text);
         await updateAssistant(assistantMessage);
+      } else if (chunk.type === 'finish-step') {
+        stepUsage = chunk.stepUsage;
       } else if (chunk.type === 'finish') {
-        usage = chunk.totalUsage ? normalizeUsage(chunk.totalUsage) : undefined;
+        finishReason = chunk.finishReason;
+        totalUsage = chunk.totalUsage;
       } else if (chunk.type === 'error') {
         throw normalizeRuntimeError(chunk.error);
+      } else if (chunk.type === 'abort') {
+        throw createAIServiceError(AI_ERROR_CODE.REQUEST_FAILED, chunk.reason?.trim() || '模型流已中止');
       } else if (chunk.type === 'tool-input-start') {
         appendToolInputStart(assistantMessage, chunk);
         await updateAssistant(assistantMessage);
@@ -85,7 +97,8 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
       } else if (chunk.type === 'tool-input-end') {
         appendToolInputEnd(assistantMessage, chunk);
         await updateAssistant(assistantMessage);
-      } else if (chunk.type === 'tool-call' || chunk.type === 'tool-input-available') {
+      } else if (chunk.type === 'tool-call') {
+        runtime.currentToolStep.toolCalls.push({ toolName: chunk.toolName, input: chunk.input });
         appendToolCall(assistantMessage, chunk);
         await updateAssistant(assistantMessage);
 
@@ -98,9 +111,9 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
 
         let toolResult: AIToolExecutionResult | undefined;
         if (dependencies.executeMainTool && isMainProcessTool(chunk.toolName)) {
-          toolResult = await executeMainToolSafely(dependencies.executeMainTool, toolExecutionInput);
+          toolResult = await executeMainToolSafely(dependencies.executeMainTool, toolExecutionInput, runtimeToolTimeoutMs);
         } else if (dependencies.executeRendererTool && isRendererManagedTool(runtime, chunk.toolName)) {
-          toolResult = await executeRendererToolSafely(dependencies.executeRendererTool, toolExecutionInput, rendererToolTimeoutMs);
+          toolResult = await executeRendererToolSafely(dependencies.executeRendererTool, toolExecutionInput, runtimeToolTimeoutMs);
         }
 
         if (toolResult) {
@@ -152,15 +165,19 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
       anyToolStopped = anyToolStopped || shouldStopStreamAfterToolResult(toolResult);
     }
 
-    const shouldContinue = executedToolCount > 0 && allToolsContinueable;
-    if (shouldContinue) return { usage, shouldContinue };
-    if (isWaitingForUserInput) return usage ? { usage } : {};
+    const shouldContinue = executedToolCount > 0 && allToolsContinueable && finishReason === 'tool-calls';
+    const usageResult = {
+      ...(stepUsage ? { stepUsage } : {}),
+      ...(totalUsage ? { totalUsage } : {})
+    };
+    if (shouldContinue) return { ...usageResult, shouldContinue };
+    if (isWaitingForUserInput) return usageResult;
 
     if (assistantMessage.finished !== true) {
-      finishAssistantMessage(assistantMessage, usage);
+      finishAssistantMessage(assistantMessage, totalUsage);
       await updateAssistant(assistantMessage);
     }
 
-    return usage ? { usage } : {};
+    return usageResult;
   };
 }

@@ -96,6 +96,23 @@ export function createRendererToolTimeoutResult(toolName: string, timeoutMs: num
 }
 
 /**
+ * 创建主进程工具超时结果。
+ * @param toolName - 工具名称
+ * @param timeoutMs - 超时时间
+ * @returns 工具失败结果
+ */
+export function createMainToolTimeoutResult(toolName: string, timeoutMs: number): AIToolExecutionResult {
+  return {
+    toolName,
+    status: 'failure',
+    error: {
+      code: 'TOOL_TIMEOUT',
+      message: `主进程工具 ${toolName} 执行超时，已等待 ${timeoutMs}ms`
+    }
+  };
+}
+
+/**
  * 创建未注册工具的失败结果。
  * @param toolName - 工具名称
  * @returns 工具失败结果
@@ -173,19 +190,34 @@ export async function executeRendererToolSafely(
 }
 
 /**
- * 执行主进程工具，并把异常转换为工具失败结果。
+ * 执行主进程工具，并把异常或超时转换为工具失败结果。
  * @param executeMainTool - 主进程工具执行器
  * @param input - 主进程工具输入
+ * @param timeoutMs - 超时时间
  * @returns 工具执行结果
  */
 export async function executeMainToolSafely(
   executeMainTool: ChatRuntimeMainToolExecutor,
-  input: Parameters<ChatRuntimeMainToolExecutor>[0]
+  input: Parameters<ChatRuntimeMainToolExecutor>[0],
+  timeoutMs: number
 ): Promise<AIToolExecutionResult> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
   try {
-    return await executeMainTool(input);
+    return await Promise.race([
+      executeMainTool(input),
+      new Promise<AIToolExecutionResult>((resolve) => {
+        timeoutId = setTimeout(() => {
+          resolve(createMainToolTimeoutResult(input.toolName, timeoutMs));
+        }, timeoutMs);
+      })
+    ]);
   } catch (error: unknown) {
     return createToolFailureResultFromError(input.toolName, error);
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
   }
 }
 

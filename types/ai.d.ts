@@ -2,7 +2,7 @@
  * @file ai.d.ts
  * @description AI 相关全局类型声明。
  */
-import type { ModelMessage } from 'ai';
+import type { AsyncIterableStream, ModelMessage, TextStreamPart, ToolSet } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 
 /**
@@ -676,13 +676,22 @@ export interface AIUsage {
 }
 
 export interface AIInvokeResult {
+  /** 最终生成文本。 */
   text: string;
+  /** 结构化输出。 */
   output?: unknown;
-  usage?: AIUsage;
+  /** 最后一个模型步骤的 token 使用量。 */
+  stepUsage?: AIUsage;
+  /** 本次 SDK 调用所有模型步骤的累计 token 使用量。 */
+  totalUsage?: AIUsage;
 }
 
+/**
+ * AI SDK 7 完整事件流结果。
+ */
 export interface AIStreamResult {
-  stream: StreamTextResult['textStream'];
+  /** 包含文本、推理、工具和完成事件的强类型流。 */
+  stream: AsyncIterableStream<TextStreamPart<ToolSet>>;
 }
 
 /**
@@ -693,6 +702,8 @@ export type AIStreamFinishReason = 'stop' | 'length' | 'content-filter' | 'tool-
 export interface AIStreamFinishChunk {
   /** 流式结束原因。 */
   finishReason: AIStreamFinishReason;
-  /** token 使用量。 */
-  usage: AIUsage;
+  /** 最后一个模型步骤的 token 使用量。 */
+  stepUsage?: AIUsage;
+  /** 本次 SDK 调用所有模型步骤的累计 token 使用量。 */
+  totalUsage: AIUsage;
 }

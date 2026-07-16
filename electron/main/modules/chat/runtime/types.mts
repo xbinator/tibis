@@ -7,6 +7,7 @@ import type { CompactionExecutor } from './compaction/executor.mjs';
 import type { SummaryGeneratorDependencies } from './compaction/summary-generator.mjs';
 import type { RuntimeFilePartMaterializer } from './messages/file-parts.mjs';
 import type { ChatModelResolution } from './model/resolver.mjs';
+import type { ToolStepSnapshot } from '../../ai/tool-loop-policy.mjs';
 import type {
   AICreateOptions,
   AIInvokeResult,
@@ -61,6 +62,8 @@ export interface ActiveChatRuntime {
   artifactRegistry?: ArtifactRegistry;
   /** 当前模型请求边界冻结的模型解析结果，不进入持久化或 recovery snapshot。 */
   resolvedModel?: ChatModelResolution;
+  /** 当前模型步骤产生的工具调用快照，仅用于进程内循环策略。 */
+  currentToolStep?: ToolStepSnapshot;
   /** 当前执行阶段。 */
   phase: ChatRuntimePhase;
   /** 当前压缩阶段的触发来源，仅保留在活跃 Runtime 内存中。 */
@@ -117,12 +120,18 @@ export interface ChatRuntimeStreamExecutorInput {
   userMessage: ChatMessageRecord;
   /** assistant 草稿消息。 */
   assistantMessage: ChatMessageRecord;
+  /** 是否强制当前模型调用生成最终回答。 */
+  forceFinal?: boolean;
+  /** 当前用户任务剩余的总超时时间。 */
+  totalTimeoutMs?: number;
 }
 
 /** Runtime 流式执行结果。 */
 export interface ChatRuntimeStreamExecutorResult {
-  /** Provider 返回的 usage。 */
-  usage?: AIUsage;
+  /** 最后一个模型步骤的 usage。 */
+  stepUsage?: AIUsage;
+  /** 本次 SDK 调用所有模型步骤的累计 usage。 */
+  totalUsage?: AIUsage;
   /** 是否应带当前 assistant 工具结果继续同一轮模型调用。 */
   shouldContinue?: boolean;
 }

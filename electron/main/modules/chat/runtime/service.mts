@@ -40,6 +40,7 @@ import { groupBy } from 'lodash-es';
 import { nanoid } from 'nanoid';
 import { AI_ERROR_CODE, createAIServiceError, isAIServiceError } from '../../ai/errors/codes.mjs';
 import { aiService } from '../../ai/service.mjs';
+import { getLoopStopReason, getTaskTimeout, type ToolLoopStopReason, type ToolStepSnapshot } from '../../ai/tool-loop-policy.mjs';
 import { log } from '../../logger/service.mjs';
 import { chatSessionManager } from '../service.mjs';
 import { createArtifactRegistry } from './compaction/artifact-registry.mjs';
@@ -68,9 +69,6 @@ import { createDefaultChatModelResolver } from './model/resolver.mjs';
 import { createCompactRuntime, createContinuationRuntime, createSendRuntime, createUserChoiceRuntime } from './runners/factory.mjs';
 import { createRuntimeStreamExecutor } from './stream/index.mjs';
 import { createMainToolExecutor } from './tools/index.mjs';
-
-/** 单个 runtime 内工具续轮最大次数。 */
-const MAX_RUNTIME_CONTINUATION_ROUNDS = 25;
 
 /** Renderer 请求默认超时时间。 */
 const RUNTIME_RENDERER_REQUEST_TIMEOUT_MS = 30_000;
@@ -133,11 +131,21 @@ function createDefaultStreamExecutor(
   const resolver = createDefaultChatModelResolver();
   return createRuntimeStreamExecutor({
     resolver,
-    streamText: (createOptions, request) => aiService.streamText(createOptions, request),
+    streamText: (createOptions, request, callOptions) => aiService.streamText(createOptions, request, callOptions),
     executeRendererTool,
     executeMainTool,
     rendererToolTimeoutMs
   });
+}
+
+/**
+ * 记录 ChatRuntime 进入最终回答阶段的固定策略原因。
+ * @param runtime - 当前 runtime
+ * @param reason - 收口原因
+ * @param stepNumber - 即将执行的零基步骤号
+ */
+function logLoopFinalizing(runtime: ActiveChatRuntime, reason: ToolLoopStopReason, stepNumber: number): void {
+  log.info('[ChatRuntime] Tool loop finalizing:', { runtimeId: runtime.runtimeId, reason, stepNumber });
 }
 
 /**
@@ -633,39 +641,51 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     assistantMessage: ChatMessageRecord
   ): Promise<AIUsage | undefined> {
     let currentSourceMessages = sourceMessages;
-    let projectedMessages = await prepareRequestContext(runtime, currentSourceMessages, userMessage, assistantMessage);
-    if (!activeRuntimes.has(runtime.runtimeId)) {
-      throw new ChatRuntimeError('RUNTIME_NOT_ACTIVE', `Runtime ${runtime.runtimeId} is not active`);
-    }
-    let streamResult = await streamExecutor({ runtime, sourceMessages: projectedMessages, userMessage, assistantMessage }, (message) =>
-      updateAssistantMessage(runtime, message)
-    );
-    runtime.resolvedModel = undefined;
-    if (!activeRuntimes.has(runtime.runtimeId)) {
-      throw new ChatRuntimeError('RUNTIME_NOT_ACTIVE', `Runtime ${runtime.runtimeId} is not active`);
-    }
+    let accumulatedUsage: AIUsage | undefined;
+    let completedSteps = 0;
+    let forceFinal = false;
+    let shouldRun = true;
+    const toolSteps: ToolStepSnapshot[] = [];
 
-    let accumulatedUsage = addRuntimeUsage(undefined, streamResult.usage);
-    let continuationRound = 0;
-    while (streamResult.shouldContinue && continuationRound < MAX_RUNTIME_CONTINUATION_ROUNDS) {
-      continuationRound += 1;
-      // 将上一轮 assistant 草稿纳入下一轮上下文，保证工具结果续轮能拿到 assistant 历史
-      currentSourceMessages = createContinuationSourceMessages(currentSourceMessages, assistantMessage);
-      // 每个完整工具结果后的模型请求边界都重新预算，并且只把 projection 交给模型。
+    while (shouldRun) {
+      // 每个模型请求边界都重新预算，并且只把 projection 交给模型。
       // eslint-disable-next-line no-await-in-loop
-      projectedMessages = await prepareRequestContext(runtime, currentSourceMessages, userMessage, assistantMessage);
+      const projectedMessages = await prepareRequestContext(runtime, currentSourceMessages, userMessage, assistantMessage);
       if (!activeRuntimes.has(runtime.runtimeId)) {
         throw new ChatRuntimeError('RUNTIME_NOT_ACTIVE', `Runtime ${runtime.runtimeId} is not active`);
       }
+
+      const totalTimeoutMs = getTaskTimeout(runtime.createdAt);
+      if (totalTimeoutMs <= 0) {
+        throw createAIServiceError(AI_ERROR_CODE.REQUEST_FAILED, '本次 AI 任务已达到固定的 300 秒总时限');
+      }
+
+      runtime.currentToolStep = { toolCalls: [] };
+      // Runtime 是主聊天唯一续轮控制者；最终步骤通过内部参数关闭工具。
       // eslint-disable-next-line no-await-in-loop
-      streamResult = await streamExecutor({ runtime, sourceMessages: projectedMessages, userMessage, assistantMessage }, (message) =>
-        updateAssistantMessage(runtime, message)
+      const streamResult = await streamExecutor(
+        { runtime, sourceMessages: projectedMessages, userMessage, assistantMessage, forceFinal, totalTimeoutMs },
+        (message) => updateAssistantMessage(runtime, message)
       );
+      completedSteps += 1;
+      toolSteps.push(runtime.currentToolStep ?? { toolCalls: [] });
       runtime.resolvedModel = undefined;
       if (!activeRuntimes.has(runtime.runtimeId)) {
         throw new ChatRuntimeError('RUNTIME_NOT_ACTIVE', `Runtime ${runtime.runtimeId} is not active`);
       }
-      accumulatedUsage = addRuntimeUsage(accumulatedUsage, streamResult.usage);
+
+      accumulatedUsage = addRuntimeUsage(accumulatedUsage, streamResult.totalUsage);
+      if (!streamResult.shouldContinue || forceFinal) {
+        shouldRun = false;
+        continue;
+      }
+
+      const stopReason = getLoopStopReason(toolSteps, completedSteps);
+      forceFinal = stopReason !== undefined;
+      if (stopReason) logLoopFinalizing(runtime, stopReason, completedSteps);
+
+      // 将上一轮 assistant 草稿纳入下一轮上下文，保证工具结果续轮能拿到 assistant 历史。
+      currentSourceMessages = createContinuationSourceMessages(currentSourceMessages, assistantMessage);
     }
 
     await finishAssistantMessageIfNeeded(runtime, assistantMessage, accumulatedUsage);

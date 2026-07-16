@@ -3,10 +3,12 @@
  * @description AI 服务 IPC 处理器，负责处理渲染进程与主进程之间的 AI 相关通信
  */
 import type { WebContents } from 'electron';
-import type { AICreateOptions, AIRequestOptions, AIStreamToolResultChunk } from 'types/ai';
+import type { AICreateOptions, AIRequestOptions, AIStreamToolResultChunk, AIToolExecutionResult, AIUsage } from 'types/ai';
 import { ipcMain } from 'electron';
 import { getWindowFromWebContents } from '../../window.mjs';
+import { AI_ERROR_CODE, createAIServiceError } from './errors/codes.mjs';
 import { aiService } from './service.mjs';
+import { normalizeAIUsage } from './usage.mjs';
 
 function emitTextDelta(text: string, isThinking: { value: boolean }, webContents: WebContents): void {
   let remaining = text;
@@ -35,22 +37,68 @@ function emitTextDelta(text: string, isThinking: { value: boolean }, webContents
  * @param chunk - SDK 原始工具结果片段
  * @returns 渲染进程可直接消费的工具结果载荷
  */
-function normalizeToolResultChunk(chunk: { toolCallId: string; toolName: string; output?: unknown; result?: unknown }): AIStreamToolResultChunk {
-  const payload = chunk.result ?? chunk.output;
-  const normalizedResult = (
-    payload && typeof payload === 'object' && 'status' in payload && 'toolName' in payload
-      ? payload
+function normalizeToolResultChunk(chunk: { toolCallId: string; toolName: string; output: unknown }): AIStreamToolResultChunk {
+  const normalizedResult: AIToolExecutionResult =
+    chunk.output && typeof chunk.output === 'object' && 'status' in chunk.output && 'toolName' in chunk.output
+      ? (chunk.output as AIToolExecutionResult)
       : {
           toolName: chunk.toolName,
           status: 'success',
-          data: payload
-        }
-  ) as AIStreamToolResultChunk['result'];
+          data: chunk.output
+        };
 
   return {
     toolCallId: chunk.toolCallId,
     toolName: chunk.toolName,
     result: normalizedResult
+  };
+}
+
+/**
+ * 提取可安全展示的工具异常消息。
+ * @param error - SDK 工具异常
+ * @returns 稳定错误消息
+ */
+function readToolErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '工具执行失败';
+}
+
+/**
+ * 将 SDK 工具异常转换为渲染进程可消费的失败结果。
+ * @param chunk - SDK 工具异常事件
+ * @returns 渲染进程工具结果载荷
+ */
+function normalizeToolErrorChunk(chunk: { toolCallId: string; toolName: string; error: unknown }): AIStreamToolResultChunk {
+  const message = readToolErrorMessage(chunk.error);
+  return {
+    toolCallId: chunk.toolCallId,
+    toolName: chunk.toolName,
+    result: {
+      toolName: chunk.toolName,
+      status: 'failure',
+      error: { code: 'EXECUTION_FAILED', message }
+    }
+  };
+}
+
+/**
+ * 将 SDK 工具拒绝事件转换为渲染进程可消费的失败结果。
+ * @param toolCallId - 工具调用 ID
+ * @param toolName - 工具名称
+ * @param reason - 可选拒绝原因
+ * @returns 渲染进程工具结果载荷
+ */
+function normalizeToolDeniedChunk(toolCallId: string, toolName: string, reason?: string): AIStreamToolResultChunk {
+  return {
+    toolCallId,
+    toolName,
+    result: {
+      toolName,
+      status: 'failure',
+      error: { code: 'PERMISSION_DENIED', message: reason?.trim() || `工具 ${toolName} 的执行未获批准` }
+    }
   };
 }
 /**
@@ -87,6 +135,7 @@ export function registerAIHandlers(): void {
     if (!win) return;
 
     const { requestId } = request;
+    let stepUsage: AIUsage | undefined;
 
     try {
       const [error, result] = await aiService.streamText(createOptions, request);
@@ -119,15 +168,40 @@ export function registerAIHandlers(): void {
         } else if (chunk.type === 'tool-result') {
           // 工具结果
           win.webContents.send('ai:stream:tool-result', normalizeToolResultChunk(chunk));
+        } else if (chunk.type === 'tool-error') {
+          // 工具异常必须作为终态结果透传，避免 UI 长期停留在执行中。
+          win.webContents.send('ai:stream:tool-result', normalizeToolErrorChunk(chunk));
+        } else if (chunk.type === 'tool-output-denied') {
+          // SDK 或供应商拒绝工具输出时保留权限拒绝语义。
+          win.webContents.send('ai:stream:tool-result', normalizeToolDeniedChunk(chunk.toolCallId, chunk.toolName));
+        } else if (chunk.type === 'tool-approval-request' && !chunk.isAutomatic) {
+          // 当前直接流通道没有 SDK 审批交互，显式失败而不是静默挂起。
+          win.webContents.send(
+            'ai:stream:error',
+            createAIServiceError(AI_ERROR_CODE.REQUEST_FAILED, `工具 ${chunk.toolCall.toolName} 请求 SDK 审批，但当前流通道未启用该审批能力`)
+          );
+        } else if (chunk.type === 'tool-approval-response' && !chunk.approved) {
+          // 自动或供应商审批拒绝统一映射为工具失败结果。
+          win.webContents.send('ai:stream:tool-result', normalizeToolDeniedChunk(chunk.toolCall.toolCallId, chunk.toolCall.toolName, chunk.reason));
+        } else if (chunk.type === 'abort') {
+          // 手动中止的 renderer 已清理监听；其他中止原因需要显式告知仍在监听的调用方。
+          win.webContents.send('ai:stream:error', createAIServiceError(AI_ERROR_CODE.REQUEST_FAILED, chunk.reason?.trim() || '模型流已中止'));
+          break;
+        } else if (chunk.type === 'file' || chunk.type === 'reasoning-file') {
+          // 旧直接流接口没有生成文件载荷，明确报告能力缺失，避免静默丢失模型输出。
+          win.webContents.send('ai:stream:error', createAIServiceError(AI_ERROR_CODE.REQUEST_FAILED, `当前流通道尚不支持 ${chunk.type} 事件`));
         } else if (chunk.type === 'error') {
           // 流式错误
           win.webContents.send('ai:stream:error', chunk.error);
+        } else if (chunk.type === 'finish-step') {
+          // 每个步骤结束时覆盖为最新一步 usage，最终与累计 usage 一起发送。
+          stepUsage = normalizeAIUsage(chunk.usage);
         } else if (chunk.type === 'finish') {
-          // 流式完成，携带 token 使用量
-          const { inputTokens, outputTokens, totalTokens } = chunk.totalUsage;
+          // 流式完成，同时携带末步与累计 token 使用量。
           win.webContents.send('ai:stream:finish', {
             finishReason: chunk.finishReason,
-            usage: { inputTokens, outputTokens, totalTokens }
+            ...(stepUsage ? { stepUsage } : {}),
+            totalUsage: normalizeAIUsage(chunk.totalUsage)
           });
         }
       }

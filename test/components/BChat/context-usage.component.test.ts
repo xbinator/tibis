@@ -58,21 +58,29 @@ describe('ContextUsage', (): void => {
     expect(wrapper.find('.context-usage__progress').attributes('stroke-dasharray')).toBe('100 100');
   });
 
-  it('renders in the input toolbar only after usage is available', async (): Promise<void> => {
-    const wrapper = shallowMount(InputToolbar, {
+  it('renders in the input toolbar only after usage is available', (): void => {
+    const baseProps = {
+      loading: false,
+      inputValue: '',
+      selectedModel: { providerId: 'provider-1', modelId: 'model-1' },
+      contextWindow: 1_000_000,
+      supportsVision: false,
+      canSubmit: false
+    };
+    const emptyWrapper = shallowMount(InputToolbar, {
       props: {
-        loading: false,
-        inputValue: '',
-        selectedModel: { providerId: 'provider-1', modelId: 'model-1' },
-        contextUsedTokens: 0,
-        contextWindow: 1_000_000,
-        supportsVision: false,
-        canSubmit: false
+        ...baseProps,
+        contextUsedTokens: 0
+      }
+    });
+    const usageWrapper = shallowMount(InputToolbar, {
+      props: {
+        ...baseProps,
+        contextUsedTokens: 54_700
       }
     });
 
-    expect(wrapper.findComponent(ContextUsage).exists()).toBe(false);
-    await wrapper.setProps({ contextUsedTokens: 54_700 });
-    expect(wrapper.findComponent(ContextUsage).exists()).toBe(true);
+    expect(emptyWrapper.findComponent(ContextUsage).exists()).toBe(false);
+    expect(usageWrapper.findComponent(ContextUsage).exists()).toBe(true);
   });
 });
