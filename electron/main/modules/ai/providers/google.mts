@@ -5,7 +5,7 @@
 import type { AIProvider } from '../types.mjs';
 import type { LanguageModel } from 'ai';
 import type { AIServiceError, AICreateOptions } from 'types/ai';
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createGoogle } from '@ai-sdk/google';
 import { AI_ERROR_CODE, createAIServiceError } from '../errors/codes.mjs';
 import { mapCommonError } from '../errors/common.mjs';
 import { extractErrorDetails } from '../errors/utils.mjs';
@@ -27,7 +27,7 @@ export class GoogleProvider implements AIProvider {
   create(options: AICreateOptions, modelId: string) {
     const { apiKey, baseUrl: baseURL, providerName } = options;
 
-    const google = createGoogleGenerativeAI({ apiKey, baseURL, name: providerName });
+    const google = createGoogle({ apiKey, baseURL, name: providerName });
     return google(modelId) as LanguageModel;
   }
 

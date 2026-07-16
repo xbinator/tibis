@@ -39,7 +39,7 @@ function createSlashCommandHook(): UseSlashCommandReturnWithScroll {
   const view: ShallowRef<EditorView | null> = shallowRef(null);
   const slashCommands: ComputedRef<readonly SlashCommandOption[]> = computed((): SlashCommandOption[] => [
     createSlashCommand('model'),
-    createSlashCommand('usage'),
+    createSlashCommand('compact'),
     createSlashCommand('new')
   ]);
   const emit = vi.fn<(_event: 'slash-command', _command: SlashCommandOption) => void>();

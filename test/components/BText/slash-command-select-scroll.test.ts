@@ -37,7 +37,7 @@ describe('SlashCommandSelect active item scrolling', (): void => {
     const wrapper = mount(SlashCommandSelect, {
       props: {
         visible: true,
-        commands: [createSlashCommand('model'), createSlashCommand('usage')],
+        commands: [createSlashCommand('model'), createSlashCommand('compact')],
         activeIndex: 1,
         scrollActiveIntoView: true
       }

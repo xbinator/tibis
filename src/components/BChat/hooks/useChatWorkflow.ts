@@ -135,7 +135,6 @@ interface RuntimeUserMessageSendInput {
 export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflowReturn {
   const chatStore = useChatSessionStore();
   const toolPermissionStore = useToolPermissionStore();
-  const rollbackIgnoredRuntimeIds = new Set<string>();
   const preflightLoading = ref<boolean>(false);
   let operationSequence = 0;
   const loading = computed<boolean>(
@@ -175,10 +174,6 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
     return runtimeLauncher.prepare(operationSequence, selectionSource, selectionParts);
   }
 
-  /** 判断 Runtime 事件是否已被回退流程作废。 */
-  function isRuntimeEventIgnored(runtimeId: string): boolean {
-    return rollbackIgnoredRuntimeIds.has(runtimeId);
-  }
   /** 处理 Runtime 完成。 */
   async function handleRuntimeComplete(nextMessage: Message): Promise<void> {
     options.sessionActor.markCompleted();
@@ -537,7 +532,6 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
     const rolledBackMessages = options.messages.value.slice(index);
     for (const rolledBackMessage of rolledBackMessages) {
       if (rolledBackMessage.runtimeId) {
-        rollbackIgnoredRuntimeIds.add(rolledBackMessage.runtimeId);
         options.actorSystem.unregisterRuntime(rolledBackMessage.runtimeId);
       }
     }
