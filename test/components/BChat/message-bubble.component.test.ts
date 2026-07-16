@@ -529,31 +529,6 @@ describe('MessageBubble', (): void => {
     expect(branchButton?.props('loading')).toBe(false);
   });
 
-  it('disables history-changing assistant actions while the current session is busy', async (): Promise<void> => {
-    const message = createAssistantMessage();
-    const wrapper = mount(MessageBubble, {
-      props: { message, historyActionsDisabled: true },
-      global: {
-        stubs: {
-          BBubble: BBubbleStub,
-          BButton: BButtonStub,
-          BIcon: true,
-          BRecentIcon: true,
-          BMessage: BMessageStub
-        }
-      }
-    });
-    const branchButton = wrapper.findAllComponents(BButtonStub).find((button): boolean => button.props('icon') === 'lucide:git-branch');
-    const regenerateButton = wrapper.findAllComponents(BButtonStub).find((button): boolean => button.props('icon') === 'lucide:refresh-cw');
-
-    expect(branchButton?.props('disabled')).toBe(true);
-    expect(regenerateButton?.props('disabled')).toBe(true);
-    await branchButton?.trigger('click');
-    await regenerateButton?.trigger('click');
-    expect(wrapper.emitted('branch')).toBeUndefined();
-    expect(wrapper.emitted('regenerate')).toBeUndefined();
-  });
-
   it('does not show regenerate for runtime error messages', (): void => {
     const wrapper = mountMessageBubble(create.errorMessage('模型调用失败'));
 

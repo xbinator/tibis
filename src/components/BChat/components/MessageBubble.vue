@@ -47,15 +47,15 @@
 
     <!-- 助手消息工具栏 -->
     <div v-if="showAssistantToolbar" :class="bem('toolbar')">
-      <BButton type="text" size="small" square icon="lucide:git-branch" :disabled="historyActionsDisabled" @click="handleBranchClick" />
-      <BButton square type="text" size="small" icon="lucide:refresh-cw" :disabled="historyActionsDisabled" @click="handleRegenerateClick" />
+      <BButton type="text" size="small" square icon="lucide:git-branch" @click="$emit('branch', message)" />
+      <BButton square type="text" size="small" icon="lucide:refresh-cw" @click="$emit('regenerate', message)" />
       <BButton type="text" size="small" square icon="lucide:copy" @click="handleCopy(message)" />
     </div>
 
     <!-- 用户消息底部：时间戳 + 回退按钮 + 复制按钮（hover 可见） -->
     <div v-if="isUserMessage && message.finished" :class="bem('toolbar', { right: isUserMessage })">
       <span :class="bem('time')">{{ formatMessageTime(message.createdAt) }}</span>
-      <BButton v-if="showRollback" type="text" size="small" square icon="lucide:undo-2" :disabled="historyActionsDisabled" @click="handleRollbackClick" />
+      <BButton v-if="showRollback" type="text" size="small" square icon="lucide:undo-2" @click="handleRollbackClick" />
       <BButton v-if="showContainer" type="text" size="small" square icon="lucide:copy" @click="handleCopy(message)" />
     </div>
 
@@ -65,7 +65,7 @@
       <span :class="bem('rollback-confirm-text')">回退将删除该消息之后的所有内容，不可撤销。</span>
       <div :class="bem('rollback-confirm-actions')">
         <BButton type="text" size="mini" @click="handleRollbackCancel">取消</BButton>
-        <BButton type="primary" size="mini" :disabled="historyActionsDisabled" @click="handleRollbackConfirm">确认</BButton>
+        <BButton type="primary" size="mini" @click="handleRollbackConfirm">确认</BButton>
       </div>
     </div>
   </div>
@@ -114,8 +114,6 @@ const props = defineProps<{
   message: Message;
   /** 会话已结束时禁用交互（如 QuestionCard） */
   disabled?: boolean;
-  /** 当前会话忙碌时禁用会修改历史的操作。 */
-  historyActionsDisabled?: boolean;
   /** 判断消息是否可回退 */
   canRollback?: (message: Message) => boolean;
   /** 可 await 的统一提交函数，用于让运行态组件等待宿主提交完成。 */
@@ -229,18 +227,6 @@ function handleCopy(message: Message): void {
   clipboard(content, { successMessage: '已复制到剪贴板' });
 }
 
-/** 创建分支前再次校验当前会话历史是否可修改。 */
-function handleBranchClick(): void {
-  if (props.historyActionsDisabled) return;
-  emit('branch', props.message);
-}
-
-/** 重新生成前再次校验当前会话历史是否可修改。 */
-function handleRegenerateClick(): void {
-  if (props.historyActionsDisabled) return;
-  emit('regenerate', props.message);
-}
-
 /** 是否处于回退二次确认态（inline 确认条） */
 const confirmRollback = ref(false);
 
@@ -248,7 +234,6 @@ const confirmRollback = ref(false);
  * 点击回退按钮：不直接 emit，而是切到确认态，展示 inline 确认条。
  */
 function handleRollbackClick(): void {
-  if (props.historyActionsDisabled) return;
   confirmRollback.value = true;
 }
 
@@ -256,7 +241,6 @@ function handleRollbackClick(): void {
  * 确认回退：向上 emit rollback 并收起确认条。
  */
 function handleRollbackConfirm(): void {
-  if (props.historyActionsDisabled) return;
   confirmRollback.value = false;
   emit('rollback', props.message);
 }

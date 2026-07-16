@@ -885,7 +885,7 @@ Expected: FAIL。
 | { key: string; kind: 'status'; part: ChatMessageCompactionPart }
 ```
 
-在 `flatMap` 中按 part 原始位置产生 item，并在 template 渲染 `BubblePartStatus`。新增 `hasAssistantContent`，只有 text/tool/widget 等用户可操作内容才展示 assistant toolbar，compaction-only 不展示。`ConversationView.loading` 通过独立属性禁用 branch/regenerate/rollback，事件处理层再次守卫 busy 状态，但输入编辑器仍允许修改草稿。
+在 `flatMap` 中按 part 原始位置产生 item，并在 template 渲染 `BubblePartStatus`。新增 `hasAssistantContent`，只有 text/tool/widget 等用户可操作内容才展示 assistant toolbar，compaction-only 不展示。`MessageBubble` 不感知会话运行状态；branch/regenerate/rollback 只在 `BChat` 和 `useChatWorkflow` 的上层事件入口守卫 busy 状态，但输入编辑器仍允许修改草稿。
 
 - [x] **Step 6: 运行组件和样式测试**
 

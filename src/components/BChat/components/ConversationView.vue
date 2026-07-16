@@ -13,7 +13,6 @@
             :key="item.id"
             :message="item"
             :disabled="disabled"
-            :history-actions-disabled="loading"
             :can-rollback="canRollback"
             :submit-action="submitAction"
             @edit="$emit('edit', item)"
