@@ -24,7 +24,7 @@ export function createRuntimeStreamRequest(
   return {
     requestId: runtime.runtimeId,
     modelId,
-    messages: toRuntimeModelMessages(sourceMessages?.length ? sourceMessages : [userMessage]),
+    messages: toRuntimeModelMessages(sourceMessages?.length ? sourceMessages : [userMessage], { skillContentHashes: runtime.skillContentHashes }),
     ...(runtime.system ? { system: runtime.system } : {}),
     ...(runtime.tools?.length ? { tools: runtime.tools } : {}),
     ...(runtime.tavily ? { tavily: runtime.tavily } : {}),

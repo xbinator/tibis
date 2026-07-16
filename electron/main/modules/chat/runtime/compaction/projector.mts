@@ -4,6 +4,7 @@
  */
 import type { AITransportTool } from 'types/ai';
 import type { ChatMessageCompactionPart, ChatMessagePart, ChatMessageRecord } from 'types/chat';
+import { invalidateStaleSkillToolResults } from '../context/model-message.mjs';
 import { findToolOutputPruneProtectedStartIndex, pruneMessageToolOutputs } from '../context/tool-output-prune.mjs';
 import { estimateRequestTokens } from './token-estimator.mjs';
 import { indexMessageParts, validatePartTopology } from './topology.mjs';
@@ -187,7 +188,8 @@ export function projectContext(input: ContextProjectionInput): ContextProjection
   const located = findLatestCheckpoint(input.messages);
   const boundary = located?.checkpoint.boundaryPartId ? findPartLocation(input.messages, located.checkpoint.boundaryPartId) : undefined;
   const rawMessages = located && boundary ? [createSummaryMessage(located), ...createRawTail(input.messages, boundary)] : createRawProjection(input.messages);
-  const messages = pruneProjection(rawMessages);
+  const skillProjectedMessages = invalidateStaleSkillToolResults(rawMessages, input.skillContentHashes);
+  const messages = pruneProjection(skillProjectedMessages);
   const estimatedTokens = estimateRequestTokens({
     messages,
     system: input.system,

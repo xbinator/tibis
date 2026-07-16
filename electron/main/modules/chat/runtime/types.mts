@@ -3,7 +3,10 @@
  * @description ChatRuntime 主进程内部类型。
  */
 import type { ArtifactRegistry } from './compaction/artifact-registry.mjs';
+import type { CompactionExecutor } from './compaction/executor.mjs';
+import type { SummaryGeneratorDependencies } from './compaction/summary-generator.mjs';
 import type { RuntimeFilePartMaterializer } from './messages/file-parts.mjs';
+import type { ChatModelResolution } from './model/resolver.mjs';
 import type {
   AICreateOptions,
   AIInvokeResult,
@@ -56,6 +59,8 @@ export interface ActiveChatRuntime {
   status: ChatRuntimeStatus;
   /** 当前 Runtime 根据 checkpoint 与文件工具结果维护的 artifact 身份映射。 */
   artifactRegistry?: ArtifactRegistry;
+  /** 当前模型请求边界冻结的模型解析结果，不进入持久化或 recovery snapshot。 */
+  resolvedModel?: ChatModelResolution;
   /** 当前执行阶段。 */
   phase: ChatRuntimePhase;
   /** 后续模型流和工具执行共用的中止控制器。 */
@@ -189,6 +194,12 @@ export interface ChatRuntimeServiceDependencies {
   messageReader: ChatRuntimeMessageReader;
   /** runtime 流式执行器。 */
   streamExecutor: ChatRuntimeStreamExecutor;
+  /** 解析当前模型并在单次模型请求边界内冻结。 */
+  resolveModel: () => Promise<ChatModelResolution | null>;
+  /** 调用结构化上下文摘要模型。 */
+  compactionGenerateText: SummaryGeneratorDependencies['generateText'];
+  /** 可选的上下文压缩 executor 测试替身。 */
+  compactionExecutor?: CompactionExecutor;
   /** 文件 part 固化函数。 */
   materializeFileParts: RuntimeFilePartMaterializer;
   /** runtime 流式中止函数。 */

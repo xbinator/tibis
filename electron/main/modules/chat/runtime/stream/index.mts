@@ -39,7 +39,7 @@ export type { RuntimeStreamText, RuntimeStreamExecutorDependencies };
  */
 export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorDependencies): ChatRuntimeStreamExecutor {
   return async ({ runtime, sourceMessages, userMessage, assistantMessage }, updateAssistant): Promise<ChatRuntimeStreamExecutorResult> => {
-    const resolution = await dependencies.resolver.resolve();
+    const resolution = runtime.resolvedModel ?? (await dependencies.resolver.resolve());
     if (!resolution) {
       throw createAIServiceError(AI_ERROR_CODE.MODEL_NOT_FOUND, '没有可用的聊天模型');
     }

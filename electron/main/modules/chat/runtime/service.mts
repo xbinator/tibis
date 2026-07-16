@@ -14,7 +14,7 @@ import type {
   ChatRuntimeStreamExecutor
 } from './types.mjs';
 import type { AIServiceError, AIToolExecutionResult, AIUsage } from 'types/ai';
-import type { ChatMessageRecord, ChatPendingInteraction } from 'types/chat';
+import type { ChatMessagePart, ChatMessageRecord, ChatPendingInteraction, CompactionModelSnapshot } from 'types/chat';
 import type {
   ChatRuntimeAbortInput,
   ChatRuntimeAutoNameInput,
@@ -37,8 +37,11 @@ import { nanoid } from 'nanoid';
 import { AI_ERROR_CODE, createAIServiceError, isAIServiceError } from '../../ai/errors/codes.mjs';
 import { aiService } from '../../ai/service.mjs';
 import { chatSessionManager } from '../service.mjs';
-import { invalidateStaleSkillToolResults } from './context/model-message.mjs';
-import { findToolOutputPruneProtectedStartIndex, pruneMessageToolOutputs } from './context/tool-output-prune.mjs';
+import { createArtifactRegistry } from './compaction/artifact-registry.mjs';
+import { createCompactionBudget, exceedsHardLimit, shouldAutoCompact } from './compaction/budget.mjs';
+import { createCompactionExecutor } from './compaction/executor.mjs';
+import { projectContext } from './compaction/projector.mjs';
+import { generateStructuredSummary } from './compaction/summary-generator.mjs';
 import { addRuntimeUsage, isSameRuntimeUsage } from './context/usage.mjs';
 import { createRuntimeBridgeRequests, type RuntimeBridgeRequestInput } from './controllers/bridge.mjs';
 import { createRuntimeConfirmationRequests, type RuntimeConfirmationRequestInput } from './controllers/confirmation.mjs';
@@ -108,7 +111,7 @@ function createDefaultMessageWriter(): ChatRuntimeMessageWriter {
 function createDefaultMessageReader(): ChatRuntimeMessageReader {
   return {
     getMessages(sessionId: string): ChatMessageRecord[] {
-      return chatSessionManager.getMessages(sessionId);
+      return chatSessionManager.getAllMessages(sessionId);
     }
   };
 }
@@ -176,6 +179,9 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   const streamAbort = dependencies.streamAbort ?? createDefaultStreamAborter();
   const createMessageId = dependencies.createMessageId ?? createDefaultMessageId;
   const now = dependencies.now ?? (() => new Date().toISOString());
+  const requestModelResolver = createDefaultChatModelResolver();
+  const resolveModel = dependencies.resolveModel ?? (() => requestModelResolver.resolve());
+  const compactionGenerateText = dependencies.compactionGenerateText ?? ((createOptions, request) => aiService.generateText(createOptions, request));
   const autoNameResolver = dependencies.autoNameResolveModel ?? (() => createDefaultChatModelResolver().resolve());
   const autoNameGenerateText = dependencies.autoNameGenerateText ?? ((createOptions, request) => aiService.generateText(createOptions, request));
   const autoNameUpdateSessionTitle = dependencies.autoNameUpdateSessionTitle ?? ((sessionId, title) => chatSessionManager.updateSessionTitle(sessionId, title));
@@ -183,6 +189,9 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   const locks = createRuntimeLockRegistry();
   const activeRuntimes = new Map<string, ActiveChatRuntime>();
   const activeAssistantMessages = new Map<string, ChatMessageRecord>();
+  const activeCompactionSources = new Map<string, ChatMessageRecord[]>();
+  const activeCompactionModels = new Map<string, Awaited<ReturnType<typeof resolveModel>>>();
+  const activeCompactionRuntimes = new Map<string, ActiveChatRuntime>();
   const getRuntime = (runtimeId: string): ActiveChatRuntime | undefined => activeRuntimes.get(runtimeId);
   const confirmationRequests = createRuntimeConfirmationRequests({ emit, getRuntime });
   const bridgeRequests = createRuntimeBridgeRequests({
@@ -196,6 +205,57 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     timeoutMs: RUNTIME_RENDERER_REQUEST_TIMEOUT_MS
   });
 
+  /**
+   * 为 compaction executor 读取冻结 raw source，并在 pending 写入后合并活动 assistant。
+   * @param sessionId - Session 标识
+   * @returns 当前 compaction 可验证的完整消息
+   */
+  async function readCompactionMessages(sessionId: string): Promise<ChatMessageRecord[]> {
+    const runtime = [...activeCompactionRuntimes.values()].find((candidate: ActiveChatRuntime): boolean => candidate.sessionId === sessionId);
+    const sourceMessages = runtime ? activeCompactionSources.get(runtime.runtimeId) : undefined;
+    const persistedMessages = sourceMessages ?? (await messageReader.getMessages(sessionId));
+    const messages = structuredClone(persistedMessages);
+    if (!runtime) return messages;
+
+    const assistantMessage = activeAssistantMessages.get(runtime.runtimeId);
+    if (!assistantMessage) return messages;
+    const assistantIndex = messages.findIndex((message: ChatMessageRecord): boolean => message.id === assistantMessage.id);
+    if (assistantIndex >= 0) {
+      messages[assistantIndex] = structuredClone(assistantMessage);
+    } else if (assistantMessage.parts.length > 0 || assistantMessage.content.trim()) {
+      messages.push(structuredClone(assistantMessage));
+    }
+
+    return messages;
+  }
+
+  /**
+   * 原子写入 compaction 承载消息并沿用标准 runtime 更新事件。
+   * @param message - 包含 compaction Part 的 assistant 消息
+   */
+  async function writeCompactionMessage(message: ChatMessageRecord): Promise<void> {
+    await messageWriter.updateMessage(message);
+    const runtime = message.runtimeId ? activeCompactionRuntimes.get(message.runtimeId) : undefined;
+    if (!runtime) return;
+    emit('chat:runtime:message-updated', {
+      runtimeId: runtime.runtimeId,
+      sessionId: runtime.sessionId,
+      clientId: runtime.clientId,
+      agentId: runtime.agentId,
+      parentRuntimeId: runtime.parentRuntimeId,
+      message
+    });
+  }
+
+  /**
+   * 将 service ISO 时间转换为 executor 时间戳。
+   * @returns 有限时间戳
+   */
+  function getCompactionNow(): number {
+    const timestamp = Date.parse(now());
+    return Number.isFinite(timestamp) ? timestamp : Date.now();
+  }
+
   const executeMainTool = createMainToolExecutor({
     now,
     requestBridge: bridgeRequests.request,
@@ -203,6 +263,21 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   });
 
   const streamExecutor = dependencies.streamExecutor ?? createDefaultStreamExecutor(rendererToolRequests.request, executeMainTool, rendererToolTimeoutMs);
+  const compactionExecutor =
+    dependencies.compactionExecutor ??
+    createCompactionExecutor({
+      readMessages: readCompactionMessages,
+      writeMessage: writeCompactionMessage,
+      generateSummary: (input) =>
+        generateStructuredSummary(input, {
+          resolveModel: async () => activeCompactionModels.get(input.runtimeId) ?? null,
+          generateText: compactionGenerateText
+        }),
+      hasLease: (sessionId: string, runtimeId: string): boolean => locks.getWritingOwner(sessionId) === runtimeId,
+      abortSummary: streamAbort,
+      createPartId: (): string => `checkpoint-${nanoid()}`,
+      now: getCompactionNow
+    });
 
   /**
    * 拒绝 renderer 重复分配仍在使用的 Runtime ID。
@@ -324,30 +399,6 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   }
 
   /**
-   * 成功 turn 后剪枝旧的大型 tool output。
-   * @param runtime - runtime 状态
-   * @param sourceMessages - 当前源消息
-   * @param assistantMessage - 当前 assistant 终态消息
-   */
-  async function pruneOldToolOutputsIfNeeded(
-    runtime: ActiveChatRuntime,
-    sourceMessages: ChatMessageRecord[],
-    assistantMessage: ChatMessageRecord
-  ): Promise<void> {
-    const completedMessages = [...sourceMessages.filter((message) => message.id !== assistantMessage.id), assistantMessage];
-    const protectedStartIndex = findToolOutputPruneProtectedStartIndex(completedMessages);
-    const prunableMessages = completedMessages.slice(0, protectedStartIndex);
-
-    for (const message of prunableMessages) {
-      const prunedMessage = pruneMessageToolOutputs(message);
-      if (!prunedMessage) continue;
-
-      // eslint-disable-next-line no-await-in-loop
-      await updateAssistantMessage(runtime, prunedMessage);
-    }
-  }
-
-  /**
    * 在所有模型续轮结束后维持等待态或兜底标记 assistant 消息完成。
    * @param runtime - runtime 状态
    * @param assistantMessage - assistant 草稿消息
@@ -372,23 +423,61 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   }
 
   /**
+   * 以完整持久化历史为基线合并 renderer 提供的最新消息快照。
+   * @param persistedMessages - 数据库完整历史
+   * @param snapshotMessages - renderer 或续轮最新快照
+   * @returns 保持持久化顺序并覆盖同 ID 消息的 raw clone
+   */
+  function mergeSourceMessages(persistedMessages: ChatMessageRecord[], snapshotMessages: ChatMessageRecord[]): ChatMessageRecord[] {
+    const snapshotById = new Map(snapshotMessages.map((message: ChatMessageRecord): [string, ChatMessageRecord] => [message.id, message]));
+    const merged = persistedMessages.map((message: ChatMessageRecord): ChatMessageRecord => structuredClone(snapshotById.get(message.id) ?? message));
+    const persistedIds = new Set(persistedMessages.map((message: ChatMessageRecord): string => message.id));
+    for (const message of snapshotMessages) {
+      if (!persistedIds.has(message.id)) merged.push(structuredClone(message));
+    }
+
+    return merged;
+  }
+
+  /**
+   * 从最新 checkpoint 与其 raw tail 重建 Runtime artifact identity。
+   * @param runtime - 当前 runtime
+   * @param messages - 完整 raw source
+   */
+  function initializeArtifactRegistry(runtime: ActiveChatRuntime, messages: ChatMessageRecord[]): void {
+    if (runtime.artifactRegistry) return;
+    const projection = projectContext({ messages, skillContentHashes: runtime.skillContentHashes });
+    const checkpoint = projection.checkpointId
+      ? messages.flatMap((message: ChatMessageRecord): ChatMessagePart[] => message.parts).find((part): boolean => part.id === projection.checkpointId)
+      : undefined;
+    const checkpointArtifacts = checkpoint?.type === 'compaction' && checkpoint.status === 'success' ? checkpoint.summary?.artifacts : undefined;
+    runtime.artifactRegistry = createArtifactRegistry({ checkpointArtifacts, messages: projection.messages });
+  }
+
+  /**
    * 读取当前 runtime 可发送给模型的源消息。
    * @param runtime - runtime 状态
    * @param userMessage - 当前用户消息
    * @param assistantMessage - 当前 assistant 草稿消息
+   * @param sourceMessageSnapshot - renderer 或续轮消息快照
    * @returns 源消息列表
    */
   async function readRuntimeSourceMessages(
     runtime: ActiveChatRuntime,
     userMessage: ChatMessageRecord,
-    assistantMessage: ChatMessageRecord
+    assistantMessage: ChatMessageRecord,
+    sourceMessageSnapshot: ChatMessageRecord[] = []
   ): Promise<ChatMessageRecord[]> {
     const persistedMessages = await messageReader.getMessages(runtime.sessionId);
-    const messagesWithoutDraft = persistedMessages.filter((message) => message.id !== assistantMessage.id);
-    const hasCurrentUserMessage = messagesWithoutDraft.some((message) => message.id === userMessage.id);
-    const sourceMessages = hasCurrentUserMessage ? messagesWithoutDraft : [...messagesWithoutDraft, userMessage];
+    const mergedMessages = mergeSourceMessages(persistedMessages, sourceMessageSnapshot);
+    const messagesWithoutEmptyDraft = mergedMessages.filter(
+      (message: ChatMessageRecord): boolean => message.id !== assistantMessage.id || message.parts.length > 0 || Boolean(message.content.trim())
+    );
+    const hasCurrentUserMessage = messagesWithoutEmptyDraft.some((message) => message.id === userMessage.id);
+    const sourceMessages = hasCurrentUserMessage ? messagesWithoutEmptyDraft : [...messagesWithoutEmptyDraft, structuredClone(userMessage)];
+    initializeArtifactRegistry(runtime, sourceMessages);
 
-    return invalidateStaleSkillToolResults(sourceMessages, runtime.skillContentHashes);
+    return sourceMessages;
   }
 
   /**
@@ -400,6 +489,83 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   function createContinuationSourceMessages(sourceMessages: ChatMessageRecord[], assistantMessage: ChatMessageRecord): ChatMessageRecord[] {
     const nextMessages = sourceMessages.filter((message) => message.id !== assistantMessage.id);
     return [...nextMessages, assistantMessage];
+  }
+
+  /**
+   * 在单次模型请求边界冻结模型、按需同步压缩并返回纯投影上下文。
+   * @param runtime - 当前 runtime
+   * @param rawMessages - 不可被 projection 覆盖的原始消息
+   * @param userMessage - 当前用户任务
+   * @param assistantMessage - 当前 assistant 草稿
+   * @returns 仅供本次模型调用使用的消息 projection
+   */
+  async function prepareRequestContext(
+    runtime: ActiveChatRuntime,
+    rawMessages: ChatMessageRecord[],
+    userMessage: ChatMessageRecord,
+    assistantMessage: ChatMessageRecord
+  ): Promise<ChatMessageRecord[]> {
+    let currentRawMessages =
+      assistantMessage.parts.length > 0 || assistantMessage.content.trim() ? createContinuationSourceMessages(rawMessages, assistantMessage) : rawMessages;
+    let projection = projectContext({
+      messages: currentRawMessages,
+      system: runtime.system,
+      tools: runtime.tools,
+      skillContentHashes: runtime.skillContentHashes
+    });
+    if (!runtime.contextWindow || runtime.contextWindow < 1) return projection.messages;
+
+    const [resolutionResult] = await Promise.allSettled([resolveModel()]);
+    const resolution = resolutionResult.status === 'fulfilled' ? resolutionResult.value : null;
+    if (resolution) runtime.resolvedModel = resolution;
+    const thresholdBudget = createCompactionBudget({ contextWindow: runtime.contextWindow, noncompressibleTokens: 0 });
+    if (resolution && shouldAutoCompact(projection.estimatedTokens, thresholdBudget)) {
+      const modelSnapshot: CompactionModelSnapshot = {
+        providerType: resolution.createOptions.providerType,
+        providerId: resolution.createOptions.providerId,
+        modelId: resolution.modelId,
+        contextWindow: runtime.contextWindow
+      };
+      activeCompactionSources.set(runtime.runtimeId, structuredClone(currentRawMessages));
+      activeCompactionModels.set(runtime.runtimeId, resolution);
+      activeCompactionRuntimes.set(runtime.runtimeId, runtime);
+      runtime.phase = 'compacting';
+      await Promise.allSettled([
+        compactionExecutor.execute({
+          runtimeId: runtime.runtimeId,
+          sessionId: runtime.sessionId,
+          trigger: 'automatic',
+          assistantMessage,
+          currentUserMessageId: userMessage.id,
+          contextWindow: runtime.contextWindow,
+          modelSnapshot,
+          system: runtime.system,
+          tools: runtime.tools,
+          skillContentHashes: runtime.skillContentHashes
+        })
+      ]);
+      activeCompactionSources.delete(runtime.runtimeId);
+      activeCompactionModels.delete(runtime.runtimeId);
+      activeCompactionRuntimes.delete(runtime.runtimeId);
+      if (activeRuntimes.has(runtime.runtimeId)) runtime.phase = 'streaming';
+      currentRawMessages = createContinuationSourceMessages(rawMessages, assistantMessage);
+      projection = projectContext({
+        messages: currentRawMessages,
+        system: runtime.system,
+        tools: runtime.tools,
+        skillContentHashes: runtime.skillContentHashes
+      });
+    }
+
+    if (!activeRuntimes.has(runtime.runtimeId)) {
+      throw new ChatRuntimeError('RUNTIME_NOT_ACTIVE', `Runtime ${runtime.runtimeId} is not active`);
+    }
+
+    if (exceedsHardLimit(projection.estimatedTokens, thresholdBudget)) {
+      throw createAIServiceError(AI_ERROR_CODE.INVALID_REQUEST, '当前任务与不可压缩上下文已达到模型输入上限');
+    }
+
+    return projection.messages;
   }
 
   /**
@@ -417,9 +583,14 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     assistantMessage: ChatMessageRecord
   ): Promise<AIUsage | undefined> {
     let currentSourceMessages = sourceMessages;
-    let streamResult = await streamExecutor({ runtime, sourceMessages: currentSourceMessages, userMessage, assistantMessage }, (message) =>
+    let projectedMessages = await prepareRequestContext(runtime, currentSourceMessages, userMessage, assistantMessage);
+    if (!activeRuntimes.has(runtime.runtimeId)) {
+      throw new ChatRuntimeError('RUNTIME_NOT_ACTIVE', `Runtime ${runtime.runtimeId} is not active`);
+    }
+    let streamResult = await streamExecutor({ runtime, sourceMessages: projectedMessages, userMessage, assistantMessage }, (message) =>
       updateAssistantMessage(runtime, message)
     );
+    runtime.resolvedModel = undefined;
     if (!activeRuntimes.has(runtime.runtimeId)) {
       throw new ChatRuntimeError('RUNTIME_NOT_ACTIVE', `Runtime ${runtime.runtimeId} is not active`);
     }
@@ -430,10 +601,17 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       continuationRound += 1;
       // 将上一轮 assistant 草稿纳入下一轮上下文，保证工具结果续轮能拿到 assistant 历史
       currentSourceMessages = createContinuationSourceMessages(currentSourceMessages, assistantMessage);
+      // 每个完整工具结果后的模型请求边界都重新预算，并且只把 projection 交给模型。
       // eslint-disable-next-line no-await-in-loop
-      streamResult = await streamExecutor({ runtime, sourceMessages: currentSourceMessages, userMessage, assistantMessage }, (message) =>
+      projectedMessages = await prepareRequestContext(runtime, currentSourceMessages, userMessage, assistantMessage);
+      if (!activeRuntimes.has(runtime.runtimeId)) {
+        throw new ChatRuntimeError('RUNTIME_NOT_ACTIVE', `Runtime ${runtime.runtimeId} is not active`);
+      }
+      // eslint-disable-next-line no-await-in-loop
+      streamResult = await streamExecutor({ runtime, sourceMessages: projectedMessages, userMessage, assistantMessage }, (message) =>
         updateAssistantMessage(runtime, message)
       );
+      runtime.resolvedModel = undefined;
       if (!activeRuntimes.has(runtime.runtimeId)) {
         throw new ChatRuntimeError('RUNTIME_NOT_ACTIVE', `Runtime ${runtime.runtimeId} is not active`);
       }
@@ -464,11 +642,8 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     sourceMessageSnapshot?: ChatMessageRecord[]
   ): Promise<void> {
     try {
-      const sourceMessages = sourceMessageSnapshot
-        ? invalidateStaleSkillToolResults(sourceMessageSnapshot, runtime.skillContentHashes)
-        : await readRuntimeSourceMessages(runtime, userMessage, assistantMessage);
+      const sourceMessages = await readRuntimeSourceMessages(runtime, userMessage, assistantMessage, sourceMessageSnapshot);
       const accumulatedUsage = await executeRuntimeStreamRounds(runtime, sourceMessages, userMessage, assistantMessage);
-      await pruneOldToolOutputsIfNeeded(runtime, sourceMessages, assistantMessage);
       completeRuntime(runtime, accumulatedUsage, isAssistantAwaitingUserInput(assistantMessage) ? 'awaiting_user_input' : 'completed');
     } catch (error) {
       if (!activeRuntimes.has(runtime.runtimeId)) return;
@@ -773,6 +948,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       if (!runtime) return;
 
       runtime.abortController.abort();
+      compactionExecutor.cancel(runtime.runtimeId);
       activeRuntimes.delete(runtime.runtimeId);
       const assistantMessage = activeAssistantMessages.get(runtime.runtimeId);
       activeAssistantMessages.delete(runtime.runtimeId);

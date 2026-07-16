@@ -2,12 +2,14 @@
  * @file service.test.ts
  * @description ChatRuntime 主进程服务骨架测试。
  */
+import type { ChatModelResolution } from '../../../../../../electron/main/modules/chat/runtime/model/resolver.mjs';
 import type { ChatRuntimeStreamExecutor } from '../../../../../../electron/main/modules/chat/runtime/types.mjs';
-import type { AIServiceError } from 'types/ai';
-import type { ChatMessagePart, ChatMessageRecord } from 'types/chat';
+import type { AIInvokeResult, AIServiceError } from 'types/ai';
+import type { ChatMessagePart, ChatMessageRecord, StructuredContextSummary } from 'types/chat';
 import type { ChatRuntimeContinueInput, ChatRuntimeEventMap, ChatRuntimeSendInput } from 'types/chat-runtime';
 import { describe, expect, it, vi } from 'vitest';
 import { createChatRuntimeService } from '../../../../../../electron/main/modules/chat/runtime/service.mjs';
+import { chatSessionManager } from '../../../../../../electron/main/modules/chat/service.mjs';
 
 /** 已捕获的 runtime 事件。 */
 type CapturedRuntimeEvent = {
@@ -169,6 +171,41 @@ async function flushRuntimeTasks(): Promise<void> {
   });
 }
 
+/**
+ * 创建压缩测试使用的当前模型解析结果。
+ * @returns 当前模型解析结果
+ */
+function createModelResolution(): ChatModelResolution {
+  return {
+    createOptions: {
+      providerId: 'provider-1',
+      providerName: 'Provider',
+      providerType: 'openai',
+      apiKey: 'secret',
+      baseUrl: 'https://example.com'
+    },
+    modelId: 'model-1'
+  };
+}
+
+/**
+ * 创建引用指定 Part 的合法压缩摘要。
+ * @param sourcePartId - 摘要证据 Part
+ * @returns 结构化摘要
+ */
+function createCompactionSummary(sourcePartId: string): StructuredContextSummary {
+  return {
+    schemaVersion: 1,
+    objectives: [],
+    facts: [{ id: 'fact-1', type: 'decision', content: '保留历史决定', sourcePartIds: [sourcePartId] }],
+    artifacts: [],
+    completedActions: [],
+    pendingActions: [],
+    openQuestions: [],
+    failures: []
+  };
+}
+
 describe('chat runtime service shell', (): void => {
   it('uses the runtime id allocated by the renderer', async (): Promise<void> => {
     const service = createChatRuntimeService({
@@ -292,6 +329,30 @@ describe('chat runtime service shell', (): void => {
       }),
       expect.any(Function)
     );
+  });
+
+  it('reads the full session history at runtime start', async (): Promise<void> => {
+    const getAllMessages = vi.spyOn(chatSessionManager, 'getAllMessages').mockReturnValue([]);
+    const getMessages = vi.spyOn(chatSessionManager, 'getMessages').mockReturnValue([]);
+    try {
+      const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async () => ({}));
+      const service = createChatRuntimeService({
+        emit: vi.fn(),
+        messageWriter: createNoopMessageWriter(),
+        streamExecutor
+      });
+
+      await service.send(createInput({ content: 'read full history' }));
+      await vi.waitFor((): void => {
+        expect(streamExecutor).toHaveBeenCalledOnce();
+      });
+
+      expect(getAllMessages).toHaveBeenCalledWith('session-1');
+      expect(getMessages).not.toHaveBeenCalled();
+    } finally {
+      getAllMessages.mockRestore();
+      getMessages.mockRestore();
+    }
   });
 
   it('starts a runtime and emits a complete event for the shell implementation', async (): Promise<void> => {
@@ -1166,7 +1227,7 @@ describe('chat runtime service shell', (): void => {
     }
   });
 
-  it('prunes old large tool results after a successful turn', async (): Promise<void> => {
+  it('prunes old large tool results only in the model projection', async (): Promise<void> => {
     const collector = createEventCollector();
     const updatedMessages: ChatMessageRecord[] = [];
     const largeContent = 'x'.repeat(12_000);
@@ -1224,6 +1285,7 @@ describe('chat runtime service shell', (): void => {
       createMessageRecord('recent-user', 'user', 'recent question', '2026-06-19T00:00:04.000Z'),
       recentAssistant
     ];
+    let projectedOldAssistant: ChatMessageRecord | undefined;
     const service = createChatRuntimeService({
       emit: collector.emit,
       createMessageId: (role) => `${role}-message-1`,
@@ -1235,7 +1297,8 @@ describe('chat runtime service shell', (): void => {
           updatedMessages.push({ ...message, parts: [...message.parts] });
         }
       },
-      streamExecutor: async ({ assistantMessage }, updateAssistant) => {
+      streamExecutor: async ({ assistantMessage, sourceMessages }, updateAssistant) => {
+        projectedOldAssistant = sourceMessages?.find((message) => message.id === 'old-assistant');
         assistantMessage.content = 'done';
         assistantMessage.parts = [{ id: 'part0095', type: 'text', text: 'done' }];
         assistantMessage.loading = false;
@@ -1245,11 +1308,10 @@ describe('chat runtime service shell', (): void => {
       }
     });
 
-    const result = await service.send(createInput({ content: 'current question' }));
+    await service.send(createInput({ content: 'current question' }));
     await flushRuntimeTasks();
 
-    const prunedMessage = updatedMessages.find((message) => message.id === 'old-assistant');
-    const oldToolPart = prunedMessage?.parts[0];
+    const oldToolPart = projectedOldAssistant?.parts[0];
     expect(oldToolPart).toMatchObject({
       type: 'tool',
       toolCallId: 'tool-call-old',
@@ -1267,16 +1329,253 @@ describe('chat runtime service shell', (): void => {
       }
     });
     expect(JSON.stringify(oldToolPart)).not.toContain(largeContent);
-    expect(updatedMessages.some((message) => message.id === 'recent-assistant')).toBe(false);
-    expect(collector.events).toContainEqual(
-      expect.objectContaining({
-        name: 'chat:runtime:message-updated',
-        payload: expect.objectContaining({
-          runtimeId: result.runtimeId,
-          message: expect.objectContaining({ id: 'old-assistant' })
-        })
-      })
-    );
+    expect(updatedMessages.some((message) => message.id === 'old-assistant')).toBe(false);
+    expect(persistedMessages.find((message) => message.id === 'old-assistant')).toEqual(oldAssistant);
+    expect(
+      collector.events.some(
+        (event) => event.name === 'chat:runtime:message-updated' && 'message' in event.payload && event.payload.message.id === 'old-assistant'
+      )
+    ).toBe(false);
+  });
+
+  it('automatically compacts before the first model request and preserves the current user task', async (): Promise<void> => {
+    const messages: ChatMessageRecord[] = [
+      {
+        id: 'old-assistant',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: 'x'.repeat(25_000),
+        parts: [{ id: 'old-source-part', type: 'text', text: 'x'.repeat(25_000) }],
+        createdAt: '2026-07-16T00:00:00.000Z',
+        finished: true
+      }
+    ];
+    const order: string[] = [];
+    let modelSourceMessages: ChatMessageRecord[] = [];
+    const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ sourceMessages }) => {
+      order.push('stream');
+      modelSourceMessages = structuredClone(sourceMessages ?? []);
+      return {};
+    });
+    const service = createChatRuntimeService({
+      emit: vi.fn(),
+      createMessageId: (role) => `${role}-message-auto`,
+      now: () => '2026-07-16T00:00:01.000Z',
+      messageReader: { getMessages: (): ChatMessageRecord[] => structuredClone(messages) },
+      messageWriter: {
+        addMessage: async (message: ChatMessageRecord): Promise<void> => {
+          messages.push(structuredClone(message));
+        },
+        updateMessage: async (message: ChatMessageRecord): Promise<void> => {
+          const index = messages.findIndex((candidate: ChatMessageRecord): boolean => candidate.id === message.id);
+          if (index >= 0) messages[index] = structuredClone(message);
+          const checkpoint = message.parts.find((part: ChatMessagePart): boolean => part.type === 'compaction');
+          if (checkpoint?.type === 'compaction') order.push(`write:${checkpoint.status}`);
+        }
+      },
+      resolveModel: async () => createModelResolution(),
+      compactionGenerateText: async (): Promise<[undefined, AIInvokeResult]> => [undefined, { text: '', output: createCompactionSummary('old-source-part') }],
+      streamExecutor
+    });
+
+    await service.send(createInput({ content: '当前任务必须保留原文', contextWindow: 12_000 }));
+    await vi.waitFor((): void => {
+      expect(streamExecutor).toHaveBeenCalledOnce();
+    });
+
+    expect(order.slice(0, 3)).toEqual(['write:pending', 'write:success', 'stream']);
+    expect(modelSourceMessages[0]).toMatchObject({ id: expect.stringMatching(/^context-checkpoint:/u) });
+    expect(JSON.stringify(modelSourceMessages)).toContain('当前任务必须保留原文');
+    expect(JSON.stringify(modelSourceMessages)).not.toContain('x'.repeat(25_000));
+  });
+
+  it('continues with the previous projection when automatic compaction fails below the hard limit', async (): Promise<void> => {
+    const messages: ChatMessageRecord[] = [
+      {
+        id: 'old-assistant',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: 'x'.repeat(25_000),
+        parts: [{ id: 'old-source-part', type: 'text', text: 'x'.repeat(25_000) }],
+        createdAt: '2026-07-16T00:00:00.000Z',
+        finished: true
+      }
+    ];
+    const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async () => ({}));
+    const service = createChatRuntimeService({
+      emit: vi.fn(),
+      createMessageId: (role) => `${role}-message-failed-compaction`,
+      messageReader: { getMessages: (): ChatMessageRecord[] => structuredClone(messages) },
+      messageWriter: {
+        addMessage: async (message: ChatMessageRecord): Promise<void> => {
+          messages.push(structuredClone(message));
+        },
+        updateMessage: async (message: ChatMessageRecord): Promise<void> => {
+          const index = messages.findIndex((candidate: ChatMessageRecord): boolean => candidate.id === message.id);
+          if (index >= 0) messages[index] = structuredClone(message);
+        }
+      },
+      resolveModel: async () => createModelResolution(),
+      compactionGenerateText: async (): Promise<[AIServiceError]> => [{ code: 'REQUEST_FAILED', message: 'summary failed' }],
+      streamExecutor
+    });
+
+    await service.send(createInput({ content: '当前任务', contextWindow: 12_000 }));
+    await vi.waitFor((): void => {
+      expect(streamExecutor).toHaveBeenCalledOnce();
+    });
+
+    const failed = messages.flatMap((message: ChatMessageRecord): ChatMessagePart[] => message.parts).find((part) => part.type === 'compaction');
+    expect(failed).toMatchObject({ status: 'failed', errorCode: 'MODEL_CALL_FAILED' });
+  });
+
+  it('checks compaction again after a complete tool result and appends checkpoint in the same assistant message', async (): Promise<void> => {
+    const messages: ChatMessageRecord[] = [
+      {
+        id: 'old-assistant',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: 'x'.repeat(17_000),
+        parts: [{ id: 'old-source-part', type: 'text', text: 'x'.repeat(17_000) }],
+        createdAt: '2026-07-16T00:00:00.000Z',
+        finished: true
+      }
+    ];
+    const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage, sourceMessages }, updateAssistant) => {
+      if (streamExecutor.mock.calls.length === 1) {
+        assistantMessage.parts.push({
+          id: 'long-tool-part',
+          type: 'tool',
+          toolCallId: 'long-tool-call',
+          toolName: 'read_file',
+          status: 'done',
+          input: { path: 'src/large.ts' },
+          result: { toolName: 'read_file', status: 'success', data: { path: 'src/large.ts', content: 'y'.repeat(5_000) } }
+        });
+        await updateAssistant(assistantMessage);
+        return { shouldContinue: true };
+      }
+
+      const projectedAssistant = sourceMessages?.find((message) => message.id === assistantMessage.id);
+      expect(projectedAssistant?.parts.map((part: ChatMessagePart): string => part.type)).toEqual(['tool']);
+      return {};
+    });
+    const service = createChatRuntimeService({
+      emit: vi.fn(),
+      createMessageId: (role) => `${role}-message-tool-round`,
+      now: () => '2026-07-16T00:00:01.000Z',
+      messageReader: { getMessages: (): ChatMessageRecord[] => structuredClone(messages) },
+      messageWriter: {
+        addMessage: async (message: ChatMessageRecord): Promise<void> => {
+          messages.push(structuredClone(message));
+        },
+        updateMessage: async (message: ChatMessageRecord): Promise<void> => {
+          const index = messages.findIndex((candidate: ChatMessageRecord): boolean => candidate.id === message.id);
+          if (index >= 0) messages[index] = structuredClone(message);
+        }
+      },
+      resolveModel: async () => createModelResolution(),
+      compactionGenerateText: async (): Promise<[undefined, AIInvokeResult]> => [undefined, { text: '', output: createCompactionSummary('old-source-part') }],
+      streamExecutor
+    });
+
+    await service.send(createInput({ content: '执行长任务', contextWindow: 12_000 }));
+    await vi.waitFor((): void => {
+      expect(streamExecutor).toHaveBeenCalledTimes(2);
+    });
+
+    const assistantMessage = messages.find((message) => message.id === 'assistant-message-tool-round');
+    expect(assistantMessage?.parts.map((part: ChatMessagePart): string => part.type)).toEqual(['tool', 'compaction']);
+    expect(assistantMessage?.parts[1]).toMatchObject({ status: 'success', boundaryPartId: 'old-source-part' });
+  });
+
+  it('keeps the session write lock while automatic summary generation is pending', async (): Promise<void> => {
+    const messages: ChatMessageRecord[] = [
+      {
+        id: 'old-assistant',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: 'x'.repeat(25_000),
+        parts: [{ id: 'old-source-part', type: 'text', text: 'x'.repeat(25_000) }],
+        createdAt: '2026-07-16T00:00:00.000Z',
+        finished: true
+      }
+    ];
+    let resolveSummary: ((result: [undefined, AIInvokeResult]) => void) | undefined;
+    const summaryPromise = new Promise<[undefined, AIInvokeResult]>((resolve): void => {
+      resolveSummary = resolve;
+    });
+    const service = createChatRuntimeService({
+      emit: vi.fn(),
+      createMessageId: (role) => `${role}-message-lock-${messages.length}`,
+      messageReader: { getMessages: (): ChatMessageRecord[] => structuredClone(messages) },
+      messageWriter: {
+        addMessage: async (message: ChatMessageRecord): Promise<void> => {
+          messages.push(structuredClone(message));
+        },
+        updateMessage: async (message: ChatMessageRecord): Promise<void> => {
+          const index = messages.findIndex((candidate: ChatMessageRecord): boolean => candidate.id === message.id);
+          if (index >= 0) messages[index] = structuredClone(message);
+        }
+      },
+      resolveModel: async () => createModelResolution(),
+      compactionGenerateText: async (): Promise<[undefined, AIInvokeResult]> => summaryPromise,
+      streamExecutor: createNoopStreamExecutor()
+    });
+
+    await service.send(createInput({ runtimeId: 'runtime-lock-owner', content: '当前任务', contextWindow: 12_000 }));
+    await vi.waitFor((): void => {
+      const pending = messages.flatMap((message: ChatMessageRecord): ChatMessagePart[] => message.parts).find((part) => part.type === 'compaction');
+      expect(pending).toMatchObject({ status: 'pending' });
+    });
+    const messageCount = messages.length;
+
+    await expect(service.send(createInput({ runtimeId: 'runtime-lock-contender', content: '不应写入', contextWindow: 12_000 }))).rejects.toMatchObject({
+      code: 'SESSION_BUSY'
+    });
+    expect(messages).toHaveLength(messageCount);
+
+    resolveSummary?.([undefined, { text: '', output: createCompactionSummary('old-source-part') }]);
+  });
+
+  it('does not call the main model when uncompressed projection reaches the hard limit', async (): Promise<void> => {
+    const messages: ChatMessageRecord[] = [
+      {
+        id: 'old-assistant',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: 'x'.repeat(40_000),
+        parts: [{ id: 'old-source-part', type: 'text', text: 'x'.repeat(40_000) }],
+        createdAt: '2026-07-16T00:00:00.000Z',
+        finished: true
+      }
+    ];
+    const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async () => ({}));
+    const service = createChatRuntimeService({
+      emit: vi.fn(),
+      createMessageId: (role) => `${role}-message-hard-limit`,
+      messageReader: { getMessages: (): ChatMessageRecord[] => structuredClone(messages) },
+      messageWriter: {
+        addMessage: async (message: ChatMessageRecord): Promise<void> => {
+          messages.push(structuredClone(message));
+        },
+        updateMessage: async (message: ChatMessageRecord): Promise<void> => {
+          const index = messages.findIndex((candidate: ChatMessageRecord): boolean => candidate.id === message.id);
+          if (index >= 0) messages[index] = structuredClone(message);
+        }
+      },
+      resolveModel: async () => createModelResolution(),
+      compactionGenerateText: async (): Promise<[undefined, AIInvokeResult]> => [undefined, { text: '', output: createCompactionSummary('old-source-part') }],
+      streamExecutor
+    });
+
+    await service.send(createInput({ content: '当前任务', contextWindow: 12_000 }));
+    await vi.waitFor((): void => {
+      const failed = messages.flatMap((message: ChatMessageRecord): ChatMessagePart[] => message.parts).find((part) => part.type === 'compaction');
+      expect(failed).toMatchObject({ status: 'failed' });
+    });
+
+    expect(streamExecutor).not.toHaveBeenCalled();
   });
 
   it('accumulates usage from multiple continuation stream rounds', async (): Promise<void> => {
@@ -1487,7 +1786,7 @@ describe('chat runtime service shell', (): void => {
       expect.objectContaining({
         userMessage,
         assistantMessage: expect.objectContaining({ id: 'assistant-message-1', runtimeId: result.runtimeId }),
-        sourceMessages: [userMessage, expect.objectContaining({ id: 'assistant-message-1', runtimeId: result.runtimeId })]
+        sourceMessages: [userMessage]
       }),
       expect.any(Function)
     );
@@ -1616,12 +1915,7 @@ describe('chat runtime service shell', (): void => {
       expect.objectContaining({
         userMessage: currentUserMessage,
         assistantMessage: expect.objectContaining({ id: 'assistant-message-1', runtimeId: result.runtimeId }),
-        sourceMessages: [
-          previousUserMessage,
-          previousAssistantMessage,
-          currentUserMessage,
-          expect.objectContaining({ id: 'assistant-message-1', runtimeId: result.runtimeId })
-        ]
+        sourceMessages: [previousUserMessage, previousAssistantMessage, currentUserMessage]
       }),
       expect.any(Function)
     );

@@ -411,6 +411,28 @@ describe('runtime stream executor', (): void => {
     );
   });
 
+  it('uses the model resolution frozen at the request boundary', async (): Promise<void> => {
+    const assistantMessage = createAssistantMessage();
+    const resolve = vi.fn().mockResolvedValue({
+      createOptions: { providerId: 'provider-new', providerName: 'New', providerType: 'openai' },
+      modelId: 'model-new'
+    });
+    const streamText = vi.fn().mockResolvedValue([undefined, { stream: createTextStream() }]);
+    const executor = createRuntimeStreamExecutor({ resolver: { resolve }, streamText });
+    const frozenRuntime: ActiveChatRuntime = {
+      ...runtime,
+      resolvedModel: {
+        createOptions: { providerId: 'provider-frozen', providerName: 'Frozen', providerType: 'anthropic' },
+        modelId: 'model-frozen'
+      }
+    };
+
+    await executor({ runtime: frozenRuntime, userMessage, assistantMessage }, async () => undefined);
+
+    expect(resolve).not.toHaveBeenCalled();
+    expect(streamText).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'provider-frozen' }), expect.objectContaining({ modelId: 'model-frozen' }));
+  });
+
   it('streams tool chunks into assistant tool parts', async (): Promise<void> => {
     const assistantMessage = createAssistantMessage();
     const updates: ChatMessageRecord[] = [];

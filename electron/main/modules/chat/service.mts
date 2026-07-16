@@ -222,7 +222,8 @@ function isMessagePartType(value: unknown): value is ChatMessagePart['type'] {
     value === 'thinking' ||
     value === 'tool' ||
     value === 'widget_result' ||
-    value === 'confirmation'
+    value === 'confirmation' ||
+    value === 'compaction'
   );
 }
 
