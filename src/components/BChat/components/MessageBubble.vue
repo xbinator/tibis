@@ -23,7 +23,7 @@
       </template>
 
       <div :class="bem('parts')">
-        <BubblePartStatus v-if="showStatusPart" :message="message" />
+        <BubblePartStatus v-if="showStatusPart" />
 
         <BubblePartUserInput v-else-if="isUserMessage" :part="userInputPart" />
 
@@ -32,8 +32,6 @@
             <BubblePartText v-if="item.kind === 'text'" :part="item.part" />
 
             <BubblePartThinking v-else-if="item.kind === 'thinking'" :part="item.part" />
-
-            <BubblePartStatus v-else-if="item.kind === 'compaction'" :message="message" :compaction-part="item.part" />
 
             <QuestionCard v-else-if="item.kind === 'question'" :question="item.question" :disabled="disabled" :submit-action="submitAction" />
 
@@ -80,7 +78,6 @@ import type { SubmitAction } from '../utils/submitAction';
 import type { Message } from '../utils/types';
 import type { AIAwaitingUserChoiceQuestion } from 'types/ai';
 import type { ChatMessageErrorPart, ChatMessagePart, ChatMessageTextPart, ChatMessageThinkingPart, ChatMessageToolPart } from 'types/chat';
-import type { ChatMessageCompactionPart } from 'types/chat-runtime';
 import { computed, ref } from 'vue';
 import BBubble from '@/components/BBubble/index.vue';
 import { useClipboard } from '@/hooks/useClipboard';
@@ -125,7 +122,6 @@ const emit = defineEmits<{
 type MessageBubbleRenderItem =
   | { key: string; kind: 'text'; part: ChatMessageTextPart | ChatMessageErrorPart }
   | { key: string; kind: 'thinking'; part: ChatMessageThinkingPart }
-  | { key: string; kind: 'compaction'; part: ChatMessageCompactionPart }
   | { key: string; kind: 'question'; question: AIAwaitingUserChoiceQuestion }
   | { key: string; kind: 'tool'; part: ChatMessageToolPart }
   | { key: string; kind: 'widget'; part: WidgetToolPart };
@@ -149,8 +145,6 @@ const otherFiles = computed(() => props.message.files?.filter((file) => file.typ
 const isUserMessage = computed(() => props.message.role === 'user');
 /** 是否为助手消息 */
 const isAssistantMessage = computed(() => props.message.role === 'assistant');
-/** 是否为压缩消息 */
-const isCompressionMessage = computed(() => props.message.role === 'compression');
 /** 是否为中断消息 */
 const isInterruptMessage = computed(() => props.message.role === 'interrupt');
 /** 气泡位置：助手和错误消息靠左，用户消息靠右 */
@@ -160,9 +154,9 @@ const bubbleSize = computed(() => (isUserMessage.value ? 'auto' : 'fill'));
 /** 是否显示头部（用户消息且有文件时显示） */
 const showHeader = computed(() => isUserMessage.value && (imageFiles.value.length || otherFiles.value.length));
 /** 是否显示气泡容器（用户消息且有文件时显示） */
-const showContainer = computed(() => isCompressionMessage.value || isInterruptMessage.value || !!props.message.parts?.length);
+const showContainer = computed(() => isInterruptMessage.value || !!props.message.parts?.length);
 /** 是否显示状态正文。 */
-const showStatusPart = computed(() => isCompressionMessage.value || isInterruptMessage.value);
+const showStatusPart = computed(() => isInterruptMessage.value);
 /** 是否显示助手工具栏 */
 const showAssistantToolbar = computed(() => props.message.finished === true && isAssistantMessage.value);
 
@@ -187,7 +181,6 @@ const renderItems = computed<MessageBubbleRenderItem[]>(() =>
     if (part.type === 'confirmation') return [];
     if (isTextLikePart(part)) return [{ key, kind: 'text', part }];
     if (part.type === 'thinking') return [{ key, kind: 'thinking', part }];
-    if (part.type === 'compaction') return [{ key, kind: 'compaction', part }];
     if (!props.disabled && isAwaitingUserChoiceResult(part)) return [{ key, kind: 'question', question: part.result.data }];
     if (isWidgetToolPart(part)) return [{ key: `widget:${part.toolCallId}`, kind: 'widget', part }];
     if (part.type === 'tool') return [{ key, kind: 'tool', part }];

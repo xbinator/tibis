@@ -3,7 +3,6 @@
  * @description 聊天会话、消息与附件类型定义
  */
 import type { AIToolExecutionResult, AIUsage } from './ai';
-import type { ChatMessageCompactionPart, ChatMessageRuntimeMeta } from './chat-runtime';
 import type { WidgetSubmitPayload } from './widget';
 
 /**
@@ -14,7 +13,7 @@ export type ChatSessionType = 'assistant';
 /**
  * 聊天消息角色
  */
-export type ChatMessageRole = 'user' | 'system' | 'assistant' | 'error' | 'compression' | 'interrupt';
+export type ChatMessageRole = 'user' | 'system' | 'assistant' | 'error' | 'interrupt';
 
 /** 持久化用户交互状态。 */
 export type ChatPendingInteractionStatus = 'pending' | 'submitting' | 'resolved' | 'cancelled' | 'failed';
@@ -37,29 +36,6 @@ export interface ChatPendingInteraction {
   toolCallId: string;
   /** Question 业务 ID。 */
   questionId: string;
-}
-
-/**
- * 压缩消息状态
- */
-export type ChatCompressionStatus = 'pending' | 'success' | 'failed' | 'cancelled' | 'skipped';
-
-/**
- * 压缩消息元数据
- */
-export interface ChatCompressionMeta {
-  /** 压缩状态 */
-  status: ChatCompressionStatus;
-  /** 压缩边界文本，同时用于成功态的显示与后续模型上下文注入 */
-  recordText: string;
-  /** 关联的压缩记录 ID */
-  recordId?: string;
-  /** 覆盖到的最后一条原始消息 ID */
-  coveredUntilMessageId?: string;
-  /** 本次压缩覆盖的源消息 ID 列表 */
-  sourceMessageIds?: string[];
-  /** 压缩失败时的错误信息 */
-  errorMessage?: string;
 }
 
 /**
@@ -375,8 +351,7 @@ export type ChatMessagePart =
   | ChatMessageThinkingPart
   | ChatMessageToolPart
   | ChatMessageWidgetResultPart
-  | ChatMessageConfirmationPart
-  | ChatMessageCompactionPart;
+  | ChatMessageConfirmationPart;
 
 /**
  * 聊天会话
@@ -418,10 +393,6 @@ export interface ChatMessageRecord {
   files?: ChatMessageFile[];
   /** Token 使用统计 */
   usage?: AIUsage;
-  /** 压缩消息元数据 */
-  compression?: ChatCompressionMeta;
-  /** 是否为压缩摘要消息 */
-  summary?: boolean;
   /** 执行该消息的 agent ID */
   agentId?: string;
   /** 创建或更新该消息的 runtime ID */

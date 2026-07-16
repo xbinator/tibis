@@ -54,8 +54,6 @@ export interface UseChatSessionActorReturn {
   regenerate: (targetMessageId: string) => void;
   /** 请求取消 */
   cancel: () => void;
-  /** 请求上下文压缩 */
-  compact: () => void;
   /** 请求消息回退 */
   rollback: (targetMessageId: string) => void;
   /** 向当前 Session 发送底层领域事件 */
@@ -74,8 +72,6 @@ export interface UseChatSessionActorReturn {
   markRuntimeCancelled: () => void;
   /** 报告取消失败 */
   markCancelFailed: (error: ChatWorkflowError) => void;
-  /** 报告上下文压缩结果 */
-  markCompactFinished: (success: boolean) => void;
   /** 报告消息回退完成 */
   markRollbackCompleted: () => void;
   /** 报告消息回退失败 */
@@ -162,11 +158,6 @@ export function useChatSessionActor(options: UseChatSessionActorOptions): UseCha
     send({ type: 'session.cancelRequested' });
   }
 
-  /** 请求上下文压缩。 */
-  function compact(): void {
-    send({ type: 'session.compactRequested' });
-  }
-
   /** 请求消息回退。 */
   function rollback(targetMessageId: string): void {
     send({ type: 'session.rollbackRequested', targetMessageId });
@@ -186,7 +177,6 @@ export function useChatSessionActor(options: UseChatSessionActorOptions): UseCha
     recoverInteraction,
     regenerate,
     cancel,
-    compact,
     rollback,
     send,
     markPrepared: (): void => send({ type: 'session.prepared' }),
@@ -196,8 +186,6 @@ export function useChatSessionActor(options: UseChatSessionActorOptions): UseCha
     markFailed: (error: ChatWorkflowError): void => send({ type: 'session.failed', error }),
     markRuntimeCancelled: (): void => send({ type: 'session.runtimeCancelled' }),
     markCancelFailed: (error: ChatWorkflowError): void => send({ type: 'session.cancelFailed', error }),
-    markCompactFinished: (success: boolean): void =>
-      send(success ? { type: 'session.compactCompleted' } : { type: 'session.compactFailed', error: { code: 'compact_failed', message: '上下文压缩未完成' } }),
     markRollbackCompleted: (): void => send({ type: 'session.rollbackCompleted' }),
     markRollbackFailed: (error: ChatWorkflowError): void => send({ type: 'session.rollbackFailed', error })
   };

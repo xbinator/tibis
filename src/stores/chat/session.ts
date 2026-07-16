@@ -42,10 +42,10 @@ function toCloneableData<T>(value: T): T {
  * @returns 可存储的聊天消息记录。
  */
 function toRecordMessage(sessionId: string, message: PersistableMessage): ChatMessageRecord {
-  const { id, role, content, parts, thinking, files, usage, compression, createdAt = dayjs().toISOString(), loading, finished } = message;
+  const { id, role, content, parts, thinking, files, usage, createdAt = dayjs().toISOString(), loading, finished } = message;
 
   // Deep-clone to strip Vue reactive Proxy objects before passing through Electron IPC.
-  return toCloneableData({ sessionId, id, role, content, parts, thinking, files, usage, compression, createdAt, loading, finished });
+  return toCloneableData({ sessionId, id, role, content, parts, thinking, files, usage, createdAt, loading, finished });
 }
 
 /**

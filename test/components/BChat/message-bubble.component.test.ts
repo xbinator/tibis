@@ -448,50 +448,6 @@ describe('MessageBubble', (): void => {
     });
   });
 
-  it('shows skipped compression messages as a friendly neutral notice', (): void => {
-    const wrapper = mountMessageBubble({
-      id: 'compression-skipped-1',
-      role: 'compression',
-      content: '内容较少，无需压缩',
-      parts: [{ id: 'part0010', type: 'text', text: '内容较少，无需压缩' }],
-      createdAt: '2026-06-23T00:00:00.000Z',
-      loading: false,
-      finished: true,
-      compression: {
-        status: 'skipped',
-        recordText: '内容较少，无需压缩'
-      }
-    });
-
-    expect(wrapper.text()).toContain('无需压缩');
-    expect(wrapper.text()).not.toContain('上下文已压缩');
-    expect(wrapper.text()).not.toContain('压缩失败');
-    expect(wrapper.find('.status-node__error').exists()).toBe(false);
-  });
-
-  it('renders assistant compaction parts as inline compression status', (): void => {
-    const wrapper = mountMessageBubble(
-      createAssistantMessage({
-        content: '',
-        parts: [
-          {
-            id: 'part0011',
-            type: 'compaction',
-            auto: true,
-            reason: 'auto',
-            status: 'success',
-            recordId: 'record-1',
-            recordText: 'COMPRESSED_CONTEXT',
-            coveredUntilMessageId: 'assistant-previous'
-          }
-        ]
-      })
-    );
-
-    expect(wrapper.text()).toContain('上下文已压缩');
-    expect(wrapper.text()).not.toContain('压缩失败');
-  });
-
   it('keeps mounted widget render data local without submit actions', async (): Promise<void> => {
     const widgetPart: TestWidgetDisplayFixture = {
       id: 'widget-created-part',

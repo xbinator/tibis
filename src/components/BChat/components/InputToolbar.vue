@@ -22,8 +22,6 @@
     </template>
 
     <div class="action-buttons">
-      <ContextUsage v-if="selectedModel" :usage="contextUsage" :used-tokens="usedTokens" :context-window="contextWindow" />
-
       <VoiceInput v-if="false" ref="voiceInputRef" @start="emit('voice-start')" @partial-text="handleVoicePartial" @complete="handleVoiceComplete" />
 
       <BButton v-if="loading" size="small" tooltip="停止" square @click="$emit('abort')">
@@ -43,10 +41,8 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import type { ContextUsageBudgetSnapshot } from '@@/shared/ai/context/usageBudget.ts';
 import BButton from '@/components/BButton/index.vue';
 import type { SelectedModel } from '@/stores/ai/serviceModel';
-import ContextUsage from './InputToolbar/ContextUsage.vue';
 import ModelSelector from './InputToolbar/ModelSelector.vue';
 import VoiceInput from './InputToolbar/VoiceInput.vue';
 import VoiceWaveform from './InputToolbar/VoiceWaveform.vue';
@@ -65,21 +61,12 @@ interface Props {
   supportsVision: boolean;
   /** 当前是否允许提交。 */
   canSubmit: boolean;
-  /** 当前上下文已使用的 Token 数。 */
-  usedTokens: number;
-  /** 模型最大上下文窗口 Token 数。 */
-  contextWindow: number;
-  /** 当前上下文可用输入预算快照。 */
-  contextUsage?: ContextUsageBudgetSnapshot;
 }
 
 withDefaults(defineProps<Props>(), {
   selectedModel: undefined,
   supportsVision: false,
-  canSubmit: false,
-  usedTokens: 0,
-  contextWindow: 200000,
-  contextUsage: undefined
+  canSubmit: false
 });
 
 const emit = defineEmits<{

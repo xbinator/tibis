@@ -23,8 +23,6 @@ export interface RuntimeEventListeners {
   complete?: (event: ChatRuntimeEventMap['chat:runtime:complete']) => void;
   /** 错误监听器。 */
   error?: (event: ChatRuntimeEventMap['chat:runtime:error']) => void;
-  /** 上下文用量监听器。 */
-  contextUsage?: (event: ChatRuntimeEventMap['chat:runtime:context-usage-updated']) => void;
   /** 工具请求监听器。 */
   toolRequest?: (event: ChatRuntimeToolRequestEvent) => void;
   /** 确认请求监听器。 */
@@ -57,7 +55,6 @@ export function resetRuntimeEventListeners(listeners: RuntimeEventListeners): vo
   listeners.messageDeleted = undefined;
   listeners.complete = undefined;
   listeners.error = undefined;
-  listeners.contextUsage = undefined;
   listeners.toolRequest = undefined;
   listeners.confirmationRequest = undefined;
   listeners.bridgeRequest = undefined;

@@ -16,7 +16,6 @@ import type {
 import type {
   ChatRuntimeBridgeRequestEvent,
   ChatRuntimeConfirmationRequestEvent,
-  ChatRuntimeContextUsageEvent,
   ChatRuntimeEventMap,
   ChatRuntimeHandlerResult,
   ChatRuntimeMessageDeletedEvent,
@@ -287,13 +286,6 @@ const electronAPI: ElectronAPI = {
   chatMessageUpdate: (message) => ipcRenderer.invoke('chat:message:update', message),
   chatMessageSetAll: (sessionId, messages) => ipcRenderer.invoke('chat:message:setAll', sessionId, messages),
 
-  // ==================== 聊天压缩记录操作 ====================
-
-  chatCompressionGetLatest: (sessionId) => ipcRenderer.invoke('chat:compression:getLatest', sessionId),
-  chatCompressionCreate: (record) => ipcRenderer.invoke('chat:compression:create', record),
-  chatCompressionUpdateStatus: (id, status, invalidReason?) => ipcRenderer.invoke('chat:compression:updateStatus', id, status, invalidReason),
-  chatCompressionGetAll: (sessionId) => ipcRenderer.invoke('chat:compression:getAll', sessionId),
-
   // ==================== 安全存储操作 ====================
 
   /**
@@ -512,13 +504,6 @@ const electronAPI: ElectronAPI = {
   chatRuntimeAbort: (input) => ipcRenderer.invoke('chat:runtime:abort', input),
 
   /**
-   * 通过主进程 ChatRuntime 执行上下文压缩。
-   * @param input - 压缩命令参数
-   * @returns 压缩结果
-   */
-  chatRuntimeCompact: (input) => ipcRenderer.invoke('chat:runtime:compact', input),
-
-  /**
    * 提交 renderer 本地工具执行结果。
    * @param input - 工具执行结果
    * @returns 提交结果
@@ -571,20 +556,6 @@ const electronAPI: ElectronAPI = {
     ipcRenderer.on('chat:runtime:message-deleted', handler);
     return () => {
       ipcRenderer.removeListener('chat:runtime:message-deleted', handler);
-    };
-  },
-
-  /**
-   * 监听 ChatRuntime 上下文用量更新事件。
-   * @param callback - 事件回调
-   * @returns 取消监听函数
-   */
-  chatRuntimeOnContextUsageUpdated: (callback) => {
-    const handler = (_event: Electron.IpcRendererEvent, payload: ChatRuntimeContextUsageEvent) => callback(payload);
-
-    ipcRenderer.on('chat:runtime:context-usage-updated', handler);
-    return () => {
-      ipcRenderer.removeListener('chat:runtime:context-usage-updated', handler);
     };
   },
 

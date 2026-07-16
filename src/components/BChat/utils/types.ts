@@ -4,7 +4,7 @@
  */
 import type { FileReference } from '../types';
 import type { AIUsage } from 'types/ai';
-import type { ChatCompressionMeta, ChatMessageFile, ChatMessagePart, ChatMessageRole } from 'types/chat';
+import type { ChatMessageFile, ChatMessagePart, ChatMessageRole } from 'types/chat';
 import type { AIToolProviderSupport } from '@/ai/tools/policy';
 
 /**
@@ -69,8 +69,6 @@ export interface Message {
   tokenCountModelId?: string;
   /** token 计数对应的内容哈希 */
   tokenCountContentHash?: string;
-  /** 压缩消息元数据 */
-  compression?: ChatCompressionMeta;
 }
 
 /**

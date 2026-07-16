@@ -262,9 +262,6 @@ export function useChatRuntimeEvents(actorSystem: ChatActorSystem): void {
     electronAPI.chatRuntimeOnMessageCreated(handleMessageCreated),
     electronAPI.chatRuntimeOnMessageUpdated(handleMessageUpdated),
     electronAPI.chatRuntimeOnMessageDeleted(handleMessageDeleted),
-    electronAPI.chatRuntimeOnContextUsageUpdated((event) => {
-      if (shouldHandle(event)) actorSystem.emitSessionEvent(event.sessionId, { type: 'contextUsageUpdated', event });
-    }),
     electronAPI.chatRuntimeOnToolRequest((event) => {
       handleToolRequest(event).catch(() => undefined);
     }),

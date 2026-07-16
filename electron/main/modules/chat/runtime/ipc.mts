@@ -6,7 +6,6 @@ import type {
   ChatRuntimeAbortInput,
   ChatRuntimeAutoNameInput,
   ChatRuntimeBridgeResponseInput,
-  ChatRuntimeCompactInput,
   ChatRuntimeContinueInput,
   ChatRuntimeHandlerResult,
   ChatRuntimeRecoverySnapshot,
@@ -92,11 +91,6 @@ export function registerChatRuntimeHandlers(): void {
   ipcMain.handle(
     'chat:runtime:abort',
     wrapRuntimeHandler((_event, input) => chatRuntimeService.abort(input as ChatRuntimeAbortInput))
-  );
-
-  ipcMain.handle(
-    'chat:runtime:compact',
-    wrapRuntimeHandler((_event, input) => chatRuntimeService.compact(input as ChatRuntimeCompactInput))
   );
 
   ipcMain.handle(

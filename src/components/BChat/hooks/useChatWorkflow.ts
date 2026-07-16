@@ -8,7 +8,7 @@ import type { createChatConfirmationController } from '../utils/confirmationCont
 import type { Message } from '../utils/types';
 import type { AIServiceError, AIToolExecutor } from 'types/ai';
 import type { ChatMessageFile } from 'types/chat';
-import type { ChatRuntimeBridgeRequestEvent, ChatRuntimeContextUsageSnapshot, ChatRuntimeUserInputPart } from 'types/chat-runtime';
+import type { ChatRuntimeBridgeRequestEvent, ChatRuntimeUserInputPart } from 'types/chat-runtime';
 import type { ComputedRef, Ref } from 'vue';
 import { computed, nextTick, ref } from 'vue';
 import { cloneDeep } from 'lodash-es';
@@ -17,7 +17,7 @@ import { findLastUserMessage } from '@/ai/chat/policies/memorySelection';
 import { createRegenerationSlice } from '@/ai/chat/policies/regeneration';
 import { getRuntimeConfirmationGrantScope } from '@/ai/chat/policies/runtimeConfirmation';
 import type { ChatSessionUIEvent } from '@/ai/chat/sessionEvents';
-import { getElectronAPI, unwrap } from '@/shared/platform/electron-api';
+import { getElectronAPI } from '@/shared/platform/electron-api';
 import { useChatSessionStore } from '@/stores/chat/session';
 import { useToolPermissionStore } from '@/stores/chat/toolPermission';
 import { buildUserInputParts } from '../utils/filePartParser';
@@ -27,7 +27,6 @@ import { useChatRuntime } from './useChatRuntime';
 import { useChatRuntimeLauncher } from './useChatRuntimeLauncher';
 import { useChatSubmitter } from './useChatSubmitter';
 import { useRollback, type UseRollbackReturns } from './useRollback';
-import { useRuntimeCompactContext } from './useRuntimeCompactContext';
 
 /** Runtime 请求准备函数。 */
 type PrepareRuntimeRequest = ReturnType<typeof useRuntimeRequestConfig>['prepareRuntimeRequest'];
@@ -80,8 +79,6 @@ interface UseChatWorkflowOptions {
   scrollToBottom: () => void;
   /** Runtime 完成后的页面级处理 */
   onRuntimeComplete: (message: Message) => Promise<void> | void;
-  /** Runtime 上下文用量更新 */
-  onContextUsageUpdated: (snapshot: ChatRuntimeContextUsageSnapshot) => void;
   /** 模型配置不存在 */
   onModelNotFound: () => void;
   /** 展示普通 Runtime 错误 */
@@ -100,8 +97,6 @@ interface UseChatWorkflowReturn {
   chatSubmitter: ReturnType<typeof useChatSubmitter>;
   /** 回退能力与可回退判断 */
   rollbackController: UseRollbackReturns;
-  /** 手动压缩上下文 */
-  handleCompactContext: () => Promise<void>;
   /** 重新生成指定消息 */
   handleRegenerate: (message: Message) => Promise<void>;
   /** 发送用户文本消息 */
@@ -141,7 +136,6 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
   const rollbackIgnoredRuntimeIds = new Set<string>();
   const preflightLoading = ref<boolean>(false);
   let operationSequence = 0;
-  let compactAbortHandler: (() => void) | null = null;
   const loading = computed<boolean>(
     () =>
       preflightLoading.value ||
@@ -412,34 +406,9 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
     getSessionId: (): string | undefined => options.activeSessionId.value ?? undefined,
     fetchAllPriorHistory: options.fetchAllPriorHistory,
     persistMessages: chatStore.setSessionMessages,
-    invalidateCompressionRecords: async (recordIds: string[]): Promise<void> => {
-      for (const recordId of recordIds) {
-        // eslint-disable-next-line no-await-in-loop
-        unwrap(await getElectronAPI().chatCompressionUpdateStatus(recordId, 'invalid', 'rollback_truncation'));
-      }
-    },
     restoreInput: options.restoreInput,
     expireConfirmation: options.confirmationController.expirePendingConfirmation,
     focusInput: options.focusInput
-  });
-
-  const { handleCompactContext } = useRuntimeCompactContext({
-    messages: options.messages,
-    getSessionId: (): string | undefined => options.activeSessionId.value ?? undefined,
-    getContextWindow: (): number => options.contextWindow.value,
-    beginCompactTask: (onAbort) => {
-      if (loading.value) return { ok: false, reason: 'busy' };
-      beginOperation();
-      compactAbortHandler = onAbort ?? null;
-      options.sessionActor.compact();
-      return { ok: true };
-    },
-    finishCompactTask: (): void => {
-      compactAbortHandler = null;
-    },
-    onCompactFinished: options.sessionActor.markCompactFinished,
-    scrollToBottom: options.scrollToBottom,
-    isRuntimeEventIgnored
   });
 
   /** 发送一条新的用户文本消息。 */
@@ -482,7 +451,7 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
     return address?.sessionId === options.activeSessionId.value;
   }
 
-  /** 中止当前 Chat 或 Compact Runtime。 */
+  /** 中止当前 Chat Runtime。 */
   async function abort(): Promise<void> {
     beginOperation();
     preflightLoading.value = false;
@@ -490,12 +459,6 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
     const runtimeId = options.sessionActor.activeRuntimeId.value;
     options.sessionActor.cancel();
     try {
-      if (compactAbortHandler) {
-        compactAbortHandler();
-        compactAbortHandler = null;
-        options.sessionActor.markRuntimeCancelled();
-        return;
-      }
       if (!hasCurrentSessionCommandRuntime() && (await abortPendingUserChoiceIfNeeded())) {
         options.sessionActor.markRuntimeCancelled();
         return;
@@ -561,10 +524,6 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
       if (index >= 0) options.messages.value.splice(index, 1);
       return;
     }
-    if (event.type === 'contextUsageUpdated') {
-      options.onContextUsageUpdated(event.event.snapshot);
-      return;
-    }
     if (event.type === 'runtimeError') {
       await handleRuntimeError(event.event.error);
       return;
@@ -598,14 +557,12 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
   function dispose(): void {
     beginOperation();
     preflightLoading.value = false;
-    compactAbortHandler = null;
   }
 
   return {
     loading,
     chatSubmitter,
     rollbackController,
-    handleCompactContext,
     handleRegenerate,
     submitUserTextMessage,
     abort,

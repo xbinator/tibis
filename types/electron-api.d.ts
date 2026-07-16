@@ -22,11 +22,8 @@ import type {
   ChatRuntimeAutoNameResult,
   ChatRuntimeBridgeRequestEvent,
   ChatRuntimeBridgeResponseInput,
-  ChatRuntimeCompactInput,
-  ChatRuntimeCompactResult,
   ChatRuntimeConfirmationRequestEvent,
   ChatRuntimeContinueInput,
-  ChatRuntimeContextUsageEvent,
   ChatRuntimeEventMap,
   ChatRuntimeHandlerResult,
   ChatRuntimeMessageDeletedEvent,
@@ -40,7 +37,6 @@ import type {
   ChatRuntimeSubmitToolResultInput,
   ChatRuntimeToolRequestEvent
 } from './chat-runtime';
-import type { CompressionRecord, CompressionRecordStatus } from './compression';
 import type { RequestInput, RequestResponse } from './request';
 import type { WebViewProtocolScreenshotRequest } from './webview';
 
@@ -552,12 +548,6 @@ export interface ElectronAPI {
   chatMessageUpdate: (message: ChatMessageRecord) => Promise<ChatHandlerResult<void>>;
   chatMessageSetAll: (sessionId: string, messages: ChatMessageRecord[]) => Promise<ChatHandlerResult<void>>;
 
-  // 聊天压缩记录操作
-  chatCompressionGetLatest: (sessionId: string) => Promise<ChatHandlerResult<CompressionRecord | undefined>>;
-  chatCompressionCreate: (record: Omit<CompressionRecord, 'id' | 'createdAt' | 'updatedAt'>) => Promise<ChatHandlerResult<CompressionRecord>>;
-  chatCompressionUpdateStatus: (id: string, status: CompressionRecordStatus, invalidReason?: string) => Promise<ChatHandlerResult<void>>;
-  chatCompressionGetAll: (sessionId: string) => Promise<ChatHandlerResult<CompressionRecord[]>>;
-
   // 安全存储操作
   storeGet: <T = unknown>(key: string) => Promise<T | undefined>;
   storeSet: (key: string, value: unknown) => Promise<void>;
@@ -600,13 +590,11 @@ export interface ElectronAPI {
   chatRuntimeSubmitBridgeResponse: (input: ChatRuntimeBridgeResponseInput) => Promise<ChatRuntimeHandlerResult<void>>;
   chatRuntimeAutoName: (input: ChatRuntimeAutoNameInput) => Promise<ChatRuntimeHandlerResult<ChatRuntimeAutoNameResult>>;
   chatRuntimeAbort: (input: ChatRuntimeAbortInput) => Promise<ChatRuntimeHandlerResult<void>>;
-  chatRuntimeCompact: (input: ChatRuntimeCompactInput) => Promise<ChatRuntimeHandlerResult<ChatRuntimeCompactResult>>;
   chatRuntimeSubmitToolResult: (input: ChatRuntimeSubmitToolResultInput) => Promise<ChatRuntimeHandlerResult<void>>;
   chatRuntimeSubmitMessagePart: (input: ChatRuntimeSubmitMessagePartInput) => Promise<ChatRuntimeHandlerResult<void>>;
   chatRuntimeOnMessageCreated: (callback: (event: ChatRuntimeMessageEvent) => void) => () => void;
   chatRuntimeOnMessageUpdated: (callback: (event: ChatRuntimeMessageEvent) => void) => () => void;
   chatRuntimeOnMessageDeleted: (callback: (event: ChatRuntimeMessageDeletedEvent) => void) => () => void;
-  chatRuntimeOnContextUsageUpdated: (callback: (event: ChatRuntimeContextUsageEvent) => void) => () => void;
   chatRuntimeOnToolRequest: (callback: (event: ChatRuntimeToolRequestEvent) => void) => () => void;
   chatRuntimeOnConfirmationRequested: (callback: (event: ChatRuntimeConfirmationRequestEvent) => void) => () => void;
   chatRuntimeOnBridgeRequested: (callback: (event: ChatRuntimeBridgeRequestEvent) => void) => () => void;

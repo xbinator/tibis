@@ -3,8 +3,6 @@
  * @description 聊天会话分支数据重建测试。
  */
 import type { ChatMessageRecord, ChatSession } from 'types/chat';
-import type { ChatMessageCompactionPart } from 'types/chat-runtime';
-import type { CompressionRecord } from 'types/compression';
 import { describe, expect, it } from 'vitest';
 import { createSessionBranchData } from '../../../../../electron/main/modules/chat/runtime/branch.mts';
 
@@ -60,43 +58,6 @@ function createMessage(id: string, role: 'user' | 'assistant', content: string, 
   };
 }
 
-/**
- * 创建一条引用首轮消息的压缩记录。
- * @returns 测试压缩记录
- */
-function createCompressionRecord(): CompressionRecord {
-  return {
-    id: 'compression-record-source',
-    sessionId: 'session-source',
-    buildMode: 'full_rebuild',
-    coveredStartMessageId: 'user-1',
-    coveredEndMessageId: 'assistant-1',
-    coveredUntilMessageId: 'assistant-1',
-    sourceMessageIds: ['user-1', 'assistant-1'],
-    preservedMessageIds: ['assistant-1'],
-    recordText: '首轮摘要',
-    structuredSummary: {
-      goal: '继续测试',
-      recentTopic: '会话分支',
-      userPreferences: [],
-      constraints: [],
-      decisions: [],
-      importantFacts: [],
-      fileContext: [],
-      openQuestions: [],
-      pendingActions: []
-    },
-    triggerReason: 'manual',
-    messageCountSnapshot: 2,
-    charCountSnapshot: 8,
-    schemaVersion: 3,
-    status: 'valid',
-    recordSetId: 'compression-set-source',
-    createdAt: '2026-07-14T08:02:00.000Z',
-    updatedAt: '2026-07-14T08:02:00.000Z'
-  };
-}
-
 describe('createSessionBranchData', (): void => {
   it('rejects generated IDs that collide with source branch data', (): void => {
     const sourceMessages = [
@@ -108,7 +69,6 @@ describe('createSessionBranchData', (): void => {
       createSessionBranchData({
         sourceSession: createSourceSession(),
         sourceMessages,
-        compressionRecords: [],
         targetMessageId: 'assistant-1',
         now: '2026-07-14T12:00:00.000Z',
         createId: (): string => 'session-source'
@@ -121,7 +81,6 @@ describe('createSessionBranchData', (): void => {
       createSessionBranchData({
         sourceSession: createSourceSession(),
         sourceMessages: [createMessage('user-1', 'user', '问题一', '2026-07-14T08:01:00.000Z')],
-        compressionRecords: [],
         targetMessageId: 'user-1',
         now: '2026-07-14T12:00:00.000Z',
         createId: createIdFactory()
@@ -145,7 +104,6 @@ describe('createSessionBranchData', (): void => {
     const result = createSessionBranchData({
       sourceSession,
       sourceMessages,
-      compressionRecords: [],
       targetMessageId: 'assistant-1',
       now: '2026-07-14T12:00:00.000Z',
       createId: createIdFactory()
@@ -167,133 +125,6 @@ describe('createSessionBranchData', (): void => {
     expect(result.messages.flatMap((message: ChatMessageRecord): string[] => message.parts.map((part): string => part.id ?? ''))).not.toContain('part-user-1');
     expect(result.messages.every((message: ChatMessageRecord): boolean => message.runtimeId === undefined && message.parentRuntimeId === undefined)).toBe(true);
     expect(result.messages[0].files).toEqual(sourceMessages[0].files);
-    expect(result.compressionRecords).toEqual([]);
     expect(sourceMessages).toEqual(sourceSnapshot);
-  });
-
-  it('clones referenced compression records and remaps their message references', (): void => {
-    const userMessage = createMessage('user-1', 'user', '问题一', '2026-07-14T08:01:00.000Z');
-    const assistantMessage = createMessage('assistant-1', 'assistant', '回答一', '2026-07-14T08:02:00.000Z');
-    assistantMessage.parts.push({
-      id: 'compaction-part-source',
-      type: 'compaction',
-      auto: false,
-      reason: 'manual',
-      status: 'success',
-      tailStartMessageId: 'assistant-1',
-      recordId: 'compression-record-source',
-      recordText: '首轮摘要',
-      coveredUntilMessageId: 'assistant-1',
-      sourceMessageIds: ['user-1', 'assistant-1']
-    });
-    assistantMessage.compression = {
-      status: 'success',
-      recordId: 'compression-record-source',
-      recordText: '首轮摘要',
-      coveredUntilMessageId: 'assistant-1',
-      sourceMessageIds: ['user-1', 'assistant-1']
-    };
-    assistantMessage.meta = {
-      compaction: {
-        previousSummaryMessageId: 'user-1',
-        hiddenMessageIds: ['user-1']
-      }
-    };
-
-    const result = createSessionBranchData({
-      sourceSession: createSourceSession(),
-      sourceMessages: [userMessage, assistantMessage],
-      compressionRecords: [createCompressionRecord()],
-      targetMessageId: 'assistant-1',
-      now: '2026-07-14T12:00:00.000Z',
-      createId: createIdFactory()
-    });
-    const copiedUserMessage = result.messages[0];
-    const copiedAssistantMessage = result.messages[1];
-    const copiedPart = copiedAssistantMessage.parts.find((part): part is ChatMessageCompactionPart => part.type === 'compaction');
-    const [copiedRecord] = result.compressionRecords;
-
-    expect(copiedRecord).toBeDefined();
-    expect(copiedRecord.id).not.toBe('compression-record-source');
-    expect(copiedRecord.sessionId).toBe(result.session.id);
-    expect(copiedRecord.recordSetId).not.toBe('compression-set-source');
-    expect(copiedRecord.coveredStartMessageId).toBe(copiedUserMessage.id);
-    expect(copiedRecord.coveredEndMessageId).toBe(copiedAssistantMessage.id);
-    expect(copiedRecord.coveredUntilMessageId).toBe(copiedAssistantMessage.id);
-    expect(copiedRecord.sourceMessageIds).toEqual([copiedUserMessage.id, copiedAssistantMessage.id]);
-    expect(copiedRecord.preservedMessageIds).toEqual([copiedAssistantMessage.id]);
-    expect(copiedPart).toMatchObject({
-      recordId: copiedRecord.id,
-      tailStartMessageId: copiedAssistantMessage.id,
-      coveredUntilMessageId: copiedAssistantMessage.id,
-      sourceMessageIds: [copiedUserMessage.id, copiedAssistantMessage.id]
-    });
-    expect(copiedAssistantMessage.compression).toMatchObject({
-      recordId: copiedRecord.id,
-      coveredUntilMessageId: copiedAssistantMessage.id,
-      sourceMessageIds: [copiedUserMessage.id, copiedAssistantMessage.id]
-    });
-    expect(copiedAssistantMessage.meta?.compaction).toMatchObject({
-      previousSummaryMessageId: copiedUserMessage.id,
-      hiddenMessageIds: [copiedUserMessage.id]
-    });
-  });
-
-  it('copies derived compression ancestors and remaps their record links', (): void => {
-    const userMessage = createMessage('user-1', 'user', '问题一', '2026-07-14T08:01:00.000Z');
-    const assistantMessage = createMessage('assistant-1', 'assistant', '回答一', '2026-07-14T08:02:00.000Z');
-    const ancestorRecord = createCompressionRecord();
-    const childRecord: CompressionRecord = {
-      ...createCompressionRecord(),
-      id: 'compression-record-child',
-      derivedFromRecordId: ancestorRecord.id,
-      createdAt: '2026-07-14T08:03:00.000Z',
-      updatedAt: '2026-07-14T08:03:00.000Z'
-    };
-    assistantMessage.parts.push({
-      id: 'compaction-part-child',
-      type: 'compaction',
-      auto: false,
-      reason: 'manual',
-      status: 'success',
-      recordId: childRecord.id,
-      recordText: '增量摘要',
-      coveredUntilMessageId: 'assistant-1',
-      sourceMessageIds: ['user-1', 'assistant-1']
-    });
-
-    const result = createSessionBranchData({
-      sourceSession: createSourceSession(),
-      sourceMessages: [userMessage, assistantMessage],
-      compressionRecords: [ancestorRecord, childRecord],
-      targetMessageId: 'assistant-1',
-      now: '2026-07-14T12:00:00.000Z',
-      createId: createIdFactory()
-    });
-    const copiedAncestor = result.compressionRecords.find((record: CompressionRecord): boolean => !record.derivedFromRecordId);
-    const copiedChild = result.compressionRecords.find((record: CompressionRecord): boolean => Boolean(record.derivedFromRecordId));
-
-    expect(result.compressionRecords).toHaveLength(2);
-    expect(copiedChild?.derivedFromRecordId).toBe(copiedAncestor?.id);
-  });
-
-  it('rejects runtime message references outside the copied range', (): void => {
-    const assistantMessage = createMessage('assistant-1', 'assistant', '回答一', '2026-07-14T08:02:00.000Z');
-    assistantMessage.meta = {
-      compaction: {
-        hiddenMessageIds: ['message-outside-range']
-      }
-    };
-
-    expect((): void => {
-      createSessionBranchData({
-        sourceSession: createSourceSession(),
-        sourceMessages: [createMessage('user-1', 'user', '问题一', '2026-07-14T08:01:00.000Z'), assistantMessage],
-        compressionRecords: [],
-        targetMessageId: 'assistant-1',
-        now: '2026-07-14T12:00:00.000Z',
-        createId: createIdFactory()
-      });
-    }).toThrow('无法重建消息引用 meta.compaction.hiddenMessageIds');
   });
 });

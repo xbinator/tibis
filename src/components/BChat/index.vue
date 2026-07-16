@@ -24,14 +24,6 @@
       </ConversationView>
 
       <div :class="bem('floating-container')">
-        <UsagePanel
-          v-if="usagePanel.open.value"
-          :loading="usagePanel.loading.value"
-          :usage="usagePanel.usage.value"
-          :error="usagePanel.error.value"
-          :on-close="usagePanel.close"
-        />
-
         <InteractionContainer :toast-queue="toastQueue" @remove-toast="removeToast" />
       </div>
     </div>
@@ -68,9 +60,6 @@
           :selected-model="selectedModel"
           :supports-vision="supportsVision"
           :can-submit="canSubmit"
-          :used-tokens="usedTokens"
-          :context-window="contextWindow"
-          :context-usage="displayedContextUsageSnapshot"
           @submit="handleChatSubmit"
           @abort="handleAbort"
           @image-select="imageUpload.appendImages"
@@ -87,10 +76,8 @@
 <script setup lang="ts">
 import type { BChatProps, Message } from './utils/types';
 import type { ChatMessageConfirmationAction, ChatSession } from 'types/chat';
-import type { ChatRuntimeContextUsageSnapshot } from 'types/chat-runtime';
 import { computed, h, onUnmounted, provide, ref, toRef, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import type { ContextUsageBudgetSnapshot } from '@@/shared/ai/context/usageBudget.ts';
 import { findPendingInteraction } from '@/ai/chat/policies/pendingInteraction';
 import type { ChatSessionUIEvent } from '@/ai/chat/sessionEvents';
 import BTextEditor from '@/components/BText/Editor.vue';
@@ -108,13 +95,11 @@ import ImagePreview from './components/ImagePreview.vue';
 import InputToolbar from './components/InputToolbar.vue';
 import InteractionContainer from './components/InteractionContainer/index.vue';
 import TodoPanel from './components/TodoPanel.vue';
-import UsagePanel from './components/UsagePanel.vue';
 import { useChatComposer } from './hooks/useChatComposer';
 import { useChatServiceConfig } from './hooks/useChatServiceConfig';
 import { useChatSessionActor } from './hooks/useChatSessionActor';
 import { useChatSessionLifecycle } from './hooks/useChatSessionLifecycle';
 import { useChatWorkflow } from './hooks/useChatWorkflow';
-import { useContextUsage } from './hooks/useContextUsage';
 import { useInteractionState } from './hooks/useInteractionState';
 import { useRuntimeBridgeHandler } from './hooks/useRuntimeBridgeHandler';
 import { useRuntimeConfig } from './hooks/useRuntimeConfig';
@@ -122,7 +107,6 @@ import { useRuntimeRequestConfig } from './hooks/useRuntimeRequestConfig';
 import { useRuntimeTools } from './hooks/useRuntimeTools';
 import { useSlashCommands, chatSlashCommands } from './hooks/useSlashCommands';
 import { useTodoPanel } from './hooks/useTodoPanel';
-import { useUsagePanel } from './hooks/useUsagePanel';
 import { createChatConfirmationController } from './utils/confirmationController';
 import { userChoice } from './utils/messageHelper';
 
@@ -198,10 +182,6 @@ const conversationRef = ref<InstanceType<typeof ConversationView>>();
 const branchingMessageId = ref<string>();
 /** 确认控制器，管理工具调用的用户确认流程 */
 const confirmationController = createChatConfirmationController();
-/** 用量面板 hook */
-const usagePanel = useUsagePanel();
-/** 主进程 runtime 上报的上下文窗口用量快照。 */
-const runtimeContextUsageSnapshot = ref<ContextUsageBudgetSnapshot | undefined>(undefined);
 /** 提供给早期初始化回调的工作流忙碌镜像。 */
 const workflowLoading = ref<boolean>(false);
 /** 会话 ID、历史消息与自动命名生命周期。 */
@@ -209,10 +189,6 @@ const sessionLifecycle = useChatSessionLifecycle({
   sessionId: toRef(props, 'sessionId'),
   isLoading: (): boolean => workflowLoading.value,
   disposeConfirmation: confirmationController.dispose,
-  resetUsagePanel: usagePanel.reset,
-  resetRuntimeContextUsage: (): void => {
-    runtimeContextUsageSnapshot.value = undefined;
-  },
   focusInput,
   hasPendingUserChoice: (sourceMessages: Message[]): boolean => Boolean(userChoice.findPending(sourceMessages)),
   onSessionCreated: (session: ChatSession): void => emit('session-created', session),
@@ -281,35 +257,13 @@ function handleConfirmationSheetAction(action: ChatMessageConfirmationAction): v
 }
 
 /**
- * 将主进程 runtime 上下文用量快照转换为 renderer 工具栏使用的形状。
- * @param snapshot - 主进程 runtime 上下文用量快照
- * @returns renderer 上下文用量快照
- */
-function toUsageBudgetSnapshot(snapshot: ChatRuntimeContextUsageSnapshot): ContextUsageBudgetSnapshot {
-  return {
-    usedTokens: snapshot.estimatedInputTokens,
-    contextWindow: snapshot.contextWindow,
-    reservedOutputTokens: snapshot.reservedOutputTokens,
-    safetyMarginTokens: snapshot.compactionBufferTokens,
-    usableInputTokens: snapshot.usableInputTokens,
-    usagePercent: snapshot.usagePercent,
-    remainingInputTokens: snapshot.remainingInputTokens,
-    status: snapshot.status
-  };
-}
-
-/**
  * 处理主进程 ChatRuntime 完成事件。
- * Runtime 已在主进程完成消息持久化，这里只做 UI 状态、用量刷新和自动命名。
+ * Runtime 已在主进程完成消息持久化，这里只做 UI 状态和自动命名。
  * @param nextMessage - runtime 完成的 assistant 消息
  */
 async function handleRuntimeComplete(nextMessage: Message): Promise<void> {
   const sessionId = activeSessionId.value;
   const snapshot = captureAutoNameSnapshot(nextMessage, sessionId);
-
-  if (sessionId) {
-    await usagePanel.refresh(sessionId, currentSessionForAutoName.value?.id ?? sessionId);
-  }
 
   if (!snapshot) return;
 
@@ -400,9 +354,6 @@ const workflow = useChatWorkflow({
   focusInput,
   scrollToBottom: (): void => conversationRef.value?.scrollToBottom({ behavior: 'auto' }),
   onRuntimeComplete: handleRuntimeComplete,
-  onContextUsageUpdated: (snapshot: ChatRuntimeContextUsageSnapshot): void => {
-    runtimeContextUsageSnapshot.value = toUsageBudgetSnapshot(snapshot);
-  },
   onModelNotFound: showNoModelToast,
   showRuntimeError: (message: string): void => interactionAPI.showToast({ type: 'error', content: message }),
   restoreTodoSnapshots: restoreTodoSnapshotsForMessages
@@ -419,7 +370,6 @@ const {
   loading,
   chatSubmitter,
   rollbackController,
-  handleCompactContext,
   handleRegenerate: handleChatRegenerate,
   abort: handleAbort,
   cancel: handleCancel,
@@ -431,13 +381,6 @@ const messageInteractionDisabled = computed<boolean>((): boolean => {
   const pendingInteraction = sessionId ? findPendingInteraction(messages.value, sessionId) : null;
   return pendingInteraction ? !chatSessionActor.waitingForUser.value : !loading.value;
 });
-
-/** 上下文窗口用量 hook（空闲态用 API 上报值，流式中用估算器）。 */
-const { usedTokens, snapshot: contextUsageSnapshot } = useContextUsage({ messages, contextWindow, selectedModel, streaming: loading });
-/** 当前展示给工具栏的上下文窗口用量快照。 */
-const displayedContextUsageSnapshot = computed<ContextUsageBudgetSnapshot>(
-  (): ContextUsageBudgetSnapshot => runtimeContextUsageSnapshot.value ?? contextUsageSnapshot.value
-);
 
 watch(
   loading,
@@ -497,16 +440,9 @@ function handleModelChange(model: { providerId: string; modelId: string }): void
 /** 斜杠命令处理 hook */
 const { handleSlashCommand } = useSlashCommands({
   openModelSelector: openModelCommandPanel,
-  openUsagePanel: (): Promise<void> => usagePanel.openPanel(activeSessionId.value ?? undefined),
   createNewSession: createDraftSession,
   clearInput: inputEvents.clear,
-  compactContext: handleCompactContext,
-  isBusy: (): boolean => loading.value,
-  onBusyCommandRejected: (commandId: string): void => {
-    if (commandId === 'compact') {
-      interactionAPI.showToast({ content: '当前消息仍在生成中，请先停止或等待完成', type: 'info' });
-    }
-  }
+  isBusy: (): boolean => loading.value
 });
 
 /** 组件卸载时清理 */

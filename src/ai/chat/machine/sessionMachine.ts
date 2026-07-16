@@ -57,10 +57,7 @@ export type SessionMachineEvent =
   | { type: 'session.cancelFailed'; error: ChatWorkflowError }
   | { type: 'session.rollbackRequested'; targetMessageId: string }
   | { type: 'session.rollbackCompleted' }
-  | { type: 'session.rollbackFailed'; error: ChatWorkflowError }
-  | { type: 'session.compactRequested' }
-  | { type: 'session.compactCompleted' }
-  | { type: 'session.compactFailed'; error: ChatWorkflowError };
+  | { type: 'session.rollbackFailed'; error: ChatWorkflowError };
 
 /**
  * 将 Session 入口事件转换为新 Turn 意图。
@@ -244,7 +241,6 @@ export const sessionMachine = setup({
           target: 'preparing',
           actions: 'startNewTurn'
         },
-        'session.compactRequested': 'compacting',
         'session.rollbackRequested': {
           target: 'rollingBack.applyingRollback',
           actions: 'assignRollbackTarget'
@@ -359,21 +355,6 @@ export const sessionMachine = setup({
         'session.runtimeCancelled': {
           target: 'idle',
           actions: ['notifyTurnCancelled', 'clearActiveTurn']
-        }
-      }
-    },
-    compacting: {
-      tags: ['busy', 'abortable'],
-      on: {
-        'session.compactCompleted': 'idle',
-        'session.compactFailed': {
-          target: 'idle',
-          actions: 'assignError'
-        },
-        'session.cancelRequested': 'cancelling',
-        'session.rollbackRequested': {
-          target: 'rollingBack.cancellingActiveRuntime',
-          actions: 'assignRollbackTarget'
         }
       }
     },

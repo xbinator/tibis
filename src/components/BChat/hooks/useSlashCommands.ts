@@ -10,14 +10,10 @@ import type { SlashCommandOption } from '@/components/BText/types';
 type CommandHandlers = {
   /** 打开模型选择器 */
   openModelSelector: () => Promise<void> | void;
-  /** 打开用量面板 */
-  openUsagePanel: () => Promise<void> | void;
   /** 创建新会话 */
   createNewSession: () => Promise<void> | void;
   /** 清空输入 */
   clearInput: () => Promise<void> | void;
-  /** 压缩上下文 */
-  compactContext: () => Promise<void> | void;
   /** 当前是否有活跃任务 */
   isBusy: () => boolean;
   /** 命令因忙碌被拒绝时的回调 */
@@ -36,10 +32,8 @@ type CommandConcurrencyPolicy = 'allowAlways' | 'allowWhenIdleOnly';
  */
 const COMMAND_HANDLER_MAP = {
   model: 'openModelSelector',
-  usage: 'openUsagePanel',
   new: 'createNewSession',
-  clear: 'clearInput',
-  compact: 'compactContext'
+  clear: 'clearInput'
 } as const satisfies Record<string, keyof CommandHandlers>;
 
 /** 从映射表键名派生的命令 id 联合类型 */
@@ -51,9 +45,7 @@ type CommandId = keyof typeof COMMAND_HANDLER_MAP;
  */
 const CHAT_COMMAND_DEFINITIONS = [
   { id: 'model', title: '模型', description: '切换当前使用的模型', concurrencyPolicy: 'allowAlways' },
-  { id: 'usage', title: '使用情况', description: '显示当前会话的 token 使用情况', concurrencyPolicy: 'allowAlways' },
-  { id: 'new', title: '新建聊天', description: '开始一个新的聊天会话', concurrencyPolicy: 'allowWhenIdleOnly' },
-  { id: 'compact', title: '压缩上下文', description: '立即执行一次手动上下文压缩', concurrencyPolicy: 'allowWhenIdleOnly' }
+  { id: 'new', title: '新建聊天', description: '开始一个新的聊天会话', concurrencyPolicy: 'allowWhenIdleOnly' }
 ] satisfies Array<{ id: CommandId; title: string; description: string; concurrencyPolicy: CommandConcurrencyPolicy }>;
 
 /**

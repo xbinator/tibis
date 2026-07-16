@@ -20,10 +20,6 @@ interface UseChatSessionLifecycleOptions {
   isLoading: () => boolean;
   /** 释放当前确认请求 */
   disposeConfirmation: () => void;
-  /** 重置用量面板 */
-  resetUsagePanel: () => void;
-  /** 重置 Runtime 上下文用量 */
-  resetRuntimeContextUsage: () => void;
   /** 聚焦输入编辑器 */
   focusInput: () => void;
   /** 检查是否存在待回答用户选择 */
@@ -75,8 +71,6 @@ export function useChatSessionLifecycle(options: UseChatSessionLifecycleOptions)
     options.disposeConfirmation();
     createdSessionId.value = null;
     currentSessionForAutoName.value = undefined;
-    options.resetRuntimeContextUsage();
-    options.resetUsagePanel();
     history.setLoadedMessages([]);
     history.hasMoreHistory.value = false;
     await nextTick();
@@ -86,8 +80,6 @@ export function useChatSessionLifecycle(options: UseChatSessionLifecycleOptions)
   /** 加载指定会话消息。 */
   async function loadSessionMessages(sessionId: string): Promise<void> {
     options.disposeConfirmation();
-    options.resetUsagePanel();
-    options.resetRuntimeContextUsage();
     history.hasMoreHistory.value = false;
     history.setLoadedMessages(await chatStore.getSessionMessages(sessionId));
   }

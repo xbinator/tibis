@@ -15,7 +15,6 @@ import type {
   ChatMessageToolPart,
   ChatMessageWidgetResultPart
 } from 'types/chat';
-import type { ChatMessageCompactionPart } from 'types/chat-runtime';
 import type { WidgetDisplayPayload } from 'types/widget';
 import dayjs from 'dayjs';
 import { nanoid } from 'nanoid';
@@ -74,43 +73,8 @@ export type ToolResult = NonNullable<ChatMessageToolPart['result']>;
 /** 可渲染的 open_widget 工具片段。 */
 export type WidgetToolPart = ChatMessageToolPart & { result: ToolResult & { status: 'success'; data: WidgetDisplayPayload } };
 
-/** 最近压缩边界。 */
-type LatestCompressionBoundary =
-  | {
-      /** 独立 compression 消息边界。 */
-      kind: 'message';
-      /** 边界消息索引。 */
-      index: number;
-      /** 边界消息。 */
-      message: Message;
-    }
-  | {
-      /** assistant 消息内 compaction part 边界。 */
-      kind: 'part';
-      /** 持有 part 的消息索引。 */
-      index: number;
-      /** 持有 part 的消息。 */
-      message: Message;
-      /** 压缩状态 part。 */
-      part: ChatMessageCompactionPart;
-      /** compaction part 在 host message 中的索引。 */
-      partIndex: number;
-    };
-
-/** 兼容历史消息与新工具实现的用户提问工具名称。 */
-/** 旧压缩记忆召回的最大数量。 */
-const MAX_RECALLED_COMPRESSION_MEMORY_COUNT = 2;
 /** Shell 命令实时输出最多保留片段数量。 */
 const MAX_SHELL_OUTPUT_CHUNK_COUNT = 80;
-/** 自动压缩后继续当前任务的用户态指令。 */
-const COMPACTION_CONTINUATION_PROMPT = '继续完成当前用户任务。以上 COMPRESSED_CONTEXT 是当前任务的压缩上下文，请基于它继续执行，不要复述压缩内容。';
-/** 后续已有真实消息时，压缩后进展使用的中性上下文说明。 */
-const COMPACTION_PROGRESS_CONTEXT_PROMPT = '以下是本次压缩之后、后续用户消息之前已经发生的当前轮进展。请把它们视为已完成的历史事实，不要复述。';
-/** 压缩后续跑上下文中单个结构化值的最大字符数。 */
-const MAX_POST_COMPACTION_VALUE_LENGTH = 12000;
-
-/** 压缩后进展写入模型上下文的模式。 */
-type CompactionProgressMode = 'continue' | 'context';
 
 // ─── 内部工具函数 ────────────────────────────────────────────────────────────
 
@@ -206,21 +170,7 @@ export const is = {
    * 判断消息是否可持久化。
    */
   persistableMessage(message: Message): message is PersistableMessage {
-    return ['user', 'assistant', 'error', 'compression', 'interrupt'].includes(message.role);
-  },
-
-  /**
-   * 判断消息是否为可作为后续模型上下文边界的成功压缩消息。
-   */
-  modelBoundaryCompressionMessage(message: Message | undefined): boolean {
-    return message?.role === 'compression' && message.compression?.status === 'success' && Boolean(message.compression.coveredUntilMessageId);
-  },
-
-  /**
-   * 判断消息片段是否为可作为后续模型上下文边界的成功压缩 part。
-   */
-  modelBoundaryCompactionPart(part: ChatMessagePart | undefined): part is ChatMessageCompactionPart {
-    return part?.type === 'compaction' && part.status === 'success' && Boolean(part.recordText) && Boolean(part.coveredUntilMessageId);
+    return ['user', 'assistant', 'error', 'interrupt'].includes(message.role);
   },
 
   /**
@@ -475,322 +425,6 @@ export const userChoice = {
   }
 } as const;
 
-/**
- * 查找消息中最后一个成功压缩 part。
- * @param message - 待检查消息
- * @returns 成功压缩 part，不存在时返回 undefined
- */
-function findLastSuccessfulCompactionPart(message: Message): { part: ChatMessageCompactionPart; partIndex: number } | undefined {
-  for (let index = message.parts.length - 1; index >= 0; index -= 1) {
-    const part = message.parts[index];
-    if (is.modelBoundaryCompactionPart(part)) {
-      return { part, partIndex: index };
-    }
-  }
-
-  return undefined;
-}
-
-/**
- * 查找最后一个成功压缩边界。
- * @param sourceMessages - 原始消息列表
- * @returns 成功压缩边界，不存在时返回 undefined
- */
-function findLatestCompressionBoundary(sourceMessages: Message[]): LatestCompressionBoundary | undefined {
-  for (let index = sourceMessages.length - 1; index >= 0; index -= 1) {
-    const message = sourceMessages[index];
-    if (is.modelBoundaryCompressionMessage(message)) {
-      return { kind: 'message', index, message };
-    }
-
-    const compactionPart = findLastSuccessfulCompactionPart(message);
-    if (compactionPart) {
-      return { kind: 'part', index, message, part: compactionPart.part, partIndex: compactionPart.partIndex };
-    }
-  }
-
-  return undefined;
-}
-
-/**
- * 查找最后一个成功压缩边界的索引。
- * @param sourceMessages - 原始消息列表
- * @returns 成功压缩边界索引，不存在时返回 -1
- */
-export function findLatestCompressionBoundaryIndex(sourceMessages: Message[]): number {
-  return findLatestCompressionBoundary(sourceMessages)?.index ?? -1;
-}
-
-/**
- * 从最近用户消息中提取召回关键词。
- * @param sourceMessages - 原始消息列表
- * @returns 去重后的关键词列表
- */
-function extractRecallKeywords(sourceMessages: Message[]): string[] {
-  const latestUserMessage = [...sourceMessages].reverse().find((message) => message.role === 'user');
-  if (!latestUserMessage) {
-    return [];
-  }
-
-  const referenceKeywords = latestUserMessage.references?.map((reference) => reference.path.split('/').pop() ?? reference.path) ?? [];
-  const contentKeywords = latestUserMessage.content
-    .toLowerCase()
-    .replace(/[^\w\s./@_\-\u4e00-\u9fff]/g, ' ')
-    .split(/\s+/)
-    .filter((word) => word.length >= 2);
-
-  return [...new Set([...contentKeywords, ...referenceKeywords.map((keyword) => keyword.toLowerCase())])];
-}
-
-/**
- * 计算旧压缩消息与当前用户消息的匹配分。
- * @param message - 旧压缩消息
- * @param keywords - 当前用户消息关键词
- * @returns 匹配分
- */
-function scoreCompressionRecallMessage(message: Message, keywords: string[]): number {
-  const text = `${message.content}\n${message.compression?.recordText ?? ''}`.toLowerCase();
-  return keywords.reduce((score, keyword) => {
-    if (!keyword) {
-      return score;
-    }
-    return text.includes(keyword) ? score + 1 : score;
-  }, 0);
-}
-
-/**
- * 选择与当前用户消息相关的旧压缩记忆。
- * @param sourceMessages - 原始消息列表
- * @param latestBoundaryIndex - 最新压缩边界索引
- * @returns 按时间顺序排列的旧压缩消息
- */
-function selectRelevantPreviousCompressionMessages(sourceMessages: Message[], latestBoundaryIndex: number): Message[] {
-  const keywords = extractRecallKeywords(sourceMessages);
-  if (!keywords.length) {
-    return [];
-  }
-
-  const scoredMessages = sourceMessages
-    .slice(0, latestBoundaryIndex)
-    .filter((message) => is.modelBoundaryCompressionMessage(message))
-    .map((message, index) => ({
-      message,
-      index,
-      score: scoreCompressionRecallMessage(message, keywords)
-    }))
-    .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score || b.index - a.index)
-    .slice(0, MAX_RECALLED_COMPRESSION_MEMORY_COUNT)
-    .sort((a, b) => a.index - b.index);
-
-  return scoredMessages.map((item) => item.message);
-}
-
-/**
- * 将 assistant compaction part 转为临时 compression 边界消息。
- * @param part - compaction part
- * @param hostMessage - 持有 part 的 assistant 消息
- * @returns 临时 compression 消息
- */
-function createCompactionBoundaryMessage(part: ChatMessageCompactionPart, hostMessage: Message): Message {
-  const recordText = part.recordText ?? '';
-
-  return {
-    id: `${hostMessage.id}:compaction-boundary`,
-    role: 'compression',
-    content: recordText,
-    parts: recordText ? [{ id: nanoid(), type: 'text', text: recordText }] : [],
-    createdAt: hostMessage.createdAt,
-    loading: false,
-    finished: true,
-    agentId: hostMessage.agentId,
-    runtimeId: hostMessage.runtimeId,
-    parentRuntimeId: hostMessage.parentRuntimeId,
-    compression: {
-      status: 'success',
-      recordText,
-      recordId: part.recordId,
-      coveredUntilMessageId: part.coveredUntilMessageId,
-      sourceMessageIds: part.sourceMessageIds
-    }
-  };
-}
-
-/**
- * 截断写入续跑提示的长文本，避免一次工具结果重新撑爆上下文。
- * @param text - 原始文本
- * @returns 适合写入提示的文本
- */
-function truncatePostCompactionText(text: string): string {
-  if (text.length <= MAX_POST_COMPACTION_VALUE_LENGTH) {
-    return text;
-  }
-
-  return `${text.slice(0, MAX_POST_COMPACTION_VALUE_LENGTH)}\n...[已截断 ${text.length - MAX_POST_COMPACTION_VALUE_LENGTH} 字符]`;
-}
-
-/**
- * 将结构化值转为可读提示文本。
- * @param value - 原始值
- * @returns 提示文本
- */
-function stringifyPostCompactionValue(value: unknown): string {
-  if (value === undefined) {
-    return 'undefined';
-  }
-
-  if (typeof value === 'string') {
-    return truncatePostCompactionText(value);
-  }
-
-  try {
-    const serialized = JSON.stringify(value, null, 2);
-
-    return truncatePostCompactionText(serialized ?? String(value));
-  } catch {
-    return truncatePostCompactionText(String(value));
-  }
-}
-
-/**
- * 将 compaction 后产生的片段转为文本进展。
- * @param part - compaction 后的消息片段
- * @param index - 片段序号
- * @returns 文本进展行
- */
-function createPostCompactionPartLines(part: ChatMessagePart, index: number): string[] {
-  const prefix = `${index + 1}.`;
-
-  switch (part.type) {
-    case 'text':
-      return part.text ? [`${prefix} assistant_text: ${truncatePostCompactionText(part.text)}`] : [];
-    case 'thinking':
-      return part.thinking ? [`${prefix} assistant_thinking: ${truncatePostCompactionText(part.thinking)}`] : [];
-    case 'error':
-      return part.text ? [`${prefix} assistant_error: ${truncatePostCompactionText(part.text)}`] : [];
-    case 'tool': {
-      const lines = [
-        `${prefix} tool: ${part.toolName}`,
-        `   status: ${part.status}`,
-        `   tool_call_id: ${part.toolCallId}`,
-        `   input: ${stringifyPostCompactionValue(part.input)}`
-      ];
-      if (part.inputText) {
-        lines.push(`   input_text: ${truncatePostCompactionText(part.inputText)}`);
-      }
-      if (part.result) {
-        lines.push(`   result: ${stringifyPostCompactionValue(createModelVisibleToolResult({ ...part, result: part.result }))}`);
-      }
-      return lines;
-    }
-    case 'confirmation':
-      return [
-        `${prefix} confirmation: ${part.toolName}`,
-        `   status: ${part.confirmationStatus}`,
-        `   execution_status: ${part.executionStatus}`,
-        `   title: ${part.title}`,
-        `   description: ${part.description}`
-      ];
-    case 'file':
-      return [`${prefix} file: ${part.path}`];
-    case 'compaction':
-      return [];
-    default:
-      return [];
-  }
-}
-
-/**
- * 创建压缩后进展的用户态内容。
- * @param parts - compaction 后已经产生的消息片段
- * @param mode - 写入上下文的模式
- * @returns 用户态续跑内容
- */
-function createCompactionProgressContent(parts: ChatMessagePart[], mode: CompactionProgressMode): string {
-  const progressLines = parts.flatMap(createPostCompactionPartLines);
-  if (!progressLines.length) {
-    return mode === 'continue' ? COMPACTION_CONTINUATION_PROMPT : '';
-  }
-
-  if (mode === 'context') {
-    return [COMPACTION_PROGRESS_CONTEXT_PROMPT, ...progressLines].join('\n');
-  }
-
-  return [COMPACTION_CONTINUATION_PROMPT, '', '以下是本次压缩之后已经发生的当前轮进展，请把它们视为已完成事实继续执行：', ...progressLines].join('\n');
-}
-
-/**
- * 创建自动压缩后的进展上下文消息。
- * @param hostMessage - 持有 compaction part 的 assistant 消息
- * @param postCompactionParts - compaction 后已经产生的消息片段
- * @param mode - 写入上下文的模式
- * @returns synthetic user 消息
- */
-function createCompactionProgressMessage(
-  hostMessage: Message,
-  postCompactionParts: ChatMessagePart[] = [],
-  mode: CompactionProgressMode = 'continue'
-): Message | undefined {
-  const content = createCompactionProgressContent(postCompactionParts, mode);
-  if (!content) {
-    return undefined;
-  }
-
-  return {
-    id: `${hostMessage.id}:compaction-${mode}`,
-    role: 'user',
-    content,
-    parts: [{ id: nanoid(), type: 'text', text: content }],
-    createdAt: hostMessage.createdAt,
-    loading: false,
-    finished: true,
-    agentId: hostMessage.agentId,
-    runtimeId: hostMessage.runtimeId,
-    parentRuntimeId: hostMessage.parentRuntimeId
-  };
-}
-
-/**
- * 从最后一条成功压缩消息开始裁剪消息列表，作为后续模型上下文起点。
- * @param sourceMessages - 原始消息列表
- * @returns 裁剪后的消息列表
- */
-export function sliceMessagesFromCompressionBoundary(sourceMessages: Message[]): Message[] {
-  const boundary = findLatestCompressionBoundary(sourceMessages);
-
-  if (!boundary) {
-    return sourceMessages;
-  }
-
-  const boundaryMessage = boundary.kind === 'message' ? boundary.message : createCompactionBoundaryMessage(boundary.part, boundary.message);
-  const recalledCompressionMessages = selectRelevantPreviousCompressionMessages(sourceMessages, boundary.index);
-  const coveredUntilMessageId = boundaryMessage.compression?.coveredUntilMessageId;
-  const coveredUntilIndex = coveredUntilMessageId ? sourceMessages.findIndex((message) => message.id === coveredUntilMessageId) : -1;
-  const preservedTailMessages = coveredUntilIndex >= 0 ? sourceMessages.slice(coveredUntilIndex + 1, boundary.index) : [];
-  const postCompactionParts = boundary.kind === 'part' ? boundary.message.parts.slice(boundary.partIndex + 1) : [];
-  const afterBoundaryMessages = sourceMessages.slice(boundary.index + 1);
-  const postCompactionMode: CompactionProgressMode = afterBoundaryMessages.length ? 'context' : 'continue';
-  const postCompactionProgressMessage =
-    postCompactionParts.length && boundary.kind === 'part'
-      ? createCompactionProgressMessage(boundary.message, postCompactionParts, postCompactionMode)
-      : undefined;
-  const postCompactionProgressMessages = postCompactionProgressMessage ? [postCompactionProgressMessage] : [];
-  const shouldAddContinuationPrompt =
-    boundary.kind === 'part' && !preservedTailMessages.length && !postCompactionProgressMessages.length && !afterBoundaryMessages.length;
-  const continuationMessage =
-    shouldAddContinuationPrompt && boundary.kind === 'part' ? createCompactionProgressMessage(boundary.message, [], 'continue') : undefined;
-  const continuationMessages = continuationMessage ? [continuationMessage] : [];
-
-  return [
-    recalledCompressionMessages,
-    boundaryMessage,
-    ...preservedTailMessages,
-    ...postCompactionProgressMessages,
-    ...afterBoundaryMessages,
-    ...continuationMessages
-  ].flat();
-}
-
 // ─── convert —— 消息格式转换 ─────────────────────────────────────────────────
 
 /** 收集当前 assistant 片段中已完成配对的 tool-call ID */
@@ -883,7 +517,6 @@ function createModelMessageSignature(message: Message): string {
     role: message.role,
     content: message.content,
     parts: message.parts,
-    compression: message.compression,
     files: message.files?.map((file) => ({
       id: file.id,
       type: file.type,
@@ -1001,15 +634,6 @@ function toUserContentParts(message: ModelCompatibleMessage): UserModelMessageCo
 
 /** 将单条组件消息转换为 AI SDK 的 ModelMessage 列表 */
 function toModelMessagesForMessage(message: Message): ModelMessage[] {
-  if (message.role === 'compression') {
-    if (message.compression?.status !== 'success') {
-      return [];
-    }
-
-    const boundaryText = message.compression.recordText;
-    return [{ role: 'system', content: boundaryText }];
-  }
-
   if (!is.modelMessage(message)) return [];
   if (message.role === 'user') {
     const imageFiles = message.files?.filter((file) => file.type === 'image' && file.url) ?? [];
@@ -1030,16 +654,15 @@ export const convert = {
    * 将组件消息转换为带缓存的模型消息结果，尽量复用前缀历史。
    */
   toCachedModelMessages(sourceMessages: Message[], previousCache?: CachedModelMessagesResult): CachedModelMessagesResult {
-    const boundaryMessages = sliceMessagesFromCompressionBoundary(sourceMessages);
     const entries: CachedModelMessageEntry[] = [];
     const modelMessages: ModelMessage[] = [];
     let reuseCount = 0;
 
     if (previousCache) {
-      const maxReuse = Math.min(boundaryMessages.length, previousCache.entries.length);
+      const maxReuse = Math.min(sourceMessages.length, previousCache.entries.length);
       while (reuseCount < maxReuse) {
         const prev = previousCache.entries[reuseCount];
-        const msg = boundaryMessages[reuseCount];
+        const msg = sourceMessages[reuseCount];
         if (!canReuseCachedEntry(prev, msg)) break;
 
         entries.push(prev);
@@ -1048,8 +671,8 @@ export const convert = {
       }
     }
 
-    for (let i = reuseCount; i < boundaryMessages.length; i += 1) {
-      const sourceMessage = boundaryMessages[i];
+    for (let i = reuseCount; i < sourceMessages.length; i += 1) {
+      const sourceMessage = sourceMessages[i];
       const nextModelMessages = toModelMessagesForMessage(sourceMessage);
       entries.push({
         sourceMessage,

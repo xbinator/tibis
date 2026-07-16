@@ -66,8 +66,6 @@ export type BChatRuntimeSubmitMessagePartInput = ChatRuntimeSubmitMessagePartInp
 interface RuntimeMessageLike extends Message {
   /** 所属会话 ID。 */
   sessionId?: string;
-  /** 是否为压缩摘要。 */
-  summary?: boolean;
   /** Runtime 扩展元数据。 */
   meta?: ChatMessageRecord['meta'];
 }
@@ -107,8 +105,6 @@ function toRuntimeMessageSnapshot(message: Message, sessionId: string): ChatRunt
     ...(rawMessage.thinking !== undefined ? { thinking: rawMessage.thinking } : {}),
     ...(rawMessage.files !== undefined ? { files: toCloneableData(rawMessage.files) } : {}),
     ...(rawMessage.usage !== undefined ? { usage: toCloneableData(rawMessage.usage) } : {}),
-    ...(rawMessage.compression !== undefined ? { compression: toCloneableData(rawMessage.compression) } : {}),
-    ...(rawMessage.summary !== undefined ? { summary: rawMessage.summary } : {}),
     ...(rawMessage.agentId !== undefined ? { agentId: rawMessage.agentId } : {}),
     ...(rawMessage.runtimeId !== undefined ? { runtimeId: rawMessage.runtimeId } : {}),
     ...(rawMessage.parentRuntimeId !== undefined ? { parentRuntimeId: rawMessage.parentRuntimeId } : {}),

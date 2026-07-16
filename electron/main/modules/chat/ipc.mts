@@ -3,7 +3,6 @@
  * @description 聊天模块 IPC handler 注册。
  */
 import type { ChatMessageHistoryCursor, ChatMessageRecord, ChatSession, ChatSessionType, SessionPaginationParams } from 'types/chat';
-import type { CompressionRecord, CompressionRecordStatus } from 'types/compression';
 import type { ChatHandlerResult } from 'types/electron-api';
 import { ipcMain } from 'electron';
 import { chatSessionManager } from './service.mjs';
@@ -83,32 +82,6 @@ export function registerChatHandlers(): void {
     'chat:message:setAll',
     wrapHandler((_event, sessionId, messages) => {
       chatSessionManager.setSessionMessages(sessionId as string, messages as ChatMessageRecord[]);
-    })
-  );
-
-  // ── Compression Records (4 个) ──
-  ipcMain.handle(
-    'chat:compression:getLatest',
-    wrapHandler((_event, sessionId) => {
-      return chatSessionManager.getLatestValidRecord(sessionId as string);
-    })
-  );
-  ipcMain.handle(
-    'chat:compression:create',
-    wrapHandler((_event, record) => {
-      return chatSessionManager.createRecord(record as Omit<CompressionRecord, 'id' | 'createdAt' | 'updatedAt'>);
-    })
-  );
-  ipcMain.handle(
-    'chat:compression:updateStatus',
-    wrapHandler((_event, id, status, invalidReason?) => {
-      chatSessionManager.updateRecordStatus(id as string, status as CompressionRecordStatus, invalidReason as string | undefined);
-    })
-  );
-  ipcMain.handle(
-    'chat:compression:getAll',
-    wrapHandler((_event, sessionId) => {
-      return chatSessionManager.getAllRecords(sessionId as string);
     })
   );
 }

@@ -3,7 +3,7 @@
  * @description ChatRuntime 活跃 runtime 状态创建工厂。
  */
 import type { ActiveChatRuntime } from '../types.mjs';
-import type { ChatRuntimeCompactInput, ChatRuntimeContinueInput, ChatRuntimeSendInput, ChatRuntimeSubmitUserChoiceInput } from 'types/chat-runtime';
+import type { ChatRuntimeContinueInput, ChatRuntimeSendInput, ChatRuntimeSubmitUserChoiceInput } from 'types/chat-runtime';
 
 /**
  * 创建普通发送 runtime 状态。
@@ -85,26 +85,6 @@ export function createUserChoiceRuntime(input: ChatRuntimeSubmitUserChoiceInput,
     mcp: input.mcp,
     status: 'running',
     phase: 'streaming',
-    abortController: new AbortController(),
-    createdAt: Date.now()
-  };
-}
-
-/**
- * 创建压缩 runtime 状态。
- * @param input - 压缩输入
- * @returns runtime 状态
- */
-export function createCompactRuntime(input: ChatRuntimeCompactInput): ActiveChatRuntime {
-  return {
-    runtimeId: input.runtimeId,
-    sessionId: input.sessionId,
-    clientId: input.clientId,
-    agentId: input.agentId,
-    parentRuntimeId: input.parentRuntimeId,
-    contextWindow: input.contextWindow,
-    status: 'running',
-    phase: 'compacting',
     abortController: new AbortController(),
     createdAt: Date.now()
   };

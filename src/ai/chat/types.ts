@@ -66,7 +66,6 @@ export type ChatWorkflowErrorCode =
   | 'recoverable_agent_failed'
   | 'protocol_error'
   | 'cancel_failed'
-  | 'compact_failed'
   | 'rollback_failed';
 
 /**

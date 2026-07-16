@@ -2,7 +2,6 @@
  * @file types.mts
  * @description ChatRuntime 主进程内部类型。
  */
-import type { RuntimeCompactionService } from './compaction/service.mjs';
 import type { RuntimeFilePartMaterializer } from './messages/file-parts.mjs';
 import type {
   AICreateOptions,
@@ -22,7 +21,7 @@ import type { ChatRuntimeCapabilityDescriptor, ChatRuntimeEventMap } from 'types
 export type ChatRuntimeStatus = 'running' | 'completed';
 
 /** Runtime 当前执行阶段。 */
-export type ChatRuntimePhase = 'streaming' | 'compacting';
+export type ChatRuntimePhase = 'streaming';
 
 /** 活跃 runtime 状态。 */
 export interface ActiveChatRuntime {
@@ -54,7 +53,7 @@ export interface ActiveChatRuntime {
   mcp?: AIMCPRequestConfig;
   /** 当前生命周期状态。 */
   status: ChatRuntimeStatus;
-  /** 当前执行阶段，用于中止时区分模型生成与压缩。 */
+  /** 当前执行阶段。 */
   phase: ChatRuntimePhase;
   /** 后续模型流和工具执行共用的中止控制器。 */
   abortController: AbortController;
@@ -181,8 +180,6 @@ export type ChatRuntimeAutoNameGenerator = (
 export interface ChatRuntimeServiceDependencies {
   /** 向 renderer 发送 runtime 事件。 */
   emit: ChatRuntimeEventEmitter;
-  /** 上下文压缩服务。 */
-  compactionService: RuntimeCompactionService;
   /** runtime 消息写入器。 */
   messageWriter: ChatRuntimeMessageWriter;
   /** runtime 消息读取器。 */

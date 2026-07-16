@@ -1,10 +1,9 @@
 /**
  * @file service.mts
- * @description 主进程聊天会话管理器，封装会话 + 消息 + 压缩记录的全部持久化逻辑。
+ * @description 主进程聊天会话管理器，封装会话与消息的全部持久化逻辑。
  */
 import type { AIUsage } from 'types/ai';
 import type {
-  ChatCompressionMeta,
   ChatMessageFile,
   ChatMessageHistoryCursor,
   ChatMessagePart,
@@ -16,8 +15,6 @@ import type {
   SessionCursor,
   SessionPaginationParams
 } from 'types/chat';
-import type { ChatMessageRuntimeMeta } from 'types/chat-runtime';
-import type { CompressionBuildMode, CompressionRecord, CompressionRecordStatus, StructuredConversationSummary, TriggerReason } from 'types/compression';
 import dayjs from 'dayjs';
 import { nanoid } from 'nanoid';
 import { dbExecute, dbSelect, transaction } from '../database/service.mjs';
@@ -26,16 +23,14 @@ import { createSessionBranchData, type SessionBranchData } from './runtime/branc
 // ==================== 常量 ====================
 
 const CHAT_MESSAGE_HISTORY_LIMIT = 30;
-const CURRENT_SCHEMA_VERSION = 3;
 const MESSAGE_ROLE_ORDER_SQL = `
   CASE role
     WHEN 'system' THEN 0
-    WHEN 'compression' THEN 1
-    WHEN 'user' THEN 2
-    WHEN 'assistant' THEN 3
-    WHEN 'interrupt' THEN 4
-    WHEN 'error' THEN 5
-    ELSE 2
+    WHEN 'user' THEN 1
+    WHEN 'assistant' THEN 2
+    WHEN 'interrupt' THEN 3
+    WHEN 'error' THEN 4
+    ELSE 1
   END
 `;
 
@@ -89,16 +84,16 @@ const SELECT_MESSAGE_USAGE_SQL = 'SELECT usage_json FROM chat_messages WHERE ses
 // ==================== SQL — 消息 (7 条) ====================
 
 const SELECT_MESSAGES_BY_SESSION_SQL = `
-  SELECT id, session_id, role, content, parts_json, thinking, files_json, usage_json, compression_json, created_at, loading, finished,
-         summary, meta_json, agent_id, runtime_id, parent_runtime_id
+  SELECT id, session_id, role, content, parts_json, thinking, files_json, usage_json, created_at, loading, finished,
+         agent_id, runtime_id, parent_runtime_id
   FROM chat_messages
   WHERE session_id = ?
   ORDER BY created_at DESC, ${MESSAGE_ROLE_ORDER_SQL} DESC, id DESC
   LIMIT ?
 `;
 const SELECT_MESSAGES_BEFORE_CURSOR_SQL = `
-  SELECT id, session_id, role, content, parts_json, thinking, files_json, usage_json, compression_json, created_at, loading, finished,
-         summary, meta_json, agent_id, runtime_id, parent_runtime_id
+  SELECT id, session_id, role, content, parts_json, thinking, files_json, usage_json, created_at, loading, finished,
+         agent_id, runtime_id, parent_runtime_id
   FROM chat_messages
   WHERE session_id = ?
     AND (
@@ -115,59 +110,26 @@ const SELECT_MESSAGES_BEFORE_CURSOR_SQL = `
   LIMIT ?
 `;
 const SELECT_ALL_MESSAGES_BY_SESSION_SQL = `
-  SELECT id, session_id, role, content, parts_json, thinking, files_json, usage_json, compression_json, created_at, loading, finished,
-         summary, meta_json, agent_id, runtime_id, parent_runtime_id
+  SELECT id, session_id, role, content, parts_json, thinking, files_json, usage_json, created_at, loading, finished,
+         agent_id, runtime_id, parent_runtime_id
   FROM chat_messages
   WHERE session_id = ?
 `;
 const UPSERT_MESSAGE_SQL = `
   INSERT OR REPLACE INTO chat_messages
-    (id, session_id, role, content, parts_json, thinking, files_json, usage_json, compression_json, created_at, loading, finished,
-     summary, meta_json, agent_id, runtime_id, parent_runtime_id)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, session_id, role, content, parts_json, thinking, files_json, usage_json, created_at, loading, finished,
+     agent_id, runtime_id, parent_runtime_id)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `;
 const INSERT_MESSAGE_SQL = `
   INSERT INTO chat_messages
-    (id, session_id, role, content, parts_json, thinking, files_json, usage_json, compression_json, created_at, loading, finished,
-     summary, meta_json, agent_id, runtime_id, parent_runtime_id)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, session_id, role, content, parts_json, thinking, files_json, usage_json, created_at, loading, finished,
+     agent_id, runtime_id, parent_runtime_id)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `;
 const DELETE_SESSION_SQL = 'DELETE FROM chat_sessions WHERE id = ?';
 const DELETE_MESSAGES_BY_SESSION_SQL = 'DELETE FROM chat_messages WHERE session_id = ?';
 const DELETE_MESSAGE_SQL = 'DELETE FROM chat_messages WHERE session_id = ? AND id = ?';
-
-// ==================== SQL — 压缩记录 (4 条) ====================
-
-const SELECT_LATEST_VALID_RECORD_SQL = `
-  SELECT *
-  FROM chat_session_compression_records
-  WHERE session_id = ? AND status = 'valid'
-  ORDER BY created_at DESC
-  LIMIT 1
-`;
-const INSERT_RECORD_SQL = `
-  INSERT INTO chat_session_compression_records (
-    id, session_id, build_mode, derived_from_record_id,
-    covered_start_message_id, covered_end_message_id, covered_until_message_id,
-    source_message_ids_json, preserved_message_ids_json,
-    record_text, structured_summary_json,
-    trigger_reason, message_count_snapshot, char_count_snapshot, token_count_snapshot,
-    schema_version, status, invalid_reason, degrade_reason,
-    record_set_id, segment_index, segment_count, topic_tags_json,
-    created_at, updated_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`;
-const UPDATE_RECORD_STATUS_SQL = `
-  UPDATE chat_session_compression_records
-  SET status = ?, invalid_reason = ?, updated_at = ?
-  WHERE id = ?
-`;
-const SELECT_ALL_RECORDS_SQL = `
-  SELECT *
-  FROM chat_session_compression_records
-  WHERE session_id = ?
-  ORDER BY created_at DESC
-`;
 
 // ==================== Row 接口 ====================
 
@@ -190,12 +152,9 @@ interface ChatMessageRow {
   thinking: string | null;
   files_json: string | null;
   usage_json: string | null;
-  compression_json: string | null;
   created_at: string;
   loading: number | null;
   finished: number | null;
-  summary: number | null;
-  meta_json: string | null;
   agent_id: string | null;
   runtime_id: string | null;
   parent_runtime_id: string | null;
@@ -203,34 +162,6 @@ interface ChatMessageRow {
 
 interface ChatSessionUsageRow {
   usage_json: string | null;
-}
-
-interface ChatCompressionRecordRow {
-  id: string;
-  session_id: string;
-  build_mode: string;
-  derived_from_record_id: string | null;
-  covered_start_message_id: string;
-  covered_end_message_id: string;
-  covered_until_message_id: string;
-  source_message_ids_json: string;
-  preserved_message_ids_json: string;
-  record_text: string;
-  structured_summary_json: string;
-  trigger_reason: string;
-  message_count_snapshot: number;
-  char_count_snapshot: number;
-  token_count_snapshot: number | null;
-  schema_version: number;
-  status: string;
-  invalid_reason: string | null;
-  degrade_reason: string | null;
-  created_at: string;
-  updated_at: string;
-  record_set_id: string | null;
-  segment_index: number | null;
-  segment_count: number | null;
-  topic_tags_json: string | null;
 }
 
 /**
@@ -291,8 +222,7 @@ function isMessagePartType(value: unknown): value is ChatMessagePart['type'] {
     value === 'thinking' ||
     value === 'tool' ||
     value === 'widget_result' ||
-    value === 'confirmation' ||
-    value === 'compaction'
+    value === 'confirmation'
   );
 }
 
@@ -328,60 +258,6 @@ function isUsageValue(value: unknown): value is AIUsage {
   return isRecordValue(value) && typeof value.inputTokens === 'number' && typeof value.outputTokens === 'number' && typeof value.totalTokens === 'number';
 }
 
-/**
- * 判断未知值是否为消息压缩元数据。
- * @param value - 待判断值
- * @returns 是否包含合法基础字段
- */
-function isCompressionMeta(value: unknown): value is ChatCompressionMeta {
-  return isRecordValue(value) && typeof value.status === 'string' && typeof value.recordText === 'string';
-}
-
-/**
- * 判断未知值是否为 Runtime 消息元数据。
- * @param value - 待判断值
- * @returns 是否为记录对象
- */
-function isRuntimeMeta(value: unknown): value is ChatMessageRuntimeMeta {
-  return isRecordValue(value);
-}
-
-/**
- * 判断未知值是否为字符串数组。
- * @param value - 待判断值
- * @returns 是否为字符串数组
- */
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item: unknown): boolean => typeof item === 'string');
-}
-
-/**
- * 判断压缩记录构建模式是否合法。
- * @param value - 待判断值
- * @returns 是否为支持的构建模式
- */
-function isCompressionBuildMode(value: string): value is CompressionBuildMode {
-  return value === 'incremental' || value === 'full_rebuild';
-}
-
-/**
- * 判断压缩记录状态是否合法。
- * @param value - 待判断值
- * @returns 是否为支持的记录状态
- */
-function isCompressionStatus(value: string): value is CompressionRecordStatus {
-  return value === 'draft' || value === 'valid' || value === 'superseded' || value === 'invalid';
-}
-
-/**
- * 判断压缩触发原因是否合法。
- * @param value - 待判断值
- * @returns 是否为支持的触发原因
- */
-function isTriggerReason(value: string): value is TriggerReason {
-  return value === 'message_count' || value === 'context_size' || value === 'manual';
-}
-
 function stringifyJson(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   return JSON.stringify(value);
@@ -392,7 +268,7 @@ function isChatSessionType(value: string): value is ChatSessionType {
 }
 
 function isChatMessageRole(value: string): value is ChatMessageRole {
-  return value === 'user' || value === 'system' || value === 'assistant' || value === 'error' || value === 'compression' || value === 'interrupt';
+  return value === 'user' || value === 'system' || value === 'assistant' || value === 'error' || value === 'interrupt';
 }
 
 function addUsage(currentUsage: AIUsage | undefined, nextUsage: AIUsage): AIUsage {
@@ -434,11 +310,10 @@ function hasUsageDelta(usage: AIUsage): boolean {
 function getMessageRoleOrder(role: ChatMessageRecord['role']): number {
   const roleOrder: Record<ChatMessageRecord['role'], number> = {
     system: 0,
-    compression: 1,
-    user: 2,
-    assistant: 3,
-    interrupt: 4,
-    error: 5
+    user: 1,
+    assistant: 2,
+    interrupt: 3,
+    error: 4
   };
 
   return roleOrder[role];
@@ -481,15 +356,12 @@ function mapMessageRow(row: ChatMessageRow): ChatMessageRecord {
     thinking: row.thinking ?? undefined,
     files: parseJson<ChatMessageFile[]>(row.files_json),
     usage: parseJson<AIUsage>(row.usage_json),
-    compression: parseJson<ChatCompressionMeta>(row.compression_json),
     createdAt: row.created_at,
     loading: row.loading === null ? undefined : row.loading === 1,
     finished: row.finished === null ? undefined : row.finished === 1,
-    summary: row.summary === null ? undefined : row.summary === 1,
     agentId: row.agent_id ?? undefined,
     runtimeId: row.runtime_id ?? undefined,
-    parentRuntimeId: row.parent_runtime_id ?? undefined,
-    meta: parseJson<ChatMessageRuntimeMeta>(row.meta_json)
+    parentRuntimeId: row.parent_runtime_id ?? undefined
   };
 }
 
@@ -510,15 +382,12 @@ function mapBranchMessageRow(row: ChatMessageRow): ChatMessageRecord {
     thinking: row.thinking ?? undefined,
     files: parseStrictJson(row.files_json, `消息 ${row.id} 的 files_json`, isMessageFiles),
     usage: parseStrictJson(row.usage_json, `消息 ${row.id} 的 usage_json`, isUsageValue),
-    compression: parseStrictJson(row.compression_json, `消息 ${row.id} 的 compression_json`, isCompressionMeta),
     createdAt: row.created_at,
     loading: row.loading === null ? undefined : row.loading === 1,
     finished: row.finished === null ? undefined : row.finished === 1,
-    summary: row.summary === null ? undefined : row.summary === 1,
     agentId: row.agent_id ?? undefined,
     runtimeId: row.runtime_id ?? undefined,
-    parentRuntimeId: row.parent_runtime_id ?? undefined,
-    meta: parseStrictJson(row.meta_json, `消息 ${row.id} 的 meta_json`, isRuntimeMeta)
+    parentRuntimeId: row.parent_runtime_id ?? undefined
   };
 }
 
@@ -547,50 +416,12 @@ function buildMessageUpsertParams(message: ChatMessageRecord): unknown[] {
     message.thinking ?? null,
     stringifyJson(message.files),
     stringifyJson(message.usage),
-    stringifyJson(message.compression),
     message.createdAt,
     toSqlBoolean(message.loading),
     toSqlBoolean(message.finished),
-    toSqlBoolean(message.summary),
-    stringifyJson(message.meta),
     message.agentId ?? null,
     message.runtimeId ?? null,
     message.parentRuntimeId ?? null
-  ];
-}
-
-/**
- * 构建压缩记录插入 SQL 参数。
- * @param record - 待写入的压缩记录
- * @returns 与 INSERT_RECORD_SQL 字段顺序一致的参数
- */
-function buildCompressionInsertParams(record: CompressionRecord): unknown[] {
-  return [
-    record.id,
-    record.sessionId,
-    record.buildMode,
-    record.derivedFromRecordId ?? null,
-    record.coveredStartMessageId,
-    record.coveredEndMessageId,
-    record.coveredUntilMessageId,
-    stringifyJson(record.sourceMessageIds),
-    stringifyJson(record.preservedMessageIds),
-    record.recordText,
-    stringifyJson(record.structuredSummary),
-    record.triggerReason,
-    record.messageCountSnapshot,
-    record.charCountSnapshot,
-    record.tokenCountSnapshot ?? null,
-    record.schemaVersion,
-    record.status,
-    record.invalidReason ?? null,
-    record.degradeReason ?? null,
-    record.recordSetId ?? null,
-    record.segmentIndex ?? null,
-    record.segmentCount ?? null,
-    stringifyJson(record.topicTags ?? []),
-    record.createdAt,
-    record.updatedAt
   ];
 }
 
@@ -602,86 +433,6 @@ function buildPaginatedResult(items: ChatSession[], limit: number): PaginatedSes
     nextCursor = { lastMessageAt: lastItem.lastMessageAt, createdAt: lastItem.createdAt };
   }
   return { items, hasMore, nextCursor };
-}
-
-// ==================== 压缩记录 Row Mapping ====================
-
-function parseStructuredSummary(row: ChatCompressionRecordRow): StructuredConversationSummary | null {
-  if (row.schema_version !== CURRENT_SCHEMA_VERSION) {
-    return null;
-  }
-  const parsed = parseJson<StructuredConversationSummary>(row.structured_summary_json);
-  if (!parsed) return null;
-  if (typeof parsed.goal !== 'string' || typeof parsed.recentTopic !== 'string') return null;
-
-  const arrayFields: (keyof StructuredConversationSummary)[] = [
-    'userPreferences',
-    'constraints',
-    'decisions',
-    'importantFacts',
-    'fileContext',
-    'openQuestions',
-    'pendingActions'
-  ];
-  for (const field of arrayFields) {
-    if (!Array.isArray(parsed[field])) return null;
-  }
-  return parsed;
-}
-
-function mapCompressionRowToRecord(row: ChatCompressionRecordRow): CompressionRecord | null {
-  const parsedSummary = parseStructuredSummary(row);
-  if (!parsedSummary) return null;
-
-  return {
-    id: row.id,
-    sessionId: row.session_id,
-    buildMode: row.build_mode as CompressionBuildMode,
-    derivedFromRecordId: row.derived_from_record_id ?? undefined,
-    coveredStartMessageId: row.covered_start_message_id,
-    coveredEndMessageId: row.covered_end_message_id,
-    coveredUntilMessageId: row.covered_until_message_id,
-    sourceMessageIds: parseJson<string[]>(row.source_message_ids_json) ?? [],
-    preservedMessageIds: parseJson<string[]>(row.preserved_message_ids_json) ?? [],
-    recordText: row.record_text,
-    structuredSummary: parsedSummary,
-    triggerReason: row.trigger_reason as TriggerReason,
-    messageCountSnapshot: row.message_count_snapshot,
-    charCountSnapshot: row.char_count_snapshot,
-    tokenCountSnapshot: row.token_count_snapshot ?? undefined,
-    schemaVersion: CURRENT_SCHEMA_VERSION,
-    status: row.status as CompressionRecordStatus,
-    invalidReason: row.invalid_reason ?? undefined,
-    degradeReason: (row.degrade_reason as 'degraded_to_incremental' | null) ?? undefined,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    recordSetId: row.record_set_id ?? row.id,
-    segmentIndex: row.segment_index ?? 0,
-    segmentCount: row.segment_count ?? 1,
-    topicTags: parseJson<string[]>(row.topic_tags_json) ?? [],
-    relevanceEmbedding: undefined
-  };
-}
-
-/**
- * 严格映射创建分支所需的压缩记录。
- * @param row - 数据库压缩记录行
- * @returns 未丢失消息引用的压缩记录
- */
-function mapBranchCompressionRow(row: ChatCompressionRecordRow): CompressionRecord {
-  if (!isCompressionBuildMode(row.build_mode)) throw new Error(`压缩记录 ${row.id} 的 build_mode 格式无效`);
-  if (!isTriggerReason(row.trigger_reason)) throw new Error(`压缩记录 ${row.id} 的 trigger_reason 格式无效`);
-  if (!isCompressionStatus(row.status)) throw new Error(`压缩记录 ${row.id} 的 status 格式无效`);
-
-  const record = mapCompressionRowToRecord(row);
-  if (!record) throw new Error(`压缩记录 ${row.id} 格式无效`);
-
-  return {
-    ...record,
-    sourceMessageIds: parseStrictJson(row.source_message_ids_json, `压缩记录 ${row.id} 的 source_message_ids_json`, isStringArray) ?? [],
-    preservedMessageIds: parseStrictJson(row.preserved_message_ids_json, `压缩记录 ${row.id} 的 preserved_message_ids_json`, isStringArray) ?? [],
-    topicTags: parseStrictJson(row.topic_tags_json, `压缩记录 ${row.id} 的 topic_tags_json`, isStringArray) ?? []
-  };
 }
 
 // ==================== ChatSessionManager ====================
@@ -741,7 +492,6 @@ class ChatSessionManager {
       const branch = createSessionBranchData({
         sourceSession,
         sourceMessages,
-        compressionRecords: this.getBranchRecords(sourceSessionId, sourceMessages, targetMessageId),
         targetMessageId,
         now: dayjs().toISOString(),
         createId: nanoid
@@ -767,9 +517,6 @@ class ChatSessionManager {
     ]);
     for (const message of branch.messages) {
       dbExecute(INSERT_MESSAGE_SQL, buildMessageUpsertParams(message));
-    }
-    for (const record of branch.compressionRecords) {
-      dbExecute(INSERT_RECORD_SQL, buildCompressionInsertParams(record));
     }
   }
 
@@ -879,79 +626,6 @@ class ChatSessionManager {
       dbExecute(DELETE_MESSAGES_BY_SESSION_SQL, [sessionId]);
       dbExecute(DELETE_SESSION_SQL, [sessionId]);
     });
-  }
-
-  // ======== Compression Records ========
-
-  getLatestValidRecord(sessionId: string): CompressionRecord | undefined {
-    const rows = dbSelect<ChatCompressionRecordRow>(SELECT_LATEST_VALID_RECORD_SQL, [sessionId]);
-    for (const row of rows) {
-      const parsed = mapCompressionRowToRecord(row);
-      if (parsed) return parsed;
-      // 标记无法解析的行为 invalid
-      this.updateRecordStatus(row.id, 'invalid', 'unsupported_schema_version');
-    }
-    return undefined;
-  }
-
-  createRecord(record: Omit<CompressionRecord, 'id' | 'createdAt' | 'updatedAt'>): CompressionRecord {
-    const now = dayjs().toISOString();
-    const newRecord: CompressionRecord = {
-      ...record,
-      id: `compression-record-${dayjs().valueOf()}-${Math.random().toString(36).slice(2, 9)}`,
-      createdAt: now,
-      updatedAt: now
-    };
-
-    dbExecute(INSERT_RECORD_SQL, buildCompressionInsertParams(newRecord));
-
-    return newRecord;
-  }
-
-  updateRecordStatus(id: string, status: CompressionRecordStatus, invalidReason?: string): void {
-    dbExecute(UPDATE_RECORD_STATUS_SQL, [status, invalidReason ?? null, dayjs().toISOString(), id]);
-  }
-
-  getAllRecords(sessionId: string): CompressionRecord[] {
-    const rows = dbSelect<ChatCompressionRecordRow>(SELECT_ALL_RECORDS_SQL, [sessionId]);
-    return rows.map(mapCompressionRowToRecord).filter((record): record is CompressionRecord => record !== null);
-  }
-
-  /**
-   * 严格读取复制范围直接引用的压缩记录及其派生祖先。
-   * @param sessionId - 源会话 ID
-   * @param sourceMessages - 已按展示顺序排列的源消息
-   * @param targetMessageId - 目标助手消息 ID
-   * @returns 未丢失引用信息的压缩记录闭包
-   */
-  getBranchRecords(sessionId: string, sourceMessages: ChatMessageRecord[], targetMessageId: string): CompressionRecord[] {
-    const rows = dbSelect<ChatCompressionRecordRow>(SELECT_ALL_RECORDS_SQL, [sessionId]);
-    const targetIndex = sourceMessages.findIndex((message: ChatMessageRecord): boolean => message.id === targetMessageId);
-    if (targetIndex < 0) return [];
-
-    const rowsById = new Map(rows.map((row: ChatCompressionRecordRow): [string, ChatCompressionRecordRow] => [row.id, row]));
-    const requiredIds = new Set<string>();
-
-    /**
-     * 加入被引用的压缩记录及其派生祖先。
-     * @param recordId - 当前压缩记录 ID
-     */
-    function includeRecord(recordId: string): void {
-      if (requiredIds.has(recordId)) return;
-      const row = rowsById.get(recordId);
-      if (!row) throw new Error(`找不到源会话压缩记录: ${recordId}`);
-      requiredIds.add(recordId);
-      if (row.derived_from_record_id) includeRecord(row.derived_from_record_id);
-    }
-
-    for (const message of sourceMessages.slice(0, targetIndex + 1)) {
-      if (message.compression?.recordId) includeRecord(message.compression.recordId);
-      for (const part of message.parts) {
-        if (part.type === 'compaction' && part.recordId) includeRecord(part.recordId);
-      }
-    }
-
-    return rows.filter((row: ChatCompressionRecordRow): boolean => requiredIds.has(row.id)).map(mapBranchCompressionRow);
   }
 }
 

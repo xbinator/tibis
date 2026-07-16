@@ -1,6 +1,6 @@
 /**
  * @file chat-runtime.d.ts
- * @description Shared chat runtime command, event, and context usage types.
+ * @description Shared chat runtime command and event types.
  */
 import type {
   AIMCPRequestConfig,
@@ -16,7 +16,6 @@ import type {
 import type {
   AIUserChoiceAnswerData,
   ChatPendingInteraction,
-  ChatMessagePartBase,
   ChatMessageConfirmationCustomInputConfig,
   ChatMessageFilePartInput,
   ChatMessagePart,
@@ -30,7 +29,6 @@ export type ChatRuntimeEventName =
   | 'chat:runtime:message-created'
   | 'chat:runtime:message-updated'
   | 'chat:runtime:message-deleted'
-  | 'chat:runtime:context-usage-updated'
   | 'chat:runtime:tool-request'
   | 'chat:runtime:confirmation-requested'
   | 'chat:runtime:bridge-requested'
@@ -273,28 +271,6 @@ export interface ChatRuntimeAbortInput {
   runtimeId: string;
 }
 
-/** Compact command input. */
-export interface ChatRuntimeCompactInput {
-  /** Runtime id. */
-  runtimeId: string;
-  /** Session id. */
-  sessionId: string;
-  /** Renderer client id. */
-  clientId: string;
-  /** Agent id. */
-  agentId: string;
-  /** Parent runtime id for future multi-agent flows. */
-  parentRuntimeId?: string;
-  /** Why compaction started. */
-  reason: 'manual' | 'auto';
-  /** Current context window for tail preservation budget. */
-  contextWindow?: number;
-  /** Message snapshot to compact until main runtime fully owns chat history. */
-  messages?: ChatMessageRecord[];
-  /** Assistant message to receive automatic compaction status parts. */
-  targetMessage?: ChatMessageRecord;
-}
-
 /** Renderer local tool result submission input. */
 export interface ChatRuntimeSubmitToolResultInput {
   /** Runtime id waiting for this result. */
@@ -346,39 +322,6 @@ export type ChatRuntimeAutoNameResult =
       errorMessage: string;
     };
 
-/** Compact command result. */
-export type ChatRuntimeCompactResult =
-  | {
-      /** Compaction completed. */
-      status: 'success';
-      /** Compression boundary message id. */
-      messageId: string;
-      /** Compression record id. */
-      recordId: string;
-    }
-  | {
-      /** Compaction was skipped before creating a pending message. */
-      status: 'skipped';
-      /** Stable skip reason. */
-      reason: 'no_messages' | 'already_compact' | 'not_enough_content' | 'no_compressible_messages';
-      /** Compression status message id, when a user-facing notice was created. */
-      messageId?: string;
-    }
-  | {
-      /** Compaction failed and the boundary message was marked failed. */
-      status: 'failed';
-      /** Compression boundary message id. */
-      messageId: string;
-      /** Error message. */
-      errorMessage: string;
-    }
-  | {
-      /** Compaction was cancelled and the boundary message was marked cancelled. */
-      status: 'cancelled';
-      /** Compression boundary message id. */
-      messageId: string;
-    };
-
 /** Runtime state returned after starting a command. */
 export interface ChatRuntimeStartResult {
   /** Runtime id created by main process. */
@@ -387,39 +330,6 @@ export interface ChatRuntimeStartResult {
   sessionId: string;
   /** Whether the command completed synchronously without leaving an active runtime. */
   completed?: boolean;
-}
-
-/** Context usage visual state. */
-export type ChatRuntimeContextUsageStatus = 'safe' | 'warning' | 'danger';
-
-/** Context usage snapshot emitted by main process. */
-export interface ChatRuntimeContextUsageSnapshot {
-  /** Runtime id that produced the snapshot. */
-  runtimeId: string;
-  /** Session id being evaluated. */
-  sessionId: string;
-  /** Agent id used for the evaluation. */
-  agentId: string;
-  /** Complete model context window. */
-  contextWindow: number;
-  /** Tokens reserved for model output. */
-  reservedOutputTokens: number;
-  /** Tokens reserved as compaction safety buffer. */
-  compactionBufferTokens: number;
-  /** Computed usable input budget. */
-  usableInputTokens: number;
-  /** Estimated serialized input tokens. */
-  estimatedInputTokens: number;
-  /** Provider-reported tokens from the last turn when available. */
-  providerUsageTokens?: number;
-  /** Rounded usage percent. */
-  usagePercent: number;
-  /** Remaining input budget. */
-  remainingInputTokens: number;
-  /** Visual status for UI. */
-  status: ChatRuntimeContextUsageStatus;
-  /** Whether the estimate should trigger send-before compaction. */
-  shouldCompactBeforeSend: boolean;
 }
 
 /** Common event envelope fields. */
@@ -446,12 +356,6 @@ export interface ChatRuntimeMessageEvent extends ChatRuntimeEventBase {
 export interface ChatRuntimeMessageDeletedEvent extends ChatRuntimeEventBase {
   /** Deleted message id. */
   messageId: string;
-}
-
-/** Context usage event. */
-export interface ChatRuntimeContextUsageEvent extends ChatRuntimeEventBase {
-  /** Usage snapshot. */
-  snapshot: ChatRuntimeContextUsageSnapshot;
 }
 
 /** Runtime tool execution request sent to renderer. */
@@ -495,7 +399,7 @@ export type ChatRuntimeRecoveryPendingRequest =
 /** Cloneable active-runtime projection used to rebuild renderer actor state. */
 export interface ChatRuntimeRecoverySnapshot extends ChatRuntimeEventBase {
   /** Current runtime execution phase. */
-  phase: 'streaming' | 'compacting';
+  phase: 'streaming';
   /** Main-process runtime creation timestamp. */
   createdAt: number;
   /** Renderer capability identity captured at runtime start. */
@@ -539,54 +443,9 @@ export interface ChatRuntimeEventMap {
   'chat:runtime:message-created': ChatRuntimeMessageEvent;
   'chat:runtime:message-updated': ChatRuntimeMessageEvent;
   'chat:runtime:message-deleted': ChatRuntimeMessageDeletedEvent;
-  'chat:runtime:context-usage-updated': ChatRuntimeContextUsageEvent;
   'chat:runtime:tool-request': ChatRuntimeToolRequestEvent;
   'chat:runtime:confirmation-requested': ChatRuntimeConfirmationRequestEvent;
   'chat:runtime:bridge-requested': ChatRuntimeBridgeRequestEvent;
   'chat:runtime:error': ChatRuntimeErrorEvent;
   'chat:runtime:complete': ChatRuntimeCompleteEvent;
 }
-
-/** Compaction part inserted into assistant messages by runtime phases. */
-export interface ChatMessageCompactionPart extends ChatMessagePartBase {
-  /** Part discriminator. */
-  type: 'compaction';
-  /** Whether runtime created this automatically. */
-  auto: boolean;
-  /** Why compaction started. */
-  reason: 'manual' | 'auto' | 'overflow';
-  /** Current compaction status. */
-  status: 'pending' | 'success' | 'failed' | 'cancelled' | 'skipped';
-  /** First tail message preserved verbatim. */
-  tailStartMessageId?: string;
-  /** Compression record id. */
-  recordId?: string;
-  /** Compression record text injected into later model context. */
-  recordText?: string;
-  /** Message id covered by this compaction boundary. */
-  coveredUntilMessageId?: string;
-  /** Source message ids covered by this compaction boundary. */
-  sourceMessageIds?: string[];
-  /** Failure message when status is failed. */
-  errorMessage?: string;
-}
-
-/** Runtime-specific message metadata. */
-export interface ChatMessageRuntimeMeta {
-  /** Compaction metadata stored on summary messages. */
-  compaction?: {
-    /** Anchor summary text. */
-    anchorSummary?: string;
-    /** Previous summary message id. */
-    previousSummaryMessageId?: string;
-    /** Message ids hidden from later compaction select passes. */
-    hiddenMessageIds?: string[];
-    /** Serialized recent model messages for event/debug payloads. */
-    recentModelMessagesJson?: string;
-  };
-  /** Last context usage snapshot associated with this message. */
-  contextUsage?: ChatRuntimeContextUsageSnapshot;
-}
-
-/** Utility alias used in type-level tests and future message helpers. */
-export type ChatRuntimeMessagePart = ChatMessagePart | ChatMessageCompactionPart;

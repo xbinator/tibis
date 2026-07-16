@@ -35,25 +35,20 @@ function createRollbackFixture(messages: Message[]): {
   canRollback: (message: Message) => boolean;
   rollback: (message: Message) => Promise<void>;
   messages: Ref<Message[]>;
-  invalidatedRecordIds: string[][];
 } {
   const sourceMessages = ref<Message[]>(messages);
-  const invalidatedRecordIds: string[][] = [];
   const options: UseRollbackOptions = {
     messages: sourceMessages,
     getSessionId: () => 'session-1',
     fetchAllPriorHistory: async () => [],
     persistMessages: async () => undefined,
-    invalidateCompressionRecords: async (recordIds: string[]) => {
-      invalidatedRecordIds.push(recordIds);
-    },
     restoreInput: vi.fn(),
     expireConfirmation: vi.fn(),
     focusInput: vi.fn()
   };
   const rollback = useRollback(options);
 
-  return { canRollback: rollback.canRollback, rollback: rollback.rollback, messages: sourceMessages, invalidatedRecordIds };
+  return { canRollback: rollback.canRollback, rollback: rollback.rollback, messages: sourceMessages };
 }
 
 describe('useRollback', (): void => {
@@ -63,33 +58,5 @@ describe('useRollback', (): void => {
     const { canRollback } = createRollbackFixture([userMessage, interruptMessage]);
 
     expect(canRollback(userMessage)).toBe(true);
-  });
-
-  it('invalidates compression records stored in assistant compaction parts', async (): Promise<void> => {
-    const userMessage = createMessage('user-1', 'user');
-    const assistantMessage = createMessage('assistant-1', 'assistant');
-    assistantMessage.parts = [
-      { id: 'part0053',
-        type: 'compaction',
-        auto: true,
-        reason: 'auto',
-        status: 'success',
-        recordId: 'record-auto',
-        recordText: 'COMPRESSED_CONTEXT',
-        coveredUntilMessageId: 'assistant-previous'
-      }
-    ];
-    const compressionMessage = createMessage('compression-1', 'compression');
-    compressionMessage.compression = {
-      status: 'success',
-      recordText: 'COMPRESSED_CONTEXT',
-      recordId: 'record-manual',
-      coveredUntilMessageId: 'assistant-1'
-    };
-    const { rollback, invalidatedRecordIds } = createRollbackFixture([userMessage, assistantMessage, compressionMessage]);
-
-    await rollback(userMessage);
-
-    expect(invalidatedRecordIds).toEqual([['record-auto', 'record-manual']]);
   });
 });

@@ -22,7 +22,7 @@ export interface PasteImageContext {
 /**
  * 斜杠命令选项元数据
  */
-export type SlashCommandId = 'model' | 'usage' | 'new' | 'clear' | 'compact';
+export type SlashCommandId = 'model' | 'new' | 'clear';
 
 /**
  * 斜杠命令类型

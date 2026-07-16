@@ -1,6 +1,6 @@
 /**
  * @file session-machine.test.ts
- * @description Chat Session 串行、继续、回退和压缩状态测试。
+ * @description Chat Session 串行、继续和回退状态测试。
  */
 import type { ChatRuntimeRecoverySnapshot } from 'types/chat-runtime';
 import { describe, expect, it, vi } from 'vitest';
@@ -177,33 +177,6 @@ describe('sessionMachine', (): void => {
     expect(actor.getSnapshot().matches({ rollingBack: 'applyingRollback' })).toBe(true);
     actor.send({ type: 'session.rollbackCompleted' });
     expect(actor.getSnapshot().matches('idle')).toBe(true);
-  });
-
-  it('only starts compaction while idle', (): void => {
-    const actor = createActor(sessionMachine, { input: { sessionId: 'session-1' } });
-    actor.start();
-    actor.send({ type: 'session.compactRequested' });
-    expect(actor.getSnapshot().matches('compacting')).toBe(true);
-    actor.send({ type: 'session.submit', input: SUBMIT_INPUT });
-    expect(actor.getSnapshot().matches('compacting')).toBe(true);
-    actor.send({ type: 'session.compactCompleted' });
-    expect(actor.getSnapshot().matches('idle')).toBe(true);
-  });
-
-  it('cancels compaction and supports rollback while compacting', (): void => {
-    const actor = createActor(sessionMachine, { input: { sessionId: 'session-1' } });
-    actor.start();
-    actor.send({ type: 'session.compactRequested' });
-    actor.send({ type: 'session.cancelRequested' });
-    expect(actor.getSnapshot().matches('cancelling')).toBe(true);
-    actor.send({ type: 'session.runtimeCancelled' });
-    expect(actor.getSnapshot().matches('idle')).toBe(true);
-
-    actor.send({ type: 'session.compactRequested' });
-    actor.send({ type: 'session.rollbackRequested', targetMessageId: 'user-1' });
-    expect(actor.getSnapshot().matches({ rollingBack: 'cancellingActiveRuntime' })).toBe(true);
-    actor.send({ type: 'session.runtimeCancelled' });
-    expect(actor.getSnapshot().matches({ rollingBack: 'applyingRollback' })).toBe(true);
   });
 
   it('hydrates running and waiting turns from main-process runtime snapshots', (): void => {
