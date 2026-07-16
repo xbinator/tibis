@@ -27,7 +27,7 @@ function createAssistantToolMessage(toolPart: ChatMessageToolPart): ChatMessageR
 }
 
 describe('tool output prune helpers', () => {
-  it('prunes large successful tool result data while preserving summary fields', (): void => {
+  it('prunes large successful tool result data while preserving summary fields and artifact identity', (): void => {
     const toolPart: ChatMessageToolPart = { id: 'part0127',
       type: 'tool',
       toolCallId: 'tool-call-1',
@@ -38,20 +38,24 @@ describe('tool output prune helpers', () => {
         toolName: 'read_file',
         status: 'success',
         data: {
+          artifactId: 'artifact-1',
           path: 'large.md',
           content: 'x'.repeat(5_000)
         }
       }
     };
     const message = createAssistantToolMessage(toolPart);
+    const original = structuredClone(message);
 
     const prunedMessage = pruneMessageToolOutputs(message);
 
+    expect(message).toEqual(original);
     expect(prunedMessage?.parts[0]).toMatchObject({
       type: 'tool',
       result: {
         status: 'success',
         data: {
+          artifactId: 'artifact-1',
           path: 'large.md',
           pruned: true,
           originalBytes: expect.any(Number)

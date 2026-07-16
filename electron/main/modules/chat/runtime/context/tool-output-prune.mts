@@ -1,6 +1,6 @@
 /**
  * @file tool-output-prune.mts
- * @description ChatRuntime 旧工具结果剪枝辅助函数。
+ * @description ChatRuntime 模型投影专用的旧工具结果软剪枝辅助函数。
  */
 import type { ChatMessageRecord, ChatMessageToolPart } from 'types/chat';
 import { USER_CHOICE_TOOL_NAMES } from '../messages/user-choice.mjs';
@@ -19,7 +19,9 @@ const TOOL_OUTPUT_PRUNE_PROTECTED_TOOL_NAMES = new Set(['skill', ...USER_CHOICE_
 
 /** 剪枝后保留的工具结果字段。 */
 const TOOL_OUTPUT_PRUNE_PRESERVED_DATA_KEYS = [
+  'artifactId',
   'path',
+  'previousPath',
   'filePath',
   'url',
   'title',

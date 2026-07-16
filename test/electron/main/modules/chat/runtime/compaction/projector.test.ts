@@ -1,0 +1,229 @@
+/**
+ * @file projector.test.ts
+ * @description 上下文压缩模型投影测试。
+ */
+import type { ChatMessageCompactionPart, ChatMessagePart, ChatMessageRecord, CompactionBudgetSnapshot, StructuredContextSummary } from 'types/chat';
+import { describe, expect, it } from 'vitest';
+import { projectContext } from '../../../../../../../electron/main/modules/chat/runtime/compaction/projector.mjs';
+
+/**
+ * 创建投影测试预算。
+ * @returns 预算快照
+ */
+function createBudget(): CompactionBudgetSnapshot {
+  return {
+    outputReserve: 2_000,
+    safetyReserve: 1_000,
+    usableInputTokens: 17_000,
+    triggerTokens: 13_600,
+    targetTokens: 9_350,
+    summaryMaxTokens: 2_000,
+    rawTailMaxTokens: 4_000
+  };
+}
+
+/**
+ * 创建引用指定证据的结构化摘要。
+ * @param sourcePartIds - 证据 Part 标识
+ * @returns 结构化摘要
+ */
+function createSummary(sourcePartIds: string[]): StructuredContextSummary {
+  return {
+    schemaVersion: 1,
+    objectives: [],
+    facts: [
+      {
+        id: 'fact-1',
+        type: 'decision',
+        content: '使用结构化 checkpoint 继续长会话',
+        sourcePartIds
+      }
+    ],
+    artifacts: [],
+    completedActions: [],
+    pendingActions: [],
+    openQuestions: [],
+    failures: []
+  };
+}
+
+/**
+ * 创建成功 checkpoint。
+ * @param id - checkpoint 标识
+ * @param boundaryPartId - boundary 标识
+ * @param sourcePartIds - 摘要证据标识
+ * @returns 成功 checkpoint
+ */
+function createCheckpoint(id: string, boundaryPartId: string, sourcePartIds: string[]): ChatMessageCompactionPart {
+  return {
+    id,
+    type: 'compaction',
+    status: 'success',
+    trigger: 'automatic',
+    boundaryPartId,
+    sourceFingerprint: `sha256:${id}`,
+    modelSnapshot: {
+      providerType: 'openai',
+      providerId: 'provider-1',
+      modelId: 'model-1',
+      contextWindow: 20_000
+    },
+    budgetSnapshot: createBudget(),
+    summary: createSummary(sourcePartIds),
+    createdAt: 1,
+    completedAt: 2
+  };
+}
+
+/**
+ * 创建已完成聊天消息。
+ * @param id - 消息标识
+ * @param role - 消息角色
+ * @param parts - 消息 Part
+ * @returns 聊天消息
+ */
+function createMessage(id: string, role: 'user' | 'assistant', parts: ChatMessagePart[]): ChatMessageRecord {
+  return {
+    id,
+    sessionId: 'session-1',
+    role,
+    content: '',
+    parts,
+    createdAt: `2026-07-16T00:00:0${id.length}.000Z`,
+    loading: false,
+    finished: true
+  };
+}
+
+describe('context projector', (): void => {
+  it('用最新有效摘要替换已覆盖前缀并保留 checkpoint 后原始 tail', (): void => {
+    const messages = [
+      createMessage('old-user', 'user', [{ id: 'source-1', type: 'text', text: '很早的需求' }]),
+      createMessage('checkpoint-message', 'assistant', [
+        createCheckpoint('checkpoint-1', 'source-1', ['source-1']),
+        { id: 'tail-1', type: 'text', text: 'checkpoint 完成后的新进展' }
+      ])
+    ];
+
+    const projection = projectContext({ messages });
+
+    expect(projection.checkpointId).toBe('checkpoint-1');
+    expect(projection.messages).toHaveLength(2);
+    expect(projection.messages[0]).toMatchObject({
+      id: 'context-checkpoint:checkpoint-1',
+      role: 'assistant',
+      parts: [{ type: 'text', text: expect.stringContaining('使用结构化 checkpoint 继续长会话') }]
+    });
+    expect(projection.messages[1].parts).toEqual([{ id: 'tail-1', type: 'text', text: 'checkpoint 完成后的新进展' }]);
+    expect(JSON.stringify(projection.messages)).not.toContain('很早的需求');
+    expect(projection.estimatedTokens).toBeGreaterThan(0);
+  });
+
+  it('boundary 与 checkpoint 同消息时保持 boundary 后的 Part 拓扑完整', (): void => {
+    const boundaryTool: ChatMessagePart = {
+      id: 'tool-boundary',
+      type: 'tool',
+      toolCallId: 'tool-call-boundary',
+      toolName: 'read_file',
+      status: 'done',
+      input: { path: 'src/a.ts' },
+      result: {
+        toolName: 'read_file',
+        status: 'success',
+        data: { path: 'src/a.ts', content: 'export const value = 1' }
+      }
+    };
+    const messages = [
+      createMessage('inline-checkpoint', 'assistant', [
+        boundaryTool,
+        createCheckpoint('checkpoint-inline', 'tool-boundary', ['tool-boundary']),
+        { id: 'tail-text', type: 'text', text: '继续修改文件' }
+      ])
+    ];
+
+    const projection = projectContext({ messages });
+
+    expect(projection.checkpointId).toBe('checkpoint-inline');
+    expect(projection.messages[1]).toMatchObject({
+      id: 'inline-checkpoint',
+      parts: [{ id: 'tail-text', type: 'text', text: '继续修改文件' }]
+    });
+    expect(JSON.stringify(projection.messages)).not.toContain('tool-call-boundary');
+  });
+
+  it('最新 checkpoint 拓扑无效时回退到前一个有效 checkpoint', (): void => {
+    const messages = [
+      createMessage('message-1', 'assistant', [{ id: 'source-1', type: 'text', text: '第一阶段' }]),
+      createMessage('message-2', 'assistant', [createCheckpoint('checkpoint-1', 'source-1', ['source-1'])]),
+      createMessage('message-3', 'assistant', [
+        { id: 'source-2', type: 'text', text: '第二阶段' },
+        createCheckpoint('checkpoint-invalid', 'source-2', ['missing-evidence'])
+      ])
+    ];
+
+    const projection = projectContext({ messages });
+
+    expect(projection.checkpointId).toBe('checkpoint-1');
+    expect(JSON.stringify(projection.messages)).toContain('第二阶段');
+    expect(JSON.stringify(projection.messages)).not.toContain('checkpoint-invalid');
+  });
+
+  it('不把 pending 或失败状态 compaction 暴露给模型', (): void => {
+    const messages = [
+      createMessage('message-1', 'assistant', [
+        { id: 'source-1', type: 'text', text: '保留内容' },
+        { id: 'checkpoint-pending', type: 'compaction', status: 'pending', trigger: 'automatic', createdAt: 1 },
+        { id: 'checkpoint-failed', type: 'compaction', status: 'failed', trigger: 'automatic', errorCode: 'MODEL_FAILED', createdAt: 1, completedAt: 2 }
+      ])
+    ];
+
+    const projection = projectContext({ messages });
+
+    expect(projection.checkpointId).toBeUndefined();
+    expect(projection.messages[0].parts).toEqual([{ id: 'source-1', type: 'text', text: '保留内容' }]);
+  });
+
+  it('只在模型投影中软剪枝旧大型工具结果并保留 artifact identity', (): void => {
+    const oldToolMessage = createMessage('old-tool', 'assistant', [
+      {
+        id: 'old-tool-part',
+        type: 'tool',
+        toolCallId: 'old-tool-call',
+        toolName: 'read_file',
+        status: 'done',
+        input: { path: 'src/a.ts' },
+        result: {
+          toolName: 'read_file',
+          status: 'success',
+          data: {
+            artifactId: 'artifact-1',
+            path: 'src/a.ts',
+            content: 'x'.repeat(5_000)
+          }
+        }
+      }
+    ]);
+    const messages = [
+      oldToolMessage,
+      createMessage('user-1', 'user', [{ id: 'user-part-1', type: 'text', text: '继续' }]),
+      createMessage('assistant-1', 'assistant', [{ id: 'assistant-part-1', type: 'text', text: '收到' }]),
+      createMessage('user-2', 'user', [{ id: 'user-part-2', type: 'text', text: '再继续' }])
+    ];
+    const original = structuredClone(messages);
+
+    const projection = projectContext({ messages });
+
+    expect(messages).toEqual(original);
+    expect(projection.messages[0].parts[0]).toMatchObject({
+      type: 'tool',
+      result: {
+        data: {
+          artifactId: 'artifact-1',
+          path: 'src/a.ts',
+          pruned: true
+        }
+      }
+    });
+    expect(JSON.stringify(projection.messages[0])).not.toContain('x'.repeat(5_000));
+  });
+});

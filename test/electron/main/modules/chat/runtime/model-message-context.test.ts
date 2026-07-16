@@ -48,6 +48,17 @@ describe('runtime model message context', (): void => {
     expect(toRuntimeModelMessages([assistant])).toEqual([{ role: 'assistant', content: [{ type: 'text', text: 'legacy answer' }] }]);
   });
 
+  it('does not expose compaction lifecycle parts to the model', (): void => {
+    const assistant = createMessage('compaction-status', 'assistant', '');
+    assistant.parts = [
+      { id: 'part-before', type: 'text', text: '模型可见内容' },
+      { id: 'compaction-pending', type: 'compaction', status: 'pending', trigger: 'automatic', createdAt: 1 },
+      { id: 'compaction-failed', type: 'compaction', status: 'failed', trigger: 'automatic', errorCode: 'MODEL_FAILED', createdAt: 1, completedAt: 2 }
+    ];
+
+    expect(toRuntimeModelMessages([assistant])).toEqual([{ role: 'assistant', content: [{ type: 'text', text: '模型可见内容' }] }]);
+  });
+
   it('converts user file parts into one XML text content for model compatibility', (): void => {
     const messages = toRuntimeModelMessages([
       {
