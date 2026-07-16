@@ -103,6 +103,33 @@ describe('compaction checkpoint validation', (): void => {
     ).toEqual({ ok: true });
   });
 
+  it('只允许 failed schema checkpoint 保存脱敏校验子错误码', (): void => {
+    expect(
+      validateCheckpoint({
+        id: 'checkpoint-failed',
+        type: 'compaction',
+        status: 'failed',
+        trigger: 'manual',
+        errorCode: 'SCHEMA_INVALID',
+        validationErrorCode: 'INVALID_REFERENCE',
+        createdAt: 1,
+        completedAt: 2
+      })
+    ).toEqual({ ok: true });
+    expect(
+      validateCheckpoint({
+        id: 'checkpoint-invalid-code',
+        type: 'compaction',
+        status: 'failed',
+        trigger: 'manual',
+        errorCode: 'SCHEMA_INVALID',
+        validationErrorCode: 'RAW_MODEL_OUTPUT',
+        createdAt: 1,
+        completedAt: 2
+      })
+    ).toEqual({ ok: false, errorCode: 'INVALID_CHECKPOINT' });
+  });
+
   it('拒绝模型快照携带 secret 字段', (): void => {
     const checkpoint = createSuccessCheckpoint();
     checkpoint.modelSnapshot = {

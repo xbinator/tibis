@@ -11,10 +11,10 @@ export const FINGERPRINT_VERSION = 1;
 export const SUMMARY_SCHEMA_VERSION = 1;
 
 /** 上下文投影算法版本。 */
-export const PROJECTOR_VERSION = 1;
+export const PROJECTOR_VERSION = 2;
 
 /** 压缩预算和边界策略版本。 */
-export const COMPACTION_POLICY_VERSION = 1;
+export const COMPACTION_POLICY_VERSION = 3;
 
 /**
  * 已冻结且可进入摘要源的消息 Part。

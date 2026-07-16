@@ -6,6 +6,7 @@ import type { ChatMessageRecord, ChatMessageToolPart } from 'types/chat';
 import { describe, expect, it } from 'vitest';
 import {
   findToolOutputPruneProtectedStartIndex,
+  pruneActiveTurnToolOutputs,
   pruneMessageToolOutputs
 } from '../../../../../../electron/main/modules/chat/runtime/context/tool-output-prune.mjs';
 
@@ -93,5 +94,80 @@ describe('tool output prune helpers', () => {
     ] as ChatMessageRecord[];
 
     expect(findToolOutputPruneProtectedStartIndex(messages)).toBe(2);
+  });
+
+  it('prunes earlier large results in the active agent turn while preserving the latest result', (): void => {
+    const messages: ChatMessageRecord[] = [
+      {
+        id: 'user-active',
+        sessionId: 'session-1',
+        role: 'user',
+        content: '执行一个长任务',
+        parts: [{ id: 'user-part-active', type: 'text', text: '执行一个长任务' }],
+        createdAt: '2026-07-16T00:00:00.000Z',
+        finished: true
+      },
+      {
+        ...createAssistantToolMessage({
+          id: 'tool-large-earlier',
+          type: 'tool',
+          toolCallId: 'tool-call-large-earlier',
+          toolName: 'read_file',
+          status: 'done',
+          input: { path: 'src/large.ts' },
+          result: {
+            toolName: 'read_file',
+            status: 'success',
+            data: { artifactId: 'artifact-large', path: 'src/large.ts', content: 'x'.repeat(10_000) }
+          }
+        }),
+        parts: [
+          {
+            id: 'tool-large-earlier',
+            type: 'tool',
+            toolCallId: 'tool-call-large-earlier',
+            toolName: 'read_file',
+            status: 'done',
+            input: { path: 'src/large.ts' },
+            result: {
+              toolName: 'read_file',
+              status: 'success',
+              data: { artifactId: 'artifact-large', path: 'src/large.ts', content: 'x'.repeat(10_000) }
+            }
+          },
+          {
+            id: 'tool-latest',
+            type: 'tool',
+            toolCallId: 'tool-call-latest',
+            toolName: 'read_file',
+            status: 'done',
+            input: { path: 'src/current.ts' },
+            result: {
+              toolName: 'read_file',
+              status: 'success',
+              data: { path: 'src/current.ts', content: 'y'.repeat(10_000) }
+            }
+          }
+        ]
+      }
+    ];
+    const original = structuredClone(messages);
+
+    const pruned = pruneActiveTurnToolOutputs(messages);
+
+    expect(messages).toEqual(original);
+    expect(pruned[1].parts[0]).toMatchObject({
+      id: 'tool-large-earlier',
+      type: 'tool',
+      result: { data: { artifactId: 'artifact-large', path: 'src/large.ts', pruned: true } }
+    });
+    expect(pruned[1].parts[1]).toEqual(messages[1].parts[1]);
+
+    const fullyPruned = pruneActiveTurnToolOutputs(messages, 'all-complete');
+    expect(fullyPruned[1].parts[1]).toMatchObject({
+      id: 'tool-latest',
+      type: 'tool',
+      result: { data: { path: 'src/current.ts', pruned: true } }
+    });
   });
 });

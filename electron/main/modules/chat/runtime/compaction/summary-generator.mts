@@ -5,7 +5,7 @@
 import type { CompactionSourceSnapshot } from './types.mjs';
 import type { ChatModelResolution } from '../model/resolver.mjs';
 import type { AICreateOptions, AIInvokeResult, AIRequestOptions, AIServiceError, AIUsage } from 'types/ai';
-import type { CompactionBudgetSnapshot, CompactionModelSnapshot, StructuredContextSummary } from 'types/chat';
+import type { CompactionBudgetSnapshot, CompactionModelSnapshot, CompactionValidationErrorCode, StructuredContextSummary } from 'types/chat';
 import { structuredSummarySchema, validateStructuredSummary } from './summary-schema.mjs';
 
 /** 摘要生成失败码。 */
@@ -44,8 +44,30 @@ export type SummaryGenerationResult =
       summary: StructuredContextSummary;
       modelSnapshot: CompactionModelSnapshot;
       usage?: AIUsage;
+      /** 是否因首次校验失败执行过一次修复重试。 */
+      repairAttempted?: true;
+      /** 触发修复重试的脱敏校验子错误码。 */
+      validationErrorCode?: CompactionValidationErrorCode;
     }
-  | { status: 'failed'; errorCode: SummaryGenerationErrorCode };
+  | {
+      status: 'failed';
+      errorCode: SummaryGenerationErrorCode;
+      /** 是否执行过一次修复重试。 */
+      repairAttempted?: true;
+      /** 最后一次摘要校验的脱敏子错误码。 */
+      validationErrorCode?: CompactionValidationErrorCode;
+    };
+
+/** 单次模型摘要调用结果。 */
+type SummaryInvokeResult = { status: 'success'; output: unknown; usage?: AIUsage } | { status: 'failed' };
+
+/** 校验失败后的定向修复提示。 */
+const REPAIR_HINTS: Record<CompactionValidationErrorCode, string> = {
+  INVALID_SHAPE: '严格输出 schema 要求的全部根字段和字段类型，不得增加额外字段；必填字符串和 sourcePartIds 不得为空。',
+  INVALID_REFERENCE: '逐项检查所有 sourcePartIds，只能逐字复制输入中实际存在的 Part ID，不得生成、缩写或改写 ID。',
+  INVALID_OBJECTIVE_RELATION:
+    '确保 objective.id 唯一；activeObjectiveId 只能指向 active 目标；parentId 和 supersededById 必须指向其他已存在目标，superseded 目标必须包含 supersededById。'
+};
 
 /**
  * 创建脱敏模型快照。
@@ -105,6 +127,75 @@ export function createSummaryPrompt(snapshot: CompactionSourceSnapshot): string 
 }
 
 /**
+ * 创建结构化摘要修复提示词。
+ * @param snapshot - 与首次调用完全相同的冻结摘要源
+ * @param errorCode - 首次运行时校验的脱敏子错误码
+ * @returns 要求重新生成完整摘要的修复提示词
+ */
+function createRepairPrompt(snapshot: CompactionSourceSnapshot, errorCode: CompactionValidationErrorCode): string {
+  return [
+    createSummaryPrompt(snapshot),
+    `上一次完整输出未通过 Tibis 校验，错误码为 ${errorCode}。`,
+    REPAIR_HINTS[errorCode],
+    '请重新生成完整的结构化 checkpoint，不要解释错误，也不要输出 Markdown。'
+  ].join('\n\n');
+}
+
+/**
+ * 合并两次摘要调用的 Token 使用量。
+ * @param first - 首次调用使用量
+ * @param second - 修复调用使用量
+ * @returns 合计使用量；两次均缺失时返回 undefined
+ */
+function mergeUsage(first?: AIUsage, second?: AIUsage): AIUsage | undefined {
+  if (!first && !second) return undefined;
+
+  return {
+    inputTokens: (first?.inputTokens ?? 0) + (second?.inputTokens ?? 0),
+    outputTokens: (first?.outputTokens ?? 0) + (second?.outputTokens ?? 0),
+    totalTokens: (first?.totalTokens ?? 0) + (second?.totalTokens ?? 0)
+  };
+}
+
+/**
+ * 执行单次结构化摘要模型调用。
+ * @param input - 冻结摘要输入
+ * @param resolution - 已解析的当前模型
+ * @param prompt - 首次或修复提示词
+ * @param dependencies - 摘要生成依赖
+ * @returns 结构化输出或稳定调用失败标记
+ */
+async function invokeSummary(
+  input: SummaryGenerationInput,
+  resolution: ChatModelResolution,
+  prompt: string,
+  dependencies: SummaryGeneratorDependencies
+): Promise<SummaryInvokeResult> {
+  const request: AIRequestOptions = {
+    requestId: input.runtimeId,
+    modelId: resolution.modelId,
+    prompt,
+    maxOutputTokens: input.budgetSnapshot.summaryMaxTokens,
+    output: {
+      schema: structuredSummarySchema,
+      name: 'context_compaction',
+      description: 'Tibis rolling context checkpoint'
+    }
+  };
+  const [generationResult] = await Promise.allSettled([dependencies.generateText(resolution.createOptions, request)]);
+  if (generationResult.status === 'rejected') return { status: 'failed' };
+
+  const [serviceError, invokeResult] = generationResult.value;
+  if (serviceError || !invokeResult) return { status: 'failed' };
+
+  return {
+    status: 'success',
+    output: invokeResult.output,
+    ...(invokeResult.usage ? { usage: invokeResult.usage } : {})
+  };
+}
+
+/**
  * 使用当前会话模型生成结构化摘要。
  * @param input - 冻结源和预算
  * @param dependencies - 模型解析与生成依赖
@@ -117,34 +208,45 @@ export async function generateStructuredSummary(input: SummaryGenerationInput, d
 
   const resolution = resolutionResult.value;
   const modelSnapshot = createModelSnapshot(resolution, input);
-  const request: AIRequestOptions = {
-    requestId: input.runtimeId,
-    modelId: resolution.modelId,
-    prompt: createSummaryPrompt(input.sourceSnapshot),
-    maxOutputTokens: input.budgetSnapshot.summaryMaxTokens,
-    output: {
-      schema: structuredSummarySchema,
-      name: 'context_compaction',
-      description: 'Tibis rolling context checkpoint'
-    }
-  };
-  const [generationResult] = await Promise.allSettled([dependencies.generateText(resolution.createOptions, request)]);
-  if (generationResult.status === 'rejected') return { status: 'failed', errorCode: 'MODEL_CALL_FAILED' };
-
-  const [serviceError, invokeResult] = generationResult.value;
-  if (serviceError || !invokeResult) return { status: 'failed', errorCode: 'MODEL_CALL_FAILED' };
-
   const allowedPartIds = new Set<string>([
     ...input.sourceSnapshot.sourceParts.map((sourcePart) => sourcePart.part.id),
     ...collectParentSources(input.sourceSnapshot.parentCheckpoint)
   ]);
-  const validation = validateStructuredSummary(invokeResult.output, allowedPartIds);
-  if (!validation.ok) return { status: 'failed', errorCode: 'SCHEMA_INVALID' };
+  const firstInvocation = await invokeSummary(input, resolution, createSummaryPrompt(input.sourceSnapshot), dependencies);
+  if (firstInvocation.status === 'failed') return { status: 'failed', errorCode: 'MODEL_CALL_FAILED' };
+
+  const firstValidation = validateStructuredSummary(firstInvocation.output, allowedPartIds);
+  if (firstValidation.ok) {
+    return {
+      status: 'success',
+      summary: firstValidation.summary,
+      modelSnapshot,
+      ...(firstInvocation.usage ? { usage: firstInvocation.usage } : {})
+    };
+  }
+
+  // Provider 兼容模式可能只把 JSON Schema 注入提示词；首次语义校验失败时仅定向重试一次，避免无限调用。
+  const repairInvocation = await invokeSummary(input, resolution, createRepairPrompt(input.sourceSnapshot, firstValidation.errorCode), dependencies);
+  if (repairInvocation.status === 'failed') return { status: 'failed', errorCode: 'MODEL_CALL_FAILED', repairAttempted: true };
+
+  const repairValidation = validateStructuredSummary(repairInvocation.output, allowedPartIds);
+  if (!repairValidation.ok) {
+    return {
+      status: 'failed',
+      errorCode: 'SCHEMA_INVALID',
+      repairAttempted: true,
+      validationErrorCode: repairValidation.errorCode
+    };
+  }
+
+  const usage = mergeUsage(firstInvocation.usage, repairInvocation.usage);
 
   return {
     status: 'success',
-    summary: validation.summary,
+    summary: repairValidation.summary,
     modelSnapshot,
-    ...(invokeResult.usage ? { usage: invokeResult.usage } : {})
+    ...(usage ? { usage } : {}),
+    repairAttempted: true,
+    validationErrorCode: firstValidation.errorCode
   };
 }

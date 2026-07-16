@@ -4,7 +4,14 @@
  */
 import type { SummaryGenerationInput, SummaryGenerationResult, SummaryGenerationErrorCode } from './summary-generator.mjs';
 import type { AITransportTool } from 'types/ai';
-import type { ChatMessageCompactionPart, ChatMessagePart, ChatMessageRecord, CompactionModelSnapshot, StructuredContextSummary } from 'types/chat';
+import type {
+  ChatMessageCompactionPart,
+  ChatMessagePart,
+  ChatMessageRecord,
+  CompactionModelSnapshot,
+  CompactionValidationErrorCode,
+  StructuredContextSummary
+} from 'types/chat';
 import { isImmutablePart } from './boundary.mjs';
 import { buildSourceFingerprint, createFingerprintInput } from './fingerprint.mjs';
 import { createCompactionPlan, type CompactionPlan, type CompactionPlanErrorCode, type CompactionPlanInput, type CompactionSkipReason } from './planner.mjs';
@@ -67,7 +74,14 @@ export interface CompactionExecuteInput {
 export type CompactionExecuteResult =
   | { status: 'success'; checkpoint: ChatMessageCompactionPart & { status: 'success' } }
   | { status: 'skipped'; reason: CompactionSkipReason; checkpoint?: ChatMessageCompactionPart }
-  | { status: 'failed'; errorCode: CompactionExecuteErrorCode }
+  | {
+      status: 'failed';
+      errorCode: CompactionExecuteErrorCode;
+      /** 最后一次摘要校验的脱敏子错误码。 */
+      validationErrorCode?: CompactionValidationErrorCode;
+      /** 是否执行过一次摘要修复重试。 */
+      repairAttempted?: true;
+    }
   | { status: 'cancelled'; checkpoint: ChatMessageCompactionPart };
 
 /** 脱敏压缩诊断日志。 */
@@ -96,6 +110,10 @@ export interface CompactionDiagnosticLog {
   modelSnapshot: CompactionModelSnapshot;
   /** 失败、取消或跳过的稳定原因。 */
   errorCode?: string;
+  /** 触发修复或最终失败的脱敏摘要校验子错误码。 */
+  validationErrorCode?: CompactionValidationErrorCode;
+  /** 是否执行过一次摘要修复重试。 */
+  repairAttempted?: boolean;
 }
 
 /**
@@ -175,6 +193,10 @@ interface ActiveDiagnosticState {
   targetTokens?: number;
   /** 成功候选的实际压缩后投影估算。 */
   projectedTokens?: number;
+  /** 触发修复或最终失败的脱敏摘要校验子错误码。 */
+  validationErrorCode?: CompactionValidationErrorCode;
+  /** 是否执行过一次摘要修复重试。 */
+  repairAttempted?: boolean;
 }
 
 /**
@@ -340,6 +362,7 @@ async function verifySource(
  * @param status - 失败或取消状态
  * @param dependencies - executor 依赖
  * @param errorCode - 稳定原因码
+ * @param validationErrorCode - 可选脱敏摘要校验子错误码
  * @returns 写入后的终态 Part，写入失败时返回 undefined
  */
 async function writeTerminalCheckpoint(
@@ -347,12 +370,14 @@ async function writeTerminalCheckpoint(
   pending: ChatMessageCompactionPart,
   status: 'failed' | 'cancelled',
   dependencies: CompactionExecutorDependencies,
-  errorCode?: string
+  errorCode?: string,
+  validationErrorCode?: CompactionValidationErrorCode
 ): Promise<ChatMessageCompactionPart | undefined> {
   const terminal: ChatMessageCompactionPart = {
     ...structuredClone(pending),
     status,
     errorCode,
+    ...(validationErrorCode ? { validationErrorCode } : {}),
     completedAt: dependencies.now()
   };
   if (!replaceCheckpoint(input.assistantMessage, pending.id, terminal)) return undefined;
@@ -436,7 +461,9 @@ export function createCompactionExecutor(dependencies: CompactionExecutorDepende
       projectedTokens: state.projectedTokens,
       durationMs: Math.max(0, dependencies.now() - state.startedAt),
       modelSnapshot: structuredClone(state.modelSnapshot),
-      errorCode: readResultError(result)
+      errorCode: readResultError(result),
+      validationErrorCode: state.validationErrorCode,
+      repairAttempted: state.repairAttempted
     };
     try {
       dependencies.diagnosticLog(entry);
@@ -545,14 +572,23 @@ export function createCompactionExecutor(dependencies: CompactionExecutorDepende
       return finishExecution(input.runtimeId, { status: 'failed', errorCode });
     }
     if (generationResult.value.status === 'failed') {
-      const { errorCode } = generationResult.value;
-      const checkpoint = await writeTerminalCheckpoint(input, pending, 'failed', dependencies, errorCode);
+      const { errorCode, validationErrorCode, repairAttempted } = generationResult.value;
+      diagnostic.validationErrorCode = validationErrorCode;
+      diagnostic.repairAttempted = repairAttempted;
+      const checkpoint = await writeTerminalCheckpoint(input, pending, 'failed', dependencies, errorCode, validationErrorCode);
       if (!checkpoint) return finishExecution(input.runtimeId, { status: 'failed', errorCode: 'PERSIST_FAILED' });
-      return finishExecution(input.runtimeId, { status: 'failed', errorCode });
+      return finishExecution(input.runtimeId, {
+        status: 'failed',
+        errorCode,
+        ...(validationErrorCode ? { validationErrorCode } : {}),
+        ...(repairAttempted ? { repairAttempted } : {})
+      });
     }
 
     dependencies.onStage?.('validate');
     const generation = generationResult.value;
+    diagnostic.validationErrorCode = generation.validationErrorCode;
+    diagnostic.repairAttempted = generation.repairAttempted;
     if (!isSameModel(plan.modelSnapshot, generation.modelSnapshot)) {
       const checkpoint = await writeTerminalCheckpoint(input, pending, 'failed', dependencies, 'MODEL_CHANGED');
       if (!checkpoint) return finishExecution(input.runtimeId, { status: 'failed', errorCode: 'PERSIST_FAILED' });
@@ -564,9 +600,15 @@ export function createCompactionExecutor(dependencies: CompactionExecutorDepende
     ]);
     const summaryValidation = validateStructuredSummary(generation.summary, allowedPartIds);
     if (!summaryValidation.ok) {
-      const checkpoint = await writeTerminalCheckpoint(input, pending, 'failed', dependencies, 'SCHEMA_INVALID');
+      diagnostic.validationErrorCode = summaryValidation.errorCode;
+      const checkpoint = await writeTerminalCheckpoint(input, pending, 'failed', dependencies, 'SCHEMA_INVALID', summaryValidation.errorCode);
       if (!checkpoint) return finishExecution(input.runtimeId, { status: 'failed', errorCode: 'PERSIST_FAILED' });
-      return finishExecution(input.runtimeId, { status: 'failed', errorCode: 'SCHEMA_INVALID' });
+      return finishExecution(input.runtimeId, {
+        status: 'failed',
+        errorCode: 'SCHEMA_INVALID',
+        validationErrorCode: summaryValidation.errorCode,
+        ...(generation.repairAttempted ? { repairAttempted: generation.repairAttempted } : {})
+      });
     }
 
     dependencies.onStage?.('verify');
@@ -601,12 +643,22 @@ export function createCompactionExecutor(dependencies: CompactionExecutorDepende
       if (!checkpoint) return finishExecution(input.runtimeId, { status: 'failed', errorCode: 'PERSIST_FAILED' });
       return finishExecution(input.runtimeId, { status: 'failed', errorCode: 'SOURCE_CHANGED' });
     }
-    const projected = projectContext({
+    let projected = projectContext({
       messages: candidateMessages,
       system: input.system,
       tools: input.tools,
-      skillContentHashes: input.skillContentHashes
+      skillContentHashes: input.skillContentHashes,
+      activeTurnToolPruneMode: 'preserve-latest'
     });
+    if (projected.estimatedTokens > plan.budgetSnapshot.targetTokens) {
+      projected = projectContext({
+        messages: candidateMessages,
+        system: input.system,
+        tools: input.tools,
+        skillContentHashes: input.skillContentHashes,
+        activeTurnToolPruneMode: 'all-complete'
+      });
+    }
     diagnostic.projectedTokens = projected.estimatedTokens;
     if (projected.estimatedTokens > plan.budgetSnapshot.targetTokens) {
       const checkpoint = await writeTerminalCheckpoint(input, pending, 'failed', dependencies, 'TARGET_BUDGET_EXCEEDED');

@@ -226,4 +226,49 @@ describe('context projector', (): void => {
     });
     expect(JSON.stringify(projection.messages[0])).not.toContain('x'.repeat(5_000));
   });
+
+  it('高压模式裁剪当前 Agent 轮次中较早的工具结果并保留最新结果', (): void => {
+    const messages = [
+      createMessage('current-user', 'user', [{ id: 'current-user-part', type: 'text', text: '继续执行长任务' }]),
+      createMessage('current-assistant', 'assistant', [
+        {
+          id: 'current-tool-earlier',
+          type: 'tool',
+          toolCallId: 'current-tool-call-earlier',
+          toolName: 'read_file',
+          status: 'done',
+          input: { path: 'src/large.ts' },
+          result: {
+            toolName: 'read_file',
+            status: 'success',
+            data: { artifactId: 'artifact-large', path: 'src/large.ts', content: 'x'.repeat(6_000) }
+          }
+        },
+        {
+          id: 'current-tool-latest',
+          type: 'tool',
+          toolCallId: 'current-tool-call-latest',
+          toolName: 'read_file',
+          status: 'done',
+          input: { path: 'src/current.ts' },
+          result: {
+            toolName: 'read_file',
+            status: 'success',
+            data: { path: 'src/current.ts', content: 'y'.repeat(6_000) }
+          }
+        }
+      ])
+    ];
+    const original = structuredClone(messages);
+
+    const projection = projectContext({ messages, activeTurnToolPruneMode: 'preserve-latest' });
+
+    expect(messages).toEqual(original);
+    expect(projection.messages[1].parts[0]).toMatchObject({
+      id: 'current-tool-earlier',
+      type: 'tool',
+      result: { data: { artifactId: 'artifact-large', path: 'src/large.ts', pruned: true } }
+    });
+    expect(projection.messages[1].parts[1]).toEqual(messages[1].parts[1]);
+  });
 });

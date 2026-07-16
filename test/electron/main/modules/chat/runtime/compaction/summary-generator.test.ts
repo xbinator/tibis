@@ -6,7 +6,10 @@ import type { CompactionSourceSnapshot } from '../../../../../../../electron/mai
 import type { AICreateOptions, AIInvokeResult, AIRequestOptions } from 'types/ai';
 import type { CompactionBudgetSnapshot, StructuredContextSummary } from 'types/chat';
 import { describe, expect, it, vi } from 'vitest';
-import { generateStructuredSummary } from '../../../../../../../electron/main/modules/chat/runtime/compaction/summary-generator.mjs';
+import {
+  generateStructuredSummary,
+  type SummaryGeneratorDependencies
+} from '../../../../../../../electron/main/modules/chat/runtime/compaction/summary-generator.mjs';
 
 /**
  * 创建摘要生成预算。
@@ -111,7 +114,12 @@ describe('structured summary generator', (): void => {
     expect(request.prompt).not.toContain('checkpoint-pending');
   });
 
-  it('结构化输出无效时返回失败且不使用文本 fallback', async (): Promise<void> => {
+  it('结构化输出首次无效时按子错误码重试一次', async (): Promise<void> => {
+    const summary = createSummary();
+    const generateText = vi
+      .fn<SummaryGeneratorDependencies['generateText']>()
+      .mockResolvedValueOnce([undefined, { text: '', output: { schemaVersion: 1 }, usage: { inputTokens: 100, outputTokens: 10, totalTokens: 110 } }])
+      .mockResolvedValueOnce([undefined, { text: '', output: summary, usage: { inputTokens: 120, outputTokens: 20, totalTokens: 140 } }]);
     const result = await generateStructuredSummary(
       {
         runtimeId: 'runtime-1',
@@ -124,11 +132,58 @@ describe('structured summary generator', (): void => {
           createOptions: { providerType: 'openai', providerId: 'provider-1', providerName: 'OpenAI' },
           modelId: 'model-1'
         }),
-        generateText: async () => [undefined, { text: JSON.stringify(createSummary()), output: { schemaVersion: 1 } }]
+        generateText
       }
     );
 
-    expect(result).toEqual({ status: 'failed', errorCode: 'SCHEMA_INVALID' });
+    expect(result).toEqual({
+      status: 'success',
+      summary,
+      modelSnapshot: {
+        providerType: 'openai',
+        providerId: 'provider-1',
+        modelId: 'model-1',
+        contextWindow: 128_000
+      },
+      usage: { inputTokens: 220, outputTokens: 30, totalTokens: 250 },
+      repairAttempted: true,
+      validationErrorCode: 'INVALID_SHAPE'
+    });
+    expect(generateText).toHaveBeenCalledTimes(2);
+    expect(generateText.mock.calls[1]?.[1].prompt).toContain('INVALID_SHAPE');
+  });
+
+  it('结构化输出重试后仍无效时保留最终子错误码', async (): Promise<void> => {
+    const invalidReferenceSummary = createSummary();
+    invalidReferenceSummary.facts[0].sourcePartIds = ['missing-part'];
+    const generateText = vi
+      .fn<SummaryGeneratorDependencies['generateText']>()
+      .mockResolvedValueOnce([undefined, { text: '', output: { schemaVersion: 1 } }])
+      .mockResolvedValueOnce([undefined, { text: '', output: invalidReferenceSummary }]);
+
+    const result = await generateStructuredSummary(
+      {
+        runtimeId: 'runtime-1',
+        contextWindow: 128_000,
+        budgetSnapshot: createBudget(),
+        sourceSnapshot: createSource()
+      },
+      {
+        resolveModel: async () => ({
+          createOptions: { providerType: 'deepseek', providerId: 'deepseek', providerName: 'DeepSeek' },
+          modelId: 'deepseek-v4-pro'
+        }),
+        generateText
+      }
+    );
+
+    expect(result).toEqual({
+      status: 'failed',
+      errorCode: 'SCHEMA_INVALID',
+      validationErrorCode: 'INVALID_REFERENCE',
+      repairAttempted: true
+    });
+    expect(generateText).toHaveBeenCalledTimes(2);
   });
 
   it('当前模型不可用时不发起摘要请求', async (): Promise<void> => {

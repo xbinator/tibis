@@ -25,6 +25,10 @@ vi.mock('@/components/BChat/components/MessageBubble.vue', () => ({
         type: Boolean,
         default: false
       },
+      historyActionsDisabled: {
+        type: Boolean,
+        default: false
+      },
       canRollback: {
         type: Function,
         default: undefined
@@ -368,6 +372,7 @@ describe('ConversationView', (): void => {
     });
 
     expect(wrapper.get('.message-bubble').text()).toBe('user::enabled:no-rollback');
+    expect(wrapper.findComponent({ name: 'MessageBubble' }).props('historyActionsDisabled')).toBe(true);
 
     messages = [userMessage, createAssistantMessage(createQuestionToolPart('done', 'awaiting_user_input'))];
     await wrapper.setProps({
@@ -379,5 +384,6 @@ describe('ConversationView', (): void => {
     await nextTick();
 
     expect(wrapper.findAll('.message-bubble')[0].text()).toBe('user::enabled:rollback');
+    expect(wrapper.findAllComponents({ name: 'MessageBubble' })[0].props('historyActionsDisabled')).toBe(true);
   });
 });

@@ -528,46 +528,58 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     const resolution = resolutionResult.status === 'fulfilled' ? resolutionResult.value : null;
     if (resolution) runtime.resolvedModel = resolution;
     const thresholdBudget = createCompactionBudget({ contextWindow: runtime.contextWindow, noncompressibleTokens: 0 });
-    if (resolution && shouldAutoCompact(projection.estimatedTokens, thresholdBudget)) {
-      const modelSnapshot: CompactionModelSnapshot = {
-        providerType: resolution.createOptions.providerType,
-        providerId: resolution.createOptions.providerId,
-        modelId: resolution.modelId,
-        contextWindow: runtime.contextWindow
-      };
-      activeCompactionSources.set(runtime.runtimeId, structuredClone(currentRawMessages));
-      activeCompactionModels.set(runtime.runtimeId, resolution);
-      activeCompactionRuntimes.set(runtime.runtimeId, runtime);
-      runtime.phase = 'compacting';
-      runtime.compactionTrigger = 'automatic';
-      await Promise.allSettled([
-        compactionExecutor.execute({
-          runtimeId: runtime.runtimeId,
-          sessionId: runtime.sessionId,
-          trigger: 'automatic',
-          assistantMessage,
-          currentUserMessageId: userMessage.id,
-          contextWindow: runtime.contextWindow,
-          modelSnapshot,
-          system: runtime.system,
-          tools: runtime.tools,
-          skillContentHashes: runtime.skillContentHashes
-        })
-      ]);
-      activeCompactionSources.delete(runtime.runtimeId);
-      activeCompactionModels.delete(runtime.runtimeId);
-      activeCompactionRuntimes.delete(runtime.runtimeId);
-      if (activeRuntimes.has(runtime.runtimeId)) {
-        runtime.phase = 'streaming';
-        runtime.compactionTrigger = undefined;
+    if (shouldAutoCompact(projection.estimatedTokens, thresholdBudget)) {
+      if (resolution) {
+        const modelSnapshot: CompactionModelSnapshot = {
+          providerType: resolution.createOptions.providerType,
+          providerId: resolution.createOptions.providerId,
+          modelId: resolution.modelId,
+          contextWindow: runtime.contextWindow
+        };
+        activeCompactionSources.set(runtime.runtimeId, structuredClone(currentRawMessages));
+        activeCompactionModels.set(runtime.runtimeId, resolution);
+        activeCompactionRuntimes.set(runtime.runtimeId, runtime);
+        runtime.phase = 'compacting';
+        runtime.compactionTrigger = 'automatic';
+        await Promise.allSettled([
+          compactionExecutor.execute({
+            runtimeId: runtime.runtimeId,
+            sessionId: runtime.sessionId,
+            trigger: 'automatic',
+            assistantMessage,
+            currentUserMessageId: userMessage.id,
+            contextWindow: runtime.contextWindow,
+            modelSnapshot,
+            system: runtime.system,
+            tools: runtime.tools,
+            skillContentHashes: runtime.skillContentHashes
+          })
+        ]);
+        activeCompactionSources.delete(runtime.runtimeId);
+        activeCompactionModels.delete(runtime.runtimeId);
+        activeCompactionRuntimes.delete(runtime.runtimeId);
+        if (activeRuntimes.has(runtime.runtimeId)) {
+          runtime.phase = 'streaming';
+          runtime.compactionTrigger = undefined;
+        }
+        currentRawMessages = createContinuationSourceMessages(rawMessages, assistantMessage);
       }
-      currentRawMessages = createContinuationSourceMessages(rawMessages, assistantMessage);
       projection = projectContext({
         messages: currentRawMessages,
         system: runtime.system,
         tools: runtime.tools,
-        skillContentHashes: runtime.skillContentHashes
+        skillContentHashes: runtime.skillContentHashes,
+        activeTurnToolPruneMode: 'preserve-latest'
       });
+      if (exceedsHardLimit(projection.estimatedTokens, thresholdBudget)) {
+        projection = projectContext({
+          messages: currentRawMessages,
+          system: runtime.system,
+          tools: runtime.tools,
+          skillContentHashes: runtime.skillContentHashes,
+          activeTurnToolPruneMode: 'all-complete'
+        });
+      }
     }
 
     if (!activeRuntimes.has(runtime.runtimeId)) {

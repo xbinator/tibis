@@ -382,6 +382,10 @@ const ConversationViewStub = defineComponent({
     disabled: {
       type: Boolean,
       default: false
+    },
+    loading: {
+      type: Boolean,
+      default: false
     }
   },
   emits: ['branch', 'regenerate', 'rollback'],
@@ -1479,6 +1483,29 @@ describe('BChat sessionId runtime', (): void => {
 
     expect(chatStoreMock.branchSession).toHaveBeenCalledWith('session-active', assistantMessage.id);
     expect(wrapper.emitted('session-created')?.[0]?.[0]).toEqual(branchedSession);
+  });
+
+  it('ignores history-changing actions while the current runtime is busy', async (): Promise<void> => {
+    const userMessage = createMessage('user-busy-history', '原始任务');
+    const assistantMessage = createAssistantMessage({ id: 'assistant-busy-history' });
+    chatStoreMock.getSessionMessages.mockResolvedValueOnce([userMessage, assistantMessage]).mockResolvedValueOnce([]);
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+    await submitTextAndReadRuntimeId(wrapper, '继续执行');
+    const conversationView = wrapper.findComponent(ConversationViewStub);
+
+    expect(conversationView.props('loading')).toBe(true);
+    conversationView.vm.$emit('branch', assistantMessage);
+    conversationView.vm.$emit('rollback', userMessage);
+    conversationView.vm.$emit('regenerate', assistantMessage);
+    wrapper.findComponent(BTextEditorStub).vm.$emit('update:value', '压缩期间继续编辑的草稿');
+    await flushPromises();
+
+    expect(wrapper.findComponent(BTextEditorStub).props('value')).toBe('压缩期间继续编辑的草稿');
+    expect(chatStoreMock.branchSession).not.toHaveBeenCalled();
+    expect(chatStoreMock.setSessionMessages).not.toHaveBeenCalled();
+    expect(electronAPIMock.chatRuntimeContinue).not.toHaveBeenCalled();
+    expect(electronAPIMock.chatRuntimeAbort).not.toHaveBeenCalled();
   });
 
   it('ignores duplicate branch events while the request is pending', async (): Promise<void> => {

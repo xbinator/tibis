@@ -2,7 +2,13 @@
  * @file checkpoint.mts
  * @description 上下文压缩 checkpoint 的基础形状与终态约束校验。
  */
-import type { ChatMessageCompactionPart, CompactionBudgetSnapshot, CompactionModelSnapshot, StructuredContextSummary } from 'types/chat';
+import type {
+  ChatMessageCompactionPart,
+  CompactionBudgetSnapshot,
+  CompactionModelSnapshot,
+  CompactionValidationErrorCode,
+  StructuredContextSummary
+} from 'types/chat';
 
 /** checkpoint 基础校验错误码。 */
 export type CheckpointErrorCode = 'INVALID_CHECKPOINT' | 'INVALID_SUCCESS_PAYLOAD' | 'SUMMARY_NOT_ALLOWED' | 'MODEL_SNAPSHOT_NOT_SANITIZED';
@@ -18,6 +24,9 @@ const CHECKPOINT_STATUSES = new Set<string>(['pending', 'success', 'failed', 'ca
 
 /** 支持的 checkpoint 触发方式。 */
 const CHECKPOINT_TRIGGERS = new Set<string>(['automatic', 'manual']);
+
+/** 支持持久化的脱敏摘要校验子错误码。 */
+const VALIDATION_ERROR_CODES = new Set<string>(['INVALID_SHAPE', 'INVALID_REFERENCE', 'INVALID_OBJECTIVE_RELATION']);
 
 /**
  * 判断值是否为普通记录。
@@ -44,6 +53,15 @@ function isNonEmptyString(value: unknown): value is string {
  */
 function isNonNegativeNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+/**
+ * 判断值是否为允许持久化的摘要校验子错误码。
+ * @param value - 待判断值
+ * @returns 是否为脱敏子错误码
+ */
+function isValidationError(value: unknown): value is CompactionValidationErrorCode {
+  return typeof value === 'string' && VALIDATION_ERROR_CODES.has(value);
 }
 
 /**
@@ -121,6 +139,12 @@ function hasCheckpointBase(value: Record<string, unknown>): boolean {
  */
 export function validateCheckpoint(value: unknown): CheckpointValidationResult {
   if (!isRecord(value) || !hasCheckpointBase(value)) return { ok: false, errorCode: 'INVALID_CHECKPOINT' };
+  if (
+    value.validationErrorCode !== undefined &&
+    (!isValidationError(value.validationErrorCode) || value.status !== 'failed' || value.errorCode !== 'SCHEMA_INVALID')
+  ) {
+    return { ok: false, errorCode: 'INVALID_CHECKPOINT' };
+  }
   if (value.modelSnapshot !== undefined && !isModelSnapshot(value.modelSnapshot)) {
     return { ok: false, errorCode: 'MODEL_SNAPSHOT_NOT_SANITIZED' };
   }

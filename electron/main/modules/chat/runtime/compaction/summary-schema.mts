@@ -3,10 +3,10 @@
  * @description 结构化上下文摘要 JSON Schema 与跨字段语义校验。
  */
 import type { JSONSchema7 } from 'json-schema';
-import type { StructuredContextSummary } from 'types/chat';
+import type { CompactionValidationErrorCode, StructuredContextSummary } from 'types/chat';
 
 /** 摘要运行时校验错误码。 */
-export type SummaryValidationErrorCode = 'INVALID_SHAPE' | 'INVALID_REFERENCE' | 'INVALID_OBJECTIVE_RELATION';
+export type SummaryValidationErrorCode = CompactionValidationErrorCode;
 
 /** 摘要运行时校验结果。 */
 export type SummaryValidationResult = { ok: true; summary: StructuredContextSummary } | { ok: false; errorCode: SummaryValidationErrorCode };

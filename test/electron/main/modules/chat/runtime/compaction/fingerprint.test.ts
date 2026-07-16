@@ -49,7 +49,7 @@ function createInput(): CompactionFingerprintInput {
     fingerprintVersion: 1,
     summarySchemaVersion: 1,
     projectorVersion: 1,
-    compactionPolicyVersion: 1,
+    compactionPolicyVersion: 2,
     modelSnapshot: createModel(),
     budgetSnapshot: createBudget(),
     parentCheckpointId: 'checkpoint-parent',
@@ -146,6 +146,7 @@ describe('compaction source fingerprint', (): void => {
       sources: [{ messageId: 'message-1', part: { ...part, text: '修改内容' } }]
     });
 
+    expect(first).toMatchObject({ projectorVersion: 2, compactionPolicyVersion: 3 });
     expect(first.sources[0].contentHash).not.toBe(changed.sources[0].contentHash);
     expect(buildSourceFingerprint(first)).not.toBe(buildSourceFingerprint(changed));
   });

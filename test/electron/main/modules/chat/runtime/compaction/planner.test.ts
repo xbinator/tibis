@@ -118,6 +118,88 @@ describe('compaction planner', (): void => {
     expect(createCompactionPlan(input)).toEqual({ status: 'blocked', errorCode: 'NONCOMPRESSIBLE_CONTEXT_TOO_LARGE' });
   });
 
+  it('摘要容量不足时先裁剪当前长任务中较早的工具结果并重新规划', (): void => {
+    const input = createInput('x'.repeat(13_000), 'manual');
+    input.messages.push(
+      createMessage('active-assistant', 'assistant', [
+        {
+          id: 'active-tool-large',
+          type: 'tool',
+          toolCallId: 'active-tool-call-large',
+          toolName: 'read_file',
+          status: 'done',
+          input: { path: 'src/large.ts' },
+          result: {
+            toolName: 'read_file',
+            status: 'success',
+            data: { artifactId: 'artifact-large', path: 'src/large.ts', content: 'x'.repeat(24_000) }
+          }
+        },
+        {
+          id: 'active-tool-latest',
+          type: 'tool',
+          toolCallId: 'active-tool-call-latest',
+          toolName: 'read_file',
+          status: 'done',
+          input: { path: 'src/current.ts' },
+          result: {
+            toolName: 'read_file',
+            status: 'success',
+            data: { path: 'src/current.ts', content: 'export const current = true' }
+          }
+        }
+      ])
+    );
+
+    const result = createCompactionPlan(input);
+
+    expect(result.status).toBe('ready');
+    if (result.status !== 'ready') return;
+    expect(result.plan.activeTurnToolPruneMode).toBe('preserve-latest');
+    expect(result.plan.rawTailMessages.at(-1)?.parts[0]).toMatchObject({
+      id: 'active-tool-large',
+      type: 'tool',
+      result: { data: { artifactId: 'artifact-large', path: 'src/large.ts', pruned: true } }
+    });
+    expect(result.plan.rawTailMessages.at(-1)?.parts[1]).toEqual(input.messages.at(-1)?.parts[1]);
+    expect(result.plan.budgetSnapshot.summaryMaxTokens).toBeGreaterThanOrEqual(1_024);
+  });
+
+  it('最新完整工具结果单独挤占摘要容量时保留 Part 拓扑并裁剪结果正文', (): void => {
+    const input = createInput('x'.repeat(13_000), 'manual');
+    input.messages.push(
+      createMessage('active-assistant', 'assistant', [
+        {
+          id: 'active-tool-only',
+          type: 'tool',
+          toolCallId: 'active-tool-call-only',
+          toolName: 'read_file',
+          status: 'done',
+          input: { path: 'src/only.ts' },
+          result: {
+            toolName: 'read_file',
+            status: 'success',
+            data: { artifactId: 'artifact-only', path: 'src/only.ts', content: 'x'.repeat(24_000) }
+          }
+        }
+      ])
+    );
+
+    const result = createCompactionPlan(input);
+
+    expect(result.status).toBe('ready');
+    if (result.status !== 'ready') return;
+    expect(result.plan.activeTurnToolPruneMode).toBe('all-complete');
+    expect(result.plan.rawTailMessages.at(-1)?.parts).toEqual([
+      expect.objectContaining({
+        id: 'active-tool-only',
+        type: 'tool',
+        toolCallId: 'active-tool-call-only',
+        result: expect.objectContaining({ data: expect.objectContaining({ artifactId: 'artifact-only', path: 'src/only.ts', pruned: true }) })
+      })
+    ]);
+  });
+
   it('摘要请求超窗时先软剪枝旧大型 tool result', (): void => {
     const input = createInput('', 'manual');
     input.messages[0] = createMessage('old-assistant', 'assistant', [

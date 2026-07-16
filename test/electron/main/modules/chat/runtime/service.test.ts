@@ -1625,7 +1625,7 @@ describe('chat runtime service shell', (): void => {
     expect(failed).toMatchObject({ status: 'failed', errorCode: 'MODEL_CALL_FAILED' });
   });
 
-  it('checks compaction again after a complete tool result and appends checkpoint in the same assistant message', async (): Promise<void> => {
+  it('checks compaction after complete tool results, prunes earlier active-turn output, and keeps the checkpoint in the same message', async (): Promise<void> => {
     const messages: ChatMessageRecord[] = [
       {
         id: 'old-assistant',
@@ -1640,20 +1640,42 @@ describe('chat runtime service shell', (): void => {
     const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage, sourceMessages }, updateAssistant) => {
       if (streamExecutor.mock.calls.length === 1) {
         assistantMessage.parts.push({
-          id: 'long-tool-part',
+          id: 'long-tool-part-earlier',
           type: 'tool',
-          toolCallId: 'long-tool-call',
+          toolCallId: 'long-tool-call-earlier',
           toolName: 'read_file',
           status: 'done',
           input: { path: 'src/large.ts' },
-          result: { toolName: 'read_file', status: 'success', data: { path: 'src/large.ts', content: 'y'.repeat(2_000) } }
+          result: {
+            toolName: 'read_file',
+            status: 'success',
+            data: { artifactId: 'artifact-large', path: 'src/large.ts', content: 'y'.repeat(24_000) }
+          }
+        });
+        assistantMessage.parts.push({
+          id: 'long-tool-part-latest',
+          type: 'tool',
+          toolCallId: 'long-tool-call-latest',
+          toolName: 'read_file',
+          status: 'done',
+          input: { path: 'src/current.ts' },
+          result: { toolName: 'read_file', status: 'success', data: { path: 'src/current.ts', content: 'export const current = true' } }
         });
         await updateAssistant(assistantMessage);
         return { shouldContinue: true };
       }
 
       const projectedAssistant = sourceMessages?.find((message) => message.id === assistantMessage.id);
-      expect(projectedAssistant?.parts.map((part: ChatMessagePart): string => part.type)).toEqual(['tool']);
+      expect(projectedAssistant?.parts).toEqual([
+        expect.objectContaining({
+          id: 'long-tool-part-earlier',
+          result: expect.objectContaining({ data: expect.objectContaining({ artifactId: 'artifact-large', path: 'src/large.ts', pruned: true }) })
+        }),
+        expect.objectContaining({
+          id: 'long-tool-part-latest',
+          result: expect.objectContaining({ data: { path: 'src/current.ts', content: 'export const current = true' } })
+        })
+      ]);
       return {};
     });
     const service = createChatRuntimeService({
@@ -1681,8 +1703,9 @@ describe('chat runtime service shell', (): void => {
     });
 
     const assistantMessage = messages.find((message) => message.id === 'assistant-message-tool-round');
-    expect(assistantMessage?.parts.map((part: ChatMessagePart): string => part.type)).toEqual(['tool', 'compaction']);
-    expect(assistantMessage?.parts[1]).toMatchObject({ status: 'success', boundaryPartId: 'old-source-part' });
+    expect(assistantMessage?.parts.map((part: ChatMessagePart): string => part.type)).toEqual(['tool', 'tool', 'compaction']);
+    expect(assistantMessage?.parts[0]).toMatchObject({ result: { data: { content: 'y'.repeat(24_000) } } });
+    expect(assistantMessage?.parts[2]).toMatchObject({ status: 'success', boundaryPartId: 'old-source-part' });
   });
 
   it('keeps the session write lock while automatic summary generation is pending', async (): Promise<void> => {

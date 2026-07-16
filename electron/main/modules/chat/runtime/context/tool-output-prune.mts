@@ -17,6 +17,9 @@ const TOOL_OUTPUT_PRUNE_SUMMARY_LENGTH = 500;
 /** 不参与 tool output prune 的工具。 */
 const TOOL_OUTPUT_PRUNE_PROTECTED_TOOL_NAMES = new Set(['skill', ...USER_CHOICE_TOOL_NAMES]);
 
+/** 当前 Agent 轮次工具结果的高压裁剪级别。 */
+export type ActiveTurnToolPruneMode = 'preserve-latest' | 'all-complete';
+
 /** 剪枝后保留的工具结果字段。 */
 const TOOL_OUTPUT_PRUNE_PRESERVED_DATA_KEYS = [
   'artifactId',
@@ -122,10 +125,11 @@ function createPrunedToolResultData(data: unknown, serializedData: string): Reco
 /**
  * 剪枝单个工具片段。
  * @param part - 工具片段
+ * @param protectedPartIds - 必须保持完整的工具 Part 标识
  * @returns 剪枝后的工具片段，未剪枝时返回原片段
  */
-function pruneToolPartIfNeeded(part: ChatMessageToolPart): ChatMessageToolPart {
-  if (!shouldPruneToolResult(part) || part.result?.status !== 'success') return part;
+function pruneToolPartIfNeeded(part: ChatMessageToolPart, protectedPartIds: ReadonlySet<string>): ChatMessageToolPart {
+  if (protectedPartIds.has(part.id) || !shouldPruneToolResult(part) || part.result?.status !== 'success') return part;
 
   const serializedData = safeStringifyJson(part.result.data);
   return {
@@ -140,20 +144,69 @@ function pruneToolPartIfNeeded(part: ChatMessageToolPart): ChatMessageToolPart {
 /**
  * 剪枝单条消息中的旧 tool output。
  * @param message - 消息
+ * @param protectedPartIds - 必须保持完整的工具 Part 标识
  * @returns 剪枝后的消息，无需更新时返回 undefined
  */
-export function pruneMessageToolOutputs(message: ChatMessageRecord): ChatMessageRecord | undefined {
+export function pruneMessageToolOutputs(message: ChatMessageRecord, protectedPartIds: ReadonlySet<string> = new Set()): ChatMessageRecord | undefined {
   if (message.role !== 'assistant') return undefined;
 
   let changed = false;
   const parts = message.parts.map((part) => {
     if (part.type !== 'tool') return part;
 
-    const nextPart = pruneToolPartIfNeeded(part);
+    const nextPart = pruneToolPartIfNeeded(part, protectedPartIds);
     if (nextPart !== part) changed = true;
     return nextPart;
   });
   if (!changed) return undefined;
 
   return { ...message, parts };
+}
+
+/**
+ * 查找当前用户轮次中最新的完整工具结果。
+ * @param messages - 完整模型投影消息
+ * @param activeUserIndex - 当前用户消息索引
+ * @returns 必须原样保留的最新工具 Part 标识
+ */
+function findLatestToolPartId(messages: ChatMessageRecord[], activeUserIndex: number): string | undefined {
+  for (let messageIndex = messages.length - 1; messageIndex > activeUserIndex; messageIndex -= 1) {
+    const parts = messages[messageIndex].parts;
+    for (let partIndex = parts.length - 1; partIndex >= 0; partIndex -= 1) {
+      const part = parts[partIndex];
+      if (part.type === 'tool' && part.status === 'done' && part.result) return part.id;
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * 在上下文高压时裁剪当前 Agent 轮次中较早的完整大型工具结果。
+ * 当前用户任务和未完成工具始终保持原样；默认尽量保留最新完整工具结果。
+ * @param messages - 原始消息投影
+ * @param mode - 是否尽量保留最新完整工具结果
+ * @returns 不修改输入的高压投影 clone
+ */
+export function pruneActiveTurnToolOutputs(
+  messages: ChatMessageRecord[],
+  mode: ActiveTurnToolPruneMode = 'preserve-latest'
+): ChatMessageRecord[] {
+  let activeUserIndex = -1;
+  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+    if (messages[messageIndex].role !== 'user') continue;
+    activeUserIndex = messageIndex;
+    break;
+  }
+  if (activeUserIndex < 0) return structuredClone(messages);
+
+  const latestToolPartId = mode === 'preserve-latest' ? findLatestToolPartId(messages, activeUserIndex) : undefined;
+  const protectedPartIds = new Set(latestToolPartId ? [latestToolPartId] : []);
+
+  return messages.map((message: ChatMessageRecord, messageIndex: number): ChatMessageRecord => {
+    const clonedMessage = structuredClone(message);
+    if (messageIndex <= activeUserIndex) return clonedMessage;
+
+    return pruneMessageToolOutputs(clonedMessage, protectedPartIds) ?? clonedMessage;
+  });
 }

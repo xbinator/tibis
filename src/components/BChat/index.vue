@@ -401,7 +401,7 @@ function handleChatEdit(nextMessage: Message): void {
  */
 async function handleBranch(message: Message): Promise<void> {
   const sourceSessionId = activeSessionId.value;
-  if (!sourceSessionId || branchingMessageId.value) return;
+  if (!sourceSessionId || loading.value || branchingMessageId.value) return;
 
   branchingMessageId.value = message.id;
   const [error, session] = await asyncTo(chatStore.branchSession(sourceSessionId, message.id));

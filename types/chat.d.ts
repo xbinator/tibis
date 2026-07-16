@@ -268,6 +268,11 @@ export interface StructuredContextSummary {
 }
 
 /**
+ * 结构化摘要运行时校验的脱敏子错误码。
+ */
+export type CompactionValidationErrorCode = 'INVALID_SHAPE' | 'INVALID_REFERENCE' | 'INVALID_OBJECTIVE_RELATION';
+
+/**
  * 聊天消息上下文压缩 checkpoint 片段。
  */
 export interface ChatMessageCompactionPart extends ChatMessagePartBase {
@@ -291,6 +296,8 @@ export interface ChatMessageCompactionPart extends ChatMessagePartBase {
   summary?: StructuredContextSummary;
   /** 失败、取消或跳过时使用的稳定原因码。 */
   errorCode?: string;
+  /** 摘要 schema 失败时保留的脱敏校验子错误码。 */
+  validationErrorCode?: CompactionValidationErrorCode;
   /** checkpoint 创建时间戳。 */
   createdAt: number;
   /** checkpoint 进入终态的时间戳。 */

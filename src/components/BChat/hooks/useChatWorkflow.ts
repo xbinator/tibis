@@ -523,11 +523,10 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
 
   /** 回退消息并同步 Session machine 结果。 */
   async function rollback(message: Message): Promise<void> {
+    if (loading.value) return;
     const index = options.messages.value.findIndex((item: Message): boolean => item.id === message.id);
     if (index === -1) return;
-    const shouldAbortActiveTask = loading.value;
     options.sessionActor.rollback(message.id);
-    if (shouldAbortActiveTask) await abort();
 
     const rolledBackMessages = options.messages.value.slice(index);
     for (const rolledBackMessage of rolledBackMessages) {

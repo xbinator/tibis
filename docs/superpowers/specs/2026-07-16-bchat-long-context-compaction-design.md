@@ -107,12 +107,12 @@ Q = min(Qcap, floor(A × 0.40))
 L = max(0, A - Q)
 ```
 
-- `F` 包含 system、工具 schema、当前用户任务、未完成交互和其他必须原样保留的内容。
+- `F` 包含 system、工具 schema、当前用户消息、未完成交互、预算允许时的当前轮最新完整工具结果和其他必须原样保留的内容。
 - `Q` 是结构化摘要最大输出预算。
 - `L` 是 boundary 后原始 tail 的最大预算。
 - 成功压缩后必须满足 `F + actualSummaryTokens + actualTailTokens <= C`。
 
-如果 `Q < 1024`，先对旧工具结果做仅投影裁剪并重新规划；仍无法满足时，以不可压缩上下文过大结束，不发起必然溢出的模型请求。
+如果 `Q < 1024`，先对旧工具结果做仅投影裁剪并重新规划。单个 Agent 任务跨越大量工具续轮时，先裁剪当前用户轮次中较早、已经完整结束的大型工具结果，并优先保留最新完整工具结果；如果最新结果单独就导致摘要容量不足，则最后裁剪其结果正文，但仍保留整个工具 Part、调用输入、artifact identity 和确定性摘要。当前用户消息与未完成工具始终保持原文。仍无法满足时，以不可压缩上下文过大结束，不发起必然溢出的模型请求。
 
 摘要请求本身还必须满足：
 
@@ -141,7 +141,7 @@ sourceTokens + compactionPromptTokens + Q <= W - S
 
 `boundaryPartId` 必须指向当前 compaction part 之前的 immutable part，并代表被压缩范围内最后一个完整 Part。
 
-当前触发模型请求的用户消息属于不可压缩内容，boundary 必须位于该用户消息之前。特别长的旧工具结果可以在投影层裁剪；如果当前用户消息、system 和工具 schema 本身已经超过硬限制，则停止请求并提示上下文不可压缩，不能擅自摘要或截断当前任务。
+当前触发模型请求的用户消息属于不可压缩内容，boundary 必须位于该用户消息之前。特别长的旧工具结果可以在投影层裁剪；当前 Agent 轮次中较早且已经结束的大型工具结果只在达到压缩阈值后允许裁剪。最新完整工具结果优先保留，只有它单独导致预算或硬限制无法满足时才裁剪结果正文，且不能拆分 Part。如果当前用户消息、system、工具 schema 和未完成交互本身已经超过硬限制，则停止请求并提示上下文不可压缩，不能擅自摘要或截断当前任务。
 
 以下情况不能作为 boundary，也不能开始压缩：
 
@@ -193,6 +193,7 @@ interface ChatMessageCompactionPart {
   budgetSnapshot?: CompactionBudgetSnapshot
   summary?: StructuredContextSummary
   errorCode?: string
+  validationErrorCode?: 'INVALID_SHAPE' | 'INVALID_REFERENCE' | 'INVALID_OBJECTIVE_RELATION'
   createdAt: number
   completedAt?: number
 }
@@ -203,6 +204,7 @@ interface ChatMessageCompactionPart {
 - `boundaryPartId` 不得指向 compaction part 自身或它之后的 Part。
 - `parentCheckpointId` 只引用上一个成功的 compaction part。
 - `summary` 只允许存在于 `success` part。
+- `validationErrorCode` 只允许与 failed 状态的 `SCHEMA_INVALID` 同时存在，且不得包含原始模型输出。
 - `modelSnapshot` 是脱敏快照，禁止包含 API key。
 - `contextWindow` 即使不参与恢复也要保存，用于未来排查模型切换和预算问题。
 - `pending` 可以原子更新为终态；一旦成为 `success` 就不可再修改。
@@ -322,8 +324,8 @@ fingerprint 的输入包含源拓扑、schema、模型和实际预算维度：
 interface CompactionFingerprintInput {
   fingerprintVersion: 1
   summarySchemaVersion: 1
-  projectorVersion: 1
-  compactionPolicyVersion: 1
+  projectorVersion: 2
+  compactionPolicyVersion: 3
   modelSnapshot: CompactionModelSnapshot
   budgetSnapshot: CompactionBudgetSnapshot
   parentCheckpointId?: string
@@ -477,14 +479,14 @@ Artifact ID、objective ID 等业务身份不随 Part ID 重建。
 
 ## UI 设计
 
-Renderer 增加专门的 compaction part 渲染组件，以中性状态行展示：
+Renderer 复用现有 `BubblePartStatus` 渲染 compaction part，以无图标的中性状态行展示：
 
 ```text
-◌ 上下文压缩中…
-✓ 上下文已压缩
-! 上下文压缩失败
-× 上下文压缩已取消
-– 当前上下文无需压缩
+上下文压缩中…
+上下文已压缩
+上下文压缩失败
+上下文压缩已取消
+当前上下文无需压缩
 ```
 
 显示规则：
@@ -503,12 +505,14 @@ Renderer 增加专门的 compaction part 渲染组件，以中性状态行展示
 
 - 用户停止自动压缩：将 part 标记为 `cancelled`，同时停止当前 Agent runtime。
 - 用户停止手动压缩：将 part 标记为 `cancelled`，原上下文不变。
-- 模型调用或 schema 校验失败：标记 `failed`，旧 checkpoint 继续有效。
+- 模型调用失败：标记 `failed`，旧 checkpoint 继续有效。
+- 首次 schema 或语义校验失败：使用相同冻结源和当前模型，根据脱敏子错误码定向重新生成一次完整摘要；不把无效原始输出写入数据库或日志。
+- 修复重试仍未通过：标记 `failed`，保留稳定的 `SCHEMA_INVALID` 和 `INVALID_SHAPE`、`INVALID_REFERENCE` 或 `INVALID_OBJECTIVE_RELATION` 子错误码；UI 不展示错误详情。
 - 应用重启发现遗留 `pending`：标记 `failed`，下次请求重新评估。
 - 成功 part 已完整写入后异常退出：该 checkpoint 可直接恢复。
 - 提交前发现写入租约、boundary 或 fingerprint 不一致：标记 `failed`，错误码为源已变化。
 
-自动失败重试通过已有 compaction parts 判断，不新增状态：
+摘要生成过程中的单次定向修复属于同一次压缩事务，不创建额外 part，也不绕过以下自动失败防循环规则：
 
 - 相同 `sourceFingerprint` 自动失败一次后不再自动重试。
 - 源、schema、模型或预算变化后 fingerprint 改变，可重新尝试。
@@ -524,7 +528,7 @@ Renderer 增加专门的 compaction part 渲染组件，以中性状态行展示
 - `BoundaryPlanner`：拒绝 streaming、executing、confirmation、user choice 和非 immutable Part。
 - `FingerprintBuilder`：确定性、schema/model/budget/source 变化、分支后重算。
 - `PartTopologyValidator`：boundary、parent、evidence、tool 和交互依赖闭包。
-- `ContextProjector`：最新成功 checkpoint、原始 tail、无效状态忽略、仅投影裁剪。
+- `ContextProjector`：最新成功 checkpoint、原始 tail、无效状态忽略、旧工具与当前长 Agent 轮次的仅投影裁剪。
 - `StructuredContextSummary`：目标漂移、owner、artifact 移动和 schema 校验。
 
 ### Runtime 集成测试
@@ -567,18 +571,21 @@ Renderer 增加专门的 compaction part 渲染组件，以中性状态行展示
 记录脱敏诊断信息，但不向用户展示：
 
 ```ts
-interface CompactionLog {
+interface CompactionDiagnosticLog {
   runtimeId: string
   sessionId: string
-  checkpointId: string
+  checkpointId?: string
   trigger: 'automatic' | 'manual'
-  status: ChatMessageCompactionPart['status']
-  sourceFingerprintPrefix: string
-  estimatedInputTokens: number
-  projectedInputTokens?: number
+  status: 'success' | 'skipped' | 'failed' | 'cancelled'
+  fingerprintPrefix?: string
+  estimatedTokens?: number
+  targetTokens?: number
+  projectedTokens?: number
   durationMs: number
-  modelSnapshot?: CompactionModelSnapshot
+  modelSnapshot: CompactionModelSnapshot
   errorCode?: string
+  validationErrorCode?: 'INVALID_SHAPE' | 'INVALID_REFERENCE' | 'INVALID_OBJECTIVE_RELATION'
+  repairAttempted?: boolean
 }
 ```
 

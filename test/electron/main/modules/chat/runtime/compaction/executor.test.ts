@@ -200,6 +200,41 @@ describe('compaction executor', (): void => {
     );
   });
 
+  it('摘要修复失败时持久化脱敏校验子错误码并写入诊断日志', async (): Promise<void> => {
+    const harness = createHarness(
+      async (): Promise<SummaryGenerationResult> => ({
+        status: 'failed',
+        errorCode: 'SCHEMA_INVALID',
+        validationErrorCode: 'INVALID_REFERENCE',
+        repairAttempted: true
+      })
+    );
+    const diagnosticLog = vi.fn();
+    harness.dependencies.diagnosticLog = diagnosticLog;
+
+    const result = await harness.executor.execute(createInput(harness.assistantMessage));
+
+    expect(result).toEqual({
+      status: 'failed',
+      errorCode: 'SCHEMA_INVALID',
+      validationErrorCode: 'INVALID_REFERENCE',
+      repairAttempted: true
+    });
+    expect(harness.assistantMessage.parts.at(-1)).toMatchObject({
+      status: 'failed',
+      errorCode: 'SCHEMA_INVALID',
+      validationErrorCode: 'INVALID_REFERENCE'
+    });
+    expect(diagnosticLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'failed',
+        errorCode: 'SCHEMA_INVALID',
+        validationErrorCode: 'INVALID_REFERENCE',
+        repairAttempted: true
+      })
+    );
+  });
+
   it('提交前实际源发生变化时重新计算 fingerprint 并写 SOURCE_CHANGED', async (): Promise<void> => {
     const harness = createHarness(async (): Promise<SummaryGenerationResult> => {
       const source = harness.messages[0].parts[0];

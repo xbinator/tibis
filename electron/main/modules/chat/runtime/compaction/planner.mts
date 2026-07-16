@@ -3,9 +3,10 @@
  * @description 纯函数规划上下文压缩 boundary、预算、冻结源和 source fingerprint。
  */
 import type { CompactionSourceSnapshot, ImmutableChatPart } from './types.mjs';
+import type { ActiveTurnToolPruneMode } from '../context/tool-output-prune.mjs';
 import type { AITransportTool } from 'types/ai';
 import type { ChatMessageCompactionPart, ChatMessagePart, ChatMessageRecord, CompactionBudgetSnapshot, CompactionModelSnapshot } from 'types/chat';
-import { pruneMessageToolOutputs } from '../context/tool-output-prune.mjs';
+import { pruneActiveTurnToolOutputs, pruneMessageToolOutputs } from '../context/tool-output-prune.mjs';
 import { findSafeBoundary } from './boundary.mjs';
 import { canGenerateSummary, createCompactionBudget, hasSummaryCapacity, shouldAutoCompact } from './budget.mjs';
 import { buildSourceFingerprint, createFingerprintInput } from './fingerprint.mjs';
@@ -60,6 +61,8 @@ export interface CompactionPlan {
   fingerprintSources: ImmutableChatPart[];
   /** boundary 后必须保持原文的消息 tail。 */
   rawTailMessages: ChatMessageRecord[];
+  /** 因摘要容量不足采用的当前 Agent 轮次工具结果裁剪级别。 */
+  activeTurnToolPruneMode?: ActiveTurnToolPruneMode;
   /** 脱敏模型快照。 */
   modelSnapshot: CompactionModelSnapshot;
   /** 完整预算快照。 */
@@ -224,14 +227,14 @@ export function createCompactionPlan(input: CompactionPlanInput): CompactionPlan
   const fingerprintSources = collectSourceParts(input.messages, boundary.partId, parent);
   if (fingerprintSources.length === 0) return { status: 'skipped', reason: 'NO_NEW_CONTENT' };
 
-  const rawTailMessages = createRawTail(input.messages, boundary.messageIndex, boundary.partIndex);
-  const noncompressibleTokens = estimateRequestTokens({
+  let rawTailMessages = createRawTail(input.messages, boundary.messageIndex, boundary.partIndex);
+  let noncompressibleTokens = estimateRequestTokens({
     system: input.system,
     tools: input.tools,
     messages: rawTailMessages,
     skillContentHashes: input.skillContentHashes
   });
-  const budgetSnapshot = createCompactionBudget({
+  let budgetSnapshot = createCompactionBudget({
     contextWindow: input.contextWindow,
     maxOutputTokens: input.maxOutputTokens,
     noncompressibleTokens
@@ -244,6 +247,28 @@ export function createCompactionPlan(input: CompactionPlanInput): CompactionPlan
   });
   if (input.trigger === 'automatic' && !shouldAutoCompact(projection.estimatedTokens, budgetSnapshot)) {
     return { status: 'skipped', reason: 'BELOW_THRESHOLD' };
+  }
+  let activeTurnToolPruneMode: ActiveTurnToolPruneMode | undefined;
+  const activeTurnPruneModes: ActiveTurnToolPruneMode[] = ['preserve-latest', 'all-complete'];
+  for (const pruneMode of activeTurnPruneModes) {
+    if (hasSummaryCapacity(budgetSnapshot)) break;
+    const prunedRawTail = pruneActiveTurnToolOutputs(rawTailMessages, pruneMode);
+    const prunedTokens = estimateRequestTokens({
+      system: input.system,
+      tools: input.tools,
+      messages: prunedRawTail,
+      skillContentHashes: input.skillContentHashes
+    });
+    if (prunedTokens < noncompressibleTokens) {
+      rawTailMessages = prunedRawTail;
+      noncompressibleTokens = prunedTokens;
+      budgetSnapshot = createCompactionBudget({
+        contextWindow: input.contextWindow,
+        maxOutputTokens: input.maxOutputTokens,
+        noncompressibleTokens
+      });
+      activeTurnToolPruneMode = pruneMode;
+    }
   }
   if (!hasSummaryCapacity(budgetSnapshot)) {
     return { status: 'blocked', errorCode: 'NONCOMPRESSIBLE_CONTEXT_TOO_LARGE' };
@@ -308,6 +333,7 @@ export function createCompactionPlan(input: CompactionPlanInput): CompactionPlan
       sourceSnapshot,
       fingerprintSources,
       rawTailMessages,
+      activeTurnToolPruneMode,
       modelSnapshot,
       budgetSnapshot,
       projectedTokens: projection.estimatedTokens,
