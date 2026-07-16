@@ -11,7 +11,9 @@ const mockChatRuntimeAutoName = vi.hoisted(() => vi.fn());
 vi.mock('@/shared/platform/electron-api', () => ({
   getElectronAPI: vi.fn(() => ({
     chatRuntimeAutoName: mockChatRuntimeAutoName
-  }))
+  })),
+  // 单测环境无真实 Electron，logger 走 console 分支，避免 mock 缺失导出导致 asyncTo 抛错。
+  hasElectronAPI: () => false
 }));
 
 /** 固定定时器，便于精确控制防抖 */

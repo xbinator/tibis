@@ -91,7 +91,8 @@ vi.mock('@/shared/logger', () => ({
 }));
 
 vi.mock('@/utils/logger', () => ({
-  default: loggerMock
+  default: loggerMock,
+  logger: loggerMock
 }));
 
 vi.mock('ant-design-vue', async (importOriginal) => {

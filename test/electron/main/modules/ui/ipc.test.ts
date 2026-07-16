@@ -53,6 +53,9 @@ describe('registerUiHandlers', (): void => {
   });
 
   it('normalizes forward-slash paths to platform-native separators before calling shell.trashItem', async (): Promise<void> => {
+    // 该用例验证 Windows 风格路径的正斜杠转换，仅在 Windows 平台有意义。
+    if (process.platform !== 'win32') return;
+
     const handler = mocks.handlers.get('ui:trashFile');
     if (!handler) throw new Error('ui:trashFile handler was not registered');
 

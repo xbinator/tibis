@@ -48,7 +48,14 @@ export async function asyncTo<T>(promise: Promise<T>): Promise<[Error] | [undefi
     return [undefined, await promise];
   } catch (error: unknown) {
     const normalized = normalizeError(error);
-    logger.error(ASYNC_ERROR_LOG_LABEL, normalized);
+    // 日志记录本身不得再次抛出异常（例如 cause 为已吊销的 Proxy 时，
+    // console.error 在格式化 cause 时会调用 getPrototypeOf 而失败），
+    // 否则会覆盖归一化结果，违背本函数“永不 reject”的契约。
+    try {
+      logger.error(ASYNC_ERROR_LOG_LABEL, normalized);
+    } catch {
+      // 忽略日志输出过程中的异常，确保归一化结果始终可返回。
+    }
     return [normalized];
   }
 }

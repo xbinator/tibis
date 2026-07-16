@@ -40,7 +40,9 @@ const loggerMock = vi.hoisted(() => ({
 }));
 
 vi.mock('@/shared/platform/electron-api', () => ({
-  getElectronAPI: () => electronAPIMock
+  getElectronAPI: () => electronAPIMock,
+  // 单测环境无真实 Electron，logger 走 console 分支，避免 mock 缺失导出导致 asyncTo 抛错。
+  hasElectronAPI: () => false
 }));
 
 vi.mock('@/stores/ai/skill', () => ({
