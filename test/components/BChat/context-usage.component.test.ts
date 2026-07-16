@@ -4,9 +4,10 @@
  * @vitest-environment jsdom
  */
 import { defineComponent } from 'vue';
-import { mount } from '@vue/test-utils';
+import { mount, shallowMount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import ContextUsage from '@/components/BChat/components/InputToolbar/ContextUsage.vue';
+import InputToolbar from '@/components/BChat/components/InputToolbar.vue';
 
 /** Tooltip 测试替身，直接暴露 title 便于断言。 */
 const TooltipStub = defineComponent({
@@ -55,5 +56,23 @@ describe('ContextUsage', (): void => {
 
     expect(wrapper.find('.tooltip-stub').attributes('data-title')).toBe('100.0% · 250.0K / 200.0K 上下文已使用');
     expect(wrapper.find('.context-usage__progress').attributes('stroke-dasharray')).toBe('100 100');
+  });
+
+  it('renders in the input toolbar only after usage is available', async (): Promise<void> => {
+    const wrapper = shallowMount(InputToolbar, {
+      props: {
+        loading: false,
+        inputValue: '',
+        selectedModel: { providerId: 'provider-1', modelId: 'model-1' },
+        contextUsedTokens: 0,
+        contextWindow: 1_000_000,
+        supportsVision: false,
+        canSubmit: false
+      }
+    });
+
+    expect(wrapper.findComponent(ContextUsage).exists()).toBe(false);
+    await wrapper.setProps({ contextUsedTokens: 54_700 });
+    expect(wrapper.findComponent(ContextUsage).exists()).toBe(true);
   });
 });

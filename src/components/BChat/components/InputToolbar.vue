@@ -18,7 +18,7 @@
 
       <div class="toolbar-space"></div>
 
-      <ContextUsage v-if="selectedModel" :used-tokens="contextUsedTokens" :context-window="contextWindow" />
+      <ContextUsage v-if="selectedModel && contextUsedTokens" :used-tokens="contextUsedTokens" :context-window="contextWindow" />
 
       <ModelSelector ref="modelSelectorRef" :model="selectedModel" @update:model="handleModelChange" />
     </template>
