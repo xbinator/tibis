@@ -40,8 +40,8 @@ interface UseChatSessionLifecycleReturn extends ReturnType<typeof useChatHistory
   activeSessionId: ComputedRef<string | null>;
   /** BChat 为草稿创建的会话 ID */
   createdSessionId: Ref<string | null>;
-  /** 自动命名使用的会话镜像 */
-  currentSessionForAutoName: Ref<{ id: string; title: string } | undefined>;
+  /** 用于自动命名的会话镜像 */
+  autoNameSession: Ref<{ id: string; title: string } | undefined>;
   /** 确保存在可持久化会话 */
   ensureActiveSession: (title: string) => Promise<string>;
   /** 创建新的草稿会话 */
@@ -62,7 +62,7 @@ interface UseChatSessionLifecycleReturn extends ReturnType<typeof useChatHistory
 export function useChatSessionLifecycle(options: UseChatSessionLifecycleOptions): UseChatSessionLifecycleReturn {
   const chatStore = useChatSessionStore();
   const createdSessionId = ref<string | null>(null);
-  const currentSessionForAutoName = ref<{ id: string; title: string }>();
+  const autoNameSession = ref<{ id: string; title: string }>();
   const activeSessionId = computed<string | null>(() => options.sessionId.value ?? createdSessionId.value);
   const history = useChatHistory();
 
@@ -70,7 +70,7 @@ export function useChatSessionLifecycle(options: UseChatSessionLifecycleOptions)
   async function resetDraftSessionState(): Promise<void> {
     options.disposeConfirmation();
     createdSessionId.value = null;
-    currentSessionForAutoName.value = undefined;
+    autoNameSession.value = undefined;
     history.setLoadedMessages([]);
     history.hasMoreHistory.value = false;
     await nextTick();
@@ -97,7 +97,7 @@ export function useChatSessionLifecycle(options: UseChatSessionLifecycleOptions)
       }
 
       createdSessionId.value = null;
-      currentSessionForAutoName.value = undefined;
+      autoNameSession.value = undefined;
       await loadSessionMessages(nextSessionId);
     },
     { immediate: true }
@@ -111,7 +111,7 @@ export function useChatSessionLifecycle(options: UseChatSessionLifecycleOptions)
 
     const session = await chatStore.createSession('assistant', { title });
     createdSessionId.value = session.id;
-    currentSessionForAutoName.value = session;
+    autoNameSession.value = session;
     options.onSessionCreated(session);
     return session.id;
   }
@@ -131,7 +131,7 @@ export function useChatSessionLifecycle(options: UseChatSessionLifecycleOptions)
   }
 
   const { captureSnapshot, scheduleAutoName } = useAutoName({
-    getCurrentSession: (): { id: string; title: string } | undefined => currentSessionForAutoName.value,
+    getCurrentSession: (): { id: string; title: string } | undefined => autoNameSession.value,
     getFirstRoundContent: (nextMessage: Pick<Message, 'content'>) => {
       if (options.hasPendingUserChoice(history.messages.value)) {
         return null;
@@ -149,7 +149,7 @@ export function useChatSessionLifecycle(options: UseChatSessionLifecycleOptions)
     ...history,
     activeSessionId,
     createdSessionId,
-    currentSessionForAutoName,
+    autoNameSession,
     ensureActiveSession,
     createDraftSession,
     handleLoadHistory,

@@ -197,7 +197,6 @@ const sessionLifecycle = useChatSessionLifecycle({
 });
 const {
   activeSessionId,
-  currentSessionForAutoName,
   setLoadedMessages,
   fetchAllPriorHistory,
   messages,
