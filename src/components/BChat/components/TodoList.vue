@@ -41,9 +41,8 @@ defineProps<TodoListProps>();
 .todo-list__body {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
   max-height: 240px;
-  padding: 6px 0;
   overflow-y: auto;
 }
 
@@ -51,7 +50,6 @@ defineProps<TodoListProps>();
   display: flex;
   gap: 8px;
   align-items: flex-start;
-  padding: 4px 0;
   line-height: 1.5;
 }
 

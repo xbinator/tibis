@@ -8,6 +8,8 @@
       <BIcon :icon="icon" :class="bem('icon', { spin: part.status === 'inputting' })" :size="14" />
       <!-- 工具名称（文件操作时显示路径，其余显示别名） -->
       <BTruncateText :class="bem('name')" :text="title" />
+      <!-- todowrite 任务进度 -->
+      <span v-if="todoWriteTodos" :class="bem('status', { todo: true })">{{ todoWriteCompletedCount }}/{{ todoWriteTodos.length }}</span>
       <!-- 执行失败状态标签 -->
       <span v-if="part.status === 'done' && part.result?.status === 'failure'" :class="bem('status', { failure: true })">失败</span>
     </template>
@@ -270,6 +272,13 @@ const todoWriteTodos = computed<TodoItem[] | null>(() => {
   return input.todos;
 });
 
+/** todowrite 任务中已完成的数量，仅在存在任务快照时返回有效值 */
+const todoWriteCompletedCount = computed<number | null>(() => {
+  const todos = todoWriteTodos.value;
+  if (!todos) return null;
+  return todos.filter((t) => t.status === 'completed').length;
+});
+
 /** 工具执行完成时的人可读摘要，支持成功/失败/取消状态，无匹配时返回 null 降级到代码视图 */
 const summary = computed(() => {
   if (props.part.status !== 'done' || !props.part.result) return null;
@@ -346,6 +355,11 @@ const questionOtherText = computed(() => {
 .bubble-part-tool__status--failure {
   margin-left: 8px;
   color: var(--color-error);
+}
+
+.bubble-part-tool__status--todo {
+  margin-left: 8px;
+  color: var(--text-tertiary);
 }
 
 .bubble-part-tool__result {

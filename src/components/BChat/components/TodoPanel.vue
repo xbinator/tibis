@@ -72,7 +72,6 @@ const currentTask = computed<TodoItem | undefined>(() => props.todos.find((t) =>
 .todo-list {
   display: flex;
   flex-direction: column;
-  padding: 0 12px;
   margin-bottom: 8px;
   overflow: hidden;
   background: var(--bg-tertiary);
@@ -82,6 +81,7 @@ const currentTask = computed<TodoItem | undefined>(() => props.todos.find((t) =>
 
 .todo-panel__list {
   flex-shrink: 0;
+  padding: 0 12px;
 }
 
 .todo-panel__header {

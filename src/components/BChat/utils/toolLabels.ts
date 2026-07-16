@@ -28,7 +28,7 @@ export const TOOL_ACTION_LABELS: Record<string, { alias: string }> = {
   skill: { alias: '调用技能' },
   question: { alias: '提问' },
   ask_user_question: { alias: '提问' },
-  todowrite: { alias: '更新任务列表' },
+  todowrite: { alias: '已完成' },
   create_document: { alias: '创建文档' },
   tavily_search: { alias: '搜索网页' },
   tavily_extract: { alias: '提取网页内容' },
