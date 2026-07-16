@@ -18,7 +18,7 @@ import { aiService, createAIInvokeResult } from '../../../../../electron/main/mo
 /** AI SDK 外部调用边界 mock。 */
 const aiSdkMocks = vi.hoisted(() => ({
   generateText: vi.fn(),
-  isStepCount: vi.fn((count: number): { count: number } => ({ count })),
+  isLoopFinished: vi.fn((): { naturalTermination: boolean } => ({ naturalTermination: true })),
   streamText: vi.fn()
 }));
 
@@ -35,7 +35,7 @@ vi.mock('ai', async (importOriginal: <T = unknown>() => Promise<T>): Promise<Rec
   return {
     ...actual,
     generateText: aiSdkMocks.generateText,
-    isStepCount: aiSdkMocks.isStepCount,
+    isLoopFinished: aiSdkMocks.isLoopFinished,
     streamText: aiSdkMocks.streamText
   };
 });
@@ -142,7 +142,7 @@ describe('AI SDK 7 service integration', (): void => {
     expect(aiSdkMocks.generateText).not.toHaveBeenCalledWith(expect.objectContaining({ system: expect.anything() }));
   });
 
-  it('uses the v7 step-count stop condition for executable tools', async (): Promise<void> => {
+  it('lets executable tools continue until the v7 loop naturally finishes', async (): Promise<void> => {
     aiSdkMocks.generateText.mockResolvedValue({
       text: 'Search result',
       usage: { inputTokens: 4, outputTokens: 3, totalTokens: 7 }
@@ -155,11 +155,11 @@ describe('AI SDK 7 service integration', (): void => {
     });
 
     expect(error).toBeUndefined();
-    expect(aiSdkMocks.isStepCount).toHaveBeenCalledWith(5);
+    expect(aiSdkMocks.isLoopFinished).toHaveBeenCalledOnce();
     expect(aiSdkMocks.generateText).toHaveBeenCalledWith(
       expect.objectContaining({
         prepareStep: expect.any(Function),
-        stopWhen: { count: 5 },
+        stopWhen: { naturalTermination: true },
         timeout: {
           totalMs: 300_000,
           stepMs: 120_000,
@@ -185,7 +185,7 @@ describe('AI SDK 7 service integration', (): void => {
     );
 
     expect(error).toBeUndefined();
-    expect(aiSdkMocks.isStepCount).not.toHaveBeenCalled();
+    expect(aiSdkMocks.isLoopFinished).not.toHaveBeenCalled();
     expect(aiSdkMocks.streamText).toHaveBeenCalledWith(
       expect.objectContaining({
         toolChoice: 'none',

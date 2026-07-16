@@ -4,13 +4,13 @@
  */
 import type { FlexibleSchema, ToolExecutionOptions, ToolSet } from 'ai';
 import type { AICreateOptions, AIRequestOptions, AIInvokeResult, AIStreamResult, AIServiceError, AIUsage, MCPDiscoveredToolSnapshot } from 'types/ai';
-import { generateText, isStepCount, jsonSchema, Output, streamText, tool } from 'ai';
+import { generateText, isLoopFinished, jsonSchema, Output, streamText, tool } from 'ai';
 import { log } from '../logger/service.mjs';
 import { connectMcpServer, executeMcpTool, getMcpDiscoveryCache } from '../mcp/session.mjs';
 import { createMcpSdkTools, resolveMcpExposedTools } from '../mcp/tools.mjs';
 import { AI_ERROR_CODE } from './errors/codes.mjs';
 import { AIProviderRegistry } from './providers/_index.mjs';
-import { createRequestTimeout, prepareToolStep, TOOL_LOOP_MAX_STEPS } from './tool-loop-policy.mjs';
+import { createRequestTimeout, prepareToolStep } from './tool-loop-policy.mjs';
 import { normalizeAIUsage } from './usage.mjs';
 
 // ─── 纯工具函数 ──────────────────────────────────────────────────────────────
@@ -678,7 +678,7 @@ class AIService {
       timeout: createRequestTimeout(callOptions.totalTimeoutMs),
       // 压缩边界的 system 消息由 Tibis 内部生成并持久化，保留其原始消息位置以维持上下文语义。
       ...(request.messages ? { allowSystemInMessages: true } : {}),
-      ...(hasExecutableTools && !callOptions.runtimeToolLoop ? { prepareStep: prepareToolStep, stopWhen: isStepCount(TOOL_LOOP_MAX_STEPS) } : {}),
+      ...(hasExecutableTools && !callOptions.runtimeToolLoop ? { prepareStep: prepareToolStep, stopWhen: isLoopFinished() } : {}),
       ...(callOptions.forceFinal ? { toolChoice: 'none' as const } : {})
     };
   }

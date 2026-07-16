@@ -1015,10 +1015,20 @@ describe('chat runtime service shell', (): void => {
     );
   });
 
-  it('uses the fifth model step for a forced final answer at the runtime limit', async (): Promise<void> => {
+  it('continues beyond five distinct tool steps until the model naturally stops', async (): Promise<void> => {
     const updatedMessages: ChatMessageRecord[] = [];
-    const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage, runtime }, updateAssistant) => {
+    const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage, runtime, forceFinal }, updateAssistant) => {
       const callNumber = streamExecutor.mock.calls.length;
+
+      if (callNumber > 6) {
+        assistantMessage.content = 'natural final answer';
+        assistantMessage.parts.push({ id: 'part-natural-final', type: 'text', text: 'natural final answer' });
+        assistantMessage.loading = false;
+        assistantMessage.finished = true;
+        await updateAssistant(assistantMessage);
+        return {};
+      }
+
       assistantMessage.parts = [
         {
           id: `part-limit-${callNumber}`,
@@ -1037,6 +1047,7 @@ describe('chat runtime service shell', (): void => {
       if (part.type === 'tool') {
         runtime.currentToolStep = { toolCalls: [{ toolName: part.toolName, input: part.input }] };
       }
+      expect(forceFinal).toBe(false);
       await updateAssistant(assistantMessage);
       return { shouldContinue: true };
     });
@@ -1057,10 +1068,10 @@ describe('chat runtime service shell', (): void => {
     await service.send(createInput({ content: 'inspect file' }));
     await flushRuntimeTasks();
 
-    expect(streamExecutor).toHaveBeenCalledTimes(5);
-    expect(streamExecutor.mock.calls.slice(0, 4).every(([input]) => input.forceFinal === false)).toBe(true);
-    expect(streamExecutor.mock.calls[4]?.[0]).toMatchObject({ forceFinal: true });
+    expect(streamExecutor).toHaveBeenCalledTimes(7);
+    expect(streamExecutor.mock.calls.every(([input]) => input.forceFinal === false)).toBe(true);
     expect(updatedMessages.at(-1)).toMatchObject({
+      content: 'natural final answer',
       loading: false,
       finished: true
     });

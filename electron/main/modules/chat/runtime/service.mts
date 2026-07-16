@@ -680,7 +680,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
         continue;
       }
 
-      const stopReason = getLoopStopReason(toolSteps, completedSteps);
+      const stopReason = getLoopStopReason(toolSteps);
       forceFinal = stopReason !== undefined;
       if (stopReason) logLoopFinalizing(runtime, stopReason, completedSteps);
 
