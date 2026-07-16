@@ -3,25 +3,18 @@
   @description 可复用的待办任务列表，统一展示任务进度、状态与优先级。
 -->
 <template>
-  <section class="todo-list">
-    <div class="todo-list__header">
-      <span class="todo-list__title">任务列表</span>
-      <span class="todo-list__progress">{{ completedCount }}/{{ todos.length }}</span>
+  <div class="todo-list__body">
+    <div v-for="(todo, index) in todos" :key="index" class="todo-list__item" :class="'todo-list__item--' + todo.status">
+      <span class="todo-list__status-icon">
+        <BIcon v-if="todo.status === 'completed'" icon="lucide:check-circle-2" :size="14" />
+        <BIcon v-else-if="todo.status === 'in_progress'" icon="lucide:circle-dot" :size="14" />
+        <BIcon v-else-if="todo.status === 'cancelled'" icon="lucide:x-circle" :size="14" />
+        <BIcon v-else icon="lucide:circle" :size="14" />
+      </span>
+      <span class="todo-list__priority" :class="'todo-list__priority--' + todo.priority"></span>
+      <span class="todo-list__content">{{ todo.content }}</span>
     </div>
-
-    <div class="todo-list__body">
-      <div v-for="(todo, index) in todos" :key="index" class="todo-list__item" :class="'todo-list__item--' + todo.status">
-        <span class="todo-list__status-icon">
-          <BIcon v-if="todo.status === 'completed'" icon="lucide:check-circle-2" :size="14" />
-          <BIcon v-else-if="todo.status === 'in_progress'" icon="lucide:circle-dot" :size="14" />
-          <BIcon v-else-if="todo.status === 'cancelled'" icon="lucide:x-circle" :size="14" />
-          <BIcon v-else icon="lucide:circle" :size="14" />
-        </span>
-        <span class="todo-list__priority" :class="'todo-list__priority--' + todo.priority"></span>
-        <span class="todo-list__content">{{ todo.content }}</span>
-      </div>
-    </div>
-  </section>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -29,7 +22,6 @@
  * @file TodoList.vue
  * @description 可复用的待办任务列表，统一展示任务进度、状态与优先级。
  */
-import { computed } from 'vue';
 import type { TodoItem } from '@/stores/chat/todo';
 
 defineOptions({ name: 'TodoList' });
@@ -42,42 +34,10 @@ interface TodoListProps {
   todos: TodoItem[];
 }
 
-const props = defineProps<TodoListProps>();
-
-/** 已完成任务数量。 */
-const completedCount = computed<number>(() => props.todos.filter((todo) => todo.status === 'completed').length);
+defineProps<TodoListProps>();
 </script>
 
 <style scoped lang="less">
-.todo-list {
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-secondary);
-  border-radius: 6px;
-}
-
-.todo-list__header {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border-secondary);
-}
-
-.todo-list__title {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  letter-spacing: 0.05em;
-}
-
-.todo-list__progress {
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-
 .todo-list__body {
   display: flex;
   flex-direction: column;
@@ -91,7 +51,7 @@ const completedCount = computed<number>(() => props.todos.filter((todo) => todo.
   display: flex;
   gap: 8px;
   align-items: flex-start;
-  padding: 4px 12px;
+  padding: 4px 0;
   line-height: 1.5;
 }
 

@@ -4,7 +4,14 @@
 -->
 <template>
   <div v-if="todos.length" class="todo-panel">
-    <TodoList v-if="visible && todos.length" :todos="todos" class="todo-panel__list" />
+    <section v-if="visible" class="todo-list">
+      <div class="todo-panel__header">
+        <span class="todo-panel__title">任务列表</span>
+        <span class="todo-panel__progress">{{ completedCount }}/{{ todos.length }}</span>
+      </div>
+
+      <TodoList :todos="todos" class="todo-panel__list" />
+    </section>
 
     <div class="todo-panel__footer">
       <BButton type="text" size="small" class="todo-panel__toggle" @click="emit('update:visible', !visible)">
@@ -62,9 +69,40 @@ const currentTask = computed<TodoItem | undefined>(() => props.todos.find((t) =>
   margin: 0 auto;
 }
 
+.todo-list {
+  display: flex;
+  flex-direction: column;
+  padding: 0 12px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 6px;
+}
+
 .todo-panel__list {
   flex-shrink: 0;
-  margin-bottom: 8px;
+}
+
+.todo-panel__header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-secondary);
+}
+
+.todo-panel__title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  letter-spacing: 0.05em;
+}
+
+.todo-panel__progress {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-tertiary);
 }
 
 .todo-panel__footer {

@@ -12,11 +12,9 @@
       <span v-if="part.status === 'done' && part.result?.status === 'failure'" :class="bem('status', { failure: true })">失败</span>
     </template>
 
-    <!-- todowrite 成功结果：复用任务面板的列表样式展示本次写入快照 -->
-    <template v-if="todoWriteTodos">
-      <TodoList v-if="todoWriteTodos.length" :todos="todoWriteTodos" />
-      <div v-else :class="bem('todo-empty')">已清空任务列表</div>
-    </template>
+    <!-- todowrite 成功结果使用单层任务卡片，避免通用工具气泡和任务面板重复嵌套 -->
+    <TodoList v-if="todoWriteTodos" :todos="todoWriteTodos" variant="tool" />
+
     <!-- 提问工具结果：以问答形式展示用户选择 -->
     <template v-else-if="isQuestionResult">
       <div :class="bem('result')">
@@ -353,15 +351,6 @@ const questionOtherText = computed(() => {
 .bubble-part-tool__result {
   font-size: 12px;
   line-height: 1.6;
-}
-
-.bubble-part-tool__todo-empty {
-  padding: 8px 12px;
-  color: var(--text-tertiary);
-  text-align: center;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-secondary);
-  border-radius: 6px;
 }
 
 .bubble-part-tool__result-item + .bubble-part-tool__result-item {

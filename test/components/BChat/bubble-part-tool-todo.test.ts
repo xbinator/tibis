@@ -46,12 +46,12 @@ function createTodoPart(todos: TodoItem[]): ChatMessageToolPart {
 }
 
 /**
- * 挂载并展开工具气泡。
+ * 挂载 todowrite 工具结果。
  * @param part - 工具消息片段
- * @returns 展开后的组件包装器
+ * @returns 组件包装器
  */
-async function mountExpanded(part: ChatMessageToolPart): Promise<VueWrapper> {
-  const wrapper = mount(BubblePartTool, {
+function mountTodoTool(part: ChatMessageToolPart): VueWrapper {
+  return mount(BubblePartTool, {
     props: { part },
     global: {
       stubs: {
@@ -66,14 +66,11 @@ async function mountExpanded(part: ChatMessageToolPart): Promise<VueWrapper> {
       }
     }
   });
-
-  await wrapper.find('.message-bubble-part__title').trigger('click');
-  return wrapper;
 }
 
 describe('BubblePartTool todowrite result', (): void => {
-  it('shows the full task snapshot with TodoPanel status and priority styling', async (): Promise<void> => {
-    const wrapper = await mountExpanded(
+  it('shows a flat task card with progress and status icons', (): void => {
+    const wrapper = mountTodoTool(
       createTodoPart([
         { content: '分析现有实现', status: 'completed', priority: 'high' },
         { content: '更新任务列表样式', status: 'in_progress', priority: 'medium' },
@@ -81,19 +78,20 @@ describe('BubblePartTool todowrite result', (): void => {
       ])
     );
 
-    expect(wrapper.find('.todo-list__progress').text()).toBe('1/3');
+    expect(wrapper.find('.todo-list__summary').text()).toBe('1/3 已完成');
     expect(wrapper.findAll('.todo-list__item')).toHaveLength(3);
     expect(wrapper.find('.todo-list__item--completed [data-icon="lucide:check-circle-2"]').exists()).toBe(true);
     expect(wrapper.find('.todo-list__item--in_progress [data-icon="lucide:circle-dot"]').exists()).toBe(true);
-    expect(wrapper.find('.todo-list__priority--low').exists()).toBe(true);
+    expect(wrapper.find('.todo-list__priority').exists()).toBe(false);
+    expect(wrapper.find('.message-bubble-part').exists()).toBe(false);
     expect(wrapper.text()).toContain('更新任务列表样式');
     expect(wrapper.text()).not.toContain('已更新 3 项任务');
   });
 
-  it('shows a readable empty state after clearing the task list', async (): Promise<void> => {
-    const wrapper = await mountExpanded(createTodoPart([]));
+  it('shows a readable empty state after clearing the task list', (): void => {
+    const wrapper = mountTodoTool(createTodoPart([]));
 
-    expect(wrapper.find('.bubble-part-tool__todo-empty').text()).toBe('已清空任务列表');
-    expect(wrapper.find('.todo-list').exists()).toBe(false);
+    expect(wrapper.find('.todo-list__summary').text()).toBe('0/0 已完成');
+    expect(wrapper.find('.todo-list__empty').text()).toBe('已清空任务列表');
   });
 });
