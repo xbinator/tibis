@@ -3,8 +3,8 @@
  * @description AI 主进程服务返回值封装测试。
  */
 import type { AIProvider } from '../../../../../electron/main/modules/ai/types.mjs';
-import type { AIInvokeResult } from 'types/ai';
-import { describe, expect, it } from 'vitest';
+import type { AICreateOptions, AIInvokeResult } from 'types/ai';
+import { describe, expect, it, vi } from 'vitest';
 import { AlibabaProvider } from '../../../../../electron/main/modules/ai/providers/alibaba.mjs';
 import { DeepSeekProvider } from '../../../../../electron/main/modules/ai/providers/deepseek.mjs';
 import { GLMProvider } from '../../../../../electron/main/modules/ai/providers/glm.mjs';
@@ -12,7 +12,18 @@ import { MiMoProvider } from '../../../../../electron/main/modules/ai/providers/
 import { MiniMaxProvider } from '../../../../../electron/main/modules/ai/providers/minimax.mjs';
 import { MoonshotProvider } from '../../../../../electron/main/modules/ai/providers/moonshot.mjs';
 import { VolcengineProvider } from '../../../../../electron/main/modules/ai/providers/volcengine.mjs';
-import { createAIInvokeResult } from '../../../../../electron/main/modules/ai/service.mjs';
+import { aiService, createAIInvokeResult } from '../../../../../electron/main/modules/ai/service.mjs';
+import { log } from '../../../../../electron/main/modules/logger/service.mjs';
+
+const { generateTextMock } = vi.hoisted(() => ({ generateTextMock: vi.fn() }));
+
+vi.mock('ai', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('ai')>();
+  return { ...actual, generateText: generateTextMock };
+});
+
+log.transports.file.level = false;
+log.transports.console.level = false;
 
 /** AI 文本生成结果夹具类型。 */
 type GenerateTextResultFixture = Parameters<typeof createAIInvokeResult>[0];
@@ -79,6 +90,37 @@ describe('createAIInvokeResult', (): void => {
         totalTokens: 3
       }
     });
+  });
+});
+
+describe('AIService.generateText abort', (): void => {
+  it('registers requestId abort signal and cancels synchronous generation', async (): Promise<void> => {
+    const createOptions: AICreateOptions = {
+      providerType: 'openai',
+      providerId: 'provider-1',
+      providerName: 'OpenAI'
+    };
+    vi.spyOn(aiService.aiProvider, 'create').mockReturnValue({} as ReturnType<typeof aiService.aiProvider.create>);
+    generateTextMock.mockImplementationOnce(
+      (options: { abortSignal?: AbortSignal }): Promise<never> =>
+        new Promise((_resolve, reject): void => {
+          options.abortSignal?.addEventListener('abort', (): void => reject(new Error('aborted')), { once: true });
+        })
+    );
+
+    const invocation = aiService.generateText(createOptions, {
+      requestId: 'summary-runtime-1',
+      modelId: 'model-1',
+      prompt: 'compress'
+    });
+    await vi.waitFor((): void => {
+      expect(generateTextMock).toHaveBeenCalledTimes(1);
+    });
+    aiService.abortStream('summary-runtime-1');
+    const [error] = await invocation;
+
+    expect(error).toBeDefined();
+    expect(generateTextMock.mock.calls[0][0].abortSignal).toBeInstanceOf(AbortSignal);
   });
 });
 

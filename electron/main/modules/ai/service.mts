@@ -615,6 +615,7 @@ class AIService {
 
       const baseOptions = {
         ...(await this.buildBaseOptions(createOptions, request)),
+        abortSignal: this.registerAbortSignal(request.requestId),
         output: toOutput(request.output)
       };
 
@@ -627,6 +628,8 @@ class AIService {
       return [undefined, createAIInvokeResult(result, Boolean(request.output))];
     } catch (error) {
       return this.handleError('generateText', error, createOptions.providerType);
+    } finally {
+      if (request.requestId) this.removeController(request.requestId);
     }
   }
 
