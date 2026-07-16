@@ -2,6 +2,7 @@
  * @file types.mts
  * @description ChatRuntime 主进程内部类型。
  */
+import type { ArtifactRegistry } from './compaction/artifact-registry.mjs';
 import type { RuntimeFilePartMaterializer } from './messages/file-parts.mjs';
 import type {
   AICreateOptions,
@@ -53,6 +54,8 @@ export interface ActiveChatRuntime {
   mcp?: AIMCPRequestConfig;
   /** 当前生命周期状态。 */
   status: ChatRuntimeStatus;
+  /** 当前 Runtime 根据 checkpoint 与文件工具结果维护的 artifact 身份映射。 */
+  artifactRegistry?: ArtifactRegistry;
   /** 当前执行阶段。 */
   phase: ChatRuntimePhase;
   /** 后续模型流和工具执行共用的中止控制器。 */

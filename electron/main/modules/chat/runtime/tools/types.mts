@@ -111,6 +111,8 @@ export interface RuntimeWebpageOperateResult {
 
 /** Runtime 文件内容快照。 */
 export interface RuntimeFileContentSnapshot {
+  /** Tibis 文档系统提供的稳定 artifact ID。 */
+  artifactId?: string;
   /** 原始请求路径。 */
   path: string;
   /** 文件内容。 */

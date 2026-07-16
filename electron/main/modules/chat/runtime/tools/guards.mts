@@ -112,7 +112,12 @@ export function isRuntimeWebpageOperateResult(value: unknown): value is RuntimeW
  * @returns 是否为文件内容快照
  */
 export function isRuntimeFileContentSnapshot(value: unknown): value is RuntimeFileContentSnapshot {
-  return isRecord(value) && typeof value.path === 'string' && typeof value.content === 'string';
+  return (
+    isRecord(value) &&
+    (value.artifactId === undefined || typeof value.artifactId === 'string') &&
+    typeof value.path === 'string' &&
+    typeof value.content === 'string'
+  );
 }
 
 /**

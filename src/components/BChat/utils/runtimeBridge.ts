@@ -89,6 +89,8 @@ export interface BChatRuntimeDocumentSnapshot {
 
 /** 文件内容 bridge 快照。 */
 export interface BChatRuntimeFileContentSnapshot {
+  /** Tibis 文档系统中的稳定 artifact ID。 */
+  artifactId?: string;
   /** 原始请求路径。 */
   path: string;
   /** 文件内容。 */
@@ -295,6 +297,7 @@ async function readFileContentSnapshot(
     }
 
     return {
+      artifactId: file.id,
       path: filePath,
       content: file.content
     };
@@ -312,6 +315,7 @@ async function readFileContentSnapshot(
   }
 
   return {
+    artifactId: context.document.id,
     path: filePath,
     content: context.document.getContent()
   };
@@ -340,7 +344,7 @@ async function writeFileContent(event: ChatRuntimeBridgeRequestEvent, dependenci
     const activeContext = dependencies.getEditorContext();
     if (activeContext?.document.locator === filePath || activeContext?.document.path === filePath || activeContext?.document.id === unsavedReference.fileId) {
       await activeContext.editor.replaceDocument(content);
-      return { path: filePath, content };
+      return { artifactId: activeContext.document.id, path: filePath, content };
     }
 
     if (!dependencies.updateRecentFileById) {
@@ -348,7 +352,7 @@ async function writeFileContent(event: ChatRuntimeBridgeRequestEvent, dependenci
     }
 
     await dependencies.updateRecentFileById(unsavedReference.fileId, { content, modifiedAt: Date.now() });
-    return { path: filePath, content };
+    return { artifactId: unsavedReference.fileId, path: filePath, content };
   }
 
   const workspaceRoot = typeof payload.workspaceRoot === 'string' ? payload.workspaceRoot : null;
@@ -364,7 +368,7 @@ async function writeFileContent(event: ChatRuntimeBridgeRequestEvent, dependenci
   }
 
   await context.editor.replaceDocument(content);
-  return { path: filePath, content };
+  return { artifactId: context.document.id, path: filePath, content };
 }
 
 /** Settings bridge handlers. */

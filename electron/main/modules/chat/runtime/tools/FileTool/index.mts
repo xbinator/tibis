@@ -20,6 +20,7 @@ import type {
 import type { AIToolExecutionResult } from 'types/ai';
 import { writeFile as writeFileAtomically } from 'atomically';
 import { readWorkspaceDirectory, readWorkspaceFile } from '../../../../workspace/read.mjs';
+import { createArtifactRegistry, type ArtifactObservation, type ArtifactRegistry } from '../../compaction/artifact-registry.mjs';
 import {
   CREATE_DOCUMENT_TOOL_NAME,
   DEFAULT_READ_FILE_OFFSET,
@@ -49,6 +50,26 @@ import { createBridgeFailureResult, createMainToolCancelledResult, createMainToo
 
 /** 真实文件写入队列，覆盖确认后的重新验证与原子写入阶段。 */
 const runtimeFileWriteQueues = new Map<string, Promise<void>>();
+
+/**
+ * 读取或延迟创建当前 Runtime 的 artifact registry。
+ * @param input - 主进程工具执行输入
+ * @returns Runtime artifact registry
+ */
+function getArtifactRegistry(input: ChatRuntimeMainToolExecutionInput): ArtifactRegistry {
+  if (!input.runtime.artifactRegistry) input.runtime.artifactRegistry = createArtifactRegistry();
+  return input.runtime.artifactRegistry;
+}
+
+/**
+ * 记录文件工具产生的 artifact 观察。
+ * @param input - 主进程工具执行输入
+ * @param observation - 文件路径与操作
+ * @returns 稳定 artifact ID
+ */
+function observeRuntimeArtifact(input: ChatRuntimeMainToolExecutionInput, observation: ArtifactObservation): string {
+  return getArtifactRegistry(input).observe(observation);
+}
 
 /** 真实磁盘写入目标。 */
 type RuntimeFileWriteTarget = Extract<RuntimeWriteTarget, { type: 'file' }>;
@@ -237,13 +258,14 @@ function normalizeRuntimeEditFileInput(input: unknown): RuntimeEditFileInput | A
  * @param limit - 读取行数
  * @returns read_file 工具结果数据
  */
-function createRuntimeReadFileData(filePath: string, fullContent: string, offset: number, limit?: number): Record<string, unknown> {
+function createRuntimeReadFileData(filePath: string, fullContent: string, offset: number, artifactId: string, limit?: number): Record<string, unknown> {
   const lines = fullContent.split('\n');
   const startLine = Math.max(0, offset - 1);
   const endLine = limit === undefined ? lines.length : Math.min(startLine + limit, lines.length);
   const hasMore = endLine < lines.length;
 
   return {
+    artifactId,
     path: filePath,
     content: lines.slice(startLine, endLine).join('\n'),
     totalLines: lines.length,
@@ -515,9 +537,14 @@ async function executeReadFileTool(input: ChatRuntimeMainToolExecutionInput, dep
     if (!isRuntimeFileContentSnapshot(bridgeResult.data)) {
       return createMainToolFailureResult(input.toolName, 'INVALID_INPUT', '文件内容快照格式无效');
     }
+    const artifactId = observeRuntimeArtifact(input, {
+      artifactId: bridgeResult.data.artifactId,
+      path: bridgeResult.data.path,
+      operation: 'read'
+    });
     return createMainToolSuccessResult(
       READ_FILE_TOOL_NAME,
-      createRuntimeReadFileData(bridgeResult.data.path, bridgeResult.data.content, normalizedInput.offset, normalizedInput.limit)
+      createRuntimeReadFileData(bridgeResult.data.path, bridgeResult.data.content, normalizedInput.offset, artifactId, normalizedInput.limit)
     );
   }
   if (bridgeResult.error.code !== 'EDITOR_UNAVAILABLE') return createBridgeFailureResult(input.toolName, bridgeResult.error);
@@ -549,7 +576,8 @@ async function executeReadFileTool(input: ChatRuntimeMainToolExecutionInput, dep
       offset: normalizedInput.offset,
       ...(normalizedInput.limit !== undefined ? { limit: normalizedInput.limit } : {})
     });
-    return createMainToolSuccessResult(READ_FILE_TOOL_NAME, data);
+    const artifactId = observeRuntimeArtifact(input, { path: data.path, operation: 'read' });
+    return createMainToolSuccessResult(READ_FILE_TOOL_NAME, { ...data, artifactId });
   } catch (error) {
     const message = error instanceof Error ? error.message : '读取文件失败';
     return createMainToolFailureResult(input.toolName, 'EXECUTION_FAILED', message);
@@ -759,7 +787,14 @@ async function executeCreateDocumentTool(input: ChatRuntimeMainToolExecutionInpu
   if (bridgeResult.status === 'failure') return createBridgeFailureResult(input.toolName, bridgeResult.error);
   if (!isRuntimeOpenDraftResult(bridgeResult.data)) return createMainToolFailureResult(input.toolName, 'INVALID_INPUT', '草稿创建结果格式无效');
 
+  const artifactId = observeRuntimeArtifact(input, {
+    artifactId: bridgeResult.data.file.id,
+    path: bridgeResult.data.unsavedPath,
+    operation: 'created'
+  });
+
   return createMainToolSuccessResult(CREATE_DOCUMENT_TOOL_NAME, {
+    artifactId,
     id: bridgeResult.data.file.id,
     title: bridgeResult.data.file.name,
     path: bridgeResult.data.unsavedPath,
@@ -812,7 +847,17 @@ async function executeWriteFileTool(input: ChatRuntimeMainToolExecutionInput, de
     });
     if (bridgeResult.status === 'failure') return createBridgeFailureResult(input.toolName, bridgeResult.error);
     if (!isRuntimeOpenDraftResult(bridgeResult.data)) return createMainToolFailureResult(input.toolName, 'INVALID_INPUT', '草稿创建结果格式无效');
-    return createMainToolSuccessResult(WRITE_FILE_TOOL_NAME, { path: bridgeResult.data.unsavedPath, content: normalizedInput.content, created: true });
+    const artifactId = observeRuntimeArtifact(input, {
+      artifactId: bridgeResult.data.file.id,
+      path: bridgeResult.data.unsavedPath,
+      operation: 'created'
+    });
+    return createMainToolSuccessResult(WRITE_FILE_TOOL_NAME, {
+      artifactId,
+      path: bridgeResult.data.unsavedPath,
+      content: normalizedInput.content,
+      created: true
+    });
   }
 
   if (target.type === 'unsaved') {
@@ -847,7 +892,17 @@ async function executeWriteFileTool(input: ChatRuntimeMainToolExecutionInput, de
       payload: { path: target.filePath, content: normalizedInput.content }
     });
     if (bridgeResult.status === 'failure') return createBridgeFailureResult(input.toolName, bridgeResult.error);
-    return createMainToolSuccessResult(WRITE_FILE_TOOL_NAME, { path: target.filePath, content: normalizedInput.content, created: false });
+    const artifactId = observeRuntimeArtifact(input, {
+      artifactId: snapshotResult.data.artifactId,
+      path: target.filePath,
+      operation: 'modified'
+    });
+    return createMainToolSuccessResult(WRITE_FILE_TOOL_NAME, {
+      artifactId,
+      path: target.filePath,
+      content: normalizedInput.content,
+      created: false
+    });
   }
 
   let existingFile: { exists: boolean; content: string };
@@ -888,7 +943,14 @@ async function executeWriteFileTool(input: ChatRuntimeMainToolExecutionInput, de
       }
 
       await writeRuntimeFile(writePath, normalizedInput.content);
-      return createMainToolSuccessResult(WRITE_FILE_TOOL_NAME, { path: target.filePath, content: normalizedInput.content, created: !existingFile.exists });
+      const operation = existingFile.exists ? 'modified' : 'created';
+      const artifactId = observeRuntimeArtifact(input, { path: target.filePath, operation });
+      return createMainToolSuccessResult(WRITE_FILE_TOOL_NAME, {
+        artifactId,
+        path: target.filePath,
+        content: normalizedInput.content,
+        created: !existingFile.exists
+      });
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : '写入文件失败';
@@ -928,6 +990,7 @@ async function executeEditFileTool(input: ChatRuntimeMainToolExecutionInput, dep
 
   let currentPath = target.filePath;
   let currentContent = '';
+  let currentArtifactId: string | undefined;
   if (target.type === 'unsaved') {
     const snapshotResult = await deps.requestBridge({
       runtimeId: input.runtime.runtimeId,
@@ -939,6 +1002,7 @@ async function executeEditFileTool(input: ChatRuntimeMainToolExecutionInput, dep
     if (!isRuntimeFileContentSnapshot(snapshotResult.data)) return createMainToolFailureResult(input.toolName, 'INVALID_INPUT', '文件内容快照格式无效');
     currentPath = snapshotResult.data.path;
     currentContent = snapshotResult.data.content;
+    currentArtifactId = snapshotResult.data.artifactId;
   } else {
     const writePath = target.writePath ?? target.filePath;
     try {
@@ -984,7 +1048,17 @@ async function executeEditFileTool(input: ChatRuntimeMainToolExecutionInput, dep
       payload: { path: target.filePath, content: nextFile.content }
     });
     if (bridgeResult.status === 'failure') return createBridgeFailureResult(input.toolName, bridgeResult.error);
-    return createMainToolSuccessResult(EDIT_FILE_TOOL_NAME, { path: currentPath, content: nextFile.content, replacedCount: nextFile.replacedCount });
+    const artifactId = observeRuntimeArtifact(input, {
+      artifactId: currentArtifactId,
+      path: currentPath,
+      operation: 'modified'
+    });
+    return createMainToolSuccessResult(EDIT_FILE_TOOL_NAME, {
+      artifactId,
+      path: currentPath,
+      content: nextFile.content,
+      replacedCount: nextFile.replacedCount
+    });
   }
 
   try {
@@ -1000,7 +1074,13 @@ async function executeEditFileTool(input: ChatRuntimeMainToolExecutionInput, dep
       }
 
       await writeRuntimeFile(writePath, nextFile.content);
-      return createMainToolSuccessResult(EDIT_FILE_TOOL_NAME, { path: currentPath, content: nextFile.content, replacedCount: nextFile.replacedCount });
+      const artifactId = observeRuntimeArtifact(input, { path: currentPath, operation: 'modified' });
+      return createMainToolSuccessResult(EDIT_FILE_TOOL_NAME, {
+        artifactId,
+        path: currentPath,
+        content: nextFile.content,
+        replacedCount: nextFile.replacedCount
+      });
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : '修改文件失败';

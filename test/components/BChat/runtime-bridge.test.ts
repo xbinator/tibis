@@ -232,6 +232,7 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
     );
 
     expect(result).toEqual({
+      artifactId: 'doc-1',
       path: 'src/index.ts',
       content: 'hello document'
     });
@@ -266,6 +267,7 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
     );
 
     expect(result).toEqual({
+      artifactId: 'draft-1',
       path: 'unsaved://draft-1/note.md',
       content: 'draft content'
     });
@@ -295,6 +297,7 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
 
     expect(replaceDocument).toHaveBeenCalledWith('next content');
     expect(result).toEqual({
+      artifactId: 'doc-1',
       path: 'src/index.ts',
       content: 'next content'
     });
@@ -328,6 +331,7 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
 
     expect(updateRecentFileById).toHaveBeenCalledWith('draft-1', expect.objectContaining({ content: 'next draft' }));
     expect(result).toEqual({
+      artifactId: 'draft-1',
       path: 'unsaved://draft-1/note.md',
       content: 'next draft'
     });

@@ -53,6 +53,35 @@ function createMainToolDependencies(bridgeRequests: MainToolBridgeRequest[]): Ma
 }
 
 describe('createMainToolExecutor', (): void => {
+  it('returns the stable bridge artifact ID from read_file', async (): Promise<void> => {
+    const executeMainTool = createMainToolExecutor({
+      ...createMainToolDependencies([]),
+      async requestBridge() {
+        return {
+          status: 'success',
+          data: {
+            artifactId: 'document-1',
+            path: 'src/index.ts',
+            content: 'export const value = 1;'
+          }
+        };
+      }
+    });
+
+    const result = await executeMainTool({
+      runtime,
+      toolCallId: 'tool-call-artifact-1',
+      toolName: 'read_file',
+      input: { path: 'src/index.ts' }
+    });
+
+    expect(result).toMatchObject({
+      toolName: 'read_file',
+      status: 'success',
+      data: { artifactId: 'document-1', path: 'src/index.ts' }
+    });
+  });
+
   it('routes local read tools without renderer bridge', async (): Promise<void> => {
     const bridgeRequests: MainToolBridgeRequest[] = [];
     const executeMainTool = createMainToolExecutor(createMainToolDependencies(bridgeRequests));
@@ -400,10 +429,7 @@ describe('createMainToolExecutor', (): void => {
     try {
       const workspaceRoot = path.join(tempRoot, 'workspace');
       const homeRoot = path.join(tempRoot, 'home');
-      const trustedFiles = [
-        path.join(homeRoot, '.agents', 'skills', 'demo', 'SKILL.md'),
-        path.join(homeRoot, '.tibis', 'runtime', 'config.md')
-      ];
+      const trustedFiles = [path.join(homeRoot, '.agents', 'skills', 'demo', 'SKILL.md'), path.join(homeRoot, '.tibis', 'runtime', 'config.md')];
       await fs.mkdir(workspaceRoot);
       for (const trustedFile of trustedFiles) {
         await fs.mkdir(path.dirname(trustedFile), { recursive: true });
