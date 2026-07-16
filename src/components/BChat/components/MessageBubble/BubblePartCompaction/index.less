@@ -1,0 +1,32 @@
+/**
+ * @file index.less
+ * @description 上下文压缩状态行样式。
+ */
+.b-bubble-part-compaction {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  align-self: flex-start;
+  min-height: 24px;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--text-tertiary);
+}
+
+.b-bubble-part-compaction__icon {
+  flex-shrink: 0;
+}
+
+.b-bubble-part-compaction__icon--spin {
+  animation: b-bubble-part-compaction-spin 1s linear infinite;
+}
+
+.b-bubble-part-compaction__label {
+  min-width: 0;
+}
+
+@keyframes b-bubble-part-compaction-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

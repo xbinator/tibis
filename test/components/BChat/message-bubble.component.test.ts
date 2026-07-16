@@ -4,7 +4,7 @@
  * @vitest-environment jsdom
  */
 /* eslint-disable vue/one-component-per-file */
-import type { ChatMessageToolPart, ChatMessageWidgetResultPart } from 'types/chat';
+import type { ChatMessageCompactionPart, ChatMessageToolPart, ChatMessageWidgetResultPart } from 'types/chat';
 import type { WidgetData, WidgetRenderContext } from 'types/widget';
 import { defineComponent, nextTick } from 'vue';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
@@ -150,6 +150,30 @@ const BMessageStub = defineComponent({
   template: '<div class="b-message-stub">{{ content }}</div>'
 });
 
+/** 顺序测试用文本片段替身。 */
+const BubblePartTextOrderStub = defineComponent({
+  name: 'BubblePartText',
+  props: {
+    part: {
+      type: Object,
+      required: true
+    }
+  },
+  template: '<div class="order-text">{{ part.text }}</div>'
+});
+
+/** 顺序测试用工具片段替身。 */
+const BubblePartToolOrderStub = defineComponent({
+  name: 'BubblePartTool',
+  props: {
+    part: {
+      type: Object,
+      required: true
+    }
+  },
+  template: '<div class="order-tool">{{ part.result.data.marker }}</div>'
+});
+
 /** 静默 BWidgetRuntime 测试替身，用于只验证宿主初始化动作。 */
 const BWidgetRuntimeSilentStub = defineComponent({
   name: 'BWidgetRuntime',
@@ -186,6 +210,22 @@ function createAssistantMessage(overrides: Partial<Message> = {}): Message {
     loading: false,
     finished: true,
     ...overrides
+  };
+}
+
+/**
+ * 创建消息流顺序测试用压缩片段。
+ * @returns 成功压缩片段
+ */
+function createCompactionPart(): ChatMessageCompactionPart {
+  return {
+    id: 'checkpoint-order',
+    type: 'compaction',
+    status: 'success',
+    trigger: 'manual',
+    boundaryPartId: 'text-before',
+    createdAt: 1,
+    completedAt: 2
   };
 }
 
@@ -363,6 +403,26 @@ function mountMessageBubble(message: Message, submitAction?: (action: SubmitActi
 }
 
 /**
+ * 使用可观察片段替身挂载顺序测试消息。
+ * @param message - 待渲染消息
+ * @returns 组件包装器
+ */
+function mountOrderedMessageBubble(message: Message): VueWrapper {
+  return mount(MessageBubble, {
+    props: { message },
+    global: {
+      stubs: {
+        BBubble: BBubbleStub,
+        BButton: BButtonStub,
+        BIcon: true,
+        BubblePartText: BubblePartTextOrderStub,
+        BubblePartTool: BubblePartToolOrderStub
+      }
+    }
+  });
+}
+
+/**
  * 挂载静默 Widget 运行态的消息气泡。
  * @param message - 待渲染消息
  * @returns 组件包装器
@@ -405,6 +465,51 @@ describe('MessageBubble', (): void => {
     const wrapper = mountMessageBubble(createAssistantMessage());
 
     expect(wrapper.find('[data-icon="lucide:refresh-cw"]').exists()).toBe(true);
+  });
+
+  it('keeps compaction parts in their original message part order', (): void => {
+    const firstTool = createQuestionToolPart();
+    firstTool.id = 'tool-first';
+    firstTool.toolCallId = 'tool-call-first';
+    firstTool.toolName = 'first_tool';
+    firstTool.result = { toolName: 'first_tool', status: 'success', data: { marker: 'first tool' } };
+    const secondTool = structuredClone(firstTool);
+    secondTool.id = 'tool-second';
+    secondTool.toolCallId = 'tool-call-second';
+    secondTool.toolName = 'second_tool';
+    secondTool.result = { toolName: 'second_tool', status: 'success', data: { marker: 'second tool' } };
+    const wrapper = mountOrderedMessageBubble(
+      createAssistantMessage({
+        content: '',
+        parts: [
+          { id: 'text-before', type: 'text', text: 'before text' },
+          firstTool,
+          createCompactionPart(),
+          secondTool,
+          { id: 'text-after', type: 'text', text: 'after text' }
+        ]
+      })
+    );
+    const content = wrapper.get('.message-bubble__parts').text();
+
+    expect(content.indexOf('before text')).toBeLessThan(content.indexOf('first tool'));
+    expect(content.indexOf('first tool')).toBeLessThan(content.indexOf('上下文已压缩'));
+    expect(content.indexOf('上下文已压缩')).toBeLessThan(content.indexOf('second tool'));
+    expect(content.indexOf('second tool')).toBeLessThan(content.indexOf('after text'));
+  });
+
+  it('hides assistant actions for compaction-only messages', (): void => {
+    const wrapper = mountMessageBubble(
+      createAssistantMessage({
+        content: '',
+        parts: [createCompactionPart()]
+      })
+    );
+
+    expect(wrapper.text()).toContain('上下文已压缩');
+    expect(wrapper.find('[data-icon="lucide:git-branch"]').exists()).toBe(false);
+    expect(wrapper.find('[data-icon="lucide:refresh-cw"]').exists()).toBe(false);
+    expect(wrapper.find('[data-icon="lucide:copy"]').exists()).toBe(false);
   });
 
   it('emits branch clicks without owning request loading state', async (): Promise<void> => {

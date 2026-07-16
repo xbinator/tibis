@@ -38,6 +38,8 @@
             <BubblePartTool v-else-if="item.kind === 'tool'" :part="item.part" />
 
             <BubblePartWidget v-else-if="item.kind === 'widget'" :message-id="message.id" :part="item.part" :submit-action="submitAction" />
+
+            <BubblePartCompaction v-else-if="item.kind === 'compaction'" :part="item.part" />
           </template>
         </template>
       </div>
@@ -77,7 +79,14 @@
 import type { SubmitAction } from '../utils/submitAction';
 import type { Message } from '../utils/types';
 import type { AIAwaitingUserChoiceQuestion } from 'types/ai';
-import type { ChatMessageErrorPart, ChatMessagePart, ChatMessageTextPart, ChatMessageThinkingPart, ChatMessageToolPart } from 'types/chat';
+import type {
+  ChatMessageCompactionPart,
+  ChatMessageErrorPart,
+  ChatMessagePart,
+  ChatMessageTextPart,
+  ChatMessageThinkingPart,
+  ChatMessageToolPart
+} from 'types/chat';
 import { computed, ref } from 'vue';
 import BBubble from '@/components/BBubble/index.vue';
 import { useClipboard } from '@/hooks/useClipboard';
@@ -86,6 +95,7 @@ import { useImagePreview } from '@/hooks/useImagePreview';
 import { createNamespace } from '@/utils/namespace';
 import { extractLastTextPart, isAwaitingUserChoiceResult, isWidgetToolPart, type WidgetToolPart } from '../utils/messageHelper';
 import { formatMessageTime } from '../utils/timeFormat';
+import BubblePartCompaction from './MessageBubble/BubblePartCompaction/index.vue';
 import BubblePartStatus from './MessageBubble/BubblePartStatus/index.vue';
 import BubblePartText from './MessageBubble/BubblePartText/index.vue';
 import BubblePartThinking from './MessageBubble/BubblePartThinking/index.vue';
@@ -124,7 +134,8 @@ type MessageBubbleRenderItem =
   | { key: string; kind: 'thinking'; part: ChatMessageThinkingPart }
   | { key: string; kind: 'question'; question: AIAwaitingUserChoiceQuestion }
   | { key: string; kind: 'tool'; part: ChatMessageToolPart }
-  | { key: string; kind: 'widget'; part: WidgetToolPart };
+  | { key: string; kind: 'widget'; part: WidgetToolPart }
+  | { key: string; kind: 'compaction'; part: ChatMessageCompactionPart };
 
 /**
  * 判断消息片段是否为文本或错误片段。
@@ -157,8 +168,16 @@ const showHeader = computed(() => isUserMessage.value && (imageFiles.value.lengt
 const showContainer = computed(() => isInterruptMessage.value || !!props.message.parts?.length);
 /** 是否显示状态正文。 */
 const showStatusPart = computed(() => isInterruptMessage.value);
+/** 是否包含可复制、分支或重新生成的助手正文。 */
+const hasAssistantContent = computed<boolean>((): boolean => {
+  return Boolean(
+    props.message.content.trim() ||
+      props.message.thinking?.trim() ||
+      props.message.parts.some((part: ChatMessagePart): boolean => part.type !== 'compaction' && part.type !== 'confirmation')
+  );
+});
 /** 是否显示助手工具栏 */
-const showAssistantToolbar = computed(() => props.message.finished === true && isAssistantMessage.value);
+const showAssistantToolbar = computed(() => props.message.finished === true && isAssistantMessage.value && hasAssistantContent.value);
 
 /** 是否显示回退按钮（仅在后面还有消息时显示） */
 const showRollback = computed(() => isUserMessage.value && props.message.finished === true && props.canRollback?.(props.message));
@@ -181,6 +200,7 @@ const renderItems = computed<MessageBubbleRenderItem[]>(() =>
     if (part.type === 'confirmation') return [];
     if (isTextLikePart(part)) return [{ key, kind: 'text', part }];
     if (part.type === 'thinking') return [{ key, kind: 'thinking', part }];
+    if (part.type === 'compaction') return [{ key, kind: 'compaction', part }];
     if (!props.disabled && isAwaitingUserChoiceResult(part)) return [{ key, kind: 'question', question: part.result.data }];
     if (isWidgetToolPart(part)) return [{ key: `widget:${part.toolCallId}`, kind: 'widget', part }];
     if (part.type === 'tool') return [{ key, kind: 'tool', part }];
