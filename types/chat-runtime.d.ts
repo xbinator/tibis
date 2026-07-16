@@ -164,6 +164,30 @@ export interface ChatRuntimeContinueInput {
   capabilities?: ChatRuntimeCapabilityDescriptor;
 }
 
+/** Manual context compaction command input. */
+export interface ChatRuntimeCompactInput {
+  /** Runtime id allocated by renderer before the command starts. */
+  runtimeId: string;
+  /** Existing session id. */
+  sessionId: string;
+  /** Renderer chat panel id. */
+  clientId: string;
+  /** Agent id for this operation. */
+  agentId: string;
+  /** Current model context window used for budgeting. */
+  contextWindow?: number;
+  /** Current system prompt context. */
+  system?: string;
+  /** Current workspace root used by main-process file tools. */
+  workspaceRoot?: string;
+  /** Transport tool schemas included in context budgeting. */
+  tools?: AITransportTool[];
+  /** Current enabled Skill content versions. */
+  skillContentHashes?: Record<string, string>;
+  /** Renderer capability identity captured at compaction start. */
+  capabilities?: ChatRuntimeCapabilityDescriptor;
+}
+
 /** Submit-user-choice command input for resuming an awaiting assistant turn from persisted runtime messages. */
 export interface ChatRuntimeSubmitUserChoiceInput {
   /** Runtime id allocated by renderer before the command starts. */
@@ -399,7 +423,7 @@ export type ChatRuntimeRecoveryPendingRequest =
 /** Cloneable active-runtime projection used to rebuild renderer actor state. */
 export interface ChatRuntimeRecoverySnapshot extends ChatRuntimeEventBase {
   /** Current runtime execution phase. */
-  phase: 'streaming';
+  phase: 'streaming' | 'compacting';
   /** Main-process runtime creation timestamp. */
   createdAt: number;
   /** Renderer capability identity captured at runtime start. */

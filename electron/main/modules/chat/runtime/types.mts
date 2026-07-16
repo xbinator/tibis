@@ -21,7 +21,7 @@ import type { ChatRuntimeCapabilityDescriptor, ChatRuntimeEventMap } from 'types
 export type ChatRuntimeStatus = 'running' | 'completed';
 
 /** Runtime 当前执行阶段。 */
-export type ChatRuntimePhase = 'streaming';
+export type ChatRuntimePhase = 'streaming' | 'compacting';
 
 /** 活跃 runtime 状态。 */
 export interface ActiveChatRuntime {

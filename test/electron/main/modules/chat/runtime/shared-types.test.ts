@@ -1,5 +1,5 @@
-import type { ChatMessageFilePart, ChatMessageFilePartInput, ChatMessagePart } from 'types/chat';
-import type { ChatRuntimeRecoverySnapshot, ChatRuntimeSendInput } from 'types/chat-runtime';
+import type { ChatMessageCompactionPart, ChatMessageFilePart, ChatMessageFilePartInput, ChatMessagePart } from 'types/chat';
+import type { ChatRuntimeCompactInput, ChatRuntimeRecoverySnapshot, ChatRuntimeSendInput } from 'types/chat-runtime';
 import { describe, expect, it } from 'vitest';
 
 describe('chat runtime shared types', (): void => {
@@ -66,5 +66,33 @@ describe('chat runtime shared types', (): void => {
     };
 
     expect(structuredClone(snapshot)).toEqual(snapshot);
+  });
+
+  it('keeps compaction commands and parts cloneable', (): void => {
+    const input: ChatRuntimeCompactInput = {
+      runtimeId: 'runtime-compact',
+      sessionId: 'session-1',
+      clientId: 'bchat',
+      agentId: 'primary',
+      contextWindow: 128_000
+    };
+    const part: ChatMessageCompactionPart = {
+      id: 'checkpoint-pending',
+      type: 'compaction',
+      status: 'pending',
+      trigger: 'manual',
+      createdAt: 1
+    };
+    const snapshot: ChatRuntimeRecoverySnapshot = {
+      runtimeId: input.runtimeId,
+      sessionId: input.sessionId,
+      clientId: input.clientId,
+      agentId: input.agentId,
+      phase: 'compacting',
+      createdAt: 1,
+      pendingRequests: []
+    };
+
+    expect(structuredClone({ input, part, snapshot })).toEqual({ input, part, snapshot });
   });
 });

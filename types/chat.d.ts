@@ -2,7 +2,7 @@
  * @file chat.d.ts
  * @description 聊天会话、消息与附件类型定义
  */
-import type { AIToolExecutionResult, AIUsage } from './ai';
+import type { AIProviderType, AIToolExecutionResult, AIUsage } from './ai';
 import type { WidgetSubmitPayload } from './widget';
 
 /**
@@ -99,6 +99,202 @@ export interface ChatMessageFile {
 export interface ChatMessagePartBase {
   /** 片段唯一标识，创建后保持稳定。 */
   id: string;
+}
+
+/**
+ * 压缩摘要使用的模型脱敏快照。
+ */
+export interface CompactionModelSnapshot {
+  /** Provider 类型。 */
+  providerType: AIProviderType;
+  /** Provider 稳定标识。 */
+  providerId: string;
+  /** 模型标识。 */
+  modelId: string;
+  /** 触发压缩时使用的上下文窗口。 */
+  contextWindow?: number;
+  /** 触发压缩时使用的最大输出 Token。 */
+  maxOutputTokens?: number;
+}
+
+/**
+ * 压缩规划使用的预算快照。
+ */
+export interface CompactionBudgetSnapshot {
+  /** 模型输出预留。 */
+  outputReserve: number;
+  /** 估算误差和 Provider 包装安全预留。 */
+  safetyReserve: number;
+  /** 可用于输入的 Token。 */
+  usableInputTokens: number;
+  /** 自动压缩触发阈值。 */
+  triggerTokens: number;
+  /** 压缩后的目标输入 Token。 */
+  targetTokens: number;
+  /** 结构化摘要最大输出 Token。 */
+  summaryMaxTokens: number;
+  /** boundary 后原始 tail 最大 Token。 */
+  rawTailMaxTokens: number;
+}
+
+/**
+ * 结构化上下文中的目标状态。
+ */
+export interface ObjectiveState {
+  /** 目标稳定标识。 */
+  id: string;
+  /** 目标描述。 */
+  description: string;
+  /** 目标生命周期状态。 */
+  status: 'active' | 'completed' | 'blocked' | 'superseded' | 'abandoned';
+  /** 判断目标完成的明确标准。 */
+  successCriteria: string[];
+  /** 上级目标标识。 */
+  parentId?: string;
+  /** 替代当前目标的新目标标识。 */
+  supersededById?: string;
+  /** 支撑目标状态的消息 Part 标识。 */
+  sourcePartIds: string[];
+}
+
+/**
+ * 待办或问题的责任主体。
+ */
+export interface ContextOwner {
+  /** 主体类型。 */
+  type: 'user' | 'assistant' | 'tool' | 'external';
+  /** 具体主体标识。 */
+  id?: string;
+}
+
+/**
+ * 结构化上下文中的动作。
+ */
+export interface ContextAction {
+  /** 动作稳定标识。 */
+  id: string;
+  /** 动作描述。 */
+  description: string;
+  /** 应执行动作的主体。 */
+  owner: ContextOwner;
+  /** 支撑动作状态的消息 Part 标识。 */
+  sourcePartIds: string[];
+}
+
+/**
+ * 结构化上下文中的开放问题。
+ */
+export interface OpenQuestion {
+  /** 问题稳定标识。 */
+  id: string;
+  /** 问题内容。 */
+  question: string;
+  /** 应回答问题的主体。 */
+  owner: ContextOwner;
+  /** 支撑问题状态的消息 Part 标识。 */
+  sourcePartIds: string[];
+}
+
+/**
+ * 结构化上下文事实。
+ */
+export interface ContextFact {
+  /** 事实稳定标识。 */
+  id: string;
+  /** 事实语义类型。 */
+  type: 'requirement' | 'preference' | 'constraint' | 'decision' | 'critical_fact' | 'conversation_continuity';
+  /** 事实内容。 */
+  content: string;
+  /** 支撑事实的消息 Part 标识。 */
+  sourcePartIds: string[];
+}
+
+/**
+ * 结构化上下文中的失败记录。
+ */
+export interface ContextFailure {
+  /** 失败稳定标识。 */
+  id: string;
+  /** 失败描述。 */
+  description: string;
+  /** 失败是否已经解决。 */
+  resolved: boolean;
+  /** 支撑失败状态的消息 Part 标识。 */
+  sourcePartIds: string[];
+}
+
+/**
+ * 结构化上下文中的文件或文档产物状态。
+ */
+export interface ArtifactState {
+  /** 不随路径变化的产物稳定标识。 */
+  id: string;
+  /** 产物当前路径。 */
+  path?: string;
+  /** 产物用途。 */
+  purpose: string;
+  /** 最近观察到的产物状态。 */
+  status: 'read' | 'created' | 'modified' | 'deleted';
+  /** 需要继续保留的关键修改。 */
+  keyChanges: string[];
+  /** 后续使用前是否应重新读取。 */
+  shouldReload: boolean;
+  /** 支撑产物状态的消息 Part 标识。 */
+  sourcePartIds: string[];
+}
+
+/**
+ * 可跨多次滚动压缩继承的结构化上下文摘要。
+ */
+export interface StructuredContextSummary {
+  /** 摘要 schema 版本。 */
+  schemaVersion: 1;
+  /** 当前活动目标标识。 */
+  activeObjectiveId?: string;
+  /** 目标状态列表。 */
+  objectives: ObjectiveState[];
+  /** 关键事实列表。 */
+  facts: ContextFact[];
+  /** 产物状态列表。 */
+  artifacts: ArtifactState[];
+  /** 已完成动作列表。 */
+  completedActions: ContextAction[];
+  /** 待完成动作列表。 */
+  pendingActions: ContextAction[];
+  /** 尚未解决的问题列表。 */
+  openQuestions: OpenQuestion[];
+  /** 失败与恢复状态列表。 */
+  failures: ContextFailure[];
+}
+
+/**
+ * 聊天消息上下文压缩 checkpoint 片段。
+ */
+export interface ChatMessageCompactionPart extends ChatMessagePartBase {
+  /** 片段类型。 */
+  type: 'compaction';
+  /** 压缩生命周期状态。 */
+  status: 'pending' | 'success' | 'failed' | 'cancelled' | 'skipped';
+  /** 压缩触发方式。 */
+  trigger: 'automatic' | 'manual';
+  /** 被覆盖范围内最后一个 immutable Part 标识。 */
+  boundaryPartId?: string;
+  /** 上一个成功 checkpoint 标识。 */
+  parentCheckpointId?: string;
+  /** 当前源拓扑、模型与预算生成的指纹。 */
+  sourceFingerprint?: string;
+  /** 生成摘要时使用的脱敏模型快照。 */
+  modelSnapshot?: CompactionModelSnapshot;
+  /** 生成摘要时使用的预算快照。 */
+  budgetSnapshot?: CompactionBudgetSnapshot;
+  /** 仅成功 checkpoint 持有的结构化摘要。 */
+  summary?: StructuredContextSummary;
+  /** 失败、取消或跳过时使用的稳定原因码。 */
+  errorCode?: string;
+  /** checkpoint 创建时间戳。 */
+  createdAt: number;
+  /** checkpoint 进入终态的时间戳。 */
+  completedAt?: number;
 }
 
 /**
@@ -351,7 +547,8 @@ export type ChatMessagePart =
   | ChatMessageThinkingPart
   | ChatMessageToolPart
   | ChatMessageWidgetResultPart
-  | ChatMessageConfirmationPart;
+  | ChatMessageConfirmationPart
+  | ChatMessageCompactionPart;
 
 /**
  * 聊天会话
