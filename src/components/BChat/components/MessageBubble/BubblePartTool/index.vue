@@ -12,8 +12,13 @@
       <span v-if="part.status === 'done' && part.result?.status === 'failure'" :class="bem('status', { failure: true })">失败</span>
     </template>
 
+    <!-- todowrite 成功结果：复用任务面板的列表样式展示本次写入快照 -->
+    <template v-if="todoWriteTodos">
+      <TodoList v-if="todoWriteTodos.length" :todos="todoWriteTodos" />
+      <div v-else :class="bem('todo-empty')">已清空任务列表</div>
+    </template>
     <!-- 提问工具结果：以问答形式展示用户选择 -->
-    <template v-if="isQuestionResult">
+    <template v-else-if="isQuestionResult">
       <div :class="bem('result')">
         <div v-for="(item, index) in qaItems" :key="index" :class="bem('result-item')">
           <div :class="bem('result-label')">{{ item.question }}</div>
@@ -65,12 +70,15 @@
 import type { ToolSummaryTag } from '../../../utils/toolResultSummary';
 import type { AIUserChoiceAnswerData, AIUserChoiceQuestionAnswer, ChatMessageToolPart } from 'types/chat';
 import { computed, ref } from 'vue';
+import { isPlainObject, isString } from 'lodash-es';
 import type { QuestionItemInput, QuestionToolInput } from '@/ai/tools/builtin/QuestionTool';
 import { useNavigate } from '@/hooks/useNavigate';
+import type { TodoItem } from '@/stores/chat/todo';
 import { createNamespace } from '@/utils/namespace';
 import { hasStructuredValueContent } from '../../../utils/messagePart';
 import { getActionLabel } from '../../../utils/toolLabels';
 import { getToolResultSummary } from '../../../utils/toolResultSummary';
+import TodoList from '../../TodoList.vue';
 import BubblePart from '../BubblePart/index.vue';
 import BubblePartToolCode from '../BubblePartToolCode/index.vue';
 
@@ -101,6 +109,12 @@ const ICON_MAP = {
 
 /** 提问类工具名称集合，用于判断是否展示问答结果视图 */
 const QUESTION_TOOL_NAMES = new Set(['ask_user_choice', 'ask_user_question', 'question']);
+
+/** 合法的任务状态，用于保护性解析持久化的工具输入。 */
+const TODO_STATUSES = new Set<TodoItem['status']>(['pending', 'in_progress', 'completed', 'cancelled']);
+
+/** 合法的任务优先级，用于保护性解析持久化的工具输入。 */
+const TODO_PRIORITIES = new Set<TodoItem['priority']>(['high', 'medium', 'low']);
 
 // ─── 提问工具结果解析 ─────────────────────────────────────────────────
 
@@ -154,6 +168,24 @@ async function handleOpenFileTag(tag: ToolSummaryTag): Promise<void> {
   if (!isOpenFileTag(tag)) return;
 
   await openFile({ filePath: tag.path });
+}
+
+/**
+ * 判断未知值是否为可展示的任务项。
+ * @param value - 待校验值
+ * @returns 值满足任务项结构时返回 true
+ */
+function isTodoItem(value: unknown): value is TodoItem {
+  if (!isPlainObject(value)) return false;
+
+  const item = value as Record<string, unknown>;
+  return (
+    isString(item.content) &&
+    isString(item.status) &&
+    TODO_STATUSES.has(item.status as TodoItem['status']) &&
+    isString(item.priority) &&
+    TODO_PRIORITIES.has(item.priority as TodoItem['priority'])
+  );
 }
 
 // ─── 组件逻辑 ────────────────────────────────────────────────────────
@@ -224,6 +256,21 @@ const isQuestionResult = computed(
     (props.part.result?.status === 'success' || props.part.result?.status === 'cancelled' || props.part.result?.status === 'awaiting_user_input') &&
     QUESTION_TOOL_NAMES.has(props.part.toolName)
 );
+
+/**
+ * 获取 todowrite 成功调用写入的完整任务快照。
+ * 非 todowrite、失败结果或输入结构异常时返回 null，并回退到通用摘要视图。
+ */
+const todoWriteTodos = computed<TodoItem[] | null>(() => {
+  const { part } = props;
+
+  if (part.toolName !== 'todowrite' || part.status !== 'done' || part.result?.status !== 'success' || !isPlainObject(part.input)) return null;
+
+  const input = part.input as Record<string, unknown>;
+  if (!Array.isArray(input.todos) || !input.todos.every(isTodoItem)) return null;
+
+  return input.todos;
+});
 
 /** 工具执行完成时的人可读摘要，支持成功/失败/取消状态，无匹配时返回 null 降级到代码视图 */
 const summary = computed(() => {
@@ -306,6 +353,15 @@ const questionOtherText = computed(() => {
 .bubble-part-tool__result {
   font-size: 12px;
   line-height: 1.6;
+}
+
+.bubble-part-tool__todo-empty {
+  padding: 8px 12px;
+  color: var(--text-tertiary);
+  text-align: center;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 6px;
 }
 
 .bubble-part-tool__result-item + .bubble-part-tool__result-item {

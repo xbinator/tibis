@@ -4,25 +4,7 @@
 -->
 <template>
   <div v-if="todos.length" class="todo-panel">
-    <section v-if="visible && todos.length" class="todo-panel__board">
-      <div class="todo-panel__header">
-        <span class="todo-panel__title">任务列表</span>
-        <span class="todo-panel__progress">{{ completedCount }}/{{ todos.length }}</span>
-      </div>
-
-      <div class="todo-panel__body">
-        <div v-for="(todo, index) in todos" :key="index" class="todo-panel__item" :class="'todo-panel__item--' + todo.status">
-          <span class="todo-panel__status-icon">
-            <BIcon v-if="todo.status === 'completed'" icon="lucide:check-circle-2" :size="14" />
-            <BIcon v-else-if="todo.status === 'in_progress'" icon="lucide:circle-dot" :size="14" />
-            <BIcon v-else-if="todo.status === 'cancelled'" icon="lucide:x-circle" :size="14" />
-            <BIcon v-else icon="lucide:circle" :size="14" />
-          </span>
-          <span class="todo-panel__priority" :class="'todo-panel__priority--' + todo.priority"></span>
-          <span class="todo-panel__content">{{ todo.content }}</span>
-        </div>
-      </div>
-    </section>
+    <TodoList v-if="visible && todos.length" :todos="todos" class="todo-panel__list" />
 
     <div class="todo-panel__footer">
       <BButton type="text" size="small" class="todo-panel__toggle" @click="emit('update:visible', !visible)">
@@ -45,6 +27,7 @@
  */
 import { computed } from 'vue';
 import type { TodoItem } from '@/stores/chat/todo';
+import TodoList from './TodoList.vue';
 
 /**
  * TodoPanel 属性
@@ -79,109 +62,9 @@ const currentTask = computed<TodoItem | undefined>(() => props.todos.find((t) =>
   margin: 0 auto;
 }
 
-.todo-panel__board {
-  display: flex;
-  flex: 0 0 auto;
-  flex-direction: column;
+.todo-panel__list {
+  flex-shrink: 0;
   margin-bottom: 8px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-secondary);
-  border-radius: 6px;
-}
-
-.todo-panel__header {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border-secondary);
-}
-
-.todo-panel__title {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  letter-spacing: 0.05em;
-}
-
-.todo-panel__progress {
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-
-.todo-panel__body {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-height: 240px;
-  padding: 6px 0;
-  overflow-y: auto;
-}
-
-.todo-panel__item {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  padding: 4px 12px;
-  line-height: 1.5;
-}
-
-.todo-panel__item--completed {
-  opacity: 0.5;
-}
-
-.todo-panel__item--cancelled {
-  text-decoration: line-through;
-  opacity: 0.4;
-}
-
-.todo-panel__status-icon {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  padding-top: 2px;
-}
-
-.todo-panel__item--pending .todo-panel__status-icon {
-  color: var(--text-tertiary);
-}
-
-.todo-panel__item--in_progress .todo-panel__status-icon {
-  color: var(--color-primary);
-}
-
-.todo-panel__item--completed .todo-panel__status-icon {
-  color: var(--color-success);
-}
-
-.todo-panel__item--cancelled .todo-panel__status-icon {
-  color: var(--text-tertiary);
-}
-
-.todo-panel__priority {
-  flex-shrink: 0;
-  width: 6px;
-  height: 6px;
-  margin-top: 7px;
-  border-radius: 50%;
-}
-
-.todo-panel__priority--high {
-  background: var(--color-error);
-}
-
-.todo-panel__priority--medium {
-  background: var(--color-warning);
-}
-
-.todo-panel__priority--low {
-  background: var(--color-success);
-}
-
-.todo-panel__content {
-  font-size: 12px;
-  color: var(--text-primary);
 }
 
 .todo-panel__footer {
