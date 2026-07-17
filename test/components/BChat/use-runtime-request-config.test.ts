@@ -60,6 +60,7 @@ describe('useRuntimeRequestConfig', (): void => {
       }),
       getActiveTools: vi.fn(() => [createTool('edit_memory')]),
       getSkillContentHashes: vi.fn(() => ({ weather: 'hash-1' })),
+      resolveSkillSnapshots: vi.fn(async () => []),
       resolveRuntimeSystemPrompt: vi.fn(async () => 'system'),
       resolveRuntimeTavilyConfig: vi.fn(() => undefined),
       resolveRuntimeMcpRequestConfig: vi.fn(() => undefined),
@@ -93,6 +94,7 @@ describe('useRuntimeRequestConfig', (): void => {
       syncAIResources,
       getActiveTools: vi.fn(() => []),
       getSkillContentHashes: vi.fn(() => ({})),
+      resolveSkillSnapshots: vi.fn(async () => []),
       resolveRuntimeSystemPrompt: vi.fn(async () => undefined),
       resolveRuntimeTavilyConfig: vi.fn(() => undefined),
       resolveRuntimeMcpRequestConfig: vi.fn(() => undefined),
@@ -102,5 +104,55 @@ describe('useRuntimeRequestConfig', (): void => {
     expect(await hook.prepareRuntimeRequest(USER_MESSAGE)).toBeNull();
     expect(onMissingServiceConfig).toHaveBeenCalledOnce();
     expect(syncAIResources).not.toHaveBeenCalled();
+  });
+
+  it('resolves structured Skill references and targets only their source user message', async (): Promise<void> => {
+    const skillSnapshot = {
+      name: 'weather',
+      content: 'Use the weather workflow.',
+      contentHash: 'hash-weather',
+      filePath: '/skills/weather/SKILL.md'
+    };
+    const resolveSkillSnapshots = vi.fn(async () => [skillSnapshot]);
+    const hook = useRuntimeRequestConfig({
+      contextWindow: ref(16000),
+      workspaceRoot: ref('/workspace'),
+      resolveServiceConfig: vi.fn(async () => ({ providerId: 'provider', modelId: 'model', toolSupport: { supported: false, reason: 'unsupported' } })),
+      syncAIResources: vi.fn(async (): Promise<void> => undefined),
+      getActiveTools: vi.fn(() => []),
+      getSkillContentHashes: vi.fn(() => ({ weather: 'hash-weather' })),
+      resolveSkillSnapshots,
+      resolveRuntimeSystemPrompt: vi.fn(async () => undefined),
+      resolveRuntimeTavilyConfig: vi.fn(() => undefined),
+      resolveRuntimeMcpRequestConfig: vi.fn(() => undefined),
+      onMissingServiceConfig: vi.fn()
+    });
+    const selectedMessage: Message = {
+      ...USER_MESSAGE,
+      parts: [
+        {
+          id: 'skill-reference-1',
+          type: 'skill_reference',
+          name: 'weather',
+          sourceText: { start: 0, end: 12, value: '{{$weather}}' }
+        },
+        {
+          id: 'skill-reference-2',
+          type: 'skill_reference',
+          name: 'weather',
+          sourceText: { start: 13, end: 25, value: '{{$weather}}' }
+        }
+      ]
+    };
+
+    const prepared = await hook.prepareRuntimeRequest(selectedMessage);
+
+    expect(resolveSkillSnapshots).toHaveBeenCalledWith(['weather', 'weather']);
+    expect(prepared?.config.runtimeContext).toEqual({
+      skill: {
+        targetMessageId: 'user-1',
+        snapshots: [skillSnapshot]
+      }
+    });
   });
 });

@@ -100,6 +100,7 @@ export function estimatePartTokens(part: ChatMessagePart): number {
     return estimateTextTokens(part.path) + estimateTextTokens(part.snapshot.content) + MODEL_MESSAGE_OVERHEAD;
   }
   if (part.type === 'widget_result') return estimateValueTokens(part);
+  if (part.type === 'skill_reference') return estimateTextTokens(`$${part.name}`);
   if (part.type === 'tool') {
     return (
       estimateTextTokens(part.toolName) +

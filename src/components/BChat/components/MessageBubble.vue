@@ -180,9 +180,8 @@ const showAssistantToolbar = computed(() => props.message.finished === true && i
 
 /** 是否显示回退按钮（仅在后面还有消息时显示） */
 const showRollback = computed(() => isUserMessage.value && props.message.finished === true && props.canRollback?.(props.message));
-/** 用户输入按原始 content 展示，file parts 仅用于历史快照与模型上下文。 */
+/** 用户输入按原始 content 展示，结构化 parts 仅用于 Runtime 与草稿恢复。 */
 const userInputPart = computed<ChatMessageTextPart>(() => ({ id: `${props.message.id}:user-input`, type: 'text', text: props.message.content }));
-
 /** 图片预览条目列表 */
 const imagePreviewItems = computed<ImagePreviewItem[]>(() =>
   imageFiles.value.map((file) => ({

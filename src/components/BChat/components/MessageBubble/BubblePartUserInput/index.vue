@@ -3,6 +3,9 @@
     <div :class="bem('text')">
       <template v-for="(segment, index) in segments" :key="index">
         <span v-if="segment.type === 'text'">{{ segment.text }}</span>
+        <span v-else-if="segment.type === 'skill'" class="b-skill-reference" :title="segment.name">
+          <span class="b-skill-reference__name">{{ segment.name }}</span>
+        </span>
         <span
           v-else
           :class="segment.presentation.rootClass"
@@ -25,14 +28,14 @@
 <script setup lang="ts">
 /**
  * @file BubblePartUserInput.vue
- * @description 渲染用户输入消息，将文件引用标签解析为内联 chip 展示。
+ * @description 渲染用户输入消息，将文件与技能引用 Token 解析为内联引用展示。
  */
 import type { ChatMessageTextPart } from 'types/chat';
 import { computed } from 'vue';
-import type { FileRefChipPresentation } from '@/components/BChat/components/FileRefChip';
-import { createFileRefChipPresentation } from '@/components/BChat/components/FileRefChip';
+import type { FileRefChipPresentation } from '@/components/BChat/utils/chipResolver/file/presentation';
+import { createFileRefChipPresentation } from '@/components/BChat/utils/chipResolver/file/presentation';
+import { splitReferenceText, type UserInputReferenceSegment } from '@/components/BChat/utils/userInputReference';
 import { useNavigate } from '@/hooks/useNavigate';
-import { findFileReferenceTokens } from '@/utils/file/reference';
 import type { ParsedFileReference } from '@/utils/file/reference';
 import { createNamespace } from '@/utils/namespace';
 
@@ -56,7 +59,7 @@ interface TextSegment {
 }
 
 interface FileRefSegment {
-  type: 'fileRef';
+  type: 'file';
   fullPath: string | null;
   fileId: string | null;
   startLine: number;
@@ -65,7 +68,13 @@ interface FileRefSegment {
   presentation: FileRefChipPresentation;
 }
 
-type Segment = TextSegment | FileRefSegment;
+interface SkillRefSegment {
+  type: 'skill';
+  name: string;
+}
+
+/** 用户输入中可渲染的文本、文件引用或技能引用片段。 */
+type Segment = TextSegment | FileRefSegment | SkillRefSegment;
 
 // ─── 工具函数 ────────────────────────────────────────────────────────────────
 
@@ -83,7 +92,7 @@ function createFileRefSegment(parsed: ParsedFileReference): FileRefSegment {
   });
 
   return {
-    type: 'fileRef',
+    type: 'file',
     fullPath: parsed.filePath,
     fileId: parsed.fileId,
     startLine: parsed.startLine,
@@ -94,32 +103,17 @@ function createFileRefSegment(parsed: ParsedFileReference): FileRefSegment {
 }
 
 /**
- * 将原始文本解析为纯文本与文件引用片段的交替序列。
- * 匹配格式：{{@filePath}}、{{@filePath#Lstart}}、{{@filePath#Lstart-Lend}}
+ * 将原始文本解析为纯文本、文件引用与技能引用片段的交替序列。
+ * 匹配格式：`{{@filePath}}`、`{{@filePath#Lstart-Lend}}` 与 `{{$skillName}}`。
+ * @param text - 用户消息原始正文
+ * @returns 有序渲染片段
  */
 function parseTextSegments(text: string): Segment[] {
-  const result: Segment[] = [];
-  const matches = findFileReferenceTokens(text);
-  let lastIndex = 0;
-
-  for (const match of matches) {
-    const matchStart = match.start;
-
-    // 匹配前的纯文本
-    if (matchStart > lastIndex) {
-      result.push({ type: 'text', text: text.slice(lastIndex, matchStart) });
-    }
-
-    result.push(createFileRefSegment(match.reference));
-    lastIndex = match.end;
-  }
-
-  // 尾部剩余纯文本
-  if (lastIndex < text.length) {
-    result.push({ type: 'text', text: text.slice(lastIndex) });
-  }
-
-  return result;
+  return splitReferenceText(text).map((segment: UserInputReferenceSegment): Segment => {
+    if (segment.type === 'text') return segment;
+    if (segment.type === 'file') return createFileRefSegment(segment.token.match.reference);
+    return { type: 'skill', name: segment.token.match.name };
+  });
 }
 
 /**
@@ -144,8 +138,6 @@ const segments = computed<Segment[]>(() => parseTextSegments(props.part.text ?? 
 </script>
 
 <style scoped lang="less">
-@import url('../../FileRefChip/index.less');
-
 .message-bubble-user-input {
   word-break: normal;
   white-space: pre-wrap;

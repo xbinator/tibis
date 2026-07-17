@@ -63,6 +63,7 @@ import {
   hasAssistantResponseContent,
   markAssistantMessageFailed
 } from './messages/finalizer.mjs';
+import { applyRuntimeContext } from './messages/runtime-context.mjs';
 import { applyUserChoiceAnswer, cloneRuntimeMessage } from './messages/user-choice.mjs';
 import { createAutoNamePrompt, normalizeAutoNameTitle } from './model/auto-name.mjs';
 import { createDefaultChatModelResolver } from './model/resolver.mjs';
@@ -549,8 +550,9 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   ): Promise<ChatMessageRecord[]> {
     let currentRawMessages =
       assistantMessage.parts.length > 0 || assistantMessage.content.trim() ? createContinuationSourceMessages(rawMessages, assistantMessage) : rawMessages;
+    // 临时 Runtime 上下文仅进入模型投影，压缩源保持原始消息，避免把临时指令写入 checkpoint 摘要。
     let projection = projectContext({
-      messages: currentRawMessages,
+      messages: applyRuntimeContext(currentRawMessages, runtime),
       system: runtime.system,
       tools: runtime.tools,
       skillContentHashes: runtime.skillContentHashes
@@ -599,7 +601,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
         currentRawMessages = createContinuationSourceMessages(rawMessages, assistantMessage);
       }
       projection = projectContext({
-        messages: currentRawMessages,
+        messages: applyRuntimeContext(currentRawMessages, runtime),
         system: runtime.system,
         tools: runtime.tools,
         skillContentHashes: runtime.skillContentHashes,
@@ -607,7 +609,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       });
       if (exceedsHardLimit(projection.estimatedTokens, thresholdBudget)) {
         projection = projectContext({
-          messages: currentRawMessages,
+          messages: applyRuntimeContext(currentRawMessages, runtime),
           system: runtime.system,
           tools: runtime.tools,
           skillContentHashes: runtime.skillContentHashes,
@@ -621,7 +623,10 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     }
 
     if (exceedsHardLimit(projection.estimatedTokens, thresholdBudget)) {
-      throw createAIServiceError(AI_ERROR_CODE.INVALID_REQUEST, '当前任务与不可压缩上下文已达到模型输入上限');
+      const message = runtime.runtimeContext?.skill?.snapshots.length
+        ? '所选技能内容与不可压缩上下文已超过当前模型可用窗口'
+        : '当前任务与不可压缩上下文已达到模型输入上限';
+      throw createAIServiceError(AI_ERROR_CODE.INVALID_REQUEST, message);
     }
 
     emitContextUsage(runtime, projection.estimatedTokens);
@@ -650,8 +655,8 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
         prepareRequestContext(runtime, rawMessages, userMessage, assistantMessage),
         new Promise<ChatMessageRecord[]>((_resolve, reject) => {
           timeoutId = setTimeout((): void => {
-            void compactionExecutor.cancel(runtime.runtimeId);
-            void streamAbort(runtime.runtimeId);
+            // 超时收口并行触发两个取消动作；allSettled 避免清理失败产生未处理拒绝。
+            Promise.allSettled([compactionExecutor.cancel(runtime.runtimeId), streamAbort(runtime.runtimeId)]);
             reject(createAIServiceError(AI_ERROR_CODE.REQUEST_FAILED, '本次 AI 任务已达到固定的 300 秒总时限'));
           }, timeoutMs);
         })

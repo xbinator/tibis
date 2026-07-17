@@ -139,6 +139,7 @@ const memoryStoreMock = vi.hoisted(() => ({
 const skillStoreMock = vi.hoisted(() => ({
   initialized: true,
   getEnabledSkills: vi.fn(() => [] as Array<{ name: string; contentHash?: string }>),
+  resolveLatestEnabledSkill: vi.fn<(_name: string) => Promise<undefined>>(),
   waitForInit: vi.fn<() => Promise<void>>(() => Promise.resolve()),
   syncFromDisk: vi.fn<() => Promise<void>>(() => Promise.resolve()),
   initialize: vi.fn<() => Promise<void>>(() => Promise.resolve()),
@@ -667,6 +668,8 @@ describe('BChat sessionId runtime', (): void => {
     skillStoreMock.initialized = true;
     skillStoreMock.getEnabledSkills.mockReset();
     skillStoreMock.getEnabledSkills.mockReturnValue([]);
+    skillStoreMock.resolveLatestEnabledSkill.mockReset();
+    skillStoreMock.resolveLatestEnabledSkill.mockResolvedValue(undefined);
     skillStoreMock.waitForInit.mockClear();
     skillStoreMock.syncFromDisk.mockClear();
     recentStoreMock.recentFiles = [];
@@ -1426,6 +1429,64 @@ describe('BChat sessionId runtime', (): void => {
     );
     expect(electronAPIMock.chatRuntimeSubmitUserChoice.mock.calls[0]?.[0]).not.toHaveProperty('messages');
     expect(electronAPIMock.chatRuntimeContinue).not.toHaveBeenCalled();
+  });
+
+  it('shows unavailable Skill errors while preparing a user choice continuation', async (): Promise<void> => {
+    const errorMessage = '技能“weather”已禁用、删除或解析失败，无法发送本轮消息';
+    const userMessage: Message = {
+      ...createMessage('user-choice-skill', '{{$weather}} 需要选择'),
+      parts: [
+        {
+          id: 'skill-reference-choice',
+          type: 'skill_reference',
+          name: 'weather',
+          sourceText: { start: 0, end: 12, value: '{{$weather}}' }
+        },
+        { id: 'skill-choice-text', type: 'text', text: ' 需要选择' }
+      ]
+    };
+    const assistantMessage = createAssistantMessage({
+      id: 'assistant-choice-skill',
+      content: '',
+      parts: [
+        {
+          id: 'skill-choice-question',
+          type: 'tool',
+          toolCallId: 'skill-choice-tool-call',
+          toolName: 'ask_user_choice',
+          status: 'done',
+          input: {},
+          result: {
+            toolName: 'ask_user_choice',
+            status: 'awaiting_user_input',
+            data: {
+              questionId: 'skill-choice-question',
+              toolCallId: 'skill-choice-tool-call',
+              mode: 'single',
+              question: '继续吗？',
+              options: [{ label: '继续', value: 'yes' }]
+            }
+          }
+        }
+      ]
+    });
+    const answer: AIUserChoiceAnswerData = {
+      questionId: 'skill-choice-question',
+      toolCallId: 'skill-choice-tool-call',
+      answers: ['yes'],
+      otherText: ''
+    };
+    chatStoreMock.getSessionMessages.mockResolvedValueOnce([userMessage, assistantMessage]).mockResolvedValueOnce([]);
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+
+    await expect(submitConversationAction(wrapper, createUserChoice(answer))).rejects.toThrow(errorMessage);
+    await flushPromises();
+
+    const toastQueue = wrapper.findComponent({ name: 'InteractionContainer' }).props('toastQueue') as ToastItem[];
+    expect(toastQueue).toContainEqual(expect.objectContaining({ type: 'error', content: errorMessage }));
+    expect(wrapper.findComponent(ConversationViewStub).props('disabled')).toBe(false);
+    expect(electronAPIMock.chatRuntimeSubmitUserChoice).not.toHaveBeenCalled();
   });
 
   it('sends runtime user message submit actions through main process ChatRuntime', async (): Promise<void> => {

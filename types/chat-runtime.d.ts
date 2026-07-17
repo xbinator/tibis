@@ -20,6 +20,7 @@ import type {
   ChatMessageFilePartInput,
   ChatMessagePart,
   ChatMessageRecord,
+  ChatMessageSkillReferencePart,
   ChatMessageTextPart,
   ChatMessageWidgetResultPart
 } from './chat';
@@ -89,8 +90,34 @@ export type ChatRuntimeMessageSnapshot = Omit<ChatMessageRecord, 'sessionId'> & 
   sessionId?: string;
 };
 
+/** Skill 内容在单个 Runtime 生命周期内使用的只读快照。 */
+export interface ChatRuntimeSkillSnapshot {
+  /** Skill frontmatter 名称。 */
+  readonly name: string;
+  /** Skill 当前解析内容。 */
+  readonly content: string;
+  /** 完整 SKILL.md 的内容版本。 */
+  readonly contentHash: string;
+  /** Skill 来源文件路径。 */
+  readonly filePath: string;
+}
+
+/** 单个 Runtime 生命周期内的显式 Skill 上下文。 */
+export interface ChatRuntimeSkillContext {
+  /** 接收显式 Skill 内容的用户消息 ID。 */
+  readonly targetMessageId: string;
+  /** 按首次引用顺序冻结的 Skill 内容快照。 */
+  readonly snapshots: ChatRuntimeSkillSnapshot[];
+}
+
+/** Renderer 传递给主进程的临时 Runtime 上下文容器。 */
+export interface ChatRuntimeContext {
+  /** 当前用户轮次显式选择的 Skill 上下文。 */
+  readonly skill?: ChatRuntimeSkillContext;
+}
+
 /** Renderer-created user input parts accepted by runtime send commands. */
-export type ChatRuntimeUserInputPart = ChatMessageTextPart | ChatMessageFilePartInput | ChatMessageWidgetResultPart;
+export type ChatRuntimeUserInputPart = ChatMessageTextPart | ChatMessageFilePartInput | ChatMessageSkillReferencePart | ChatMessageWidgetResultPart;
 
 /** Send command input. */
 export interface ChatRuntimeSendInput {
@@ -122,6 +149,8 @@ export interface ChatRuntimeSendInput {
   tools?: AITransportTool[];
   /** Current enabled Skill content versions used to invalidate stale history. */
   skillContentHashes?: Record<string, string>;
+  /** Temporary context applied only while this Runtime is active. */
+  runtimeContext?: ChatRuntimeContext;
   /** Tavily runtime config executable in main process. */
   tavily?: AITavilyRuntimeConfig;
   /** MCP runtime config executable in main process. */
@@ -156,6 +185,8 @@ export interface ChatRuntimeContinueInput {
   tools?: AITransportTool[];
   /** Current enabled Skill content versions used to invalidate stale history. */
   skillContentHashes?: Record<string, string>;
+  /** Temporary context applied only while this Runtime is active. */
+  runtimeContext?: ChatRuntimeContext;
   /** Tavily runtime config executable in main process. */
   tavily?: AITavilyRuntimeConfig;
   /** MCP runtime config executable in main process. */
@@ -186,6 +217,8 @@ export interface ChatRuntimeCompactInput {
   tools?: AITransportTool[];
   /** Current enabled Skill content versions. */
   skillContentHashes?: Record<string, string>;
+  /** Temporary context, normally absent for manual compaction. */
+  runtimeContext?: ChatRuntimeContext;
   /** Renderer capability identity captured at compaction start. */
   capabilities?: ChatRuntimeCapabilityDescriptor;
 }
@@ -212,6 +245,8 @@ export interface ChatRuntimeSubmitUserChoiceInput {
   tools?: AITransportTool[];
   /** Current enabled Skill content versions used to invalidate stale history. */
   skillContentHashes?: Record<string, string>;
+  /** Temporary context restored for the resumed user turn. */
+  runtimeContext?: ChatRuntimeContext;
   /** Tavily runtime config executable in main process. */
   tavily?: AITavilyRuntimeConfig;
   /** MCP runtime config executable in main process. */

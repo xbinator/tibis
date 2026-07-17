@@ -4,7 +4,10 @@
  */
 import type { Message } from '../utils/types';
 import type { AIToolExecutor } from 'types/ai';
+import type { ChatRuntimeSkillSnapshot } from 'types/chat-runtime';
 import type { Ref } from 'vue';
+import { uniq } from 'lodash-es';
+import type { SkillDefinition } from '@/ai/skill/types';
 import {
   createBuiltinTools,
   isBuiltinToolName,
@@ -33,6 +36,7 @@ import { useToolSettingsStore } from '@/stores/ai/toolSettings';
 import { useWidgetStore } from '@/stores/ai/widget';
 import { useRecentStore } from '@/stores/workspace/recent';
 import { userChoice } from '../utils/messageHelper';
+import { createRuntimeError } from '../utils/runtimeError';
 
 /**
  * Runtime 工具 hook 配置。
@@ -62,6 +66,8 @@ interface UseRuntimeToolsReturn {
   syncAIResources: () => Promise<void>;
   /** 获取当前已启用 Skill 的内容版本。 */
   getSkillContentHashes: () => Record<string, string>;
+  /** 解析本轮显式选择的 Skill 内容快照。 */
+  resolveSkillSnapshots: (names: string[]) => Promise<ChatRuntimeSkillSnapshot[]>;
   /** 创建并打开未保存草稿。 */
   openDraft: ReturnType<typeof useOpenDraft>['openDraft'];
   /** 通过文件路径打开文件标签页。 */
@@ -239,12 +245,40 @@ export function useRuntimeTools(options: UseRuntimeToolsOptions): UseRuntimeTool
     );
   }
 
+  /**
+   * 按首次出现顺序解析本轮显式选择的 Skill 最新内容。
+   * @param names - 结构化 SkillReference 中的名称
+   * @returns 去重后的 Runtime Skill 快照
+   */
+  async function resolveSkillSnapshots(names: string[]): Promise<ChatRuntimeSkillSnapshot[]> {
+    const uniqueNames = uniq(names);
+    const skills = await Promise.all(uniqueNames.map((name: string) => skillStore.resolveLatestEnabledSkill(name)));
+
+    return skills.map((skill: SkillDefinition | undefined, index: number): ChatRuntimeSkillSnapshot => {
+      const name = uniqueNames[index];
+      if (!skill || skill.parseError || !skill.contentHash) {
+        throw createRuntimeError({
+          code: 'SKILL_UNAVAILABLE',
+          message: `技能“${name}”已禁用、删除或解析失败，无法发送本轮消息`
+        });
+      }
+
+      return {
+        name: skill.name,
+        content: skill.content,
+        contentHash: skill.contentHash,
+        filePath: skill.filePath
+      };
+    });
+  }
+
   return {
     workspaceRoot,
     getWorkspaceRoot,
     getActiveTools,
     syncAIResources,
     getSkillContentHashes,
+    resolveSkillSnapshots,
     openDraft,
     openFileByPath
   };

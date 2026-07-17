@@ -20,7 +20,8 @@ import type { ChatSessionUIEvent } from '@/ai/chat/sessionEvents';
 import { getElectronAPI } from '@/shared/platform/electron-api';
 import { useChatSessionStore } from '@/stores/chat/session';
 import { useToolPermissionStore } from '@/stores/chat/toolPermission';
-import { buildUserInputParts } from '../utils/filePartParser';
+import { asyncTo } from '@/utils/asyncTo';
+import { parseUserInput } from '../utils/filePartParser';
 import { create, userChoice } from '../utils/messageHelper';
 import { appendRuntimeErrorMessage } from '../utils/runtimeError';
 import { useChatRuntime } from './useChatRuntime';
@@ -247,9 +248,10 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
 
     const { sourceMessages, removedMessages } = regenerationSlice;
     options.messages.value.splice(0, options.messages.value.length, ...sourceMessages);
-    const prepared = await prepareRuntimeWithCapabilities(findLastUserMessage(sourceMessages));
-    if (!prepared) {
+    const [preparationError, prepared] = await asyncTo(prepareRuntimeWithCapabilities(findLastUserMessage(sourceMessages)));
+    if (preparationError || !prepared) {
       options.messages.value.splice(0, options.messages.value.length, ...sourceMessages, ...removedMessages);
+      if (preparationError) options.showRuntimeError(preparationError.message);
       return false;
     }
 
@@ -341,6 +343,10 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
     let managedRuntimeId: string | undefined;
     preflightLoading.value = true;
     try {
+      // SkillReference 必须在清空草稿和创建用户消息前完成最新磁盘解析。
+      const prepared = await prepareRuntimeWithCapabilities(input.userMessage, input.parts);
+      if (!isCurrentOperation(operationId) || !prepared) return;
+
       const sessionId = await options.ensureActiveSession(input.userMessage.content);
       if (!isCurrentOperation(operationId)) return;
       pendingSessionId = sessionId;
@@ -357,12 +363,6 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
       options.focusInput();
       if (input.clearDraft === true) options.clearInput();
       options.scrollToBottom();
-
-      const prepared = await prepareRuntimeWithCapabilities(input.userMessage, input.parts);
-      if (!prepared) {
-        options.sessionActor.markPreparationFailed({ code: 'preparation_failed', message: '发送准备未完成' });
-        return;
-      }
 
       const runtimeId = runtimeLauncher.start(prepared);
       managedRuntimeId = runtimeId;
@@ -417,7 +417,7 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
     getSessionId: (): string | undefined => options.activeSessionId.value ?? undefined,
     getActiveRuntimeId: (): string | undefined => options.sessionActor.activeRuntimeId.value,
     resolveRuntimeRequestConfig: options.resolveRuntimeRequestConfig,
-    prepareRuntimeRequest: (): ReturnType<PrepareRuntimeRequest> => prepareRuntimeWithCapabilities(),
+    prepareRuntimeRequest: (): ReturnType<PrepareRuntimeRequest> => prepareRuntimeWithCapabilities(findLastUserMessage(options.messages.value)),
     onContinueStarted: (answer): void => {
       beginOperation();
       options.sessionActor.continueWithAnswer(answer);
@@ -436,6 +436,7 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
       } else {
         options.sessionActor.markPreparationFailed(workflowError);
       }
+      options.showRuntimeError(workflowError.message);
     },
     submitUserChoice: chatRuntime.submitUserChoice,
     sendRuntimeUserMessage,
@@ -459,11 +460,12 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
     if (!trimmedContent && !images.length) return;
     if (loading.value) return;
 
-    const userMessage = create.userMessage(trimmedContent);
+    const parsedInput = parseUserInput(trimmedContent, options.workspaceRoot.value || undefined);
+    const userMessage = create.userMessage(parsedInput.content);
     if (images.length && options.supportsVision.value) userMessage.files = [...images];
     await sendRuntimeUserMessage({
       userMessage,
-      parts: buildUserInputParts(trimmedContent, options.workspaceRoot.value || undefined),
+      parts: parsedInput.parts,
       clearDraft
     });
   }

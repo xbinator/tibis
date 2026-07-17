@@ -40,6 +40,8 @@ export type BChatRuntimeSendInput = Pick<
   | 'system'
   | 'workspaceRoot'
   | 'tools'
+  | 'skillContentHashes'
+  | 'runtimeContext'
   | 'tavily'
   | 'mcp'
   | 'capabilities'
@@ -48,7 +50,17 @@ export type BChatRuntimeSendInput = Pick<
 /** ChatRuntime 续轮输入。 */
 export type BChatRuntimeContinueInput = Pick<
   ChatRuntimeContinueInput,
-  'runtimeId' | 'sessionId' | 'contextWindow' | 'system' | 'workspaceRoot' | 'tools' | 'tavily' | 'mcp' | 'capabilities'
+  | 'runtimeId'
+  | 'sessionId'
+  | 'contextWindow'
+  | 'system'
+  | 'workspaceRoot'
+  | 'tools'
+  | 'skillContentHashes'
+  | 'runtimeContext'
+  | 'tavily'
+  | 'mcp'
+  | 'capabilities'
 > & {
   /** renderer 消息列表，发送到主进程前转换为纯快照。 */
   messages: Message[];
@@ -60,7 +72,18 @@ export type BChatRuntimeCompactInput = Omit<ChatRuntimeCompactInput, 'clientId' 
 /** ChatRuntime 用户选择提交输入。 */
 export type BChatRuntimeSubmitUserChoiceInput = Pick<
   ChatRuntimeSubmitUserChoiceInput,
-  'runtimeId' | 'sessionId' | 'contextWindow' | 'system' | 'workspaceRoot' | 'tools' | 'tavily' | 'mcp' | 'capabilities' | 'answer'
+  | 'runtimeId'
+  | 'sessionId'
+  | 'contextWindow'
+  | 'system'
+  | 'workspaceRoot'
+  | 'tools'
+  | 'skillContentHashes'
+  | 'runtimeContext'
+  | 'tavily'
+  | 'mcp'
+  | 'capabilities'
+  | 'answer'
 >;
 
 /** ChatRuntime renderer 消息片段提交输入。 */

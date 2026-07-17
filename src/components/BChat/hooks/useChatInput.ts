@@ -5,6 +5,7 @@
 import type { Message } from '../utils/types';
 import type { ChatMessageFile } from 'types/chat';
 import { ref } from 'vue';
+import { restoreSkillReferenceTokens } from '../utils/skillReference';
 
 /**
  * 草稿输入 Hook 的依赖项
@@ -57,7 +58,7 @@ export function useChatInput(options: ChatInputOptions) {
   function restoreFromMessage(message: Message): void {
     // 输入框已有内容时不覆盖，避免丢失用户正在编辑的草稿
     if (inputContent.value.trim()) return;
-    inputContent.value = message.content;
+    inputContent.value = restoreSkillReferenceTokens(message.content, message.parts);
     inputImages.value = [...(message.files?.filter((file) => file.type === 'image') ?? [])];
   }
 

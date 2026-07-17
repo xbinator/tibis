@@ -18,7 +18,7 @@ export interface RuntimeRequestError extends Error {
 /**
  * Runtime 错误文案输入。
  */
-interface RuntimeErrorMessageInput {
+export interface RuntimeErrorMessageInput {
   /** 稳定错误码。 */
   code?: string;
   /** 原始错误文案。 */
@@ -87,14 +87,23 @@ export function localizeRuntimeServiceError(error: AIServiceError): AIServiceErr
 }
 
 /**
+ * 创建带稳定错误码的 Renderer Runtime 错误。
+ * @param input - Runtime 错误信息
+ * @returns 可沿请求准备链路传播的错误对象
+ */
+export function createRuntimeError(input: RuntimeErrorMessageInput): RuntimeRequestError {
+  const error = new Error(localizeRuntimeErrorMessage(input)) as RuntimeRequestError;
+  error.code = input.code;
+  return error;
+}
+
+/**
  * 创建 Runtime IPC 请求错误。
  * @param result - handler 结果
  * @returns 带稳定错误码的错误对象
  */
 export function createRuntimeRequestError(result: ChatRuntimeHandlerResult<unknown>): RuntimeRequestError {
-  const error = new Error(localizeRuntimeErrorMessage({ code: result.code, message: result.error })) as RuntimeRequestError;
-  error.code = result.code;
-  return error;
+  return createRuntimeError({ code: result.code, message: result.error });
 }
 
 /**

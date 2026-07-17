@@ -5,6 +5,7 @@
 import yaml from 'js-yaml';
 import { hashString } from '@/shared/utils/hash';
 import { posix } from '@/utils/file/posix';
+import { isValidSkillName } from './name';
 import { DEFAULT_SKILL_MAX_CONTENT_LENGTH, type SkillDefinition, type SkillSource } from './types';
 
 /** 解析选项。 */
@@ -126,6 +127,21 @@ export function parseSkillMarkdown(markdown: string, filePath: string, options: 
       enabled: true,
       parsedAt,
       parseError: 'Missing required frontmatter field: name'
+    };
+  }
+
+  if (!isValidSkillName(name)) {
+    return {
+      name,
+      description,
+      content: '',
+      contentHash,
+      filePath: normalizedFilePath,
+      dirPath,
+      source,
+      enabled: true,
+      parsedAt,
+      parseError: 'Invalid frontmatter field: name cannot contain braces or line breaks'
     };
   }
 

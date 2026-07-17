@@ -218,21 +218,28 @@ function isRecordValue(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * 当前版本支持的消息片段类型索引。
+ * `satisfies` 保证 ChatMessagePart 新增类型时此处必须同步处理。
+ */
+const MESSAGE_PART_TYPES = {
+  text: true,
+  file: true,
+  skill_reference: true,
+  error: true,
+  thinking: true,
+  tool: true,
+  widget_result: true,
+  confirmation: true,
+  compaction: true
+} as const satisfies Record<ChatMessagePart['type'], true>;
+
+/**
  * 判断消息片段类型是否受当前版本支持。
  * @param value - 待判断值
  * @returns 是否为合法消息片段类型
  */
 function isMessagePartType(value: unknown): value is ChatMessagePart['type'] {
-  return (
-    value === 'text' ||
-    value === 'file' ||
-    value === 'error' ||
-    value === 'thinking' ||
-    value === 'tool' ||
-    value === 'widget_result' ||
-    value === 'confirmation' ||
-    value === 'compaction'
-  );
+  return typeof value === 'string' && Object.hasOwn(MESSAGE_PART_TYPES, value);
 }
 
 /**

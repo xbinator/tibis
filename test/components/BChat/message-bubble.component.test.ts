@@ -1414,6 +1414,7 @@ describe('MessageBubble', (): void => {
       finished: true
     });
 
+    expect(wrapper.text()).toContain(content);
     await wrapper.get('[data-icon="lucide:copy"]').trigger('click');
 
     expect(clipboardMock).toHaveBeenCalledWith(content, { successMessage: '已复制到剪贴板' });

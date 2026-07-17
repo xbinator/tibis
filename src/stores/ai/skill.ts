@@ -330,7 +330,7 @@ export const useSkillStore = defineStore('skill', () => {
       }
 
       const latestSkill = getSkillByName(name);
-      return latestSkill?.enabled ? latestSkill : undefined;
+      return latestSkill?.enabled && !latestSkill.parseError ? latestSkill : undefined;
     })().finally((): void => {
       latestSkillPromises.delete(name);
     });

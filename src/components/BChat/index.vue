@@ -45,7 +45,7 @@
           :on-paste-files="fileReference.onPasteFiles"
           :on-paste-images="imageUpload.onPasteImages"
           :can-accept-images="imageUpload.canAcceptImages"
-          :slash-commands="chatSlashCommands"
+          :slash-commands="slashCommandOptions"
           :file-mentions="fileMentionOptions"
           :on-cancel="handleCancel"
           submit-on-enter
@@ -84,11 +84,12 @@ import { useRouter } from 'vue-router';
 import { findPendingInteraction } from '@/ai/chat/policies/pendingInteraction';
 import type { ChatSessionUIEvent } from '@/ai/chat/sessionEvents';
 import BTextEditor from '@/components/BText/Editor.vue';
-import type { BTextEditorExpose } from '@/components/BText/types';
+import type { BTextEditorExpose, SlashCommandOption } from '@/components/BText/types';
 import { useChatActorSystem } from '@/hooks/useChatActorSystem';
 import { useNavigate } from '@/hooks/useNavigate';
 import { getElectronAPI } from '@/shared/platform/electron-api';
 import { useProviderStore } from '@/stores/ai/provider';
+import { useSkillStore } from '@/stores/ai/skill';
 import { useChatSessionStore } from '@/stores/chat/session';
 import { useCommandPanelStore } from '@/stores/ui/commandPanel';
 import { asyncTo } from '@/utils/asyncTo';
@@ -109,7 +110,7 @@ import { useRuntimeBridgeHandler } from './hooks/useRuntimeBridgeHandler';
 import { useRuntimeConfig } from './hooks/useRuntimeConfig';
 import { useRuntimeRequestConfig } from './hooks/useRuntimeRequestConfig';
 import { useRuntimeTools } from './hooks/useRuntimeTools';
-import { useSlashCommands, chatSlashCommands } from './hooks/useSlashCommands';
+import { createSkillSlashCommands, useSlashCommands, chatSlashCommands } from './hooks/useSlashCommands';
 import { useTodoPanel } from './hooks/useTodoPanel';
 import { createChatConfirmationController } from './utils/confirmationController';
 import { userChoice } from './utils/messageHelper';
@@ -182,6 +183,13 @@ let contextUsageEstimateSequence = 0;
 const commandPanelStore = useCommandPanelStore();
 /** Provider 数据源。 */
 const providerStore = useProviderStore();
+/** Skill 候选数据源。 */
+const skillStore = useSkillStore();
+/** 命令与可用 Skill 组成的响应式斜杠菜单。 */
+const slashCommandOptions = computed<SlashCommandOption[]>((): SlashCommandOption[] => [
+  ...chatSlashCommands,
+  ...createSkillSlashCommands(skillStore.skills ?? [])
+]);
 /** 是否存在至少一个已启用的模型，用于「去配置」点击分支。 */
 const hasAvailableModels = computed<boolean>((): boolean => providerStore.availableModels.length > 0);
 /** 对话视图引用 */
@@ -237,7 +245,7 @@ watch(messages, (loadedMessages: Message[]): void => {
 /** Todo 面板状态和回退恢复能力。 */
 const { currentSessionTodos, todoPanelVisible, todoPanelDismissed, restoreTodoSnapshotsForMessages } = useTodoPanel({ activeSessionId });
 /** Runtime 内置工具能力。 */
-const { workspaceRoot, getActiveTools, syncAIResources, getSkillContentHashes, openDraft, openFileByPath } = useRuntimeTools({
+const { workspaceRoot, getActiveTools, syncAIResources, getSkillContentHashes, resolveSkillSnapshots, openDraft, openFileByPath } = useRuntimeTools({
   messages,
   confirm: confirmationController.createAdapter(),
   getSessionId: (): string | undefined => activeSessionId.value ?? undefined,
@@ -331,6 +339,7 @@ const { prepareRuntimeRequest, resolveRuntimeRequestConfig } = useRuntimeRequest
   syncAIResources,
   getActiveTools,
   getSkillContentHashes,
+  resolveSkillSnapshots,
   resolveRuntimeSystemPrompt,
   resolveRuntimeTavilyConfig,
   resolveRuntimeMcpRequestConfig,
@@ -492,6 +501,8 @@ defineExpose({ focusInput });
 </script>
 
 <style lang="less">
+@import url('./utils/chipResolver/index.less');
+
 .b-chat__container {
   display: flex;
   flex: 1;

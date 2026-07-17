@@ -2,7 +2,9 @@
  * @file useSlashCommands.ts
  * @description 斜杠命令处理 hook，统一管理命令定义和派发逻辑。
  */
+import type { SkillDefinition } from '@/ai/skill/types';
 import type { SlashCommandOption } from '@/components/BText/types';
+import { createSkillReferenceToken } from '../utils/skillReference';
 
 /**
  * 斜杠命令处理所需的回调函数集合。
@@ -48,8 +50,8 @@ type CommandId = keyof typeof COMMAND_HANDLER_MAP;
  */
 const CHAT_COMMAND_DEFINITIONS = [
   { id: 'model', title: '模型', description: '切换当前使用的模型', concurrencyPolicy: 'allowAlways' },
-  { id: 'new', title: '新建聊天', description: '开始一个新的聊天会话', concurrencyPolicy: 'allowWhenIdleOnly' },
-  { id: 'compact', title: '压缩上下文', description: '压缩当前长会话上下文', concurrencyPolicy: 'allowWhenIdleOnly' }
+  { id: 'new', title: '新建', description: '开始一个新的聊天会话', concurrencyPolicy: 'allowWhenIdleOnly' },
+  { id: 'compact', title: '压缩', description: '压缩当前长会话上下文', concurrencyPolicy: 'allowWhenIdleOnly' }
 ] satisfies Array<{ id: CommandId; title: string; description: string; concurrencyPolicy: CommandConcurrencyPolicy }>;
 
 /**
@@ -60,8 +62,33 @@ export const chatSlashCommands: SlashCommandOption[] = CHAT_COMMAND_DEFINITIONS.
   trigger: `/${id}`,
   title,
   description,
-  type: 'action' as const
+  group: 'command',
+  selectAction: { type: 'emit' }
 }));
+
+/**
+ * 把当前可用 Skill 转换为斜杠菜单条目。
+ * @param skills - Skill Store 当前定义
+ * @returns 已启用且无解析错误的技能条目
+ */
+export function createSkillSlashCommands(skills: readonly SkillDefinition[]): SlashCommandOption[] {
+  return skills
+    .filter((skill: SkillDefinition): boolean => skill.enabled && !skill.parseError && Boolean(skill.name))
+    .map(
+      (skill: SkillDefinition): SlashCommandOption => ({
+        id: `skill:${skill.name}`,
+        trigger: `/${skill.name}`,
+        title: skill.name,
+        description: skill.description,
+        group: 'skill',
+        groupTitle: '技能',
+        selectAction: {
+          type: 'insert',
+          text: createSkillReferenceToken(skill.name)
+        }
+      })
+    );
+}
 
 /**
  * 斜杠命令处理 hook

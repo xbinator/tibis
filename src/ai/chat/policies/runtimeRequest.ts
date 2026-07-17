@@ -3,7 +3,7 @@
  * @description ChatRuntime 请求配置与 renderer 工具快照纯策略。
  */
 import type { AIMCPRequestConfig, AITavilyRuntimeConfig, AIToolExecutor } from 'types/ai';
-import type { ChatRuntimeSendInput } from 'types/chat-runtime';
+import type { ChatRuntimeContext, ChatRuntimeSendInput } from 'types/chat-runtime';
 import type { MemoryInjectionMode } from '@/ai/memory/types';
 import { toTransportTools } from '@/ai/tools/stream';
 import { filterMemoryTools } from './memorySelection';
@@ -11,7 +11,7 @@ import { filterMemoryTools } from './memorySelection';
 /** ChatRuntime 通用请求配置。 */
 export type ChatRuntimeRequestConfig = Pick<
   ChatRuntimeSendInput,
-  'contextWindow' | 'system' | 'workspaceRoot' | 'tools' | 'skillContentHashes' | 'tavily' | 'mcp' | 'capabilities'
+  'contextWindow' | 'system' | 'workspaceRoot' | 'tools' | 'skillContentHashes' | 'runtimeContext' | 'tavily' | 'mcp' | 'capabilities'
 >;
 
 /**
@@ -32,6 +32,8 @@ export interface RuntimeRequestPolicyInput {
   memoryMode?: MemoryInjectionMode;
   /** 当前 Skill 内容版本 */
   skillContentHashes: Record<string, string>;
+  /** 本轮只在 Runtime 生命周期内生效的临时上下文 */
+  runtimeContext?: ChatRuntimeContext;
   /** Tavily Runtime 配置 */
   tavily?: AITavilyRuntimeConfig;
   /** MCP Runtime 配置 */
@@ -65,6 +67,7 @@ export function buildRuntimeRequestConfig(input: RuntimeRequestPolicyInput): Run
       workspaceRoot: input.workspaceRoot,
       tools: input.toolSupport ? toTransportTools(rendererTools) : undefined,
       skillContentHashes: input.skillContentHashes,
+      runtimeContext: input.runtimeContext,
       tavily: input.tavily,
       mcp: input.mcp
     },

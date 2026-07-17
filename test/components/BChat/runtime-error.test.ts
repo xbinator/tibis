@@ -3,7 +3,7 @@
  * @description ChatRuntime 错误处理与中文展示测试。
  */
 import { describe, expect, it } from 'vitest';
-import { appendRuntimeErrorMessage, createRuntimeRequestError, localizeRuntimeErrorMessage } from '@/components/BChat/utils/runtimeError';
+import { appendRuntimeErrorMessage, createRuntimeError, createRuntimeRequestError, localizeRuntimeErrorMessage } from '@/components/BChat/utils/runtimeError';
 import type { Message } from '@/components/BChat/utils/types';
 
 /**
@@ -45,6 +45,12 @@ describe('runtimeError', (): void => {
 
     expect(error.message).toBe('文件不存在或已被移动：/tmp/missing.md');
     expect(error.code).toBe('ENOENT');
+  });
+
+  it('creates local preparation errors through the shared runtime error collector', (): void => {
+    const error = createRuntimeError({ code: 'SKILL_UNAVAILABLE', message: '技能不可用' });
+
+    expect(error).toMatchObject({ code: 'SKILL_UNAVAILABLE', message: '技能不可用' });
   });
 
   it('appends runtime errors to visible and persisted messages', async (): Promise<void> => {

@@ -4,7 +4,7 @@
  */
 import type { Message, ServiceConfig } from '../utils/types';
 import type { AIMCPRequestConfig, AITavilyRuntimeConfig, AIToolExecutor } from 'types/ai';
-import type { ChatRuntimeUserInputPart } from 'types/chat-runtime';
+import type { ChatRuntimeContext, ChatRuntimeSkillSnapshot, ChatRuntimeUserInputPart } from 'types/chat-runtime';
 import type { Ref } from 'vue';
 import { createMemorySelection } from '@/ai/chat/policies/memorySelection';
 import { buildRuntimeRequestConfig, type ChatRuntimeRequestConfig, type RuntimeRequestPolicyResult } from '@/ai/chat/policies/runtimeRequest';
@@ -27,6 +27,8 @@ interface UseRuntimeRequestConfigOptions {
   getActiveTools: () => AIToolExecutor[];
   /** 读取 Skill 内容版本 */
   getSkillContentHashes: () => Record<string, string>;
+  /** 解析显式选择的 Skill 内容快照 */
+  resolveSkillSnapshots: (names: string[]) => Promise<ChatRuntimeSkillSnapshot[]>;
   /** 解析 system prompt */
   resolveRuntimeSystemPrompt: (
     selection?: MemorySelectionContext,
@@ -65,6 +67,17 @@ interface UseRuntimeRequestConfigReturn {
  */
 export function useRuntimeRequestConfig(options: UseRuntimeRequestConfigOptions): UseRuntimeRequestConfigReturn {
   /**
+   * 从 Runtime 输入或持久化消息中读取有序 SkillReference 名称。
+   * @param selectionSource - 当前用户消息
+   * @param selectionParts - 发送前结构化输入
+   * @returns 允许包含重复项的 Skill 名称
+   */
+  function collectSkillNames(selectionSource?: Message | null, selectionParts: ChatRuntimeUserInputPart[] = []): string[] {
+    const sourceParts = selectionParts.length > 0 ? selectionParts : selectionSource?.parts ?? [];
+    return sourceParts.filter((part) => part.type === 'skill_reference').map((part) => part.name);
+  }
+
+  /**
    * 解析完整 Runtime 请求。
    * @param selectionSource - Memory 选择使用的用户消息
    * @param selectionParts - Runtime 结构化输入
@@ -81,14 +94,26 @@ export function useRuntimeRequestConfig(options: UseRuntimeRequestConfigOptions)
     }
 
     await options.syncAIResources();
-    const memorySelection = selectionSource
-      ? createMemorySelection({
-          content: selectionSource.content,
-          messageReferences: selectionSource.references?.map((reference) => reference.path) ?? [],
-          filePartReferences: selectionParts.filter((part) => part.type === 'file').map((part) => part.path),
-          workspaceRoot: options.workspaceRoot.value || undefined
-        })
-      : undefined;
+    const resolvedSkills = await options.resolveSkillSnapshots(collectSkillNames(selectionSource, selectionParts));
+    const runtimeContext: ChatRuntimeContext | undefined =
+      resolvedSkills.length > 0 && selectionSource
+        ? {
+            skill: {
+              targetMessageId: selectionSource.id,
+              snapshots: resolvedSkills
+            }
+          }
+        : undefined;
+    // 构造 Memory 选择上下文（无消息源时跳过）
+    let memorySelection: MemorySelectionContext | undefined;
+    if (selectionSource) {
+      memorySelection = createMemorySelection({
+        content: selectionSource.content,
+        messageReferences: selectionSource.references?.map((reference) => reference.path) ?? [],
+        filePartReferences: selectionParts.filter((part) => part.type === 'file').map((part) => part.path),
+        workspaceRoot: options.workspaceRoot.value || undefined
+      });
+    }
     let memorySelectionDebugInfo: MemorySelectionDebugInfo | undefined;
     const system = await options.resolveRuntimeSystemPrompt(memorySelection, (debugInfo: MemorySelectionDebugInfo): void => {
       memorySelectionDebugInfo = debugInfo;
@@ -101,6 +126,7 @@ export function useRuntimeRequestConfig(options: UseRuntimeRequestConfigOptions)
       toolSupport: serviceConfig.toolSupport.supported,
       memoryMode: memorySelection?.mode,
       skillContentHashes: options.getSkillContentHashes(),
+      runtimeContext,
       tavily: options.resolveRuntimeTavilyConfig(),
       mcp: options.resolveRuntimeMcpRequestConfig()
     });

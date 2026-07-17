@@ -360,6 +360,26 @@ export interface ChatMessageFilePart extends ChatMessageFilePartInput {
 }
 
 /**
+ * 聊天消息 Skill 引用片段。
+ * 仅持久化稳定名称与原始 Token，不保存 Skill 完整内容。
+ */
+export interface ChatMessageSkillReferencePart extends ChatMessagePartBase {
+  /** 片段类型 */
+  type: 'skill_reference';
+  /** Skill frontmatter 名称 */
+  name: string;
+  /** 用户原始输入中的引用文本及位置 */
+  sourceText: {
+    /** Token 起始 offset */
+    start: number;
+    /** Token 结束 offset */
+    end: number;
+    /** 原始 Token 文本 */
+    value: string;
+  };
+}
+
+/**
  * 聊天消息文本片段
  */
 export interface ChatMessageTextPart extends ChatMessagePartBase {
@@ -550,6 +570,7 @@ export interface ChatMessageErrorPart extends ChatMessagePartBase {
 export type ChatMessagePart =
   | ChatMessageTextPart
   | ChatMessageFilePart
+  | ChatMessageSkillReferencePart
   | ChatMessageErrorPart
   | ChatMessageThinkingPart
   | ChatMessageToolPart

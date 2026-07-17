@@ -11,7 +11,7 @@ import { useFileDrop } from '@/hooks/useFileDrop';
 import type { OpenFileOptions } from '@/hooks/useNavigate';
 import { useRecentStore } from '@/stores/workspace/recent';
 import type { FileReferenceNavigationTarget } from '@/utils/file/reference';
-import { createFileRefChipResolver } from '../utils/chipResolver';
+import { createChatChipResolver } from '../utils/chipResolver';
 import { useChatInput } from './useChatInput';
 import { useFileReference } from './useFileReference';
 import { useImageUpload } from './useImageUpload';
@@ -58,7 +58,7 @@ interface UseChatComposerReturn {
   /** 文件提及候选项 */
   fileMentionOptions: ComputedRef<FileMentionOption[]>;
   /** 文件引用 chip resolver */
-  promptChipResolver: ReturnType<typeof createFileRefChipResolver>;
+  promptChipResolver: ReturnType<typeof createChatChipResolver>;
   /** 处理文件提及选择 */
   handleFileMentionSelect: (file: FileMentionOption) => void;
   /** 开始语音输入 */
@@ -123,7 +123,7 @@ export function useChatComposer(options: UseChatComposerOptions): UseChatCompose
     });
   }
 
-  const promptChipResolver = createFileRefChipResolver(handleOpenPromptFileReference);
+  const promptChipResolver = createChatChipResolver(handleOpenPromptFileReference);
   const input = useChatInput({ focusInput });
   const model = useModelSelection();
   const imageUpload = useImageUpload({ supportsVision: model.supportsVision, inputEvents: input, interactionAPI: options.interactionAPI });

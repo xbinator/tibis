@@ -20,7 +20,7 @@ import type {
   AIUsage
 } from 'types/ai';
 import type { ChatMessageRecord } from 'types/chat';
-import type { ChatRuntimeCapabilityDescriptor, ChatRuntimeEventMap } from 'types/chat-runtime';
+import type { ChatRuntimeCapabilityDescriptor, ChatRuntimeContext, ChatRuntimeEventMap } from 'types/chat-runtime';
 
 /** Runtime 生命周期状态。 */
 export type ChatRuntimeStatus = 'running' | 'completed';
@@ -52,6 +52,8 @@ export interface ActiveChatRuntime {
   tools?: AITransportTool[];
   /** 当前启用 Skill 的内容版本。 */
   skillContentHashes?: Record<string, string>;
+  /** 当前生命周期内生效的临时 Runtime 上下文。 */
+  runtimeContext?: ChatRuntimeContext;
   /** Tavily 运行时配置。 */
   tavily?: AITavilyRuntimeConfig;
   /** MCP 运行时配置。 */

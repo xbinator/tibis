@@ -9,7 +9,7 @@ import type {
 } from '../../../../../../electron/main/modules/chat/runtime/compaction/executor.mjs';
 import type { ChatModelResolution } from '../../../../../../electron/main/modules/chat/runtime/model/resolver.mjs';
 import type { ChatRuntimeStreamExecutor } from '../../../../../../electron/main/modules/chat/runtime/types.mjs';
-import type { AIInvokeResult, AIServiceError } from 'types/ai';
+import type { AICreateOptions, AIInvokeResult, AIRequestOptions, AIServiceError } from 'types/ai';
 import type { ChatMessagePart, ChatMessageRecord, StructuredContextSummary } from 'types/chat';
 import type { ChatRuntimeCompactInput, ChatRuntimeContinueInput, ChatRuntimeEventMap, ChatRuntimeSendInput } from 'types/chat-runtime';
 import { describe, expect, it, vi } from 'vitest';
@@ -889,6 +889,99 @@ describe('chat runtime service shell', (): void => {
     );
   });
 
+  it('keeps explicit Skill context across tool continuation rounds without persisting its content', async (): Promise<void> => {
+    const collector = createEventCollector();
+    const addedMessages: ChatMessageRecord[] = [];
+    const sourceTexts: string[] = [];
+    const skillContent = `Use deterministic weather instructions. ${'x'.repeat(4_000)}`;
+    const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage, sourceMessages }, updateAssistant) => {
+      const selectedUser = sourceMessages?.find((message) => message.id === 'user-message-skill');
+      sourceTexts.push(
+        selectedUser?.parts
+          .filter((part): part is Extract<ChatMessagePart, { type: 'text' }> => part.type === 'text')
+          .map((part) => part.text)
+          .join('') ?? ''
+      );
+
+      if (streamExecutor.mock.calls.length === 1) {
+        assistantMessage.parts = [
+          {
+            id: 'skill-round-tool',
+            type: 'tool',
+            toolCallId: 'skill-round-tool-call',
+            toolName: 'read_file',
+            status: 'done',
+            input: { path: 'src/index.ts' },
+            result: { toolName: 'read_file', status: 'success', data: { content: 'ok' } }
+          }
+        ];
+        await updateAssistant(assistantMessage);
+        return { shouldContinue: true };
+      }
+
+      assistantMessage.content = 'done';
+      assistantMessage.parts.push({ id: 'skill-round-final', type: 'text', text: 'done' });
+      assistantMessage.loading = false;
+      assistantMessage.finished = true;
+      await updateAssistant(assistantMessage);
+      return {};
+    });
+    const service = createChatRuntimeService({
+      emit: collector.emit,
+      createMessageId: (role) => `${role}-message-skill`,
+      messageReader: createNoopMessageReader(),
+      messageWriter: {
+        addMessage: (message): void => {
+          addedMessages.push(structuredClone(message));
+        },
+        updateMessage: (): void => undefined
+      },
+      streamExecutor
+    });
+
+    await service.send(
+      createInput({
+        content: '$weather 查询上海',
+        contextWindow: 100_000,
+        userMessageId: 'user-message-skill',
+        parts: [
+          {
+            id: 'skill-reference-weather',
+            type: 'skill_reference',
+            name: 'weather',
+            sourceText: { start: 0, end: 12, value: '{{$weather}}' }
+          },
+          { id: 'skill-request-text', type: 'text', text: ' 查询上海' }
+        ],
+        runtimeContext: {
+          skill: {
+            targetMessageId: 'user-message-skill',
+            snapshots: [
+              {
+                name: 'weather',
+                content: skillContent,
+                contentHash: 'weather-hash',
+                filePath: '/skills/weather/SKILL.md'
+              }
+            ]
+          }
+        }
+      })
+    );
+    await flushRuntimeTasks();
+
+    expect(streamExecutor).toHaveBeenCalledTimes(2);
+    expect(sourceTexts).toHaveLength(2);
+    expect(sourceTexts.every((text: string): boolean => text.includes('Use deterministic weather instructions.'))).toBe(true);
+    expect(JSON.stringify(addedMessages)).not.toContain(skillContent);
+    expect(addedMessages[0]?.parts).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'skill_reference', name: 'weather' })]));
+    const usageEvents = collector.events.filter((event): boolean => event.name === 'chat:runtime:context-usage-updated');
+    const requestUsage = usageEvents.at(-2)?.payload as ChatRuntimeEventMap['chat:runtime:context-usage-updated'];
+    const finalUsage = usageEvents.at(-1)?.payload as ChatRuntimeEventMap['chat:runtime:context-usage-updated'];
+    expect(usageEvents.length).toBeGreaterThanOrEqual(3);
+    expect(requestUsage.snapshot.usedTokens).toBeGreaterThan(finalUsage.snapshot.usedTokens);
+  });
+
   it('keeps assistant message unfinished when the stream pauses for user choice', async (): Promise<void> => {
     const collector = createEventCollector();
     const updatedMessages: ChatMessageRecord[] = [];
@@ -1467,6 +1560,8 @@ describe('chat runtime service shell', (): void => {
       }
     ];
     const order: string[] = [];
+    const summaryRequests: AIRequestOptions[] = [];
+    const skillContent = 'Use deterministic weather instructions without persisting this text.';
     let modelSourceMessages: ChatMessageRecord[] = [];
     const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ sourceMessages }) => {
       order.push('stream');
@@ -1490,11 +1585,42 @@ describe('chat runtime service shell', (): void => {
         }
       },
       resolveModel: async () => createModelResolution(),
-      compactionGenerateText: async (): Promise<[undefined, AIInvokeResult]> => [undefined, { text: '', output: createCompactionSummary('old-source-part') }],
+      compactionGenerateText: async (_createOptions: AICreateOptions, request: AIRequestOptions): Promise<[undefined, AIInvokeResult]> => {
+        summaryRequests.push(structuredClone(request));
+        return [undefined, { text: '', output: createCompactionSummary('old-source-part') }];
+      },
       streamExecutor
     });
 
-    await service.send(createInput({ content: '当前任务必须保留原文', contextWindow: 12_000 }));
+    await service.send(
+      createInput({
+        content: '$weather 当前任务必须保留原文',
+        contextWindow: 12_000,
+        userMessageId: 'user-message-auto',
+        parts: [
+          {
+            id: 'skill-reference-auto',
+            type: 'skill_reference',
+            name: 'weather',
+            sourceText: { start: 0, end: 12, value: '{{$weather}}' }
+          },
+          { id: 'skill-request-auto', type: 'text', text: ' 当前任务必须保留原文' }
+        ],
+        runtimeContext: {
+          skill: {
+            targetMessageId: 'user-message-auto',
+            snapshots: [
+              {
+                name: 'weather',
+                content: skillContent,
+                contentHash: 'weather-auto-hash',
+                filePath: '/skills/weather/SKILL.md'
+              }
+            ]
+          }
+        }
+      })
+    );
     await vi.waitFor((): void => {
       expect(streamExecutor).toHaveBeenCalledOnce();
     });
@@ -1502,7 +1628,10 @@ describe('chat runtime service shell', (): void => {
     expect(order.slice(0, 3)).toEqual(['write:pending', 'write:success', 'stream']);
     expect(modelSourceMessages[0]).toMatchObject({ id: expect.stringMatching(/^context-checkpoint:/u) });
     expect(JSON.stringify(modelSourceMessages)).toContain('当前任务必须保留原文');
+    expect(JSON.stringify(modelSourceMessages)).toContain(skillContent);
     expect(JSON.stringify(modelSourceMessages)).not.toContain('x'.repeat(13_000));
+    expect(JSON.stringify(summaryRequests)).not.toContain(skillContent);
+    expect(JSON.stringify(messages)).not.toContain(skillContent);
   });
 
   it('manually compacts into a compaction-only assistant message without creating a user message', async (): Promise<void> => {

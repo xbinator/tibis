@@ -5,6 +5,54 @@
 import type { ActiveChatRuntime } from '../types.mjs';
 import type { ChatRuntimeCompactInput, ChatRuntimeContinueInput, ChatRuntimeSendInput, ChatRuntimeSubmitUserChoiceInput } from 'types/chat-runtime';
 
+/** 支持创建 ActiveChatRuntime 的请求输入。 */
+type RuntimeFactoryInput = ChatRuntimeSendInput | ChatRuntimeContinueInput | ChatRuntimeCompactInput | ChatRuntimeSubmitUserChoiceInput;
+
+/** ActiveChatRuntime 中由全部创建路径共享的基础状态。 */
+type RuntimeBaseState = Pick<
+  ActiveChatRuntime,
+  | 'runtimeId'
+  | 'sessionId'
+  | 'clientId'
+  | 'agentId'
+  | 'capabilities'
+  | 'contextWindow'
+  | 'system'
+  | 'workspaceRoot'
+  | 'tools'
+  | 'skillContentHashes'
+  | 'runtimeContext'
+  | 'status'
+  | 'abortController'
+  | 'createdAt'
+>;
+
+/**
+ * 创建全部 Runtime 路径共享的基础状态。
+ * @param input - Runtime 请求输入
+ * @param runtimeId - Runtime ID
+ * @param sessionId - Session ID
+ * @returns ActiveChatRuntime 基础状态
+ */
+function createRuntimeBase(input: RuntimeFactoryInput, runtimeId: string, sessionId: string): RuntimeBaseState {
+  return {
+    runtimeId,
+    sessionId,
+    clientId: input.clientId,
+    agentId: input.agentId,
+    capabilities: input.capabilities,
+    contextWindow: input.contextWindow,
+    system: input.system,
+    workspaceRoot: input.workspaceRoot,
+    tools: input.tools,
+    skillContentHashes: input.skillContentHashes,
+    runtimeContext: input.runtimeContext,
+    status: 'running',
+    abortController: new AbortController(),
+    createdAt: Date.now()
+  };
+}
+
 /**
  * 创建普通发送 runtime 状态。
  * @param input - 发送输入
@@ -14,23 +62,11 @@ import type { ChatRuntimeCompactInput, ChatRuntimeContinueInput, ChatRuntimeSend
  */
 export function createSendRuntime(input: ChatRuntimeSendInput, runtimeId: string, sessionId: string): ActiveChatRuntime {
   return {
-    runtimeId,
-    sessionId,
-    clientId: input.clientId,
-    agentId: input.agentId,
+    ...createRuntimeBase(input, runtimeId, sessionId),
     parentRuntimeId: input.parentRuntimeId,
-    capabilities: input.capabilities,
-    contextWindow: input.contextWindow,
-    system: input.system,
-    workspaceRoot: input.workspaceRoot,
-    tools: input.tools,
-    skillContentHashes: input.skillContentHashes,
     tavily: input.tavily,
     mcp: input.mcp,
-    status: 'running',
-    phase: 'streaming',
-    abortController: new AbortController(),
-    createdAt: Date.now()
+    phase: 'streaming'
   };
 }
 
@@ -42,23 +78,11 @@ export function createSendRuntime(input: ChatRuntimeSendInput, runtimeId: string
  */
 export function createContinuationRuntime(input: ChatRuntimeContinueInput, runtimeId: string): ActiveChatRuntime {
   return {
-    runtimeId,
-    sessionId: input.sessionId,
-    clientId: input.clientId,
-    agentId: input.agentId,
+    ...createRuntimeBase(input, runtimeId, input.sessionId),
     parentRuntimeId: input.parentRuntimeId,
-    capabilities: input.capabilities,
-    contextWindow: input.contextWindow,
-    system: input.system,
-    workspaceRoot: input.workspaceRoot,
-    tools: input.tools,
-    skillContentHashes: input.skillContentHashes,
     tavily: input.tavily,
     mcp: input.mcp,
-    status: 'running',
-    phase: 'streaming',
-    abortController: new AbortController(),
-    createdAt: Date.now()
+    phase: 'streaming'
   };
 }
 
@@ -70,21 +94,9 @@ export function createContinuationRuntime(input: ChatRuntimeContinueInput, runti
  */
 export function createCompactRuntime(input: ChatRuntimeCompactInput, runtimeId: string): ActiveChatRuntime {
   return {
-    runtimeId,
-    sessionId: input.sessionId,
-    clientId: input.clientId,
-    agentId: input.agentId,
-    capabilities: input.capabilities,
-    contextWindow: input.contextWindow,
-    system: input.system,
-    workspaceRoot: input.workspaceRoot,
-    tools: input.tools,
-    skillContentHashes: input.skillContentHashes,
-    status: 'running',
+    ...createRuntimeBase(input, runtimeId, input.sessionId),
     phase: 'compacting',
-    compactionTrigger: 'manual',
-    abortController: new AbortController(),
-    createdAt: Date.now()
+    compactionTrigger: 'manual'
   };
 }
 
@@ -96,22 +108,10 @@ export function createCompactRuntime(input: ChatRuntimeCompactInput, runtimeId: 
  */
 export function createUserChoiceRuntime(input: ChatRuntimeSubmitUserChoiceInput, runtimeId: string): ActiveChatRuntime {
   return {
-    runtimeId,
-    sessionId: input.sessionId,
-    clientId: input.clientId,
-    agentId: input.agentId,
+    ...createRuntimeBase(input, runtimeId, input.sessionId),
     parentRuntimeId: input.parentRuntimeId,
-    capabilities: input.capabilities,
-    contextWindow: input.contextWindow,
-    system: input.system,
-    workspaceRoot: input.workspaceRoot,
-    tools: input.tools,
-    skillContentHashes: input.skillContentHashes,
     tavily: input.tavily,
     mcp: input.mcp,
-    status: 'running',
-    phase: 'streaming',
-    abortController: new AbortController(),
-    createdAt: Date.now()
+    phase: 'streaming'
   };
 }

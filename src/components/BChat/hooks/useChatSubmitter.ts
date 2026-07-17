@@ -12,7 +12,10 @@ import type { Ref } from 'vue';
 import { cloneDeep } from 'lodash-es';
 
 /** ChatRuntime 通用请求配置。 */
-type ChatRuntimeRequestConfig = Pick<ChatRuntimeSendInput, 'contextWindow' | 'system' | 'workspaceRoot' | 'tools' | 'tavily' | 'mcp' | 'capabilities'>;
+type ChatRuntimeRequestConfig = Pick<
+  ChatRuntimeSendInput,
+  'contextWindow' | 'system' | 'workspaceRoot' | 'tools' | 'skillContentHashes' | 'runtimeContext' | 'tavily' | 'mcp' | 'capabilities'
+>;
 
 /**
  * BChat 统一提交 hook 选项。

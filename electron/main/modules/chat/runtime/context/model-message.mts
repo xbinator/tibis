@@ -3,7 +3,14 @@
  * @description ChatRuntime 主进程模型上下文转换。
  */
 import type { JSONValue, ModelMessage } from 'ai';
-import type { ChatMessageFilePart, ChatMessagePart, ChatMessageRecord, ChatMessageToolPart, ChatMessageWidgetResultPart } from 'types/chat';
+import type {
+  ChatMessageFilePart,
+  ChatMessagePart,
+  ChatMessageRecord,
+  ChatMessageSkillReferencePart,
+  ChatMessageToolPart,
+  ChatMessageWidgetResultPart
+} from 'types/chat';
 import { isPlainObject } from 'lodash-es';
 
 /** 可发送给模型的聊天消息。 */
@@ -27,9 +34,7 @@ type ToolModelMessageContent = Array<{
 }>;
 
 /** User 模型消息内容片段。 */
-type UserModelMessageContent = Array<
-  { type: 'text'; text: string } | { type: 'file'; data: URL; mediaType: string; filename?: string }
->;
+type UserModelMessageContent = Array<{ type: 'text'; text: string } | { type: 'file'; data: URL; mediaType: string; filename?: string }>;
 
 /** Runtime 工具结果类型。 */
 type RuntimeToolResult = NonNullable<ChatMessageToolPart['result']>;
@@ -231,6 +236,15 @@ function isWidgetResultPart(part: ChatMessagePart): part is ChatMessageWidgetRes
 }
 
 /**
+ * 判断消息片段是否为 SkillReference。
+ * @param part - 消息片段
+ * @returns 是否为 SkillReference
+ */
+function isSkillReferencePart(part: ChatMessagePart): part is ChatMessageSkillReferencePart {
+  return part.type === 'skill_reference';
+}
+
+/**
  * 判断用户消息是否包含需要以 content part 传递的结构化文本片段。
  * @param message - 用户消息
  * @returns 是否包含结构化文本片段
@@ -286,6 +300,8 @@ function createUserModelText(message: RuntimeUserMessageRecord): string {
         text += toUserFileXmlText(part);
       } else if (isWidgetResultPart(part)) {
         text += `${text ? '\n' : ''}${stringifyUserModelTextValue(part)}`;
+      } else if (isSkillReferencePart(part)) {
+        text += `$${part.name}`;
       }
     }
     return text;

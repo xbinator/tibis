@@ -20,4 +20,12 @@ describe('parseSkillMarkdown content hash', (): void => {
 
     expect(parseSkillMarkdown(source, '/skills/broken/SKILL.md').contentHash).toBe(hashString(source));
   });
+
+  it('rejects names that cannot be represented by SkillReference tokens', (): void => {
+    const braceName = ['---', 'name: "bad{name"', 'description: invalid', '---', 'content'].join('\n');
+    const multilineName = ['---', 'name: |-', '  bad', '  name', 'description: invalid', '---', 'content'].join('\n');
+
+    expect(parseSkillMarkdown(braceName, '/skills/brace/SKILL.md').parseError).toContain('name');
+    expect(parseSkillMarkdown(multilineName, '/skills/multiline/SKILL.md').parseError).toContain('name');
+  });
 });

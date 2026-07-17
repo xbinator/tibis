@@ -606,6 +606,8 @@ function createUserModelText(message: ModelCompatibleMessage): string {
         text += toUserFileXmlText(part);
       } else if (isWidgetResultPart(part)) {
         text += `${text ? '\n' : ''}${stringifyUserModelTextValue(part)}`;
+      } else if (part.type === 'skill_reference') {
+        text += `$${part.name}`;
       }
     }
     return text;

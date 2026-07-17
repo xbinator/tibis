@@ -4,7 +4,8 @@
  */
 import type { ChatMessageFilePartInput } from 'types/chat';
 import { describe, expect, it } from 'vitest';
-import { buildUserInputParts } from '@/components/BChat/utils/filePartParser';
+import { buildUserInputParts, parseUserInput } from '@/components/BChat/utils/filePartParser';
+import { createSkillReferenceToken } from '@/components/BChat/utils/skillReference';
 
 describe('buildUserInputParts', (): void => {
   it('splits text and file references in source order', (): void => {
@@ -31,5 +32,19 @@ describe('buildUserInputParts', (): void => {
     expect(filePart.type).toBe('file');
     expect(filePart.path).toBe(path);
     expect(filePart.url).toBe('unsaved://file-1/Draft.md');
+  });
+
+  it('preserves file, SkillReference and text order while retaining source tokens', (): void => {
+    const skillToken = createSkillReferenceToken('天气 / 中文');
+    const source = `用 ${skillToken} 读 {{@src/foo.ts}}`;
+    const parsed = parseUserInput(source, '/workspace');
+
+    expect(parsed.content).toBe(source);
+    expect(parsed.parts.map((part) => part.type)).toEqual(['text', 'skill_reference', 'text', 'file']);
+    expect(parsed.parts[1]).toMatchObject({
+      type: 'skill_reference',
+      name: '天气 / 中文',
+      sourceText: { start: 2, value: skillToken }
+    });
   });
 });

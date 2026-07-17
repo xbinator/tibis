@@ -2,14 +2,25 @@
  * @file filePartParser.ts
  * @description 将 BChat 输入文本解析为有序 runtime user parts。
  */
-import type { ChatMessageFilePartInput, ChatMessageTextPart } from 'types/chat';
+import type { ChatMessageFilePartInput, ChatMessageSkillReferencePart, ChatMessageTextPart } from 'types/chat';
 import { nanoid } from 'nanoid';
-import { findFileReferenceTokens, type FileReferenceTokenMatch } from '@/utils/file/reference';
+import type { FileReferenceTokenMatch } from '@/utils/file/reference';
 import { isUnsavedPath } from '@/utils/file/unsaved';
 import { workspace } from '@/utils/file/workspace';
+import { splitReferenceText } from './userInputReference';
 
 /** Renderer 发送给 ChatRuntime 的用户输入片段。 */
-export type BChatUserInputPart = ChatMessageTextPart | ChatMessageFilePartInput;
+export type BChatUserInputPart = ChatMessageTextPart | ChatMessageFilePartInput | ChatMessageSkillReferencePart;
+
+/**
+ * 用户输入解析结果。
+ */
+export interface ParsedBChatUserInput {
+  /** 保留文件与技能引用 Token 的消息正文。 */
+  content: string;
+  /** 按来源顺序排列的 Runtime 输入片段。 */
+  parts: BChatUserInputPart[];
+}
 
 /**
  * 追加非空文本片段。
@@ -79,34 +90,54 @@ function createRuntimeFileUrl(rawPath: string, workspaceRoot: string | undefined
 }
 
 /**
+ * 将输入解析为保留引用 Token 的正文与有序 Runtime parts。
+ * @param content - 编辑器原始文本
+ * @param workspaceRoot - 当前工作区根路径
+ * @returns 可读正文与结构化片段
+ */
+export function parseUserInput(content: string, workspaceRoot?: string): ParsedBChatUserInput {
+  const parts: BChatUserInputPart[] = [];
+  for (const segment of splitReferenceText(content)) {
+    if (segment.type === 'text') {
+      appendTextPart(parts, segment.text);
+    } else if (segment.type === 'file') {
+      const { token } = segment;
+      parts.push({
+        type: 'file',
+        id: `file-part-${nanoid()}`,
+        filename: token.match.reference.fileName,
+        mime: 'text/plain',
+        url: createRuntimeFileUrl(token.match.reference.rawPath, workspaceRoot, token.match),
+        path: token.match.reference.rawPath,
+        sourceText: {
+          start: token.start,
+          end: token.end,
+          value: token.token
+        }
+      });
+    } else {
+      const { token } = segment;
+      parts.push({
+        type: 'skill_reference',
+        id: `skill-reference-${nanoid()}`,
+        name: token.match.name,
+        sourceText: {
+          start: token.start,
+          end: token.end,
+          value: token.token
+        }
+      });
+    }
+  }
+  return { content, parts };
+}
+
+/**
  * 从用户输入文本构建有序 runtime input parts。
  * @param content - 用户输入文本
  * @param workspaceRoot - 当前工作区根路径
  * @returns 有序输入片段
  */
 export function buildUserInputParts(content: string, workspaceRoot?: string): BChatUserInputPart[] {
-  const matches = findFileReferenceTokens(content);
-  if (!matches.length) return content ? [{ id: nanoid(), type: 'text', text: content }] : [];
-
-  const parts: BChatUserInputPart[] = [];
-  let cursor = 0;
-  for (const match of matches) {
-    appendTextPart(parts, content.slice(cursor, match.start));
-    parts.push({
-      type: 'file',
-      id: `file-part-${nanoid()}`,
-      filename: match.reference.fileName,
-      mime: 'text/plain',
-      url: createRuntimeFileUrl(match.reference.rawPath, workspaceRoot, match),
-      path: match.reference.rawPath,
-      sourceText: {
-        start: match.start,
-        end: match.end,
-        value: match.token
-      }
-    });
-    cursor = match.end;
-  }
-  appendTextPart(parts, content.slice(cursor));
-  return parts;
+  return parseUserInput(content, workspaceRoot).parts;
 }
