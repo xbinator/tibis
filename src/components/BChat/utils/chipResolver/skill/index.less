@@ -4,16 +4,29 @@
  */
 .b-skill-reference {
   display: inline-flex;
-  align-items: baseline;
-  vertical-align: baseline;
-  color: var(--color-primary);
+  gap: 4px;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 20px;
+  cursor: pointer;
+  background-color: var(--bg-secondary);
+  border-radius: 4px;
 
   &:hover {
     color: var(--color-primary-hover);
   }
 }
 
+.b-skill-reference__icon {
+  flex-shrink: 0;
+}
+
 .b-skill-reference__name {
-  font-weight: 600;
-  color: currentcolor;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

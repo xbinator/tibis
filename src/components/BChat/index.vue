@@ -145,8 +145,8 @@ const { api: interactionAPI, toastQueue, removeToast } = useInteractionState();
 /** 提供交互 API */
 provide('interaction', interactionAPI);
 
-/** 通用文件打开导航能力 */
-const { openFile, openWebview } = useNavigate();
+/** 文件、Skill 与 Webview 的通用导航能力 */
+const { openFile, openSkill, openWebview } = useNavigate();
 /** 输入编辑器实例。 */
 const promptEditorRef = ref<EditorInstance>();
 /** 文件拖拽容器引用。 */
@@ -156,7 +156,8 @@ const composer = useChatComposer({
   containerRef,
   promptEditorRef,
   interactionAPI,
-  openFile
+  openFile,
+  openSkill
 });
 const {
   focusInput,

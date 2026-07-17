@@ -30,11 +30,11 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { message } from 'ant-design-vue';
 import type { SkillDefinition } from '@/ai/skill/types';
 import type { DropdownOption } from '@/components/BDropdown/type';
+import { useNavigate } from '@/hooks/useNavigate';
 import { useOpenFile } from '@/hooks/useOpenFile';
 import { native } from '@/shared/platform';
 import { useSkillStore } from '@/stores/ai/skill';
@@ -50,8 +50,8 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-const router = useRouter();
 const store = useSkillStore();
+const { openSkill } = useNavigate();
 const { openFileByPath } = useOpenFile();
 /** 当前 Skill 是否正在执行删除流程。 */
 const deleting = ref(false);
@@ -69,7 +69,7 @@ const description = computed<string>(() => {
  * 打开 Skill 独立详情页。
  */
 function handleOpen(): void {
-  router.push({ name: 'skill', params: { name: props.skill.name } });
+  openSkill(props.skill.name);
 }
 
 /**

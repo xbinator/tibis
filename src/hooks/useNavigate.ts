@@ -1,6 +1,6 @@
 /**
  * @file useNavigate.ts
- * @description Markdown/富文本链接点击与文件打开统一导航逻辑。
+ * @description Markdown/富文本链接、文件与 Skill 详情的统一导航逻辑。
  */
 import { useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
@@ -218,9 +218,18 @@ export function useNavigate() {
     }
   }
 
+  /**
+   * 打开指定 Skill 的独立详情页。
+   * @param skillName - Skill frontmatter 名称
+   */
+  function openSkill(skillName: string): void {
+    router.push({ name: 'skill', params: { name: skillName } });
+  }
+
   return {
     onLink,
     openFile,
+    openSkill,
     openWebview
   };
 }

@@ -6,7 +6,6 @@
   display: inline-flex;
   gap: 4px;
   align-items: center;
-  max-width: 240px;
   height: 20px;
   padding: 0 6px;
   font-family: inherit;
@@ -16,13 +15,13 @@
   color: var(--text-primary);
   cursor: pointer;
   background-color: var(--bg-secondary);
-  border: 1px solid var(--border-secondary, var(--border-primary));
+  border: 1px solid var(--border-secondary);
   border-radius: 4px;
   transition: background-color 0.15s ease, border-color 0.15s ease;
 
   &:hover {
-    background-color: var(--bg-tertiary, var(--bg-secondary));
-    border-color: var(--border-primary, var(--border-secondary));
+    background-color: var(--bg-tertiary);
+    border-color: var(--border-primary);
   }
 }
 
@@ -39,6 +38,6 @@
 
 .b-file-ref-chip__lines {
   flex-shrink: 0;
-  color: var(--text-secondary, var(--text-primary));
+  color: var(--text-secondary);
   opacity: 0.7;
 }

@@ -49,9 +49,9 @@ type CommandId = keyof typeof COMMAND_HANDLER_MAP;
  * trigger 由 id 自动生成，避免重复维护。
  */
 const CHAT_COMMAND_DEFINITIONS = [
-  { id: 'model', title: '模型', description: '切换当前使用的模型', concurrencyPolicy: 'allowAlways' },
-  { id: 'new', title: '新建', description: '开始一个新的聊天会话', concurrencyPolicy: 'allowWhenIdleOnly' },
-  { id: 'compact', title: '压缩', description: '压缩当前长会话上下文', concurrencyPolicy: 'allowWhenIdleOnly' }
+  { id: 'model', title: '切换模型', description: '切换当前使用的模型', concurrencyPolicy: 'allowAlways' },
+  { id: 'new', title: '新建会话', description: '开始一个新的聊天会话', concurrencyPolicy: 'allowWhenIdleOnly' },
+  { id: 'compact', title: '压缩上下文', description: '压缩当前长会话上下文', concurrencyPolicy: 'allowWhenIdleOnly' }
 ] satisfies Array<{ id: CommandId; title: string; description: string; concurrencyPolicy: CommandConcurrencyPolicy }>;
 
 /**

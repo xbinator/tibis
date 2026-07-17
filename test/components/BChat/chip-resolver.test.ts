@@ -1,6 +1,6 @@
 /**
  * @file chip-resolver.test.ts
- * @description 验证聊天输入框文件引用 chip 的图标渲染与打开行为。
+ * @description 验证聊天输入框文件与 Skill 引用 chip 的图标渲染与打开行为。
  * @vitest-environment jsdom
  */
 import type { EditorView } from '@codemirror/view';
@@ -26,7 +26,25 @@ const bRecentIconModuleMock = vi.hoisted(() => ({
   }
 }));
 
+const bIconModuleMock = vi.hoisted(() => ({
+  default: {
+    name: 'BIcon',
+    props: {
+      icon: {
+        type: String,
+        default: ''
+      },
+      size: {
+        type: [Number, String],
+        default: ''
+      }
+    },
+    template: '<i class="b-icon-stub" :data-icon="icon" :data-size="size"></i>'
+  }
+}));
+
 vi.mock('@/components/BRecent/Icon.vue', () => bRecentIconModuleMock);
+vi.mock('@/components/BIcon/index.vue', () => bIconModuleMock);
 
 describe('createFileRefChipResolver', (): void => {
   it('exposes file and skill widgets from scoped resolver folders', (): void => {
@@ -63,8 +81,9 @@ describe('createFileRefChipResolver', (): void => {
     expect(sourceWidget.widget.eq(libraryWidget.widget)).toBe(false);
   });
 
-  it('renders skill reference tokens as iconless name widgets', (): void => {
-    const resolver = createChatChipResolver(vi.fn());
+  it('renders skill reference tokens with the shared hammer icon', (): void => {
+    const onOpenSkill = vi.fn();
+    const resolver = createChatChipResolver(vi.fn(), onOpenSkill);
     const result = resolver('$天气 / 中文');
 
     if (!result || !('widget' in result)) {
@@ -72,11 +91,20 @@ describe('createFileRefChipResolver', (): void => {
     }
 
     const element = result.widget.toDOM(undefined as unknown as EditorView);
+    const icon = element.querySelector('.b-icon-stub');
 
     expect(element.classList.contains('b-skill-reference')).toBe(true);
-    expect(element.querySelector('.b-skill-reference__icon')).toBeNull();
-    expect(element.querySelector('svg')).toBeNull();
+    expect(element.querySelector('.b-skill-reference__icon')).not.toBeNull();
+    expect(icon?.getAttribute('data-icon')).toBe('lucide:hammer');
+    expect(icon?.getAttribute('data-size')).toBe('13');
     expect(element.querySelector('.b-skill-reference__name')?.textContent).toBe('天气 / 中文');
+    expect(element.getAttribute('role')).toBe('button');
+    expect(element.tabIndex).toBe(0);
+
+    element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+
+    expect(onOpenSkill).toHaveBeenCalledWith('天气 / 中文');
     result.widget.destroy(element);
+    expect(element.querySelector('.b-icon-stub')).toBeNull();
   });
 });

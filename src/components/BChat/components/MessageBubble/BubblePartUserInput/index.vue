@@ -3,19 +3,22 @@
     <div :class="bem('text')">
       <template v-for="(segment, index) in segments" :key="index">
         <span v-if="segment.type === 'text'">{{ segment.text }}</span>
-        <span v-else-if="segment.type === 'skill'" class="b-skill-reference" :title="segment.name">
-          <span class="b-skill-reference__name">{{ segment.name }}</span>
-        </span>
+        <!-- 技能引用 Token -->
         <span
-          v-else
-          :class="segment.presentation.rootClass"
-          :title="segment.presentation.title"
+          v-else-if="segment.type === 'skill'"
+          class="b-skill-reference"
+          :title="segment.name"
           role="button"
           tabindex="0"
-          @click="onChipClick(segment)"
-          @keydown.enter.prevent="onChipClick(segment)"
-          @keydown.space.prevent="onChipClick(segment)"
+          @click="openSkill(segment.name)"
+          @keydown.enter.prevent="openSkill(segment.name)"
+          @keydown.space.prevent="openSkill(segment.name)"
         >
+          <BIcon class="b-skill-reference__icon" icon="lucide:hammer" :size="13" />
+          <span class="b-skill-reference__name">{{ segment.name }}</span>
+        </span>
+        <!-- 文件引用 Token -->
+        <span v-else :class="segment.presentation.rootClass" :title="segment.presentation.fileName" @click="onChipClick(segment)">
           <BRecentIcon :class="segment.presentation.iconClass" :file-name="segment.presentation.fileName" :size="14" />
           <span :class="segment.presentation.fileNameClass">{{ segment.presentation.fileName }}</span>
           <span :class="segment.presentation.lineTextClass">{{ segment.presentation.lineText }}</span>
@@ -47,7 +50,7 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-const { openFile } = useNavigate();
+const { openFile, openSkill } = useNavigate();
 
 const [name, bem] = createNamespace('', 'message-bubble-user-input');
 
@@ -141,6 +144,10 @@ const segments = computed<Segment[]>(() => parseTextSegments(props.part.text ?? 
 .message-bubble-user-input {
   word-break: normal;
   white-space: pre-wrap;
+
+  .b-skill-reference {
+    background-color: var(--bg-primary);
+  }
 }
 
 .message-bubble-user-input__text {

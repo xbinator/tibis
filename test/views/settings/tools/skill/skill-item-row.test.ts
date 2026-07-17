@@ -13,8 +13,8 @@ import type { DropdownOption, DropdownOptionItem } from '@/components/BDropdown/
 import { useSkillStore } from '@/stores/ai/skill';
 import SkillItemRow from '@/views/settings/tools/skill/components/SkillItemRow.vue';
 
-/** 路由跳转 mock。 */
-const routerPushMock = vi.hoisted(() => vi.fn<(_location: unknown) => Promise<void>>());
+/** Skill 详情打开 mock。 */
+const openSkillMock = vi.hoisted(() => vi.fn<(skillName: string) => void>());
 /** 文件打开 mock。 */
 const openFileByPathMock = vi.hoisted(() => vi.fn<(path: string) => Promise<{ id: string } | null>>());
 /** 删除确认 mock。 */
@@ -35,8 +35,8 @@ const loggerMock = vi.hoisted(() => ({
   warn: vi.fn<(...args: unknown[]) => void>()
 }));
 
-vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: routerPushMock })
+vi.mock('@/hooks/useNavigate', () => ({
+  useNavigate: () => ({ openSkill: openSkillMock })
 }));
 
 vi.mock('@/hooks/useOpenFile', () => ({
@@ -169,7 +169,7 @@ describe('SkillItemRow', (): void => {
   beforeEach((): void => {
     localStorage.clear();
     setActivePinia(createPinia());
-    routerPushMock.mockReset();
+    openSkillMock.mockReset();
     openFileByPathMock.mockReset();
     deleteConfirmMock.mockReset();
     nativeMock.trashFile.mockReset();
@@ -178,7 +178,6 @@ describe('SkillItemRow', (): void => {
     messageMock.warning.mockReset();
     loggerMock.error.mockReset();
     loggerMock.warn.mockReset();
-    routerPushMock.mockResolvedValue(undefined);
     openFileByPathMock.mockResolvedValue({ id: 'skill-weather' });
     deleteConfirmMock.mockResolvedValue([false, true]);
     nativeMock.trashFile.mockResolvedValue(undefined);
@@ -190,7 +189,7 @@ describe('SkillItemRow', (): void => {
     await wrapper.trigger('click');
     await wrapper.findComponent({ name: 'ASwitch' }).trigger('click');
 
-    expect(routerPushMock).toHaveBeenCalledWith({ name: 'skill', params: { name: 'weather' } });
+    expect(openSkillMock).toHaveBeenCalledWith('weather');
     expect(useSkillStore().getSkillByName('weather')?.enabled).toBe(false);
     expect(wrapper.emitted('open')).toBeUndefined();
     expect(wrapper.emitted('toggle')).toBeUndefined();

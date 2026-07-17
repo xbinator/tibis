@@ -33,6 +33,8 @@ interface UseChatComposerOptions {
   interactionAPI: InteractionAPI;
   /** 在编辑器中打开文件 */
   openFile: (options: OpenFileOptions) => Promise<void>;
+  /** 打开 Skill 独立详情页 */
+  openSkill: (skillName: string) => void;
   /** 输入编辑器组件引用 */
   promptEditorRef: Ref<EditorInstance | undefined>;
 }
@@ -57,7 +59,7 @@ interface UseChatComposerReturn {
   isContainerDragActive: Ref<boolean>;
   /** 文件提及候选项 */
   fileMentionOptions: ComputedRef<FileMentionOption[]>;
-  /** 文件引用 chip resolver */
+  /** 文件与 Skill 引用 chip resolver */
   promptChipResolver: ReturnType<typeof createChatChipResolver>;
   /** 处理文件提及选择 */
   handleFileMentionSelect: (file: FileMentionOption) => void;
@@ -123,7 +125,7 @@ export function useChatComposer(options: UseChatComposerOptions): UseChatCompose
     });
   }
 
-  const promptChipResolver = createChatChipResolver(handleOpenPromptFileReference);
+  const promptChipResolver = createChatChipResolver(handleOpenPromptFileReference, options.openSkill);
   const input = useChatInput({ focusInput });
   const model = useModelSelection();
   const imageUpload = useImageUpload({ supportsVision: model.supportsVision, inputEvents: input, interactionAPI: options.interactionAPI });
