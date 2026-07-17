@@ -3,9 +3,7 @@
  * @description 文件引用 Chip 的共享展示数据与 DOM 创建工具。
  */
 
-/**
- * 文件引用 Chip 展示数据。
- */
+/** 文件引用 Chip 展示数据。 */
 export interface FileRefChipPresentation {
   /** 根节点类名。 */
   rootClass: string;
@@ -23,9 +21,7 @@ export interface FileRefChipPresentation {
   lineText: string;
 }
 
-/**
- * 文件引用 Chip 展示参数。
- */
+/** 文件引用 Chip 展示参数。 */
 export interface FileRefChipPresentationOptions {
   /** 完整路径或回退标题。 */
   title: string;
@@ -39,13 +35,10 @@ export interface FileRefChipPresentationOptions {
 
 /** 文件引用 Chip 根节点类名。 */
 export const FILE_REF_CHIP_CLASS = 'b-file-ref-chip';
-
 /** 文件引用 Chip 图标节点类名。 */
 export const FILE_REF_CHIP_ICON_CLASS = 'b-file-ref-chip__icon';
-
 /** 文件引用 Chip 文件名节点类名。 */
 export const FILE_REF_CHIP_FILENAME_CLASS = 'b-file-ref-chip__filename';
-
 /** 文件引用 Chip 行号节点类名。 */
 export const FILE_REF_CHIP_LINES_CLASS = 'b-file-ref-chip__lines';
 
@@ -56,9 +49,7 @@ export const FILE_REF_CHIP_LINES_CLASS = 'b-file-ref-chip__lines';
  * @returns 行号展示文案，无行号时返回空字符串
  */
 export function formatFileRefChipLineText(startLine: number, endLine: number): string {
-  if (startLine === 0 && endLine === 0) {
-    return '';
-  }
+  if (startLine === 0 && endLine === 0) return '';
   return startLine === endLine ? `${startLine}` : `${startLine}-${endLine}`;
 }
 
@@ -94,7 +85,6 @@ export function createFileRefChipElement(presentation: FileRefChipPresentation):
   const fileName = document.createElement('span');
   fileName.className = presentation.fileNameClass;
   fileName.textContent = presentation.fileName;
-
   root.appendChild(fileName);
 
   // 无行号时不添加行号元素
