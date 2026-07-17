@@ -116,6 +116,15 @@ export class ElectronNative implements Native {
     await getElectronAPI().writeFile(filePath, content);
   }
 
+  /**
+   * 仅在目标路径不存在时原子创建文本文件。
+   * @param filePath - 目标文件路径
+   * @param content - 文件文本内容
+   */
+  async createFile(filePath: string, content: string): Promise<void> {
+    await getElectronAPI().createFile(filePath, content);
+  }
+
   async renameFile(oldPath: string, newPath: string): Promise<void> {
     await getElectronAPI().renameFile(oldPath, newPath);
   }

@@ -502,6 +502,8 @@ export interface ElectronAPI {
   exportPdf: (options: ElectronExportPdfOptions) => Promise<string | null>;
 
   writeFile: (filePath: string, content: string) => Promise<void>;
+  /** 仅在目标路径不存在时原子创建文本文件。 */
+  createFile: (filePath: string, content: string) => Promise<void>;
   renameFile: (oldPath: string, newPath: string) => Promise<void>;
   ensureDir: (dirPath: string) => Promise<void>;
   /** 在主进程获取指定目标目录的跨窗口安装锁。 */

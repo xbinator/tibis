@@ -96,6 +96,10 @@ export function registerFileHandlers(): void {
     await fs.promises.writeFile(filePath, content, 'utf-8');
   });
 
+  ipcMain.handle('fs:createFile', async (_event, filePath: string, content: string) => {
+    await fs.promises.writeFile(filePath, content, { encoding: 'utf-8', flag: 'wx' });
+  });
+
   ipcMain.handle('fs:renameFile', async (_event, oldPath: string, newPath: string) => {
     await fs.promises.rename(oldPath, newPath);
   });

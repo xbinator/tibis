@@ -1,35 +1,38 @@
 /**
  * @file use-session-save-dialog.test.ts
- * @description 验证编辑器会话对保存对话框写盘事件的自写入抑制。
+ * @description 验证编辑器会话对公共文件控制器的事件适配与动作转发。
  * @vitest-environment jsdom
  */
-import { defineComponent, ref } from 'vue';
+import type { Ref } from 'vue';
+import { defineComponent, nextTick, ref } from 'vue';
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { FileSessionState } from '@/hooks/types';
+import type { FileControllerOptions, FileControllerResult } from '@/hooks/useFileController';
 import type { StoredFile, StoredWidget } from '@/shared/storage/files/types';
 import { useSession } from '@/views/editor/hooks/useSession';
 
 const getFileByIdMock = vi.hoisted(() => vi.fn());
-const addFileMock = vi.hoisted(() => vi.fn());
-const updateFileMock = vi.hoisted(() => vi.fn());
-const addTabMock = vi.hoisted(() => vi.fn());
-const clearDirtyMock = vi.hoisted(() => vi.fn());
-const clearMissingMock = vi.hoisted(() => vi.fn());
-const isDirtyMock = vi.hoisted(() => vi.fn());
-const isMissingMock = vi.hoisted(() => vi.fn());
 const saveFileMock = vi.hoisted(() => vi.fn());
 const readFileMock = vi.hoisted(() => vi.fn());
-const registerWatchMock = vi.hoisted(() => vi.fn());
-const unregisterWatchMock = vi.hoisted(() => vi.fn());
-const updateWatchPathMock = vi.hoisted(() => vi.fn());
-const switchWatchedFileMock = vi.hoisted(() => vi.fn());
-const clearWatchedFileMock = vi.hoisted(() => vi.fn());
-const setOnFileChangedMock = vi.hoisted(() => vi.fn());
-const setIsDirtyMock = vi.hoisted(() => vi.fn());
-const finishReloadMock = vi.hoisted(() => vi.fn());
-const suppressNextChangeMock = vi.hoisted(() => vi.fn());
-const clearSuppressedChangeMock = vi.hoisted(() => vi.fn());
+const getPathStatusMock = vi.hoisted(() => vi.fn());
+const createFileMock = vi.hoisted(() => vi.fn());
+const writeFileMock = vi.hoisted(() => vi.fn());
+const confirmMock = vi.hoisted(() => vi.fn());
 const routerPushMock = vi.hoisted(() => vi.fn());
+const controllerHarness = vi.hoisted(() => ({
+  options: null as FileControllerOptions<string> | null,
+  fileState: null as Ref<FileSessionState> | null,
+  data: null as Ref<string> | null,
+  onSave: vi.fn(),
+  onSaveAs: vi.fn(),
+  onRename: vi.fn(),
+  onBlur: vi.fn(),
+  onReload: vi.fn(),
+  onDelete: vi.fn(),
+  onFlush: vi.fn(),
+  onDispose: vi.fn()
+}));
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({
@@ -39,72 +42,73 @@ vi.mock('vue-router', () => ({
     params: { id: 'file-1' },
     meta: {}
   }),
-  useRouter: () => ({
-    push: routerPushMock
-  })
+  useRouter: () => ({ push: routerPushMock })
 }));
 
 vi.mock('@/hooks/useClipboard', () => ({
-  useClipboard: () => ({
-    clipboard: vi.fn()
-  })
+  useClipboard: () => ({ clipboard: vi.fn() })
 }));
 
-vi.mock('@/hooks/useFileAutoSave', async () => {
-  const { ref: vueRef } = await import('vue');
+vi.mock('@/hooks/useFileController', async () => {
+  const { computed: vueComputed, ref: vueRef } = await import('vue');
 
   return {
-    useFileAutoSave: () => ({
-      save: vi.fn().mockResolvedValue(undefined),
-      debouncedSave: vi.fn(),
-      isPaused: vueRef(false),
-      pause: vi.fn(),
-      resume: vi.fn()
-    })
+    useFileController: (options: FileControllerOptions<string>): FileControllerResult<string> => {
+      controllerHarness.options = options;
+      const initial = options.events.onCreate({ fileId: options.fileId.value });
+      const fileState = vueRef<FileSessionState>({ ...initial.fileState });
+      const data = vueRef<string>(initial.data);
+      controllerHarness.fileState = fileState;
+      controllerHarness.data = data;
+
+      return {
+        fileState,
+        data,
+        savedContent: vueRef<string>(initial.savedContent),
+        isSaved: vueComputed<boolean>((): boolean => true),
+        isMissing: vueComputed<boolean>((): boolean => false),
+        isLoading: vueRef<boolean>(false),
+        loadError: vueRef<Error | null>(null),
+        actions: {
+          onSave: controllerHarness.onSave,
+          onSaveAs: controllerHarness.onSaveAs,
+          onRename: controllerHarness.onRename,
+          onBlur: controllerHarness.onBlur,
+          onReload: controllerHarness.onReload,
+          onDelete: controllerHarness.onDelete,
+          onFlush: controllerHarness.onFlush,
+          onDispose: controllerHarness.onDispose
+        }
+      };
+    }
   };
 });
 
 vi.mock('@/stores/workspace/recent', () => ({
   useRecentStore: () => ({
     getFileById: getFileByIdMock,
-    addFile: addFileMock,
-    updateFile: updateFileMock,
+    addFile: vi.fn(),
     removeFile: vi.fn()
   })
 }));
 
 vi.mock('@/stores/workspace/tabs', () => ({
   useTabsStore: () => ({
-    addTab: addTabMock,
-    clearDirty: clearDirtyMock,
-    clearMissing: clearMissingMock,
-    isDirty: isDirtyMock,
-    isMissing: isMissingMock,
-    setDirty: vi.fn(),
-    removeTab: vi.fn()
-  })
-}));
-
-vi.mock('@/stores/editor/fileWatch', () => ({
-  useEditorFileWatchStore: () => ({
-    register: registerWatchMock,
-    unregister: unregisterWatchMock,
-    updatePath: updateWatchPathMock
-  })
-}));
-
-vi.mock('@/stores/editor/preferences', () => ({
-  useEditorPreferencesStore: () => ({
-    saveStrategy: 'off'
+    addTab: vi.fn(),
+    removeTab: vi.fn(),
+    isMissing: vi.fn().mockReturnValue(false)
   })
 }));
 
 vi.mock('@/shared/platform', () => ({
   native: {
     readFile: readFileMock,
+    getPathStatus: getPathStatusMock,
     saveFile: saveFileMock,
-    writeFile: vi.fn(),
+    writeFile: writeFileMock,
+    createFile: createFileMock,
     renameFile: vi.fn(),
+    trashFile: vi.fn(),
     showItemInFolder: vi.fn(),
     getRelativePath: vi.fn()
   }
@@ -112,27 +116,17 @@ vi.mock('@/shared/platform', () => ({
 
 vi.mock('@/utils/modal', () => ({
   Modal: {
-    confirm: vi.fn().mockResolvedValue([true, false]),
-    input: vi.fn().mockResolvedValue([true, ''])
+    confirm: confirmMock,
+    input: vi.fn().mockResolvedValue([true, '']),
+    delete: vi.fn().mockResolvedValue([true, false])
   }
 }));
 
-vi.mock('@/views/editor/hooks/useFileWatcher', () => ({
-  useFileWatcher: () => ({
-    switchWatchedFile: switchWatchedFileMock,
-    clearWatchedFile: clearWatchedFileMock,
-    getWatchedPath: vi.fn(),
-    setOnFileChanged: setOnFileChangedMock,
-    setIsDirty: setIsDirtyMock,
-    setOnFileDeleted: vi.fn(),
-    finishReload: finishReloadMock,
-    suppressNextChange: suppressNextChangeMock,
-    clearSuppressedChange: clearSuppressedChangeMock
-  })
-}));
-
+/**
+ * 编辑器会话宿主暴露值。
+ */
 interface SessionExpose {
-  /** 编辑器会话控制器 */
+  /** 编辑器会话。 */
   session: ReturnType<typeof useSession>;
 }
 
@@ -140,8 +134,8 @@ const FILE_PATH = '/workspace/note.md';
 const FILE_CONTENT = '# Draft';
 
 /**
- * 创建最近文件存储记录。
- * @returns 最近文件存储记录
+ * 创建普通最近文件记录。
+ * @returns 普通最近文件记录
  */
 function createStoredFile(): StoredFile {
   return {
@@ -156,8 +150,8 @@ function createStoredFile(): StoredFile {
 }
 
 /**
- * 创建 Widget 最近文件存储记录。
- * @returns Widget 最近文件存储记录
+ * 创建 Widget 最近文件记录。
+ * @returns Widget 最近文件记录
  */
 function createStoredWidget(): StoredWidget {
   return {
@@ -173,89 +167,157 @@ function createStoredWidget(): StoredWidget {
 
 /**
  * 挂载编辑器会话宿主组件。
- * @returns 暴露编辑器会话的测试包装器
+ * @returns 测试包装器
  */
 function mountSessionHost(): ReturnType<typeof mount> {
   return mount(
     defineComponent({
-      name: 'UseSessionSaveDialogHost',
+      name: 'EditorSessionHost',
       setup(_, { expose }): () => null {
         const session = useSession(ref('file-1'));
         expose({ session });
-
         return (): null => null;
       }
     })
   );
 }
 
-describe('useSession save dialog', (): void => {
+describe('editor useSession adapter', (): void => {
   beforeEach((): void => {
     getFileByIdMock.mockReset();
-    addFileMock.mockReset();
-    updateFileMock.mockReset();
-    addTabMock.mockReset();
-    clearDirtyMock.mockReset();
-    clearMissingMock.mockReset();
-    isDirtyMock.mockReset();
-    isMissingMock.mockReset();
     saveFileMock.mockReset();
     readFileMock.mockReset();
-    registerWatchMock.mockReset();
-    unregisterWatchMock.mockReset();
-    updateWatchPathMock.mockReset();
-    switchWatchedFileMock.mockReset();
-    clearWatchedFileMock.mockReset();
-    setOnFileChangedMock.mockReset();
-    setIsDirtyMock.mockReset();
-    finishReloadMock.mockReset();
-    suppressNextChangeMock.mockReset();
-    clearSuppressedChangeMock.mockReset();
+    getPathStatusMock.mockReset().mockResolvedValue({ exists: true, isFile: true, isDirectory: false });
+    createFileMock.mockReset().mockResolvedValue(undefined);
+    writeFileMock.mockReset().mockResolvedValue(undefined);
+    confirmMock.mockReset().mockResolvedValue([true, false]);
     routerPushMock.mockReset();
-
-    const storedFile = createStoredFile();
-    getFileByIdMock.mockResolvedValue(storedFile);
+    controllerHarness.options = null;
+    controllerHarness.fileState = null;
+    controllerHarness.data = null;
+    controllerHarness.onSave.mockReset().mockResolvedValue(undefined);
+    controllerHarness.onSaveAs.mockReset().mockResolvedValue(undefined);
+    controllerHarness.onRename.mockReset().mockResolvedValue(undefined);
+    controllerHarness.onBlur.mockReset().mockResolvedValue(undefined);
+    controllerHarness.onReload.mockReset().mockResolvedValue(undefined);
+    controllerHarness.onDelete.mockReset().mockResolvedValue(undefined);
+    controllerHarness.onFlush.mockReset().mockResolvedValue(undefined);
+    controllerHarness.onDispose.mockReset().mockResolvedValue(undefined);
+    getFileByIdMock.mockResolvedValue(createStoredFile());
     readFileMock.mockResolvedValue({ content: FILE_CONTENT, name: 'note', ext: 'md' });
     saveFileMock.mockResolvedValue(FILE_PATH);
-    isDirtyMock.mockReturnValue(false);
-    isMissingMock.mockReturnValue(false);
   });
 
-  it('registers self-write suppression before switching watcher after save-as overwrites the watched path', async (): Promise<void> => {
-    const wrapper = mountSessionHost();
-
-    await flushPromises();
-    switchWatchedFileMock.mockClear();
-    suppressNextChangeMock.mockClear();
-
-    await (wrapper.vm as unknown as SessionExpose).session.actions.onSaveAs();
-
-    expect(suppressNextChangeMock).toHaveBeenCalledWith(FILE_PATH, FILE_CONTENT);
-    expect(suppressNextChangeMock.mock.invocationCallOrder[0]).toBeLessThan(saveFileMock.mock.invocationCallOrder[0]);
-  });
-
-  it('clears pre-registered self-write suppression when save-as dialog is cancelled', async (): Promise<void> => {
-    saveFileMock.mockResolvedValue(null);
-    const wrapper = mountSessionHost();
-
-    await flushPromises();
-    suppressNextChangeMock.mockClear();
-    clearSuppressedChangeMock.mockClear();
-
-    await (wrapper.vm as unknown as SessionExpose).session.actions.onSaveAs();
-
-    expect(suppressNextChangeMock).toHaveBeenCalledWith(FILE_PATH, FILE_CONTENT);
-    expect(clearSuppressedChangeMock).toHaveBeenCalledWith(FILE_PATH);
-  });
-
-  it('redirects widget records away from the editor without replacing the stored record', async (): Promise<void> => {
-    getFileByIdMock.mockResolvedValue(createStoredWidget());
-
+  it('provides save-as and load behavior through controller events', async (): Promise<void> => {
     mountSessionHost();
     await flushPromises();
+    const { options } = controllerHarness;
+    expect(options).not.toBeNull();
+    if (!options) return;
+
+    const savedPath = await options.events.onSaveAs({ fileState: createStoredFile(), content: FILE_CONTENT });
+    const candidates = await options.events.onLoad({ fileId: 'file-1', sessionVersion: 1 });
+
+    expect(savedPath).toBe(FILE_PATH);
+    expect(saveFileMock).toHaveBeenCalledWith(FILE_CONTENT, undefined, { defaultPath: FILE_PATH });
+    expect(candidates.draft?.fileState.content).toBe(FILE_CONTENT);
+    expect(candidates.disk?.fileState.content).toBe(FILE_CONTENT);
+  });
+
+  it('redirects Widget records from the load event without replacing them', async (): Promise<void> => {
+    getFileByIdMock.mockResolvedValue(createStoredWidget());
+    mountSessionHost();
+    await flushPromises();
+    const { options } = controllerHarness;
+    expect(options).not.toBeNull();
+    if (!options) return;
+
+    const candidates = await options.events.onLoad({ fileId: 'file-1', sessionVersion: 1 });
 
     expect(routerPushMock).toHaveBeenCalledWith({ name: 'widget', params: { id: 'file-1' } });
-    expect(addFileMock).not.toHaveBeenCalled();
-    expect(switchWatchedFileMock).not.toHaveBeenCalled();
+    expect(candidates).toEqual({ draft: null, disk: null, error: null, aborted: true });
+  });
+
+  it('reports a disk read error when the existing path is still present', async (): Promise<void> => {
+    readFileMock.mockRejectedValue(new Error('permission denied'));
+    mountSessionHost();
+    await flushPromises();
+    const { options } = controllerHarness;
+    expect(options).not.toBeNull();
+    if (!options) return;
+
+    const candidates = await options.events.onLoad({ fileId: 'file-1', sessionVersion: 1 });
+
+    expect(candidates.error?.message).toBe('permission denied');
+    expect(candidates.missing).not.toBe(true);
+  });
+
+  it('classifies an absent disk path as missing while preserving its draft', async (): Promise<void> => {
+    readFileMock.mockRejectedValue(new Error('file not found'));
+    getPathStatusMock.mockResolvedValue({ exists: false, isFile: false, isDirectory: false });
+    mountSessionHost();
+    await flushPromises();
+    const { options } = controllerHarness;
+    expect(options).not.toBeNull();
+    if (!options) return;
+
+    const candidates = await options.events.onLoad({ fileId: 'file-1', sessionVersion: 1 });
+
+    expect(candidates.draft?.fileState.content).toBe(FILE_CONTENT);
+    expect(candidates.disk).toBeNull();
+    expect(candidates.error).toBeNull();
+    expect(candidates.missing).toBe(true);
+  });
+
+  it('restores a missing path with atomic creation before allowing overwrite', async (): Promise<void> => {
+    getPathStatusMock.mockResolvedValue({ exists: false, isFile: false, isDirectory: false });
+    mountSessionHost();
+    await flushPromises();
+    const { options } = controllerHarness;
+    expect(options).not.toBeNull();
+    if (!options) return;
+    const fileState = createStoredFile();
+
+    const restored = await options.events.onRestoreFile({ fileState });
+
+    expect(restored).toBe(true);
+    expect(createFileMock).toHaveBeenCalledWith(FILE_PATH, FILE_CONTENT);
+    expect(writeFileMock).not.toHaveBeenCalled();
+    expect(confirmMock).not.toHaveBeenCalled();
+  });
+
+  it('asks before overwriting when a file appears during atomic restoration', async (): Promise<void> => {
+    getPathStatusMock
+      .mockResolvedValueOnce({ exists: false, isFile: false, isDirectory: false })
+      .mockResolvedValueOnce({ exists: true, isFile: true, isDirectory: false });
+    createFileMock.mockRejectedValueOnce(new Error('path exists'));
+    confirmMock.mockResolvedValueOnce([false, true]);
+    mountSessionHost();
+    await flushPromises();
+    const { options } = controllerHarness;
+    expect(options).not.toBeNull();
+    if (!options) return;
+
+    const restored = await options.events.onRestoreFile({ fileState: createStoredFile() });
+
+    expect(restored).toBe(true);
+    expect(confirmMock).toHaveBeenCalledTimes(1);
+    expect(writeFileMock).toHaveBeenCalledWith(FILE_PATH, FILE_CONTENT);
+  });
+
+  it('forwards common actions and bridges editor content into controller data', async (): Promise<void> => {
+    const wrapper = mountSessionHost();
+    await flushPromises();
+    const exposed = wrapper.vm as unknown as SessionExpose;
+
+    await exposed.session.actions.onSave();
+    await exposed.session.actions.onEditorBlur();
+    expect(controllerHarness.onSave).toHaveBeenCalledTimes(1);
+    expect(controllerHarness.onBlur).toHaveBeenCalledTimes(1);
+
+    if (!controllerHarness.fileState || !controllerHarness.data) return;
+    controllerHarness.fileState.value.content = 'changed in editor';
+    await nextTick();
+    expect(controllerHarness.data.value).toBe('changed in editor');
   });
 });

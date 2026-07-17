@@ -14,8 +14,12 @@ import { storeEvents } from '@/stores/helpers/events';
 export interface EditorFileWatchState {
   /** 文件路径到引用该路径的编辑器文件 ID 集合 */
   pathToFileIds: Map<string, Set<string>>;
-  /** 编辑器文件 ID 到当前监听路径的映射 */
-  fileIdToPath: Map<string, string>;
+  /** 文件路径到控制器注册 ID 与业务文件 ID 的映射 */
+  pathToRegistrations: Map<string, Map<string, string>>;
+  /** 控制器注册 ID 到当前监听路径的映射 */
+  registrationToPath: Map<string, string>;
+  /** 控制器注册 ID 到业务文件 ID 的映射 */
+  registrationToFileId: Map<string, string>;
   /** native 文件事件取消订阅函数 */
   unsubscribe: (() => void) | null;
 }
@@ -26,7 +30,9 @@ export interface EditorFileWatchState {
 export const useEditorFileWatchStore = defineStore('editorFileWatch', {
   state: (): EditorFileWatchState => ({
     pathToFileIds: new Map<string, Set<string>>(),
-    fileIdToPath: new Map<string, string>(),
+    pathToRegistrations: new Map<string, Map<string, string>>(),
+    registrationToPath: new Map<string, string>(),
+    registrationToFileId: new Map<string, string>(),
     unsubscribe: null
   }),
 
@@ -46,40 +52,51 @@ export const useEditorFileWatchStore = defineStore('editorFileWatch', {
      * 注册指定编辑器文件对应的磁盘路径。
      * @param fileId - 编辑器文件 ID
      * @param filePath - 需要监听的磁盘路径
+     * @param registrationId - 控制器实例级注册 ID
      */
-    async register(fileId: string, filePath: string): Promise<void> {
+    async register(fileId: string, filePath: string, registrationId: string = fileId): Promise<void> {
       this.ensureSubscribed();
 
-      const previousPath = this.fileIdToPath.get(fileId);
+      const previousPath = this.registrationToPath.get(registrationId);
       if (previousPath && previousPath !== filePath) {
-        await this.updatePath(fileId, filePath);
+        await this.updatePath(fileId, filePath, registrationId);
         return;
       }
 
-      let fileIds = this.pathToFileIds.get(filePath);
-      if (!fileIds) {
+      let registrations = this.pathToRegistrations.get(filePath);
+      if (!registrations) {
         await native.watchFile(filePath);
-        fileIds = new Set<string>();
-        this.pathToFileIds.set(filePath, fileIds);
+        registrations = new Map<string, string>();
+        this.pathToRegistrations.set(filePath, registrations);
       }
 
+      registrations.set(registrationId, fileId);
+      const fileIds = this.pathToFileIds.get(filePath) ?? new Set<string>();
       fileIds.add(fileId);
-      this.fileIdToPath.set(fileId, filePath);
+      this.pathToFileIds.set(filePath, fileIds);
+      this.registrationToPath.set(registrationId, filePath);
+      this.registrationToFileId.set(registrationId, fileId);
     },
 
     /**
      * 取消指定编辑器文件的路径引用；仅最后一个引用离开时才停止 native watcher。
      * @param fileId - 编辑器文件 ID
+     * @param registrationId - 控制器实例级注册 ID
      */
-    async unregister(fileId: string): Promise<void> {
-      const previousPath = this.fileIdToPath.get(fileId);
+    async unregister(fileId: string, registrationId: string = fileId): Promise<void> {
+      const previousPath = this.registrationToPath.get(registrationId);
       if (!previousPath) return;
 
+      const registrations = this.pathToRegistrations.get(previousPath);
+      registrations?.delete(registrationId);
       const fileIds = this.pathToFileIds.get(previousPath);
-      fileIds?.delete(fileId);
-      this.fileIdToPath.delete(fileId);
+      const hasSameFile = registrations ? [...registrations.values()].some((registeredFileId: string): boolean => registeredFileId === fileId) : false;
+      if (!hasSameFile) fileIds?.delete(fileId);
+      this.registrationToPath.delete(registrationId);
+      this.registrationToFileId.delete(registrationId);
 
-      if (fileIds && fileIds.size === 0) {
+      if (!registrations || registrations.size === 0) {
+        this.pathToRegistrations.delete(previousPath);
         this.pathToFileIds.delete(previousPath);
         await native.unwatchFile(previousPath);
       }
@@ -89,25 +106,32 @@ export const useEditorFileWatchStore = defineStore('editorFileWatch', {
      * 更新编辑器文件监听路径，先确保新路径监听成功再释放旧路径。
      * @param fileId - 编辑器文件 ID
      * @param nextPath - 新的磁盘路径
+     * @param registrationId - 控制器实例级注册 ID
      */
-    async updatePath(fileId: string, nextPath: string): Promise<void> {
+    async updatePath(fileId: string, nextPath: string, registrationId: string = fileId): Promise<void> {
       this.ensureSubscribed();
 
-      const previousPath = this.fileIdToPath.get(fileId);
+      const previousPath = this.registrationToPath.get(registrationId);
       if (previousPath === nextPath) return;
 
-      let nextFileIds = this.pathToFileIds.get(nextPath);
-      if (!nextFileIds) {
+      let nextRegistrations = this.pathToRegistrations.get(nextPath);
+      if (!nextRegistrations) {
         await native.watchFile(nextPath);
-        nextFileIds = new Set<string>();
-        this.pathToFileIds.set(nextPath, nextFileIds);
+        nextRegistrations = new Map<string, string>();
+        this.pathToRegistrations.set(nextPath, nextRegistrations);
       }
 
       if (previousPath) {
+        const previousRegistrations = this.pathToRegistrations.get(previousPath);
+        previousRegistrations?.delete(registrationId);
         const previousFileIds = this.pathToFileIds.get(previousPath);
-        previousFileIds?.delete(fileId);
+        const hasSameFile = previousRegistrations
+          ? [...previousRegistrations.values()].some((registeredFileId: string): boolean => registeredFileId === fileId)
+          : false;
+        if (!hasSameFile) previousFileIds?.delete(fileId);
 
-        if (previousFileIds && previousFileIds.size === 0) {
+        if (!previousRegistrations || previousRegistrations.size === 0) {
+          this.pathToRegistrations.delete(previousPath);
           this.pathToFileIds.delete(previousPath);
 
           try {
@@ -118,12 +142,16 @@ export const useEditorFileWatchStore = defineStore('editorFileWatch', {
         }
       }
 
+      nextRegistrations.set(registrationId, fileId);
+      const nextFileIds = this.pathToFileIds.get(nextPath) ?? new Set<string>();
       nextFileIds.add(fileId);
-      this.fileIdToPath.set(fileId, nextPath);
+      this.pathToFileIds.set(nextPath, nextFileIds);
+      this.registrationToPath.set(registrationId, nextPath);
+      this.registrationToFileId.set(registrationId, fileId);
     },
 
     /**
-     * 处理 native 文件事件；change 显式忽略，unlink 标记丢失，add 恢复丢失状态。
+     * 处理 native 文件事件；change 与 add 由活动控制器协调，unlink 只负责标记丢失。
      * @param event - native 文件变化事件
      */
     handleFileChanged(event: FileChangeEvent): void {
@@ -133,12 +161,9 @@ export const useEditorFileWatchStore = defineStore('editorFileWatch', {
 
       if (event.type === 'unlink') {
         this.markPathMissing(event.filePath);
-        return;
       }
 
-      if (event.type === 'add') {
-        this.clearPathMissing(event.filePath);
-      }
+      // add 必须在控制器完成磁盘重新加载与冲突协调后才能清除 missing。
     },
 
     /**
@@ -177,7 +202,9 @@ export const useEditorFileWatchStore = defineStore('editorFileWatch', {
       }
 
       this.pathToFileIds.clear();
-      this.fileIdToPath.clear();
+      this.pathToRegistrations.clear();
+      this.registrationToPath.clear();
+      this.registrationToFileId.clear();
       await native.unwatchAll();
     }
   }

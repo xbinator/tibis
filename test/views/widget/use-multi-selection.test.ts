@@ -8,8 +8,7 @@ import type { WidgetData, WidgetElement, WidgetSelectTarget } from '@/components
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 import { findElementTreeNode } from '@/components/BWidget/utils/widgetTree';
-import type { UseFileSessionReturn } from '@/hooks/useFileSession';
-import type { WidgetComponentRef } from '@/views/widget/hooks/types';
+import type { WidgetComponentRef, WidgetDataSession } from '@/views/widget/hooks/types';
 import { useLayerActions } from '@/views/widget/hooks/useLayerActions';
 import { mergeSelectedElementStyles, updateSelectedElementLayouts, useMultiSelection } from '@/views/widget/hooks/useMultiSelection';
 
@@ -44,7 +43,7 @@ describe('useMultiSelection', (): void => {
       ...createDefaultWidgetData(),
       elements: [createElement('node-1', { x: 0, y: 0 }, { width: 10, height: 20 }), createElement('node-2', { x: 30, y: 0 }, { width: 10, height: 20 })]
     });
-    const session = { data } as unknown as UseFileSessionReturn<WidgetData>;
+    const session: WidgetDataSession = { data };
     const initialData = data.value;
     const handlers = useMultiSelection({
       session,
@@ -98,7 +97,7 @@ describe('useLayerActions', (): void => {
     const first = createElement('node-1', { x: 0, y: 0 }, { width: 120, height: 80 });
     const second = createElement('node-2', { x: 140, y: 0 }, { width: 120, height: 80 });
     const data = ref<WidgetData>({ ...createDefaultWidgetData(), elements: [first, second] });
-    const session = { data } as unknown as UseFileSessionReturn<WidgetData>;
+    const session: WidgetDataSession = { data };
     const initialData = data.value;
     const layer = useLayerActions({
       session,

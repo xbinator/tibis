@@ -2,18 +2,18 @@
  * @file useSelection.ts
  * @description Widget页面画布选区、侧栏高亮和设置目标同步逻辑。
  */
+import type { WidgetDataSession } from './types';
 import type { ComputedRef, Ref } from 'vue';
 import { computed, ref, watch } from 'vue';
 import type { WidgetData, WidgetElement, WidgetSelectTarget } from '@/components/BWidget/types';
 import { findElementTreeNode } from '@/components/BWidget/utils/widgetTree';
-import type { UseFileSessionReturn } from '@/hooks/useFileSession';
 
 /**
  * Widget选区 hook 入参。
  */
 export interface UseSelectionOptions {
   /** 当前Widget文件会话 */
-  session: UseFileSessionReturn<WidgetData>;
+  session: WidgetDataSession;
   /** 右侧设置面板宽度 */
   settingsWidth: Ref<number>;
 }

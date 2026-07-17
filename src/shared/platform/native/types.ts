@@ -151,6 +151,9 @@ export interface Native {
 
   writeFile(path: string, content: string): Promise<void>;
 
+  /** 仅在目标路径不存在时原子创建文本文件。 */
+  createFile(path: string, content: string): Promise<void>;
+
   renameFile(oldPath: string, newPath: string): Promise<void>;
 
   /** 释放目标目录跨窗口安装锁。 */

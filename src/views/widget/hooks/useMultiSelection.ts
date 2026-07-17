@@ -3,11 +3,10 @@
  * @description Widget页面多选设置面板命令、布局和样式批量处理逻辑。
  */
 import type { WidgetMultiSelectLayoutChange } from '../types';
-import type { WidgetComponentRef } from './types';
+import type { WidgetComponentRef, WidgetDataSession } from './types';
 import type { Ref } from 'vue';
-import type { WidgetData, WidgetElement, WidgetElementStyleChange, WidgetLayerAction } from '@/components/BWidget/types';
+import type { WidgetElement, WidgetElementStyleChange, WidgetLayerAction } from '@/components/BWidget/types';
 import { flattenWidgetElementTree, isSameParent, updateElementInTree, type WidgetRenderTreeNode } from '@/components/BWidget/utils/widgetTree';
-import type { UseFileSessionReturn } from '@/hooks/useFileSession';
 
 /**
  * 右侧多选面板快捷操作命令。
@@ -38,7 +37,7 @@ export interface MultiSelectionBounds {
  */
 export interface UseMultiSelectionOptions {
   /** 当前Widget文件会话 */
-  session: UseFileSessionReturn<WidgetData>;
+  session: WidgetDataSession;
   /** 当前选中元素 ID 列表 */
   selectedElementIds: Ref<string[]>;
   /** Widget画布组件引用 */

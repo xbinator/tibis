@@ -139,6 +139,13 @@ const electronAPI: ElectronAPI = {
    */
   writeFile: (filePath: string, content: string) => ipcRenderer.invoke('fs:writeFile', filePath, content),
 
+  /**
+   * 仅在目标路径不存在时原子创建文本文件。
+   * @param filePath 文件路径
+   * @param content 文件内容
+   */
+  createFile: (filePath: string, content: string) => ipcRenderer.invoke('fs:createFile', filePath, content),
+
   renameFile: (oldPath: string, newPath: string) => ipcRenderer.invoke('fs:renameFile', oldPath, newPath),
 
   ensureDir: (dirPath: string) => ipcRenderer.invoke('fs:ensureDir', dirPath),

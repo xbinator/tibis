@@ -7,8 +7,8 @@
     <section v-if="session.isLoading.value" class="widget-page__state" role="status">正在加载 Widget...</section>
 
     <section v-else-if="session.loadError.value" class="widget-page__state" role="alert">
-      <p>{{ session.loadError.value }}</p>
-      <button class="widget-page__retry" type="button" @click="session.reload">重新加载</button>
+      <p>{{ session.loadError.value.message }}</p>
+      <button class="widget-page__retry" type="button" @click="session.actions.onReload">重新加载</button>
     </section>
 
     <template v-else>

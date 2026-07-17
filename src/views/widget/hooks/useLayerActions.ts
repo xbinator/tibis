@@ -2,12 +2,12 @@
  * @file useLayerActions.ts
  * @description Widget页面侧栏图层选择、复制、删除和排序操作。
  */
-import type { WidgetComponentRef } from './types';
+import type { WidgetComponentRef, WidgetDataSession } from './types';
 import type { Ref } from 'vue';
 import { nextTick } from 'vue';
 import { cloneDeep } from 'lodash-es';
 import { nanoid } from 'nanoid';
-import type { WidgetData, WidgetElement, WidgetSelectTarget } from '@/components/BWidget/types';
+import type { WidgetElement, WidgetSelectTarget } from '@/components/BWidget/types';
 import {
   findElementTreeNode,
   flattenWidgetElementTree,
@@ -18,7 +18,6 @@ import {
   replaceSiblingList,
   type WidgetRenderTreeNode
 } from '@/components/BWidget/utils/widgetTree';
-import type { UseFileSessionReturn } from '@/hooks/useFileSession';
 import { moveLayerElements, moveLayerElement, type WidgetLayerMovePosition } from '../utils/layerOrder';
 import { isWidgetElementTarget } from './useSelection';
 
@@ -32,7 +31,7 @@ const WIDGET_LAYER_COPY_ID_SIZE = 8;
  */
 export interface UseLayerActionsOptions {
   /** 当前Widget文件会话 */
-  session: UseFileSessionReturn<WidgetData>;
+  session: WidgetDataSession;
   /** 当前右侧设置栏可编辑目标 */
   selectedTarget: Ref<WidgetSelectTarget>;
   /** 当前侧栏需要高亮的元素 ID 列表 */

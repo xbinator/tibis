@@ -66,7 +66,7 @@ tibis/
 │   │   ├── editor/                   # 编辑器页面（核心：自动保存、文件监听、会话管理）
 │   │   │   ├── index.vue
 │   │   │   ├── types.ts
-│   │   │   ├── hooks/                # useBindings / useFileSelection / useFileState / useFileWatcher / useSession
+│   │   │   ├── hooks/                # useBindings / useFileSelection / useSession（文件控制器适配层）
 │   │   │   └── utils/                # filePath / reconcileFileContent
 │   │   ├── widget/                   # Widget 小组件编辑器页面（原 drawing，已重构）
 │   │   │   ├── index.vue / types.ts
@@ -217,24 +217,24 @@ tibis/
 │   │   ├── workspace/                # 路径工具
 │   │   └── widget/                   # Widget 协议（protocol.ts）
 │   │
-│   ├── hooks/                        # 全局组合式函数（17 个）
+│   ├── hooks/                        # 全局组合式函数与共享类型
+│   │   ├── file-controller/          # 草稿、写盘与文件监听子控制器
 │   │   ├── useAntdTheme.ts           # Ant Design 明暗主题
 │   │   ├── useAutoCollapse.ts        # ResizeObserver 自动折叠
 │   │   ├── useChat.ts                # AI 流式聊天（invoke/stream/abort）
 │   │   ├── useClipboard.ts           # 剪贴板操作
-│   │   ├── useFileAutoSave.ts        # 文件自动保存
+│   │   ├── useFileController.ts      # 公共文件生命周期控制器
 │   │   ├── useFileDrop.ts            # 文件拖拽处理
-│   │   ├── useFileSession.ts         # 文件会话关联
 │   │   ├── useImagePreview.ts        # 图片预览（跨平台：Electron 原生 / Web）
 │   │   ├── useMenuAction.ts          # 系统菜单动作注册
 │   │   ├── useNavigate.ts            # 统一导航
 │   │   ├── useOpenDraft.ts           # 草稿文件打开
 │   │   ├── useOpenFile.ts            # 统一文件打开
-│   │   ├── useSavePolicy.ts          # 保存策略
 │   │   ├── useScroller.ts            # DOM 滚动包装
 │   │   ├── useShortcuts.ts           # 键盘快捷键（@vueuse/core useMagicKeys）
 │   │   ├── useSystem.ts              # 系统信息查询
-│   │   └── useWorkspaceRoot.ts       # 工作区根目录
+│   │   ├── useWorkspaceRoot.ts       # 工作区根目录
+│   │   └── types.ts                  # Hook 共享文件状态类型
 │   │
 │   ├── utils/                        # 工具函数（16 个）
 │   │   ├── asyncTo.ts / css.ts / emitter.ts / env.ts / image.ts / is.ts / json.ts
@@ -300,11 +300,11 @@ tibis/
 │   ├── global.d.ts / model.d.ts / webview.d.ts / vite-env.d.ts
 │   └── components.d.ts              # 自动生成的组件类型
 │
-├── test/                             # 测试套件（285 个测试文件，按 src/electron/shared 结构镜像组织）
+├── test/                             # 测试套件（按 src/electron/shared 结构镜像组织）
 │   ├── ai/                           # 工具系统测试（builtin / tool-registry / drawing-context）
 │   ├── components/                   # BChat、BColorPicker、BEditor、BMessage、BMonaco、BWidget
 │   ├── electron/                     # 主进程测试（ai/errors、chat/runtime、lifecycle、mcp/transport、ui、updater）
-│   ├── hooks/                        # useClipboard / useFileAutoSave / useFileSession / useImagePreview / useOpenFile / useSavePolicy / useSystem
+│   ├── hooks/                        # useFileController / useClipboard / useImagePreview / useOpenFile / useSystem
 │   ├── layouts/                      # ChatSider、HeaderTabs、useHelpActive 等
 │   ├── router/                       # widget 路由
 │   ├── shared/storage/               # files、providers、settings、tool-settings、database
@@ -767,13 +767,11 @@ BEditor 新增完整的行内补全子系统：
 ### 页面级功能
 
 编辑器页面（`views/editor/`）通过 hooks 提供：
-- **useFileState**：文件状态管理（已保存/未保存/外部修改）
-- **useFileWatcher**：外部文件变更监听与冲突处理
 - **useFileSelection**：文件选区/行范围导航
-- **useSession**：编辑器与会话联动
+- **useSession**：将编辑器的加载、解析、写盘和对话框事件适配到公共文件控制器
 - **useBindings**：编辑器与全局快捷键/命令绑定
 
-全局 `src/hooks/useFileAutoSave.ts`、`useSavePolicy.ts`、`useFileSession.ts`、`useFileDrop.ts` 提供跨页面复用的文件生命周期能力。
+全局 `src/hooks/useFileController.ts` 统一管理草稿持久化、保存基线、标签脏状态、磁盘写入策略、文件监听与异步操作隔离；编辑器和 Widget 的 `useSession` 仅通过 `on*` 事件适配文件格式及平台交互。保存状态只区分已保存和未保存，关闭自动保存时只禁止自动写入磁盘，草稿仍会持久化。
 
 ---
 
@@ -1033,14 +1031,14 @@ Vite 对第三方依赖做细粒度拆包，提升 Electron 内嵌 Web 首屏性
 
 ## 测试体系
 
-运行 `pnpm test` 执行 Vitest 测试套件，`test/` 目录按源码结构镜像组织，包含 285 个测试文件：
+运行 `pnpm test` 执行 Vitest 测试套件，`test/` 目录按源码结构镜像组织，包含以下测试范围：
 
 | 测试范围 | 说明 |
 |----------|------|
 | `ai/` | 工具系统（builtin-index、builtin-main-process-tool、todo-write、tool-registry） |
 | `components/` | BChat、BColorPicker、BEditor、BMessage、BMonaco、BWidget |
 | `electron/` | 主进程 ai/errors、chat/runtime（compaction/context/messages/model/stream/tools）、lifecycle、mcp/transport、ui、updater |
-| `hooks/` | useClipboard、useFileAutoSave、useFileSession、useImagePreview、useOpenFile、useSavePolicy、useSystem |
+| `hooks/` | useFileController、useDraftPersistence、useDiskSave、useFileWatch、useClipboard、useImagePreview、useOpenFile、useSystem |
 | `layouts/` | ChatSider、HeaderTabs（结构 + 滚动）、useHelpActive 等 |
 | `router/` | widget 路由 |
 | `shared/` | 存储层（files、providers、settings、tool-settings、database） |
