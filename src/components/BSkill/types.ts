@@ -26,6 +26,8 @@ export interface BSkillProps {
   virtualFiles?: VirtualFile[];
   /** 初始选中文件路径，树加载完成后自动选中 */
   initialFilePath?: string;
+  /** 是否允许通过头部入口在编辑器中打开真实文件 */
+  editable?: boolean;
 }
 
 /**

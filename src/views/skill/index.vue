@@ -33,7 +33,7 @@
 
     <!-- 主体：文件树 + 文件预览 -->
     <section v-if="skill" class="skill-page__body">
-      <BSkill :root-path="skill.dirPath" :initial-file-path="skill.filePath" />
+      <BSkill editable :root-path="skill.dirPath" :initial-file-path="skill.filePath" />
     </section>
 
     <!-- 未找到技能空状态 -->

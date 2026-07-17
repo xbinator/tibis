@@ -11,10 +11,16 @@
 
       <div :class="bem('pane')">
         <div :class="bem('header')">
-          <span>{{ selectedFileName }}</span>
-          <BButton v-if="fileState.status === 'success'" type="text" square size="small" title="复制内容" @click="copyContent">
-            <Icon icon="lucide:copy" :width="12" />
-          </BButton>
+          <span :class="bem('file-name')">{{ selectedFileName }}</span>
+          <div v-if="fileState.status === 'success'" :class="bem('header-actions')">
+            <BButton v-if="canEditFile" type="text" square size="mini" :loading="editingFile" @click="editFile">
+              <Icon icon="lucide:pencil" :width="12" />
+            </BButton>
+
+            <BButton type="text" square size="mini" @click="copyContent">
+              <Icon icon="lucide:copy" :width="12" />
+            </BButton>
+          </div>
         </div>
 
         <BScrollbar :class="bem('content-wrapper')">
@@ -38,8 +44,11 @@
 import type { BSkillProps as Props } from './types';
 import { computed, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
+import { message } from 'ant-design-vue';
 import { useClipboard } from '@/hooks/useClipboard';
+import { useOpenFile } from '@/hooks/useOpenFile';
 import { native } from '@/shared/platform';
+import { asyncTo } from '@/utils/asyncTo';
 import { createNamespace } from '@/utils/namespace';
 import FileTree from './components/FileTree.vue';
 
@@ -62,10 +71,12 @@ type FileState = { status: 'idle' } | { status: 'loading' } | { status: 'success
 // ─── State ───────────────────────────────────────────────────────────────────
 
 const { clipboard } = useClipboard();
+const { openFileByPath } = useOpenFile();
 
 const selectedFilePath = ref('');
 const fileState = ref<FileState>({ status: 'idle' });
 const treeFileCount = ref(0);
+const editingFile = ref(false);
 
 /** 请求版本号，用于丢弃过期的异步结果 */
 let requestVersion = 0;
@@ -83,6 +94,9 @@ const virtualPaths = computed<string[]>(() => [...virtualFileMap.value.keys()]);
 const showFileTree = computed<boolean>(() => treeFileCount.value > 1);
 
 const selectedFileName = computed<string>(() => selectedFilePath.value.split('/').at(-1) || '未选择文件');
+
+/** 真实文件加载成功后允许跳转到编辑器，虚拟预览文件仅支持查看。 */
+const canEditFile = computed<boolean>(() => props.editable && Boolean(props.rootPath) && !props.virtualFiles && Boolean(selectedFilePath.value));
 
 // ─── File loading ─────────────────────────────────────────────────────────────
 
@@ -102,16 +116,15 @@ async function selectFile(filePath: string): Promise<void> {
   const version = ++requestVersion;
   selectedFilePath.value = filePath;
   fileState.value = { status: 'loading' };
+  const [error, content] = await asyncTo(readContent(filePath));
 
-  try {
-    const content = await readContent(filePath);
-    if (version !== requestVersion) return;
-    fileState.value = { status: 'success', content };
-  } catch (error) {
-    if (version !== requestVersion) return;
-    const message = error instanceof Error ? error.message : '无法预览该文件';
-    fileState.value = { status: 'error', message };
+  if (version !== requestVersion) return;
+  if (error) {
+    fileState.value = { status: 'error', message: error.message || '无法预览该文件' };
+    return;
   }
+
+  fileState.value = { status: 'success', content };
 }
 
 // ─── Event handlers ───────────────────────────────────────────────────────────
@@ -126,6 +139,22 @@ function onTreeLoaded(count: number): void {
 function copyContent(): void {
   if (fileState.value.status !== 'success') return;
   clipboard(fileState.value.content, { successMessage: '内容已复制' });
+}
+
+/**
+ * 在 Markdown 编辑器中打开当前选中的真实文件。
+ */
+async function editFile(): Promise<void> {
+  if (!canEditFile.value || editingFile.value) return;
+
+  const filePath = selectedFilePath.value;
+  editingFile.value = true;
+  const [error, openedFile] = await asyncTo(openFileByPath(filePath));
+  editingFile.value = false;
+
+  if (error || !openedFile) {
+    message.error(`无法在编辑器中打开“${selectedFileName.value}”`);
+  }
 }
 
 // ─── Watchers ─────────────────────────────────────────────────────────────────
@@ -168,6 +197,11 @@ defineExpose({
   flex-direction: column;
   width: 0;
   background: var(--bg-primary);
+
+  // 移入 pane 时才显示 header-actions
+  &:hover .b-skill__header-actions {
+    opacity: 1;
+  }
 }
 
 .b-skill__content-wrapper {
@@ -177,6 +211,7 @@ defineExpose({
 
 .b-skill__header {
   display: flex;
+  gap: 8px;
   align-items: center;
   justify-content: space-between;
   min-height: 36px;
@@ -185,6 +220,22 @@ defineExpose({
   font-weight: 600;
   color: var(--text-primary);
   border-bottom: 1px solid var(--border-tertiary);
+}
+
+.b-skill__file-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.b-skill__header-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 5px;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.15s ease;
 }
 
 .b-skill__content {
