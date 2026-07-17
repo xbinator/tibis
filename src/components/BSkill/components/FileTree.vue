@@ -357,7 +357,6 @@ watch(
   padding-right: 8px;
   overflow: hidden;
   font-size: 12px;
-  color: var(--text-secondary);
   text-align: left;
   cursor: pointer;
   background: transparent;
@@ -373,16 +372,13 @@ watch(
 
   &:hover:not(.b-skill__file-tree-node--directory),
   &.b-skill__file-tree-node--active {
-    color: var(--text-primary);
     background: var(--bg-tertiary);
   }
 
   &.b-skill__file-tree-node--directory {
     font-weight: 600;
-    color: var(--text-tertiary);
 
     &:hover {
-      color: var(--text-secondary);
       background: var(--bg-tertiary);
     }
   }
