@@ -146,6 +146,16 @@ function handleCopyPath(): void {
   background: var(--bg-secondary);
   border: 1px solid var(--border-tertiary);
   border-radius: 6px;
+
+  // 复制按钮默认隐藏，hover 时显示
+  .b-button {
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+
+  &:hover .b-button {
+    opacity: 1;
+  }
 }
 
 .skill-page__path-text {
@@ -154,7 +164,6 @@ function handleCopyPath(): void {
   text-overflow: ellipsis;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
   font-size: 11px;
-  color: var(--text-tertiary);
   white-space: nowrap;
 }
 
