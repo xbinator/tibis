@@ -1,5 +1,5 @@
 /**
- * @file useMenuAction.ts
+ * @file index.ts
  * @description 注册系统菜单 action 回调，并分发到应用事件和设置 store。
  */
 import { onMounted, onUnmounted } from 'vue';

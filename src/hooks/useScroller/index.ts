@@ -1,5 +1,5 @@
 /**
- * @file useScroller.ts
+ * @file index.ts
  * @description 自动发现滚动容器并提供响应式滚动状态的 Hook
  */
 import type { Ref } from 'vue';

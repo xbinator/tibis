@@ -1,5 +1,5 @@
 /**
- * @file useFileDrop.ts
+ * @file index.ts
  * @description 通用文件拖拽 Hook，封装 DOM 拖拽态、文件 drop 分发与本地路径解析。
  */
 import type { Ref } from 'vue';

@@ -1,5 +1,5 @@
 /**
- * @file useNavigate.ts
+ * @file index.ts
  * @description Markdown/富文本链接、文件与 Skill 详情的统一导航逻辑。
  */
 import { useRouter } from 'vue-router';

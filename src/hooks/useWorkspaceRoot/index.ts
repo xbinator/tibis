@@ -1,5 +1,5 @@
 /**
- * @file useWorkspaceRoot.ts
+ * @file index.ts
  * @description 工作区根目录 composable，挂载时自动异步初始化，提供同步读取能力。
  */
 import { shallowRef, ref, onMounted } from 'vue';

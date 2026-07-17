@@ -85,7 +85,7 @@ import { findPendingInteraction } from '@/ai/chat/policies/pendingInteraction';
 import type { ChatSessionUIEvent } from '@/ai/chat/sessionEvents';
 import BTextEditor from '@/components/BText/Editor.vue';
 import type { BTextEditorExpose, SlashCommandOption } from '@/components/BText/types';
-import { useChatActorSystem } from '@/hooks/useChatActorSystem';
+import { useActorSystem } from '@/hooks/useChat/useActorSystem';
 import { useNavigate } from '@/hooks/useNavigate';
 import { getElectronAPI } from '@/shared/platform/electron-api';
 import { useProviderStore } from '@/stores/ai/provider';
@@ -224,7 +224,7 @@ const {
   scheduleAutoName
 } = sessionLifecycle;
 /** 应用级 Chat Actor system。 */
-const chatActorSystem = useChatActorSystem();
+const chatActorSystem = useActorSystem();
 /** Workflow 创建前收到的待重放 Session UI 事件。 */
 const pendingSessionUIEvents: ChatSessionUIEvent[] = [];
 /** 当前 Session UI 事件处理器，Workflow 创建前先暂存事件。 */

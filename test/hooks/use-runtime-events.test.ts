@@ -1,5 +1,5 @@
 /**
- * @file use-chat-runtime-events.test.ts
+ * @file use-runtime-events.test.ts
  * @description 应用级 ChatRuntime 事件路由 hook 测试。
  * @vitest-environment jsdom
  */
@@ -15,7 +15,7 @@ import { effectScope } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createChatActorSystem } from '@/ai/chat/actorSystem';
-import { useChatRuntimeEvents } from '@/hooks/useChatRuntimeEvents';
+import { useRuntimeEvents } from '@/hooks/useChat/useRuntimeEvents';
 import { useToolPermissionStore } from '@/stores/chat/toolPermission';
 
 const runtimeListeners = vi.hoisted(() => ({
@@ -87,7 +87,7 @@ function createEventBase(): {
   };
 }
 
-describe('useChatRuntimeEvents', (): void => {
+describe('useRuntimeEvents', (): void => {
   beforeEach((): void => {
     setActivePinia(createPinia());
     runtimeCommands.submitConfirmation.mockReset();
@@ -113,7 +113,7 @@ describe('useChatRuntimeEvents', (): void => {
     const visibleEvents = vi.fn();
     system.subscribeSessionEvents('session-1', visibleEvents);
     const scope = effectScope();
-    scope.run((): void => useChatRuntimeEvents(system));
+    scope.run((): void => useRuntimeEvents(system));
 
     runtimeListeners.confirmation?.({
       ...createEventBase(),
@@ -159,7 +159,7 @@ describe('useChatRuntimeEvents', (): void => {
     system.subscribeSessionEvents('session-1', visibleEvents);
     const scope = effectScope();
     scope.run((): void => {
-      useChatRuntimeEvents(system);
+      useRuntimeEvents(system);
     });
 
     runtimeListeners.messageDeleted?.({ ...createEventBase(), messageId: 'assistant-1' });
@@ -200,7 +200,7 @@ describe('useChatRuntimeEvents', (): void => {
     );
     system.send({ type: 'runtime.event', runtimeId: 'runtime-1', event: { type: 'runtime.started', runtimeId: 'runtime-1' } });
     const scope = effectScope();
-    scope.run((): void => useChatRuntimeEvents(system));
+    scope.run((): void => useRuntimeEvents(system));
 
     runtimeListeners.confirmation?.({
       ...createEventBase(),
@@ -235,7 +235,7 @@ describe('useChatRuntimeEvents', (): void => {
     const visibleEvents = vi.fn();
     system.subscribeSessionEvents('session-1', visibleEvents);
     const scope = effectScope();
-    scope.run((): void => useChatRuntimeEvents(system));
+    scope.run((): void => useRuntimeEvents(system));
 
     runtimeListeners.complete?.({
       ...createEventBase(),
@@ -268,7 +268,7 @@ describe('useChatRuntimeEvents', (): void => {
     system.subscribeSessionEvents('session-1', visibleEvents);
     const scope = effectScope();
     scope.run((): void => {
-      useChatRuntimeEvents(system);
+      useRuntimeEvents(system);
     });
 
     runtimeListeners.messageDeleted?.({ ...createEventBase(), messageId: 'assistant-1' });

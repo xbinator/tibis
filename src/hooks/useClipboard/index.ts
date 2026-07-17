@@ -1,5 +1,5 @@
 /**
- * @file useClipboard.ts
+ * @file index.ts
  * @description 剪贴板操作 Hook，统一封装文本与图片复制反馈。
  */
 import { useClipboard as _useClipboard } from '@vueuse/core';

@@ -1,12 +1,12 @@
 /**
- * @file use-chat-runtime-recovery.test.ts
+ * @file use-runtime-recovery.test.ts
  * @description renderer 启动时 ChatRuntime 恢复测试。
  * @vitest-environment jsdom
  */
 import type { ChatRuntimeRecoverySnapshot } from 'types/chat-runtime';
 import { describe, expect, it, vi } from 'vitest';
 import { createChatActorSystem } from '@/ai/chat/actorSystem';
-import { recoverChatRuntimes } from '@/hooks/useChatRuntimeRecovery';
+import { recoverRuntimes } from '@/hooks/useChat/useRuntimeRecovery';
 
 const electronAPIMock = vi.hoisted(() => ({
   chatRuntimeListActive: vi.fn(),
@@ -41,7 +41,7 @@ function createSnapshot(): ChatRuntimeRecoverySnapshot {
   };
 }
 
-describe('recoverChatRuntimes', (): void => {
+describe('recoverRuntimes', (): void => {
   it('hydrates actors, replays confirmation, and resolves degraded renderer requests', async (): Promise<void> => {
     const snapshot = createSnapshot();
     electronAPIMock.chatRuntimeListActive.mockResolvedValue({ ok: true, data: [snapshot] });
@@ -50,7 +50,7 @@ describe('recoverChatRuntimes', (): void => {
     const system = createChatActorSystem();
     system.start();
 
-    await recoverChatRuntimes(system);
+    await recoverRuntimes(system);
 
     expect(system.getSession('session-1')?.getSnapshot().matches('waitingForUser')).toBe(true);
     expect(system.getRuntimeCapabilities('runtime-1')?.documentId).toBe('document-1');
@@ -74,7 +74,7 @@ describe('recoverChatRuntimes', (): void => {
     const system = createChatActorSystem();
     system.start();
 
-    await recoverChatRuntimes(system);
+    await recoverRuntimes(system);
 
     expect(system.actor.getSnapshot().context.runtimeRoutes.has('runtime-1')).toBe(false);
     expect(system.getSession('session-1')?.getSnapshot().matches('idle')).toBe(true);

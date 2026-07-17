@@ -1,3 +1,7 @@
+/**
+ * @file index.ts
+ * @description 当目标元素宽度低于阈值时自动折叠的 Hook。
+ */
 import type { Ref } from 'vue';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 

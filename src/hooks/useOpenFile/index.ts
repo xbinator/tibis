@@ -1,5 +1,5 @@
 /**
- * @file useOpenFile.ts
+ * @file index.ts
  * @description 收口最近文件相关的打开与新建路由逻辑。
  */
 

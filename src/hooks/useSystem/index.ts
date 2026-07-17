@@ -1,5 +1,5 @@
 /**
- * @file useSystemCore.ts
+ * @file index.ts
  * @description 系统级事件监听与处理，支持注册多个处理器，可扩展。
  */
 import { onMounted, onUnmounted } from 'vue';

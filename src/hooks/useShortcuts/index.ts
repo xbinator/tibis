@@ -1,5 +1,5 @@
 /**
- * @file useShortcuts.ts
+ * @file index.ts
  * @description 全局快捷键注册 Hook，支持 Mac 按键映射和局部作用域守卫。
  */
 import { useEventListener, useMagicKeys, whenever } from '@vueuse/core';

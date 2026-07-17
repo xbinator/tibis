@@ -1,12 +1,12 @@
 /**
- * @file useChatActorSystem.ts
+ * @file useActorSystem.ts
  * @description 应用级 Chat Actor system 的 Vue provide/inject 接入。
  */
 import type { InjectionKey } from 'vue';
 import { inject, onScopeDispose, provide } from 'vue';
 import { createChatActorSystem, type ChatActorSystem } from '@/ai/chat/actorSystem';
-import { useChatRuntimeEvents } from '@/hooks/useChatRuntimeEvents';
-import { useChatRuntimeRecovery } from '@/hooks/useChatRuntimeRecovery';
+import { useRuntimeEvents } from '@/hooks/useChat/useRuntimeEvents';
+import { useRuntimeRecovery } from '@/hooks/useChat/useRuntimeRecovery';
 
 /** Chat Actor system 注入键。 */
 const CHAT_ACTOR_SYSTEM_KEY: InjectionKey<ChatActorSystem> = Symbol('chat-actor-system');
@@ -30,11 +30,11 @@ function getApplicationChatActorSystem(): ChatActorSystem {
  * 在应用根级创建并提供 Chat Actor system。
  * @returns 应用级 Chat Actor system
  */
-export function useProvideChatActorSystem(): ChatActorSystem {
+export function useProvideActorSystem(): ChatActorSystem {
   const actorSystem = getApplicationChatActorSystem();
   provide(CHAT_ACTOR_SYSTEM_KEY, actorSystem);
-  useChatRuntimeEvents(actorSystem);
-  useChatRuntimeRecovery(actorSystem);
+  useRuntimeEvents(actorSystem);
+  useRuntimeRecovery(actorSystem);
 
   onScopeDispose((): void => {
     actorSystem.stop();
@@ -50,7 +50,7 @@ export function useProvideChatActorSystem(): ChatActorSystem {
  * 读取应用级 Chat Actor system。
  * @returns Chat Actor system
  */
-export function useChatActorSystem(): ChatActorSystem {
+export function useActorSystem(): ChatActorSystem {
   const providedActorSystem = inject(CHAT_ACTOR_SYSTEM_KEY, undefined);
   if (providedActorSystem) {
     return providedActorSystem;
@@ -59,7 +59,7 @@ export function useChatActorSystem(): ChatActorSystem {
   // 组件隔离挂载时创建作用域内系统，避免测试或独立预览之间共享会话状态。
   const localActorSystem = createChatActorSystem();
   localActorSystem.start();
-  useChatRuntimeEvents(localActorSystem);
+  useRuntimeEvents(localActorSystem);
   onScopeDispose((): void => localActorSystem.stop());
   return localActorSystem;
 }

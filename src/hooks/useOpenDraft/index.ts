@@ -1,5 +1,5 @@
 /**
- * @file useOpenDraft.ts
+ * @file index.ts
  * @description 创建并打开未保存草稿的通用用例，供 AI 工具降级或其他入口复用。
  */
 import { customAlphabet } from 'nanoid';

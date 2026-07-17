@@ -1,3 +1,7 @@
+/**
+ * @file index.ts
+ * @description AI 流式文本生成 Hook，提供流式文本生成能力，支持实时获取生成内容。
+ */
 /* eslint-disable no-use-before-define */
 import type {
   AIServiceError,

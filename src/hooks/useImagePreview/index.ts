@@ -1,5 +1,5 @@
 /**
- * @file useImagePreview.ts
+ * @file index.ts
  * @description 图片预览入口 hook，优先调用 Electron 原生能力，失败时回退到应用内查看器。
  */
 import type { ElectronImagePreviewRequest } from 'types/electron-api';

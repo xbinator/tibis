@@ -1,5 +1,5 @@
 /**
- * @file useChatRuntimeRecovery.ts
+ * @file useRuntimeRecovery.ts
  * @description 从主进程活跃 Runtime 快照重建 renderer Chat actor 与待处理请求。
  */
 import type { ChatRuntimeHandlerResult, ChatRuntimeRecoveryPendingRequest, ChatRuntimeRecoverySnapshot } from 'types/chat-runtime';
@@ -87,7 +87,7 @@ async function hydrateSnapshots(actorSystem: ChatActorSystem, snapshots: ChatRun
  * 从主进程事实源恢复活跃 ChatRuntime。
  * @param actorSystem - 应用级 Chat actor system
  */
-export async function recoverChatRuntimes(actorSystem: ChatActorSystem): Promise<void> {
+export async function recoverRuntimes(actorSystem: ChatActorSystem): Promise<void> {
   const electronAPI = getElectronAPI();
   const replayedRequestKeys = new Set<string>();
   const firstSnapshots = unwrapRuntimeResult(await electronAPI.chatRuntimeListActive());
@@ -110,8 +110,8 @@ export async function recoverChatRuntimes(actorSystem: ChatActorSystem): Promise
 }
 
 /** 在应用启动时异步恢复 ChatRuntime，失败只记录日志。 */
-export function useChatRuntimeRecovery(actorSystem: ChatActorSystem): void {
-  recoverChatRuntimes(actorSystem).catch((error: unknown): void => {
+export function useRuntimeRecovery(actorSystem: ChatActorSystem): void {
+  recoverRuntimes(actorSystem).catch((error: unknown): void => {
     logger.error(`[chat-runtime-recovery] ${error instanceof Error ? error.message : String(error)}`);
   });
 }

@@ -1,5 +1,5 @@
 /**
- * @file useWatchResource.ts
+ * @file index.ts
  * @description 通用资源监听 hook，负责扫描用户目录、监听变更及增量更新到 Store。
  *              适用于按根目录（如 `.agents`、`.tibis`）+ 子目录（如 `skills`、`widgets`）
  *              下单一类型文件（如 `SKILL.md`、`widget.json`）管理的 Store 同步场景。
