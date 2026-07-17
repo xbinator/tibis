@@ -7,9 +7,9 @@ import type { FileState } from '@/shared/platform/native/types';
 import type { StoredDocumentRecord } from '@/shared/storage/files/types';
 
 /**
- * 文件冲突处理结果。
+ * 文件冲突处理结果：`true` 表示保留本地草稿，`false` 表示使用磁盘中的最新内容。
  */
-export type FileConflictDecision = 'keepDraft' | 'useDisk';
+export type FileConflictDecision = boolean;
 
 /**
  * 控制器持久化错误来源。

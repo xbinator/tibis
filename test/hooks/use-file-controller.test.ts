@@ -152,7 +152,7 @@ function createEvents(overrides: Partial<FileControllerEvents<string>> = {}): Fi
     onWriteFile: vi.fn().mockResolvedValue(undefined),
     onSaveAs: vi.fn().mockResolvedValue(null),
     onRename: vi.fn().mockResolvedValue(null),
-    onResolveConflict: vi.fn().mockResolvedValue('keepDraft'),
+    onResolveConflict: vi.fn().mockResolvedValue(true),
     onRestoreFile: vi.fn().mockResolvedValue(false),
     ...overrides
   };
@@ -330,7 +330,7 @@ describe('useFileController', (): void => {
 
   it('asks the adapter before replacing a dirty draft changed on disk', async (): Promise<void> => {
     const scope = effectScope();
-    const onResolveConflict = vi.fn().mockResolvedValue('keepDraft');
+    const onResolveConflict = vi.fn().mockResolvedValue(true);
 
     await scope.run(async (): Promise<void> => {
       const events = createEvents({
@@ -564,7 +564,7 @@ describe('useFileController', (): void => {
           }
           return content;
         },
-        onResolveConflict: vi.fn().mockResolvedValue('useDisk'),
+        onResolveConflict: vi.fn().mockResolvedValue(false),
         onWriteFile
       });
       const controller = useFileController({ fileId: ref('file-1'), events });
@@ -777,7 +777,7 @@ describe('useFileController', (): void => {
 
   it('suppresses a matching native change emitted during save-as', async (): Promise<void> => {
     const scope = effectScope();
-    const onResolveConflict = vi.fn().mockResolvedValue('useDisk');
+    const onResolveConflict = vi.fn().mockResolvedValue(false);
     const onSaveAs = vi.fn(async (): Promise<string> => {
       fileWatchMock.callback?.({ type: 'change', filePath: '/tmp/file-1.md', content: 'local draft' });
       return '/tmp/file-1.md';
@@ -1166,7 +1166,7 @@ describe('useFileController', (): void => {
 
   it('rejects a reload conflict result while dispose is flushing a draft', async (): Promise<void> => {
     const scope = effectScope();
-    const conflictTask = createDeferred<'keepDraft' | 'useDisk'>();
+    const conflictTask = createDeferred<boolean>();
     const draftTask = createDeferred<void>();
     updateFileMock.mockReturnValue(draftTask.promise);
 
@@ -1190,7 +1190,7 @@ describe('useFileController', (): void => {
       await vi.waitFor((): void => expect(events.onResolveConflict).toHaveBeenCalledTimes(1));
 
       const disposeTask = controller.actions.onDispose();
-      conflictTask.resolve('useDisk');
+      conflictTask.resolve(false);
       await Promise.resolve();
       await Promise.resolve();
 
@@ -1205,7 +1205,7 @@ describe('useFileController', (): void => {
 
   it('asks before replacing a dirty draft from an external change event', async (): Promise<void> => {
     const scope = effectScope();
-    const onResolveConflict = vi.fn().mockResolvedValue('useDisk');
+    const onResolveConflict = vi.fn().mockResolvedValue(false);
 
     await scope.run(async (): Promise<void> => {
       const events = createEvents({

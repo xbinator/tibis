@@ -184,19 +184,24 @@ export function useSession(): WidgetSessionReturn {
    * @returns Widget 草稿与磁盘候选内容
    */
   async function onLoadWidget(context: FileLoadContext): Promise<FileLoadCandidates> {
+    // 1. 等待 Widget 状态初始化完成，避免在未 ready 时读取已安装路径
     const [initError] = await asyncTo(widgetStore.waitForInit());
     if (initError) {
       return { draft: null, disk: null, error: initError };
     }
 
+    // 2. 读取最近文件记录（含未保存草稿与最近已知 path）
     const [recordError, record] = await asyncTo(recentStore.getFileById(context.fileId));
     if (recordError) {
       return { draft: null, disk: null, error: recordError };
     }
 
+    // 3. 解析候选路径：已安装路径优先于草稿里残留的 path
     const stored = isStoredWidget(record) ? record : undefined;
     const installedPath = widgetStore.getWidgetById(resolveWidgetId(context.fileId))?.filePath ?? null;
     const filePath = installedPath ?? stored?.path ?? null;
+
+    // 4. 用最近记录构造草稿状态；若存在已安装路径，按其重新解析文件名 / 扩展名
     const storedState = stored ? createStoredState(stored) : null;
     if (storedState && installedPath) {
       const { name, ext } = parseFileName(installedPath);
@@ -206,20 +211,26 @@ export function useSession(): WidgetSessionReturn {
     }
 
     const draft = storedState ? { fileState: storedState, savedContent: stored?.savedContent ?? null } : null;
+
+    // 5. 没有可读路径时：有草稿就仅返回草稿，否则视为未找到已安装 Widget
     if (!filePath) {
       const error = draft ? null : new Error('未找到已安装 Widget 的文件路径');
       return { draft, disk: null, error };
     }
 
+    // 6. 读取磁盘文件；失败时回查 path status，区分"不存在"与"读取失败"
     const [diskError, diskFile] = await asyncTo(native.readFile(filePath));
     if (diskError) {
       const [statusError, status] = await asyncTo(native.getPathStatus(filePath));
       if (statusError) {
+        // 连 path status 都查不到，原始读盘错误也无法定位，直接抛出 status 错误
         return { draft, disk: null, error: statusError };
       }
       if (!status.exists) {
+        // 文件已被删除 / 移走，标记 missing 以走恢复流程
         return { draft, disk: null, error: null, missing: true };
       }
+      // 文件存在但读不出来（权限 / IO 错误），用 cause 链保留原始错误便于排查
       return { draft, disk: null, error: new Error(`无法读取 Widget 文件：${diskError.message}`, { cause: diskError }) };
     }
 
@@ -259,12 +270,7 @@ export function useSession(): WidgetSessionReturn {
    * @returns Widget 最近文件记录
    */
   function onBuildRecord(context: FileRecordContext<WidgetData>): StoredWidget {
-    return {
-      ...context.fileState,
-      type: 'widget',
-      savedContent: context.savedContent,
-      modifiedAt: context.modifiedAt
-    };
+    return { ...context.fileState, type: 'widget', savedContent: context.savedContent, modifiedAt: context.modifiedAt };
   }
 
   /**
@@ -272,8 +278,7 @@ export function useSession(): WidgetSessionReturn {
    * @param context - 精确写盘上下文
    */
   async function onWriteWidget(context: FileWriteContext): Promise<void> {
-    const [error] = await asyncTo(native.writeFile(context.path, context.content));
-    if (error) throw error;
+    await native.writeFile(context.path, context.content);
   }
 
   /**
@@ -283,9 +288,7 @@ export function useSession(): WidgetSessionReturn {
    */
   async function onSaveAsWidget(context: FileSaveAsContext): Promise<string | null> {
     const defaultPath = context.suggestedPath || context.fileState.path || getDefaultSavePath(context.fileState);
-    const [error, savedPath] = await asyncTo(native.saveFile(context.content, undefined, { defaultPath }));
-    if (error) throw error;
-    return savedPath;
+    return native.saveFile(context.content, undefined, { defaultPath });
   }
 
   /**
@@ -293,24 +296,20 @@ export function useSession(): WidgetSessionReturn {
    * @returns 始终返回 null
    */
   async function onRenameWidget(): Promise<FileRenameResult | null> {
-    const [error] = await asyncTo(Modal.alert('无法重命名', '已安装 Widget 的配置文件名固定为 widget.json'));
-    if (error) throw error;
+    await Modal.alert('无法重命名', '已安装 Widget 的配置文件名固定为 widget.json');
     return null;
   }
 
   /**
    * 询问用户如何处理 Widget 草稿与磁盘冲突。
-   * @returns 用户选择的冲突结果
+   * @returns `true` 表示保留本地草稿，`false` 表示使用磁盘内容
    */
   async function onResolveConflict(): Promise<FileConflictDecision> {
-    const [error, result] = await asyncTo(
-      Modal.confirm('发现内容冲突', '当前 Widget 有未保存草稿，同时磁盘内容也已变化。是否使用磁盘中的最新内容？', {
-        confirmText: '使用磁盘内容',
-        cancelText: '保留本地草稿'
-      })
-    );
-    if (error) throw error;
-    return result[0] ? 'keepDraft' : 'useDisk';
+    const [, confirmed] = await Modal.confirm('发现内容冲突', '当前 Widget 有未保存草稿，同时磁盘内容也已变化。是否使用磁盘中的最新内容？', {
+      confirmText: '使用磁盘内容',
+      cancelText: '保留本地草稿'
+    });
+    return confirmed;
   }
 
   /**
@@ -319,10 +318,7 @@ export function useSession(): WidgetSessionReturn {
    * @returns 是否完成原路径恢复
    */
   async function onRestoreFile(context: FileRestoreContext): Promise<boolean> {
-    return restoreMissingFile(context.fileState, {
-      title: '文件已存在',
-      message: '原 Widget 路径已重新出现同名文件。是否覆盖它？'
-    });
+    return restoreMissingFile(context.fileState, { title: '文件已存在', message: '原 Widget 路径已重新出现同名文件。是否覆盖它？' });
   }
 
   /**
@@ -346,8 +342,7 @@ export function useSession(): WidgetSessionReturn {
    * 完成 Widget 最近记录删除后的标签和路由收尾。
    */
   async function onDeletedWidget(): Promise<void> {
-    const [routeError] = await asyncTo(router.push('/welcome'));
-    if (routeError) throw routeError;
+    await router.push('/welcome');
     tabsStore.removeTab(fileId.value);
   }
 
@@ -376,12 +371,8 @@ export function useSession(): WidgetSessionReturn {
    */
   function onSyncWidgetTab(): void {
     if (!fileId.value) return;
-    tabsStore.addTab({
-      id: fileId.value,
-      path: routePath.value,
-      title: currentTitle.value,
-      cacheKey: `widget:${fileId.value}`
-    });
+
+    tabsStore.addTab({ id: fileId.value, path: routePath.value, title: currentTitle.value, cacheKey: `widget:${fileId.value}` });
   }
 
   watch([fileId, currentTitle], onSyncWidgetTab, { immediate: true });

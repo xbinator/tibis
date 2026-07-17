@@ -206,7 +206,7 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
 
     if (draftChanged && diskChanged) {
       const decision = await events.onResolveConflict({ draft, disk });
-      return decision === 'keepDraft' ? onParseSnapshot(draft.fileState, baseline) : onParseSnapshot(disk.fileState, disk.fileState.content);
+      return decision ? onParseSnapshot(draft.fileState, baseline) : onParseSnapshot(disk.fileState, disk.fileState.content);
     }
 
     if (draftChanged) {
@@ -490,13 +490,8 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
     if (!isSaved.value) {
       const [conflictError, decision] = await asyncTo(
         events.onResolveConflict({
-          draft: {
-            fileState: { ...fileState.value },
-            savedContent: savedContent.value
-          },
-          disk: {
-            fileState: { ...fileState.value, content: event.content }
-          }
+          draft: { fileState: { ...fileState.value }, savedContent: savedContent.value },
+          disk: { fileState: { ...fileState.value, content: event.content } }
         })
       );
       if (conflictError) {
@@ -508,7 +503,7 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
         diskSave.onResumeSave(externalPause);
         return;
       }
-      if (decision === 'keepDraft') {
+      if (decision) {
         diskSave.onResumeSave(externalPause);
         diskSave.onScheduleSave();
         return;
@@ -517,11 +512,7 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
 
     try {
       const nextData = events.onParse({ content: event.content, path: fileState.value.path });
-      onApplySnapshot({
-        fileState: { ...fileState.value, content: event.content },
-        data: nextData,
-        savedContent: event.content
-      });
+      onApplySnapshot({ fileState: { ...fileState.value, content: event.content }, data: nextData, savedContent: event.content });
       draftPersistence.onScheduleDraft();
       await draftPersistence.onFlushDraft();
       loadError.value = null;

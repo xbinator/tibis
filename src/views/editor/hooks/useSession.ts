@@ -102,13 +102,7 @@ function isStoredFileRecord(record: StoredDocumentRecord | undefined): record is
  * @returns 控制器文件状态
  */
 function onCreateStoredState(record: StoredFile): FileState {
-  return {
-    id: record.id,
-    path: record.path,
-    name: record.name,
-    ext: record.ext,
-    content: record.content
-  };
+  return { id: record.id, path: record.path, name: record.name, ext: record.ext, content: record.content };
 }
 
 /**
@@ -120,13 +114,8 @@ function onCreateStoredState(record: StoredFile): FileState {
  */
 function onCreateDiskState(fileId: string, filePath: string, diskFile: ReadFileResult): FileState {
   const { name, ext } = parseFileName(filePath);
-  return {
-    id: fileId,
-    path: filePath,
-    name: name || diskFile.name,
-    ext: ext || diskFile.ext || 'md',
-    content: diskFile.content
-  };
+
+  return { id: fileId, path: filePath, name: name || diskFile.name, ext: ext || diskFile.ext || 'md', content: diskFile.content };
 }
 
 /**
@@ -150,13 +139,8 @@ export function useSession(fileId: Ref<string>): EditorSessionResult {
    * @returns 默认文件快照
    */
   function onCreateFile(context: { fileId: string }): FileControllerSnapshot<string> {
-    const nextFile: FileState = {
-      id: context.fileId,
-      name: 'Untitled',
-      content: '',
-      ext: 'md',
-      path: null
-    };
+    const nextFile: FileState = { id: context.fileId, name: 'Untitled', content: '', ext: 'md', path: null };
+
     return { fileState: nextFile, data: nextFile.content, savedContent: nextFile.content };
   }
 
@@ -166,28 +150,34 @@ export function useSession(fileId: Ref<string>): EditorSessionResult {
    * @returns 草稿与磁盘候选内容
    */
   async function onLoadFile(context: FileLoadContext): Promise<FileLoadCandidates> {
+    // 1. 读取最近文件记录（含未保存草稿与最近已知 path）
     const [readRecordError, record] = await asyncTo(recentStore.getFileById(context.fileId));
     if (readRecordError) {
       return { draft: null, disk: null, error: readRecordError };
     }
 
+    // 2. 记录指向 Widget 时重定向到 Widget 页面，并 abort 当前加载避免重复渲染
     if (record?.type === 'widget') {
       const [redirectError] = await asyncTo(router.push({ name: 'widget', params: { id: context.fileId } }));
       return { draft: null, disk: null, error: redirectError ?? null, aborted: !redirectError };
     }
 
+    // 3. 不是合法的文件记录（不存在 / 类型不匹配），返回空结果交由上层处理
     if (!isStoredFileRecord(record)) {
       return { draft: null, disk: null, error: null };
     }
 
+    // 4. 用最近记录构造草稿（fileState + savedContent）
     const draft = {
       fileState: onCreateStoredState(record),
       savedContent: record.savedContent ?? null
     };
+    // 5. 记录里没有 path，表示文件从未落盘，仅返回草稿
     if (!record.path) {
       return { draft, disk: null, error: null };
     }
 
+    // 6. 读取磁盘文件；失败时回查 path status，区分"不存在"与"读取失败"
     const [readDiskError, diskFile] = await asyncTo(native.readFile(record.path));
     if (readDiskError) {
       const [statusError, status] = await asyncTo(native.getPathStatus(record.path));
@@ -195,8 +185,10 @@ export function useSession(fileId: Ref<string>): EditorSessionResult {
         return { draft, disk: null, error: statusError };
       }
       if (!status.exists) {
+        // 文件已被删除 / 移走，标记 missing 以走恢复流程
         return { draft, disk: null, error: null, missing: true };
       }
+      // 文件存在但读不出来（权限 / IO 错误）
       return { draft, disk: null, error: readDiskError };
     }
 
@@ -245,8 +237,7 @@ export function useSession(fileId: Ref<string>): EditorSessionResult {
    * @param context - 精确写盘上下文
    */
   async function onWriteFile(context: FileWriteContext): Promise<void> {
-    const [error] = await asyncTo(native.writeFile(context.path, context.content));
-    if (error) throw error;
+    await native.writeFile(context.path, context.content);
   }
 
   /**
@@ -256,9 +247,7 @@ export function useSession(fileId: Ref<string>): EditorSessionResult {
    */
   async function onSaveAsFile(context: FileSaveAsContext): Promise<string | null> {
     const defaultPath = context.suggestedPath || context.fileState.path || getDefaultSavePath(context.fileState);
-    const [error, savedPath] = await asyncTo(native.saveFile(context.content, undefined, { defaultPath }));
-    if (error) throw error;
-    return savedPath;
+    return native.saveFile(context.content, undefined, { defaultPath });
   }
 
   /**
@@ -267,12 +256,7 @@ export function useSession(fileId: Ref<string>): EditorSessionResult {
    * @returns 最新文件元信息；取消时返回 null
    */
   async function onRenameFile(context: FileRenameContext): Promise<FileRenameResult | null> {
-    const [inputError, inputResult] = await asyncTo(
-      Modal.input('重命名', { defaultValue: context.fileState.name, placeholder: '请输入文件名', autofocus: true })
-    );
-    if (inputError) throw inputError;
-
-    const [cancelled, newName] = inputResult;
+    const [cancelled, newName] = await Modal.input('重命名', { defaultValue: context.fileState.name, placeholder: '请输入文件名', autofocus: true });
     const normalizedName = String(newName || '').trim();
     if (cancelled || !normalizedName || normalizedName === context.fileState.name) {
       return null;
@@ -280,8 +264,7 @@ export function useSession(fileId: Ref<string>): EditorSessionResult {
 
     const nextPath = context.fileState.path ? replaceFileName(context.fileState.path, normalizedName, context.fileState.ext) : null;
     if (context.fileState.path && nextPath) {
-      const [renameError] = await asyncTo(native.renameFile(context.fileState.path, nextPath));
-      if (renameError) throw renameError;
+      await native.renameFile(context.fileState.path, nextPath);
     }
 
     return { name: normalizedName, ext: context.fileState.ext, path: nextPath };
@@ -289,17 +272,14 @@ export function useSession(fileId: Ref<string>): EditorSessionResult {
 
   /**
    * 询问用户如何处理编辑器草稿与磁盘冲突。
-   * @returns 用户选择的冲突处理结果
+   * @returns `true` 表示保留本地草稿，`false` 表示使用磁盘内容
    */
   async function onResolveConflict(): Promise<FileConflictDecision> {
-    const [confirmError, confirmResult] = await asyncTo(
-      Modal.confirm('发现内容冲突', '当前文件有未保存草稿，同时磁盘内容也已变化。是否使用磁盘中的最新内容？', {
-        confirmText: '使用磁盘内容',
-        cancelText: '保留本地草稿'
-      })
-    );
-    if (confirmError) throw confirmError;
-    return confirmResult[0] ? 'keepDraft' : 'useDisk';
+    const [, confirmed] = await Modal.confirm('发现内容冲突', '当前文件有未保存草稿，同时磁盘内容也已变化。是否使用磁盘中的最新内容？', {
+      confirmText: '使用磁盘内容',
+      cancelText: '保留本地草稿'
+    });
+    return confirmed;
   }
 
   /**
@@ -308,10 +288,7 @@ export function useSession(fileId: Ref<string>): EditorSessionResult {
    * @returns 是否完成原路径恢复
    */
   async function onRestoreFile(context: FileRestoreContext): Promise<boolean> {
-    return restoreMissingFile(context.fileState, {
-      title: '文件已存在',
-      message: '原文件路径已重新出现同名文件。是否覆盖它？'
-    });
+    return restoreMissingFile(context.fileState, { title: '文件已存在', message: '原文件路径已重新出现同名文件。是否覆盖它？' });
   }
 
   /**
@@ -322,9 +299,8 @@ export function useSession(fileId: Ref<string>): EditorSessionResult {
   async function onConfirmDelete(context: FileDeleteContext): Promise<boolean> {
     const title = resolveFileTitle(context.fileState);
     const confirmMessage = context.fileState.path ? `确定要删除文件 "${title}" 吗？` : `确定要删除未保存文档 "${title}" 吗？`;
-    const [deleteError, deleteResult] = await asyncTo(Modal.delete(confirmMessage));
-    if (deleteError) throw deleteError;
-    return !deleteResult[0];
+    const [, confirmed] = await Modal.delete(confirmMessage);
+    return confirmed;
   }
 
   /**
@@ -333,16 +309,14 @@ export function useSession(fileId: Ref<string>): EditorSessionResult {
    */
   async function onDeleteDiskFile(context: FileDeleteContext): Promise<void> {
     if (!context.fileState.path) return;
-    const [trashError] = await asyncTo(native.trashFile(context.fileState.path));
-    if (trashError) throw trashError;
+    await native.trashFile(context.fileState.path);
   }
 
   /**
    * 完成删除后的标签和路由收尾。
    */
   async function onDeleted(): Promise<void> {
-    const [routeError] = await asyncTo(router.push('/welcome'));
-    if (routeError) throw routeError;
+    await router.push('/welcome');
     tabsStore.removeTab(fileId.value);
   }
 
