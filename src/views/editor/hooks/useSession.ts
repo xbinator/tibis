@@ -25,6 +25,9 @@ import { useFileState } from './useFileState';
 import { useFileWatcher } from './useFileWatcher';
 import { type SaveToDiskResult, useSavePolicy } from './useSavePolicy';
 
+/**
+ * 编辑器视图模式：富文本编辑或纯源码编辑。
+ */
 type ViewMode = 'rich' | 'source';
 
 const nanoid = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz_', 8);
@@ -38,6 +41,19 @@ function isStoredFileRecord(record: StoredDocumentRecord | undefined): record is
   return record?.type === 'file';
 }
 
+/**
+ * 编排单个编辑器会话的生命周期：文件加载、磁盘调和、命令面板动作、缓存激活/停用。
+ *
+ * 本 hook 不直接管理编辑器内容，仅作为胶水层串联：
+ * 1. `useFileState`：文件状态与本地存储同步
+ * 2. `useFileWatcher`：磁盘文件监听与变更回调
+ * 3. `useFileAutoSave`：自动保存节流
+ * 4. `useSavePolicy`：保存策略（Ctrl+S、关闭、blur）
+ * 5. 路由 + 标签 store + 最近文件 store
+ *
+ * @param fileId - 当前会话对应的文件 ID（响应式，路由切换时更新）
+ * @returns 暴露给模板的状态与动作
+ */
 export function useSession(fileId: Ref<string>) {
   const route = useRoute();
   const router = useRouter();
@@ -120,7 +136,11 @@ export function useSession(fileId: Ref<string>) {
     registeredWatchFileId = null;
   }
 
-  function updateTab() {
+  /**
+   * 把当前会话的元信息（路径、标题、缓存 key）同步到标签 store。
+   * 监听 fileId / 名称 / 扩展名变化时触发，保证标签始终反映最新状态。
+   */
+  function updateTab(): void {
     if (!fileId.value) return;
 
     tabsStore.addTab({ id: fileId.value, path: sessionPath.value, title: currentTitle.value, cacheKey: sessionCacheKey.value });
@@ -243,7 +263,14 @@ export function useSession(fileId: Ref<string>) {
     }
   }
 
-  async function onSave() {
+  /**
+   * 统一的保存入口。
+   * 1. 确保存在可写入的存储记录
+   * 2. 文件标记为 missing（外部被删）时走恢复流程
+   * 3. 已有路径直接写盘
+   * 4. 其余情况弹出系统保存对话框
+   */
+  async function onSave(): Promise<void> {
     await fileStateActions.ensureStoredFile();
 
     if (tabsStore.isMissing(fileId.value)) {
@@ -259,13 +286,21 @@ export function useSession(fileId: Ref<string>) {
     await saveWithDialog();
   }
 
-  async function onSaveAs() {
+  /**
+   * 另存为：总是走系统保存对话框，允许选择新路径。
+   */
+  async function onSaveAs(): Promise<void> {
     await fileStateActions.ensureStoredFile();
 
     await saveWithDialog();
   }
 
-  async function onRename() {
+  /**
+   * 重命名当前文件。
+   * - 已有磁盘路径：先在系统层重命名文件，再更新本地状态和全局 watcher
+   * - 未保存文档：只更新内存中的名称与存储记录
+   */
+  async function onRename(): Promise<void> {
     await fileStateActions.ensureStoredFile();
 
     const [cancelled, newName] = await Modal.input('重命名', { defaultValue: fileState.value.name, placeholder: '请输入文件名', autofocus: true });
@@ -289,7 +324,11 @@ export function useSession(fileId: Ref<string>) {
     await fileStateActions.persistCurrentFile();
   }
 
-  async function onDuplicate() {
+  /**
+   * 复制当前文档为新文件并跳转到新标签。
+   * 注意：副本是未保存的（path = null），后续需要走另存为落盘。
+   */
+  async function onDuplicate(): Promise<void> {
     const nextId = nanoid();
     const nextName = fileState.value.name ? `${fileState.value.name}-副本` : '';
 
@@ -298,7 +337,10 @@ export function useSession(fileId: Ref<string>) {
     await router.push({ name: 'editor', params: { id: nextId } });
   }
 
-  async function onShowInFolder() {
+  /**
+   * 在系统文件管理器中定位当前文件（仅对已落盘文件生效）。
+   */
+  async function onShowInFolder(): Promise<void> {
     if (!fileState.value.path) {
       return;
     }
@@ -330,7 +372,14 @@ export function useSession(fileId: Ref<string>) {
     await clipboard(normalizedPath, { successMessage: '已复制相对路径', trim: false });
   }
 
-  async function onDelete() {
+  /**
+   * 删除当前文件/文档。
+   * - 先暂停自动保存，避免删除过程被中间保存覆盖
+   * - 已落盘：释放全局 watcher、停用本地文件监听、把磁盘文件移入回收站
+   * - 未落盘：仅删除本地记录和标签
+   * - 最后跳转到欢迎页
+   */
+  async function onDelete(): Promise<void> {
     autoSave.pause();
 
     const path = fileState.value.path || '';
@@ -340,19 +389,25 @@ export function useSession(fileId: Ref<string>) {
     if (cancelled) return;
 
     if (path) {
+      // 释放全局 watcher 引用，再停用本地文件监听
       await unregisterGlobalWatch();
       await clearWatchedFile();
-      // 删除文件
+      // 将磁盘文件移入回收站
       await native.trashFile(path);
     }
-    // 删除关联的文件
+    // 清理本地存储记录、标签页并退出到欢迎页
     await recentStore.removeFile(fileId.value);
-    // 删除关联的标签页
     tabsStore.removeTab(fileId.value);
 
     await router.push('/welcome');
   }
 
+  /**
+   * 把磁盘上的内容回填到当前会话，标记为已保存状态。
+   * 文件名/扩展名优先取自当前 path（确保和保存路径一致），缺失时回退到磁盘返回的元数据。
+   *
+   * @param diskFile - 从磁盘读取的最新文件内容与元数据
+   */
   async function applyDiskState(diskFile: ReadFileResult): Promise<void> {
     const diskMeta = fileState.value.path ? parseFileName(fileState.value.path) : { name: fileState.value.name, ext: fileState.value.ext };
 
@@ -365,7 +420,16 @@ export function useSession(fileId: Ref<string>) {
     await fileStateActions.persistCurrentFile();
   }
 
-  async function reconcileStoredFileWithDisk() {
+  /**
+   * 启动时调和本地存储与磁盘内容，避免出现"磁盘改了但本地还是旧值"的情况。
+   *
+   * 决策由 `resolveFileReconcileDecision` 给出，约定：
+   * - `keepDraft`：本地草稿与磁盘一致或无冲突，保持现状
+   * - `markSaved`：磁盘没有改动但本地误标脏，把基线对齐到当前内容
+   * - `applyDisk`：磁盘是更新源，直接覆盖（用于文件被外部修改等场景）
+   * - `confirm`：本地有未保存草稿 + 磁盘也已变化，弹窗让用户二选一
+   */
+  async function reconcileStoredFileWithDisk(): Promise<void> {
     if (!fileState.value.path) return;
 
     let diskFile: ReadFileResult;
@@ -373,10 +437,12 @@ export function useSession(fileId: Ref<string>) {
     try {
       diskFile = await native.readFile(fileState.value.path);
     } catch {
+      // 读取失败（最常见的就是文件被外部删除），交给上层 missing 流程处理。
       return;
     }
 
     if (!fileStateActions.hasSavedContentBaseline.value) {
+      // 第一次打开这个文件：以磁盘内容作为基线，避免误判为冲突。
       fileStateActions.savedContent.value = diskFile.content;
       fileStateActions.hasSavedContentBaseline.value = true;
       fileStateActions.hasUnsavedDraft.value = false;
@@ -416,30 +482,41 @@ export function useSession(fileId: Ref<string>) {
       return;
     }
 
+    // 决策为 confirm：本地草稿和磁盘都有未同步的改动，交给用户裁决。
     const [cancelled] = await Modal.confirm('发现内容冲突', '当前文件有未保存草稿，同时磁盘内容也已变化。是否使用磁盘中的最新内容？', {
       confirmText: '使用磁盘内容',
       cancelText: '保留本地草稿'
     });
 
+    // 确认按钮的语义是"用磁盘内容"，所以 cancelled=false 时采用磁盘版本。
     if (!cancelled) {
       await applyDiskState(diskFile);
     }
   }
 
-  async function loadFileState() {
-    // 增加版本号，标记当前加载请求
+  /**
+   * 加载并初始化一个文件会话。每次 fileId 变化都会重新执行。
+   *
+   * 关键点：
+   * - 用 `loadVersion` 丢弃过期的异步结果，避免快速切换标签时旧请求覆盖新文件
+   * - 加载期间暂停自动保存和 dirty 跟踪，初始化回填不应被识别为用户编辑
+   * - 文件被识别为 widget 类型时直接跳转到对应路由
+   * - 加载完成后与磁盘做一次 reconcile，处理外部修改
+   */
+  async function loadFileState(): Promise<void> {
+    // 1. 自增版本号，标记本次加载请求；后续 await 之前都需要校验版本号。
     const currentVersion = ++loadVersion;
-    // 暂停自动保存，避免在加载过程中触发保存
+    // 2. 暂停自动保存：避免加载过程中触发自动保存覆盖刚刚初始化好的内容。
     autoSave.pause();
-    // 页面切换后的初始化回填不应该被视为用户修改。
+    // 3. 暂停 dirty 跟踪：把初始化回填的数据视为"基线"而不是"用户编辑"。
     fileStateActions.pauseDirtyTracking();
 
     try {
-      // 记录当前文件ID，避免在异步操作过程中文件ID发生变化
+      // 4. 锁定本次请求对应的 fileId，后续可能因路由切换而变化。
       const currentFileId = fileId.value;
 
       const storedRecord = await recentStore.getFileById(currentFileId);
-      // 检查版本号，如果版本不匹配则终止（说明有更新的加载请求）
+      // 5. 版本号校验：如果在 await 期间产生了新的加载请求，立即放弃本次结果。
       if (currentVersion !== loadVersion) return;
 
       if (storedRecord?.type === 'widget') {
@@ -448,27 +525,25 @@ export function useSession(fileId: Ref<string>) {
       }
 
       const stored = isStoredFileRecord(storedRecord) ? storedRecord : undefined;
-      // 初始化文件状态
+      // 6. 初始化 fileState（清空旧值、写入存储记录、设定扩展名等）。
       await fileStateActions.initializeFileState(stored, currentFileId);
 
-      // 再次检查版本号
+      // 7. 再次校验版本号，再进入磁盘调和阶段。
       if (currentVersion !== loadVersion) return;
       await reconcileStoredFileWithDisk();
 
-      // 再次检查版本号
+      // 8. 调和后再次校验版本号，然后接管全局 watcher 和本地文件监听。
       if (currentVersion !== loadVersion) return;
-      // 切换文件监听器到新文件
       await syncGlobalWatch(currentFileId, fileState.value.path);
       if (isActive.value) {
         await switchWatchedFile(fileState.value.path);
       }
 
-      // 检查版本号
+      // 9. 最后再做一次版本号校验，并等待 Vue 更新周期让编辑器完成挂载。
       if (currentVersion !== loadVersion) return;
-      // 等待 Vue 更新周期完成
       await nextTick();
     } finally {
-      // 只有当前请求仍然有效时才恢复跟踪，避免旧请求提前解除新请求的保护。
+      // 10. 仅在本次请求仍然有效时才恢复跟踪，避免旧请求提前解除新请求的保护。
       if (currentVersion === loadVersion) {
         fileStateActions.resumeDirtyTracking();
         autoSave.resume();
@@ -503,6 +578,10 @@ export function useSession(fileId: Ref<string>) {
     await clearWatchedFile();
   }
 
+  /**
+   * 释放会话占用的全局资源：取消全局文件 watcher 引用，停用本地文件监听。
+   * 由 `onUnmounted` 自动调用，也可在外部手动调用（例如路由被强制销毁时）。
+   */
   async function dispose(): Promise<void> {
     await unregisterGlobalWatch();
     await clearWatchedFile();
