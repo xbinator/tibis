@@ -10,6 +10,7 @@ import type {
   FileControllerSnapshot,
   FileCreateContext,
   FileParseContext,
+  FileParseResult,
   FileRecordContext,
   FileSerializeContext
 } from '@/hooks/useFileController/types';
@@ -142,7 +143,7 @@ function createEvents(overrides: Partial<FileControllerEvents<string>> = {}): Fi
       savedContent: ''
     }),
     onLoad: vi.fn().mockResolvedValue({ draft: null, disk: null, error: null }),
-    onParse: ({ content }: FileParseContext): string => content,
+    onParse: ({ content }: FileParseContext): FileParseResult<string> => [undefined, content],
     onSerialize: ({ data }: FileSerializeContext<string>): string => data,
     onBuildRecord: ({ fileState, savedContent }: FileRecordContext<string>): StoredDocumentRecord => ({
       ...fileState,
@@ -558,11 +559,11 @@ describe('useFileController', (): void => {
           data: 'saved',
           savedContent: 'saved'
         }),
-        onParse: ({ content }: FileParseContext): string => {
+        onParse: ({ content }: FileParseContext): FileParseResult<string> => {
           if (content === 'invalid external') {
-            throw new Error('invalid external file');
+            return [new Error('invalid external file')];
           }
-          return content;
+          return [undefined, content];
         },
         onResolveConflict: vi.fn().mockResolvedValue(false),
         onWriteFile
@@ -875,9 +876,7 @@ describe('useFileController', (): void => {
           disk: { fileState: createFileState('file-1', 'invalid') },
           error: null
         }),
-        onParse: (): string => {
-          throw new Error('invalid file');
-        }
+        onParse: (): FileParseResult<string> => [new Error('invalid file')]
       });
       const controller = useFileController({ fileId: ref('file-1'), events });
 

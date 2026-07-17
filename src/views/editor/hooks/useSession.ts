@@ -18,6 +18,7 @@ import type {
   FileLoadCandidates,
   FileLoadContext,
   FileParseContext,
+  FileParseResult,
   FileRecordContext,
   FileRenameContext,
   FileRenameResult,
@@ -201,12 +202,12 @@ export function useSession(fileId: Ref<string>): EditorSessionResult {
   }
 
   /**
-   * 解析普通文本内容。
+   * 解析普通文本内容。编辑器文件无需解析，直接返回原始文本。
    * @param context - 文件解析上下文
-   * @returns 原始文本内容
+   * @returns 成功返回 `[undefined, content]`
    */
-  function onParseContent(context: FileParseContext): string {
-    return context.content;
+  function onParseContent(context: FileParseContext): FileParseResult<string> {
+    return [undefined, context.content];
   }
 
   /**

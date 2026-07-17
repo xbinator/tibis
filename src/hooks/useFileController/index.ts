@@ -129,6 +129,14 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
   }
 
   /**
+   * 判断控制器是否处于终态（已 dispose、正在 dispose 或正在删除）。
+   * @returns 是否已不再接受新副作用
+   */
+  function isTerminal(): boolean {
+    return status.disposed || status.disposing || status.deleting;
+  }
+
+  /**
    * 在生命周期切换期间校验不含运行状态的文件身份。
    * @param snapshot - 操作开始时的文件快照
    * @returns 文件 ID、会话版本与路径是否未变化
@@ -143,7 +151,7 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
    * @returns 是否仍可应用路径类副作用结果
    */
   function onIsCurrentIdentity(snapshot: FileOperationSnapshot): boolean {
-    return !status.disposed && !status.disposing && !status.deleting && onHasIdentity(snapshot);
+    return !isTerminal() && onHasIdentity(snapshot);
   }
 
   /**
@@ -162,11 +170,10 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
    * @returns 可原子应用的控制器快照
    */
   function onParseSnapshot(nextFileState: FileState, nextSavedContent: string): FileControllerSnapshot<TData> {
-    return {
-      fileState: { ...nextFileState },
-      data: events.onParse({ content: nextFileState.content, path: nextFileState.path }),
-      savedContent: nextSavedContent
-    };
+    const [parseError, parsedData] = events.onParse({ content: nextFileState.content, path: nextFileState.path });
+    if (parseError) throw parseError;
+
+    return { fileState: { ...nextFileState }, data: parsedData, savedContent: nextSavedContent };
   }
 
   /**
@@ -216,12 +223,7 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
     return onParseSnapshot(disk.fileState, disk.fileState.content);
   }
 
-  const draftPersistence = useDraftPersistence({
-    fileState,
-    data,
-    savedContent,
-    onBuildRecord: events.onBuildRecord
-  });
+  const draftPersistence = useDraftPersistence({ fileState, data, savedContent, onBuildRecord: events.onBuildRecord });
 
   /** 文件监听初始化完成后接管的异步变化处理器。 */
   let onExternalHandler: ((event: FileChangeEvent) => Promise<void>) | null = null;
@@ -307,7 +309,7 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
   const stopDataWatch = watch(
     data,
     (nextData: TData): void => {
-      if (status.syncingData || status.disposed || status.disposing || status.deleting) {
+      if (status.syncingData || isTerminal()) {
         return;
       }
 
@@ -333,7 +335,7 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
    * 重新加载当前文件的初始候选内容。
    */
   async function onReload(): Promise<void> {
-    if (status.disposed || status.disposing || status.deleting) {
+    if (isTerminal()) {
       return;
     }
 
@@ -350,7 +352,7 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
     isLoading.value = true;
     loadError.value = null;
     await diskSave.onPauseSave(loadPause);
-    if (currentVersion !== sessionVersion.value || loadingFileId !== fileId.value || status.disposed || status.disposing || status.deleting) {
+    if (currentVersion !== sessionVersion.value || loadingFileId !== fileId.value || isTerminal()) {
       onReleaseLoadPause(loadPause);
       return;
     }
@@ -358,7 +360,7 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
     await fileWatch.onSwitchPath(null);
     const [error, candidates] = await asyncTo(events.onLoad({ fileId: fileId.value, sessionVersion: currentVersion }));
 
-    if (currentVersion !== sessionVersion.value || loadingFileId !== fileId.value || status.disposed || status.disposing || status.deleting) {
+    if (currentVersion !== sessionVersion.value || loadingFileId !== fileId.value || isTerminal()) {
       onReleaseLoadPause(loadPause);
       return;
     }
@@ -385,7 +387,7 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
     }
 
     const [resolveError, snapshot] = await asyncTo(onResolveInitial(candidates, loadingFileId));
-    if (currentVersion !== sessionVersion.value || loadingFileId !== fileId.value || status.disposed || status.disposing || status.deleting) {
+    if (currentVersion !== sessionVersion.value || loadingFileId !== fileId.value || isTerminal()) {
       onReleaseLoadPause(loadPause);
       return;
     }
@@ -404,7 +406,7 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
       savedContent.value = snapshot.savedContent;
       onSyncDirty();
       await fileWatch.onSwitchPath(fileState.value.path ?? previousPath);
-      if (currentVersion !== sessionVersion.value || loadingFileId !== fileId.value || status.disposed || status.disposing || status.deleting) {
+      if (currentVersion !== sessionVersion.value || loadingFileId !== fileId.value || isTerminal()) {
         onReleaseLoadPause(loadPause);
         return;
       }
@@ -417,7 +419,7 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
       }
       draftPersistence.onScheduleDraft();
       await draftPersistence.onFlushDraft();
-      if (currentVersion !== sessionVersion.value || loadingFileId !== fileId.value || status.disposed || status.disposing || status.deleting) {
+      if (currentVersion !== sessionVersion.value || loadingFileId !== fileId.value || isTerminal()) {
         onReleaseLoadPause(loadPause);
         return;
       }
@@ -428,7 +430,7 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
 
     onApplySnapshot(snapshot);
     await fileWatch.onSwitchPath(fileState.value.path);
-    if (currentVersion !== sessionVersion.value || loadingFileId !== fileId.value || status.disposed || status.disposing || status.deleting) {
+    if (currentVersion !== sessionVersion.value || loadingFileId !== fileId.value || isTerminal()) {
       onReleaseLoadPause(loadPause);
       return;
     }
@@ -442,7 +444,7 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
     // 加载后的最终调和结果必须显式持久化，不能依赖数据 watcher 的副作用。
     draftPersistence.onScheduleDraft();
     await draftPersistence.onFlushDraft();
-    if (currentVersion !== sessionVersion.value || loadingFileId !== fileId.value || status.disposed || status.disposing || status.deleting) {
+    if (currentVersion !== sessionVersion.value || loadingFileId !== fileId.value || isTerminal()) {
       onReleaseLoadPause(loadPause);
       return;
     }
@@ -450,32 +452,27 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
   }
 
   /**
-   * 应用当前路径上的外部文件内容。
-   * @param event - 未被自写入抑制的文件变化
+   * 处理外部文件被删除事件：暂停保存并进入 missing 状态。
    */
-  async function onApplyExternal(event: FileChangeEvent): Promise<void> {
-    if (status.disposed || status.disposing || status.deleting) {
-      return;
-    }
+  async function onHandleUnlink(): Promise<void> {
+    await diskSave.onPauseSave('missing');
+  }
 
-    // 路径切换前已排队的旧路径事件不得影响新的文件身份。
-    if (event.filePath !== fileState.value.path) {
-      return;
+  /**
+   * 处理外部新增文件事件：若当前处于 missing 状态则重新加载恢复。
+   */
+  async function onHandleAdd(): Promise<void> {
+    if (isMissing.value) {
+      await onReload();
     }
+  }
 
-    if (event.type === 'unlink') {
-      await diskSave.onPauseSave('missing');
-      return;
-    }
-
-    if (event.type === 'add') {
-      if (isMissing.value) {
-        await onReload();
-      }
-      return;
-    }
-
-    if (event.type !== 'change' || typeof event.content !== 'string') {
+  /**
+   * 处理外部文件内容变化事件：含冲突检测与重新解析流程。
+   * @param event - 携带新内容的 change 事件
+   */
+  async function onHandleChange(event: FileChangeEvent): Promise<void> {
+    if (typeof event.content !== 'string') {
       return;
     }
 
@@ -510,17 +507,41 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
       }
     }
 
-    try {
-      const nextData = events.onParse({ content: event.content, path: fileState.value.path });
-      onApplySnapshot({ fileState: { ...fileState.value, content: event.content }, data: nextData, savedContent: event.content });
-      draftPersistence.onScheduleDraft();
-      await draftPersistence.onFlushDraft();
-      loadError.value = null;
+    const [parseError, nextData] = events.onParse({ content: event.content, path: fileState.value.path });
+    if (parseError) {
+      loadError.value = parseError;
       diskSave.onResumeSave(externalPause);
-    } catch (error: unknown) {
-      loadError.value = error instanceof Error ? error : new Error('parse external file content failed');
-      diskSave.onResumeSave(externalPause);
+      return;
     }
+    onApplySnapshot({ fileState: { ...fileState.value, content: event.content }, data: nextData, savedContent: event.content });
+    draftPersistence.onScheduleDraft();
+    await draftPersistence.onFlushDraft();
+    loadError.value = null;
+    diskSave.onResumeSave(externalPause);
+  }
+
+  /**
+   * 外部文件事件策略表：按事件类型分发到对应处理函数。
+   */
+  const externalEventStrategies: Record<FileChangeEvent['type'], (event: FileChangeEvent) => Promise<void>> = {
+    unlink: onHandleUnlink,
+    add: onHandleAdd,
+    change: onHandleChange
+  };
+
+  /**
+   * 应用当前路径上的外部文件内容。按 `FileChangeEvent.type` 分派到对应策略。
+   * @param event - 未被自写入抑制的文件变化
+   */
+  async function onApplyExternal(event: FileChangeEvent): Promise<void> {
+    if (isTerminal()) {
+      return;
+    }
+    // 路径切换前已排队的旧路径事件不得影响新的文件身份。
+    if (event.filePath !== fileState.value.path) {
+      return;
+    }
+    await externalEventStrategies[event.type](event);
   }
 
   onExternalHandler = onApplyExternal;
@@ -555,7 +576,7 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
    * @param suggestedPath - 控制器建议的默认保存路径
    */
   async function onSaveAsPath(suggestedPath: string | null = null): Promise<void> {
-    if (serializationError.value || loadError.value || isLoading.value || status.disposed || status.disposing || status.deleting) {
+    if (serializationError.value || loadError.value || isLoading.value || isTerminal()) {
       return;
     }
 
@@ -664,7 +685,7 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
    * 手动保存当前文件。
    */
   async function onSave(): Promise<void> {
-    if (serializationError.value || loadError.value || isLoading.value || status.disposed || status.disposing || status.deleting) {
+    if (serializationError.value || loadError.value || isLoading.value || isTerminal()) {
       return;
     }
 
@@ -685,7 +706,7 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
    * 重命名当前文件并原子应用事件结果。
    */
   async function onRename(): Promise<void> {
-    if (loadError.value || isLoading.value || status.disposed || status.disposing || status.deleting) {
+    if (loadError.value || isLoading.value || isTerminal()) {
       return;
     }
 
@@ -739,7 +760,7 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
    * 处理编辑区域失焦保存。
    */
   async function onBlur(): Promise<void> {
-    if (loadError.value || isLoading.value || status.disposed || status.disposing || status.deleting) {
+    if (loadError.value || isLoading.value || isTerminal()) {
       return;
     }
 
@@ -808,7 +829,7 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
    * 删除当前最近文件记录并释放会话资源。
    */
   async function onDelete(): Promise<void> {
-    if (status.disposed || status.disposing || status.deleting) {
+    if (isTerminal()) {
       return;
     }
 
@@ -886,7 +907,7 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
    * KeepAlive 页面激活时恢复当前路径的页面级监听。
    */
   async function onActivateController(): Promise<void> {
-    if (status.disposed || status.disposing || status.deleting) return;
+    if (isTerminal()) return;
     await fileWatch.onActivate();
     // 停用期间重新出现的文件仍保留 missing，激活后必须先重新加载并协调内容。
     if (isMissing.value) {
@@ -924,7 +945,7 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
   }
 
   runtime.stopFileIdWatch = watch(fileId, (nextFileId: string, previousFileId: string): void => {
-    if (nextFileId === previousFileId || status.disposed || status.disposing || status.deleting) {
+    if (nextFileId === previousFileId || isTerminal()) {
       return;
     }
 

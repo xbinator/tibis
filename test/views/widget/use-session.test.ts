@@ -216,7 +216,9 @@ describe('Widget useSession adapter', (): void => {
     const data = { ...createDefaultWidgetData('weather'), name: '天气' };
     const content = JSON.stringify(data, null, 2);
 
-    const parsed = options.events.onParse({ content, path: '/tmp/widget.json' });
+    const [parseError, parsed] = options.events.onParse({ content, path: '/tmp/widget.json' });
+    expect(parseError).toBeUndefined();
+    if (!parsed) return;
     const serialized = options.events.onSerialize({ data: parsed, path: '/tmp/widget.json' });
     const snapshot = options.events.onCreate({ fileId: 'widget-weather' });
     const record = options.events.onBuildRecord({ ...snapshot, modifiedAt: 1 });
@@ -224,7 +226,9 @@ describe('Widget useSession adapter', (): void => {
     expect(parsed.name).toBe('天气');
     expect(serialized).toBe(content);
     expect(record.type).toBe('widget');
-    expect((): WidgetData => options.events.onParse({ content: '{invalid', path: '/tmp/widget.json' })).toThrow('Widget JSON');
+    const [invalidError] = options.events.onParse({ content: '{invalid', path: '/tmp/widget.json' });
+    expect(invalidError).toBeInstanceOf(Error);
+    expect(invalidError?.message).toContain('Widget JSON');
   });
 
   it('classifies an absent installed Widget path as missing without discarding its draft', async (): Promise<void> => {

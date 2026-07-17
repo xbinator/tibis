@@ -12,6 +12,11 @@ import type { StoredDocumentRecord } from '@/shared/storage/files/types';
 export type FileConflictDecision = boolean;
 
 /**
+ * 文件解析结果：失败时返回 `[error]`，成功时返回 `[undefined, data]`，与 `asyncTo` 风格保持一致。
+ */
+export type FileParseResult<T> = [Error] | [undefined, T];
+
+/**
  * 控制器持久化错误来源。
  */
 export type FileControllerErrorSource = 'draft' | 'save' | 'saveAs' | 'rename' | 'restore' | 'delete' | 'watch';
@@ -210,8 +215,8 @@ export interface FileControllerEvents<TData> {
   onCreate: (context: FileCreateContext) => FileControllerSnapshot<TData>;
   /** 加载草稿与磁盘候选内容。 */
   onLoad: (context: FileLoadContext) => Promise<FileLoadCandidates>;
-  /** 将字符串解析为页面数据。 */
-  onParse: (context: FileParseContext) => TData;
+  /** 将字符串解析为页面数据。失败时返回错误元组，由消费方按需处理。 */
+  onParse: (context: FileParseContext) => FileParseResult<TData>;
   /** 将页面数据序列化为字符串。 */
   onSerialize: (context: FileSerializeContext<TData>) => string;
   /** 构建最近文件记录。 */

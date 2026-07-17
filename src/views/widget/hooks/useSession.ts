@@ -18,6 +18,7 @@ import type {
   FileLoadCandidates,
   FileLoadContext,
   FileParseContext,
+  FileParseResult,
   FileRecordContext,
   FileRenameResult,
   FileRestoreContext,
@@ -243,16 +244,16 @@ export function useSession(): WidgetSessionReturn {
   }
 
   /**
-   * 将 Widget JSON 字符串解析为页面数据。
+   * 将 Widget JSON 字符串解析为页面数据；失败时返回错误元组而非抛错，便于消费方走错误分支。
    * @param context - 文件解析上下文
-   * @returns Widget 页面数据
+   * @returns 成功返回 `[undefined, data]`，失败返回 `[error]`
    */
-  function onParseWidget(context: FileParseContext): WidgetData {
+  function onParseWidget(context: FileParseContext): FileParseResult<WidgetData> {
     const definition = parseWidgetJson(context.content, context.path ?? 'widget.json');
     if (definition.parseError) {
-      throw new Error(`Widget JSON 解析失败：${definition.parseError}`);
+      return [new Error(`Widget JSON 解析失败：${definition.parseError}`)];
     }
-    return definition.data;
+    return [undefined, definition.data];
   }
 
   /**
