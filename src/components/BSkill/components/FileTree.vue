@@ -1,22 +1,23 @@
 <!--
-  @file SkillFileTree.vue
-  @description Skill 文件树组件，支持目录折叠/展开，默认全部展开。
+  @file FileTree.vue
+  @description BSkill 文件树子组件，支持目录折叠/展开，默认全部展开。
 -->
 <template>
-  <div class="skill-file-tree" aria-label="Skill 文件树">
-    <div v-if="loading" class="skill-file-tree__empty">正在加载文件…</div>
-    <div v-else-if="error" class="skill-file-tree__error">{{ error }}</div>
-    <div v-else-if="nodes.length === 0" class="skill-file-tree__empty">未发现文件</div>
+  <div :class="bem('file-tree')" aria-label="Skill 文件树">
+    <div v-if="loading" :class="bem('file-tree-empty')">正在加载文件…</div>
+    <div v-else-if="error" :class="bem('file-tree-error')">{{ error }}</div>
+    <div v-else-if="nodes.length === 0" :class="bem('file-tree-empty')">未发现文件</div>
     <template v-else>
       <button
         v-for="node in visibleNodes"
         :key="node.path"
-        class="skill-file-tree__node"
-        :class="{
-          'skill-file-tree__node--directory': node.type === 'directory',
-          'skill-file-tree__node--active': selectedFilePath === node.path,
-          'skill-file-tree__node--collapsed': node.type === 'directory' && collapsedPaths.has(node.path)
-        }"
+        :class="
+          bem('file-tree-node', {
+            directory: node.type === 'directory',
+            active: selectedFilePath === node.path,
+            collapsed: node.type === 'directory' && collapsedPaths.has(node.path)
+          })
+        "
         :style="{ paddingLeft: `${12 + node.depth * 14}px` }"
         @click="handleNodeClick(node)"
       >
@@ -24,10 +25,10 @@
           v-if="node.type === 'directory'"
           :icon="collapsedPaths.has(node.path) ? 'lucide:chevron-right' : 'lucide:chevron-down'"
           :width="12"
-          class="skill-file-tree__chevron"
+          :class="bem('file-tree-chevron')"
         />
-        <span v-else-if="hasDirectories" class="skill-file-tree__chevron-placeholder"></span>
-        <Icon :icon="getNodeIcon(node)" :width="14" class="skill-file-tree__icon" />
+        <span v-else-if="hasDirectories" :class="bem('file-tree-chevron-placeholder')"></span>
+        <Icon :icon="getNodeIcon(node)" :width="14" :class="bem('file-tree-icon')" />
         <span>{{ node.name }}</span>
       </button>
     </template>
@@ -36,8 +37,8 @@
 
 <script setup lang="ts">
 /**
- * @file SkillFileTree.vue
- * @description Skill 文件树组件，支持目录折叠/展开，默认全部展开。
+ * @file FileTree.vue
+ * @description BSkill 文件树子组件，支持目录折叠/展开，默认全部展开。
  */
 
 import { computed, ref, watch } from 'vue';
@@ -45,6 +46,9 @@ import { Icon } from '@iconify/vue';
 import { native } from '@/shared/platform';
 import type { ReadWorkspaceDirectoryEntry } from '@/shared/platform/native/types';
 import { resolveFileIcon } from '@/utils/file/icons';
+import { createNamespace } from '@/utils/namespace';
+
+const [, bem] = createNamespace('skill');
 
 /**
  * 文件树节点。
@@ -335,7 +339,7 @@ watch(
 </script>
 
 <style scoped lang="less">
-.skill-file-tree {
+.b-skill__file-tree {
   min-width: 0;
   height: 100%;
   padding: 4px 6px 6px;
@@ -344,7 +348,7 @@ watch(
   border-right: 1px solid var(--border-tertiary);
 }
 
-.skill-file-tree__node {
+.b-skill__file-tree-node {
   display: flex;
   gap: 6px;
   align-items: center;
@@ -367,13 +371,13 @@ watch(
     white-space: nowrap;
   }
 
-  &:hover:not(.skill-file-tree__node--directory),
-  &--active {
+  &:hover:not(.b-skill__file-tree-node--directory),
+  &.b-skill__file-tree-node--active {
     color: var(--text-primary);
     background: var(--bg-tertiary);
   }
 
-  &--directory {
+  &.b-skill__file-tree-node--directory {
     font-weight: 600;
     color: var(--text-tertiary);
 
@@ -388,30 +392,30 @@ watch(
   }
 }
 
-.skill-file-tree__icon {
+.b-skill__file-tree-icon {
   flex-shrink: 0;
 }
 
 /** 折叠箭头 */
-.skill-file-tree__chevron {
+.b-skill__file-tree-chevron {
   flex-shrink: 0;
 }
 
 /** 非目录节点的箭头占位，保持图标对齐 */
-.skill-file-tree__chevron-placeholder {
+.b-skill__file-tree-chevron-placeholder {
   display: inline-block;
   flex-shrink: 0;
   width: 12px;
 }
 
-.skill-file-tree__empty,
-.skill-file-tree__error {
+.b-skill__file-tree-empty,
+.b-skill__file-tree-error {
   padding: 12px;
   font-size: 12px;
   color: var(--text-secondary);
 }
 
-.skill-file-tree__error {
+.b-skill__file-tree-error {
   color: var(--color-danger, #ff4d4f);
 }
 </style>

@@ -44,7 +44,8 @@ const COMPONENT_DIRS = [
   'BSection',
   'BDrawer',
   'BPagination',
-  'BInputNumber'
+  'BInputNumber',
+  'BSkill'
 ];
 
 /**

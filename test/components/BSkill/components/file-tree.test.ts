@@ -1,11 +1,11 @@
 /**
- * @file skill-file-tree.test.ts
- * @description Skill 文件树图标渲染测试。
+ * @file file-tree.test.ts
+ * @description BSkill 文件树图标渲染测试。
  * @vitest-environment jsdom
  */
 import { flushPromises, mount, type VueWrapper, type DOMWrapper } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
-import SkillFileTree from '@/views/settings/tools/skill/components/SkillFileTree.vue';
+import FileTree from '@/components/BSkill/components/FileTree.vue';
 
 vi.mock('@iconify/vue', () => ({
   Icon: {
@@ -23,8 +23,8 @@ vi.mock('@iconify/vue', () => ({
  * @param virtualPaths - 虚拟文件路径列表
  * @returns 文件树组件包装器
  */
-async function mountSkillFileTree(virtualPaths: string[]): Promise<VueWrapper> {
-  const wrapper = mount(SkillFileTree, {
+async function mountFileTree(virtualPaths: string[]): Promise<VueWrapper> {
+  const wrapper = mount(FileTree, {
     props: {
       selectedFilePath: '',
       virtualPaths
@@ -43,7 +43,7 @@ async function mountSkillFileTree(virtualPaths: string[]): Promise<VueWrapper> {
  * @returns 文件节点包装器
  */
 function findNodeByName(wrapper: VueWrapper, fileName: string): DOMWrapper<Element> {
-  const node = wrapper.findAll('.skill-file-tree__node').find((item) => item.text().includes(fileName));
+  const node = wrapper.findAll('.b-skill__file-tree-node').find((item) => item.text().includes(fileName));
 
   if (!node) {
     throw new Error(`未找到文件节点：${fileName}`);
@@ -59,7 +59,7 @@ function findNodeByName(wrapper: VueWrapper, fileName: string): DOMWrapper<Eleme
  * @returns Iconify 图标名
  */
 function getIconByFileName(wrapper: VueWrapper, fileName: string): string | undefined {
-  return findNodeByName(wrapper, fileName).find('.skill-file-tree__icon').attributes('data-icon');
+  return findNodeByName(wrapper, fileName).find('.b-skill__file-tree-icon').attributes('data-icon');
 }
 
 /**
@@ -68,12 +68,12 @@ function getIconByFileName(wrapper: VueWrapper, fileName: string): string | unde
  * @returns 文件树节点名称列表
  */
 function getRenderedNodeNames(wrapper: VueWrapper): string[] {
-  return wrapper.findAll('.skill-file-tree__node').map((item) => item.text().trim());
+  return wrapper.findAll('.b-skill__file-tree-node').map((item) => item.text().trim());
 }
 
-describe('SkillFileTree', (): void => {
+describe('FileTree', (): void => {
   it('uses filename-specific icons for special markdown files', async (): Promise<void> => {
-    const wrapper = await mountSkillFileTree(['SKILL.md', 'agents.md', 'README.md']);
+    const wrapper = await mountFileTree(['SKILL.md', 'agents.md', 'README.md']);
 
     expect(getIconByFileName(wrapper, 'SKILL.md')).toBe('vscode-icons:file-type-light-skill');
     expect(getIconByFileName(wrapper, 'agents.md')).toBe('vscode-icons:file-type-light-agents');
@@ -81,7 +81,7 @@ describe('SkillFileTree', (): void => {
   });
 
   it('renders virtual paths in the same hierarchy order as a real skill directory', async (): Promise<void> => {
-    const wrapper = await mountSkillFileTree([
+    const wrapper = await mountFileTree([
       'SKILL.md',
       'references/widget-format.md',
       'references/runtime-api.md',

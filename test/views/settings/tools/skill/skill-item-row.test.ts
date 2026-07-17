@@ -190,7 +190,7 @@ describe('SkillItemRow', (): void => {
     await wrapper.trigger('click');
     await wrapper.findComponent({ name: 'ASwitch' }).trigger('click');
 
-    expect(routerPushMock).toHaveBeenCalledWith({ name: 'skill-detail', params: { name: 'weather' } });
+    expect(routerPushMock).toHaveBeenCalledWith({ name: 'skill', params: { name: 'weather' } });
     expect(useSkillStore().getSkillByName('weather')?.enabled).toBe(false);
     expect(wrapper.emitted('open')).toBeUndefined();
     expect(wrapper.emitted('toggle')).toBeUndefined();
