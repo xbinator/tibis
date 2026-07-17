@@ -692,7 +692,7 @@ defineExpose<EditorController & EditorScrollController>({
 .b-editor-monaco__host,
 .b-editor-monaco__fallback {
   flex: 1;
-  min-height: calc(100vh - 42px);
+  min-height: calc(100vh - 44px);
 }
 
 .b-editor-monaco__fallback {

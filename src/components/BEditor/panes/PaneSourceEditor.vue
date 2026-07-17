@@ -555,7 +555,7 @@ defineExpose(controller);
   width: 100%;
 
   .cm-editor {
-    min-height: calc(100vh - 42px);
+    min-height: calc(100vh - 44px);
     padding: 20px 40px 90px;
     font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
     color: var(--source-editor-markdown-foreground);

@@ -573,7 +573,7 @@ defineExpose({
     --editor-table-selection-header-bg: color-mix(in srgb, var(--color-primary-bg-hover) 88%, var(--editor-table-header-bg));
     --editor-table-selection-cell-bg: color-mix(in srgb, var(--color-primary-bg-hover) 74%, var(--bg-primary));
 
-    min-height: calc(100vh - 42px);
+    min-height: calc(100vh - 44px);
     padding: 20px 40px 90px;
     margin: 0;
     line-height: 1.74;
