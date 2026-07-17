@@ -252,14 +252,14 @@ export function useRuntimeTools(options: UseRuntimeToolsOptions): UseRuntimeTool
    */
   async function resolveSkillSnapshots(names: string[]): Promise<ChatRuntimeSkillSnapshot[]> {
     const uniqueNames = uniq(names);
-    const skills = await Promise.all(uniqueNames.map((name: string) => skillStore.resolveLatestEnabledSkill(name)));
+    const skills = await Promise.all(uniqueNames.map((name: string) => skillStore.resolveLatestSkill(name)));
 
     return skills.map((skill: SkillDefinition | undefined, index: number): ChatRuntimeSkillSnapshot => {
       const name = uniqueNames[index];
       if (!skill || skill.parseError || !skill.contentHash) {
         throw createRuntimeError({
           code: 'SKILL_UNAVAILABLE',
-          message: `技能“${name}”已禁用、删除或解析失败，无法发送本轮消息`
+          message: `技能“${name}”已删除或解析失败，无法发送本轮消息`
         });
       }
 

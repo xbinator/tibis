@@ -100,6 +100,19 @@ describe('skill store disk freshness', (): void => {
     expect(store.getSkillByName('weather')?.content).toBe('execution-time instructions');
   });
 
+  it('resolves the latest disabled Skill for an explicit reference', async (): Promise<void> => {
+    const api = createScannerAPI(createSkillMarkdown('old instructions'));
+    const store = useSkillStore();
+    await store.initialize('/Users/test', api);
+    store.toggleSkill('weather');
+    api.readFile.mockResolvedValue({ content: createSkillMarkdown('explicit instructions') });
+
+    const skill = await store.resolveLatestSkill('weather');
+
+    expect(skill?.content).toBe('explicit instructions');
+    expect(skill?.enabled).toBe(false);
+  });
+
   it('does not let a slow execution read overwrite a newer watcher result', async (): Promise<void> => {
     const api = createScannerAPI(createSkillMarkdown('initial instructions'));
     const store = useSkillStore();

@@ -62,6 +62,7 @@ const storeMockState = vi.hoisted(() => ({
   skillStore: {
     initialized: false,
     getEnabledSkills: vi.fn(() => []),
+    resolveLatestSkill: vi.fn(),
     resolveLatestEnabledSkill: vi.fn(),
     waitForInit: vi.fn(() => Promise.resolve()),
     syncFromDisk: vi.fn(() => Promise.resolve())
@@ -242,6 +243,7 @@ describe('useRuntimeTools', () => {
     registryMockState.webviewToolContextRegistry.getCurrentContext.mockReturnValue(undefined);
     storeMockState.skillStore.initialized = false;
     storeMockState.skillStore.getEnabledSkills.mockReturnValue([]);
+    storeMockState.skillStore.resolveLatestSkill.mockReset();
     storeMockState.skillStore.resolveLatestEnabledSkill.mockReset();
     storeMockState.widgetStore.initialized = false;
     storeMockState.widgetStore.getEnabledWidgets.mockReturnValue([]);
@@ -291,8 +293,8 @@ describe('useRuntimeTools', () => {
     expect(storeMockState.widgetStore.syncFromDisk).toHaveBeenCalledTimes(1);
   });
 
-  it('deduplicates selected Skill names and freezes their latest content in first-use order', async (): Promise<void> => {
-    storeMockState.skillStore.resolveLatestEnabledSkill.mockImplementation(async (name: string) => ({
+  it('deduplicates explicitly selected Skills and allows disabled definitions', async (): Promise<void> => {
+    storeMockState.skillStore.resolveLatestSkill.mockImplementation(async (name: string) => ({
       name,
       description: name,
       content: `${name} instructions`,
@@ -300,25 +302,26 @@ describe('useRuntimeTools', () => {
       filePath: `/skills/${name}/SKILL.md`,
       dirPath: `/skills/${name}`,
       source: 'global',
-      enabled: true,
+      enabled: false,
       parsedAt: 1
     }));
     const runtimeTools = createRuntimeTools();
 
     const snapshots = await runtimeTools.resolveSkillSnapshots(['weather', 'search', 'weather']);
 
-    expect(storeMockState.skillStore.resolveLatestEnabledSkill).toHaveBeenCalledTimes(2);
+    expect(storeMockState.skillStore.resolveLatestSkill).toHaveBeenCalledTimes(2);
+    expect(storeMockState.skillStore.resolveLatestEnabledSkill).not.toHaveBeenCalled();
     expect(snapshots.map((snapshot) => snapshot.name)).toEqual(['weather', 'search']);
     expect(snapshots[0]).toMatchObject({ content: 'weather instructions', contentHash: 'weather-hash' });
   });
 
   it('rejects a selected Skill that is no longer available', async (): Promise<void> => {
-    storeMockState.skillStore.resolveLatestEnabledSkill.mockResolvedValue(undefined);
+    storeMockState.skillStore.resolveLatestSkill.mockResolvedValue(undefined);
     const runtimeTools = createRuntimeTools();
 
     await expect(runtimeTools.resolveSkillSnapshots(['missing'])).rejects.toMatchObject({
       code: 'SKILL_UNAVAILABLE',
-      message: expect.stringContaining('技能“missing”已禁用、删除或解析失败')
+      message: expect.stringContaining('技能“missing”已删除或解析失败')
     });
   });
 

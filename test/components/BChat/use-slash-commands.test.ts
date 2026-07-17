@@ -49,7 +49,7 @@ describe('BChat /compact command', (): void => {
     expect(busy.onBusyCommandRejected).toHaveBeenCalledWith('compact');
   });
 
-  it('creates stable Skill entries only for enabled definitions without parse errors', (): void => {
+  it('creates stable Skill entries regardless of enabled state while excluding parse errors', (): void => {
     const commands = createSkillSlashCommands([
       {
         name: 'weather',
@@ -92,6 +92,13 @@ describe('BChat /compact command', (): void => {
         group: 'skill',
         groupTitle: '技能',
         selectAction: { type: 'insert', text: '{{$weather}}' }
+      }),
+      expect.objectContaining({
+        id: 'skill:disabled',
+        trigger: '/disabled',
+        group: 'skill',
+        groupTitle: '技能',
+        selectAction: { type: 'insert', text: '{{$disabled}}' }
       })
     ]);
   });

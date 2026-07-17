@@ -69,11 +69,11 @@ export const chatSlashCommands: SlashCommandOption[] = CHAT_COMMAND_DEFINITIONS.
 /**
  * 把当前可用 Skill 转换为斜杠菜单条目。
  * @param skills - Skill Store 当前定义
- * @returns 已启用且无解析错误的技能条目
+ * @returns 无解析错误且名称有效的技能条目，显式选择不受启用状态限制
  */
 export function createSkillSlashCommands(skills: readonly SkillDefinition[]): SlashCommandOption[] {
   return skills
-    .filter((skill: SkillDefinition): boolean => skill.enabled && !skill.parseError && Boolean(skill.name))
+    .filter((skill: SkillDefinition): boolean => !skill.parseError && Boolean(skill.name))
     .map(
       (skill: SkillDefinition): SlashCommandOption => ({
         id: `skill:${skill.name}`,

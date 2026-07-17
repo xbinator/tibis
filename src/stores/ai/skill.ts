@@ -294,13 +294,13 @@ export const useSkillStore = defineStore('skill', () => {
   }
 
   /**
-   * 执行工具前从磁盘读取最新启用 Skill。
+   * 从磁盘读取最新 Skill，不限制启用状态。
    * @param name - Skill 名称
-   * @returns 最新 Skill 定义，不存在或已禁用时返回 undefined
+   * @returns 无解析错误的最新 Skill，不存在时返回 undefined
    */
-  async function resolveLatestEnabledSkill(name: string): Promise<SkillDefinition | undefined> {
+  async function resolveLatestSkill(name: string): Promise<SkillDefinition | undefined> {
     const existingSkill = getSkillByName(name);
-    if (!existingSkill?.enabled || !cachedApi) {
+    if (!existingSkill || !cachedApi) {
       return undefined;
     }
 
@@ -330,13 +330,28 @@ export const useSkillStore = defineStore('skill', () => {
       }
 
       const latestSkill = getSkillByName(name);
-      return latestSkill?.enabled && !latestSkill.parseError ? latestSkill : undefined;
+      return latestSkill && !latestSkill.parseError ? latestSkill : undefined;
     })().finally((): void => {
       latestSkillPromises.delete(name);
     });
 
     latestSkillPromises.set(name, nextPromise);
     return nextPromise;
+  }
+
+  /**
+   * 执行自动 Skill 工具前从磁盘读取最新启用 Skill。
+   * @param name - Skill 名称
+   * @returns 最新启用 Skill，不存在、已禁用或解析失败时返回 undefined
+   */
+  async function resolveLatestEnabledSkill(name: string): Promise<SkillDefinition | undefined> {
+    const existingSkill = getSkillByName(name);
+    if (!existingSkill?.enabled) {
+      return undefined;
+    }
+
+    const latestSkill = await resolveLatestSkill(name);
+    return latestSkill?.enabled ? latestSkill : undefined;
   }
 
   /**
@@ -371,6 +386,7 @@ export const useSkillStore = defineStore('skill', () => {
     afterInitialize,
     initialize,
     syncFromDisk,
+    resolveLatestSkill,
     resolveLatestEnabledSkill,
     rescan,
     waitForInit

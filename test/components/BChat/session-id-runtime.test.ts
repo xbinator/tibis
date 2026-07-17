@@ -139,6 +139,7 @@ const memoryStoreMock = vi.hoisted(() => ({
 const skillStoreMock = vi.hoisted(() => ({
   initialized: true,
   getEnabledSkills: vi.fn(() => [] as Array<{ name: string; contentHash?: string }>),
+  resolveLatestSkill: vi.fn<(_name: string) => Promise<undefined>>(),
   resolveLatestEnabledSkill: vi.fn<(_name: string) => Promise<undefined>>(),
   waitForInit: vi.fn<() => Promise<void>>(() => Promise.resolve()),
   syncFromDisk: vi.fn<() => Promise<void>>(() => Promise.resolve()),
@@ -668,6 +669,8 @@ describe('BChat sessionId runtime', (): void => {
     skillStoreMock.initialized = true;
     skillStoreMock.getEnabledSkills.mockReset();
     skillStoreMock.getEnabledSkills.mockReturnValue([]);
+    skillStoreMock.resolveLatestSkill.mockReset();
+    skillStoreMock.resolveLatestSkill.mockResolvedValue(undefined);
     skillStoreMock.resolveLatestEnabledSkill.mockReset();
     skillStoreMock.resolveLatestEnabledSkill.mockResolvedValue(undefined);
     skillStoreMock.waitForInit.mockClear();
@@ -1432,7 +1435,7 @@ describe('BChat sessionId runtime', (): void => {
   });
 
   it('shows unavailable Skill errors while preparing a user choice continuation', async (): Promise<void> => {
-    const errorMessage = '技能“weather”已禁用、删除或解析失败，无法发送本轮消息';
+    const errorMessage = '技能“weather”已删除或解析失败，无法发送本轮消息';
     const userMessage: Message = {
       ...createMessage('user-choice-skill', '{{$weather}} 需要选择'),
       parts: [
