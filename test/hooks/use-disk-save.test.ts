@@ -5,9 +5,9 @@
 import type { Ref } from 'vue';
 import { ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useDiskSave } from '@/hooks/file-controller/useDiskSave';
-import type { FileSessionState } from '@/hooks/types';
-import type { FileOperationSnapshot, FileWriteContext } from '@/hooks/useFileController';
+import type { FileOperationSnapshot, FileWriteContext } from '@/hooks/useFileController/types';
+import { useDiskSave } from '@/hooks/useFileController/useDiskSave';
+import type { FileState } from '@/shared/platform/native/types';
 import type { EditorSaveStrategy } from '@/stores/editor/preferences';
 
 /**
@@ -27,7 +27,7 @@ interface DiskSaveHarness {
   /** 磁盘保存调度器。 */
   controller: ReturnType<typeof useDiskSave>;
   /** 可变文件状态。 */
-  fileState: Ref<FileSessionState>;
+  fileState: Ref<FileState>;
   /** 可变内容修订号。 */
   contentRevision: Ref<number>;
   /** 磁盘写入事件。 */
@@ -55,7 +55,7 @@ function createDeferred<T>(): Deferred<T> {
  */
 function createHarness(strategy: EditorSaveStrategy): DiskSaveHarness {
   const fileId = ref<string>('file-1');
-  const fileState = ref<FileSessionState>({
+  const fileState = ref<FileState>({
     id: 'file-1',
     name: 'Document',
     ext: 'md',

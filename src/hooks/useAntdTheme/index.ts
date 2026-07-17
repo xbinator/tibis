@@ -1,5 +1,5 @@
 /**
- * @file useAntdTheme.ts
+ * @file index.ts
  * @description Ant Design Vue 主题 Hook，从统一 Token 派生主题配置。
  */
 import type { ComputedRef } from 'vue';

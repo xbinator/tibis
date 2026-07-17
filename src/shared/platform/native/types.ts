@@ -29,6 +29,14 @@ export interface File {
   ext: string;
 }
 
+/**
+ * 被编辑器追踪中的文件状态：在原生 File 基础上补充唯一 ID。
+ */
+export interface FileState extends File {
+  /** 文件唯一 ID */
+  id: string;
+}
+
 export interface ReadFileResult {
   content: string;
   name: string;

@@ -6,7 +6,7 @@ import type { FileRecordContext } from './types';
 import type { Ref } from 'vue';
 import { ref } from 'vue';
 import { debounce } from 'lodash-es';
-import type { FileSessionState } from '@/hooks/types';
+import type { FileState } from '@/shared/platform/native/types';
 import type { StoredDocumentRecord } from '@/shared/storage/files/types';
 import { useRecentStore } from '@/stores/workspace/recent';
 import { asyncTo } from '@/utils/asyncTo';
@@ -16,7 +16,7 @@ import { asyncTo } from '@/utils/asyncTo';
  */
 export interface DraftPersistenceOptions<TData> {
   /** 当前文件状态。 */
-  fileState: Ref<FileSessionState>;
+  fileState: Ref<FileState>;
   /** 当前页面业务数据。 */
   data: Ref<TData>;
   /** 最近一次磁盘同步内容。 */

@@ -4,8 +4,8 @@
  */
 import { ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useFileWatch } from '@/hooks/file-controller/useFileWatch';
-import type { FileOperationSnapshot } from '@/hooks/useFileController';
+import type { FileOperationSnapshot } from '@/hooks/useFileController/types';
+import { useFileWatch } from '@/hooks/useFileController/useFileWatch';
 import type { FileChangeEvent } from '@/shared/platform/native/types';
 
 const watchMocks = vi.hoisted(() => ({

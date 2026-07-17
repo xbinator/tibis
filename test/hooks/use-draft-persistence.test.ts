@@ -5,9 +5,9 @@
 import type { Ref } from 'vue';
 import { ref } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useDraftPersistence } from '@/hooks/file-controller/useDraftPersistence';
-import type { FileSessionState } from '@/hooks/types';
-import type { FileRecordContext } from '@/hooks/useFileController';
+import type { FileRecordContext } from '@/hooks/useFileController/types';
+import { useDraftPersistence } from '@/hooks/useFileController/useDraftPersistence';
+import type { FileState } from '@/shared/platform/native/types';
 import type { StoredDocumentRecord } from '@/shared/storage/files/types';
 
 const getFileByIdMock = vi.hoisted(() => vi.fn());
@@ -26,9 +26,9 @@ vi.mock('@/stores/workspace/recent', () => ({
  * 创建草稿持久化测试状态。
  * @returns 文件状态与业务数据
  */
-function createState(): { fileState: Ref<FileSessionState>; data: Ref<string>; savedContent: Ref<string> } {
+function createState(): { fileState: Ref<FileState>; data: Ref<string>; savedContent: Ref<string> } {
   return {
-    fileState: ref<FileSessionState>({
+    fileState: ref<FileState>({
       id: 'file-1',
       name: 'Widget',
       ext: 'json',

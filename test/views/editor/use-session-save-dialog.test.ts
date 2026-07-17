@@ -7,8 +7,8 @@ import type { Ref } from 'vue';
 import { defineComponent, nextTick, ref } from 'vue';
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { FileSessionState } from '@/hooks/types';
-import type { FileControllerOptions, FileControllerResult } from '@/hooks/useFileController';
+import type { FileControllerOptions, FileControllerResult } from '@/hooks/useFileController/types';
+import type { FileState } from '@/shared/platform/native/types';
 import type { StoredFile, StoredWidget } from '@/shared/storage/files/types';
 import { useSession } from '@/views/editor/hooks/useSession';
 
@@ -22,7 +22,7 @@ const confirmMock = vi.hoisted(() => vi.fn());
 const routerPushMock = vi.hoisted(() => vi.fn());
 const controllerHarness = vi.hoisted(() => ({
   options: null as FileControllerOptions<string> | null,
-  fileState: null as Ref<FileSessionState> | null,
+  fileState: null as Ref<FileState> | null,
   data: null as Ref<string> | null,
   onSave: vi.fn(),
   onSaveAs: vi.fn(),
@@ -56,7 +56,7 @@ vi.mock('@/hooks/useFileController', async () => {
     useFileController: (options: FileControllerOptions<string>): FileControllerResult<string> => {
       controllerHarness.options = options;
       const initial = options.events.onCreate({ fileId: options.fileId.value });
-      const fileState = vueRef<FileSessionState>({ ...initial.fileState });
+      const fileState = vueRef<FileState>({ ...initial.fileState });
       const data = vueRef<string>(initial.data);
       controllerHarness.fileState = fileState;
       controllerHarness.data = data;

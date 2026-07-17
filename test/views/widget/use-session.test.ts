@@ -9,8 +9,8 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WidgetData } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
-import type { FileSessionState } from '@/hooks/types';
-import type { FileControllerOptions, FileControllerResult } from '@/hooks/useFileController';
+import type { FileControllerOptions, FileControllerResult } from '@/hooks/useFileController/types';
+import type { FileState } from '@/shared/platform/native/types';
 import type { StoredWidget } from '@/shared/storage/files/types';
 import { useSession } from '@/views/widget/hooks/useSession';
 
@@ -27,7 +27,7 @@ const removeTabMock = vi.hoisted(() => vi.fn());
 const routerPushMock = vi.hoisted(() => vi.fn());
 const controllerHarness = vi.hoisted(() => ({
   options: null as FileControllerOptions<WidgetData> | null,
-  fileState: null as Ref<FileSessionState> | null,
+  fileState: null as Ref<FileState> | null,
   data: null as Ref<WidgetData> | null,
   onSave: vi.fn(),
   onSaveAs: vi.fn(),
@@ -59,7 +59,7 @@ vi.mock('@/hooks/useFileController', async () => {
     useFileController: (options: FileControllerOptions<WidgetData>): FileControllerResult<WidgetData> => {
       controllerHarness.options = options;
       const initial = options.events.onCreate({ fileId: options.fileId.value });
-      const fileState = vueRef<FileSessionState>({ ...initial.fileState });
+      const fileState = vueRef<FileState>({ ...initial.fileState });
       const data = vueRef<WidgetData>(initial.data) as Ref<WidgetData>;
       controllerHarness.fileState = fileState;
       controllerHarness.data = data;

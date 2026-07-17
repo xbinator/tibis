@@ -6,7 +6,7 @@ import type { FileOperationSnapshot, FileWriteContext } from './types';
 import type { Ref } from 'vue';
 import { ref } from 'vue';
 import { debounce } from 'lodash-es';
-import type { FileSessionState } from '@/hooks/types';
+import type { FileState } from '@/shared/platform/native/types';
 import type { EditorSaveStrategy } from '@/stores/editor/preferences';
 import { asyncTo } from '@/utils/asyncTo';
 
@@ -17,7 +17,7 @@ export interface DiskSaveOptions {
   /** 当前文件 ID。 */
   fileId: Ref<string>;
   /** 当前文件状态。 */
-  fileState: Ref<FileSessionState>;
+  fileState: Ref<FileState>;
   /** 当前磁盘保存策略。 */
   saveStrategy: Ref<EditorSaveStrategy>;
   /** 当前会话版本。 */

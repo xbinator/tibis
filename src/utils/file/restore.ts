@@ -2,8 +2,8 @@
  * @file restore.ts
  * @description 通过独占创建与覆盖确认安全恢复外部删除的文件路径。
  */
-import type { FileSessionState } from '@/hooks/types';
 import { native } from '@/shared/platform';
+import type { FileState } from '@/shared/platform/native/types';
 import { asyncTo } from '@/utils/asyncTo';
 import { Modal } from '@/utils/modal';
 
@@ -23,7 +23,7 @@ export interface RestoreFileOptions {
  * @param options - 覆盖确认文案
  * @returns 用户是否确认并完成覆盖
  */
-async function onOverwriteFile(fileState: Readonly<FileSessionState>, options: RestoreFileOptions): Promise<boolean> {
+async function onOverwriteFile(fileState: Readonly<FileState>, options: RestoreFileOptions): Promise<boolean> {
   const [confirmError, confirmResult] = await asyncTo(
     Modal.confirm(options.title, options.message, {
       confirmText: '覆盖',
@@ -44,7 +44,7 @@ async function onOverwriteFile(fileState: Readonly<FileSessionState>, options: R
  * @param options - 覆盖确认文案
  * @returns 是否完成恢复；用户取消时为 false
  */
-export async function restoreMissingFile(fileState: Readonly<FileSessionState>, options: RestoreFileOptions): Promise<boolean> {
+export async function restoreMissingFile(fileState: Readonly<FileState>, options: RestoreFileOptions): Promise<boolean> {
   if (!fileState.path) return false;
 
   const [statusError, status] = await asyncTo(native.getPathStatus(fileState.path));

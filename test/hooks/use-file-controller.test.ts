@@ -4,7 +4,7 @@
  */
 import { effectScope, nextTick, ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { FileSessionState } from '@/hooks/types';
+import { useFileController } from '@/hooks/useFileController';
 import type {
   FileControllerEvents,
   FileControllerSnapshot,
@@ -12,9 +12,8 @@ import type {
   FileParseContext,
   FileRecordContext,
   FileSerializeContext
-} from '@/hooks/useFileController';
-import { useFileController } from '@/hooks/useFileController';
-import type { FileChangeEvent } from '@/shared/platform/native/types';
+} from '@/hooks/useFileController/types';
+import type { FileState, FileChangeEvent } from '@/shared/platform/native/types';
 import type { StoredDocumentRecord } from '@/shared/storage/files/types';
 import type { EditorSaveStrategy } from '@/stores/editor/preferences';
 
@@ -66,7 +65,7 @@ function createDeferred<T>(): Deferred<T> {
  * @param content - 文件内容
  * @returns 文件状态
  */
-function createFileState(id: string, content: string): FileSessionState {
+function createFileState(id: string, content: string): FileState {
   return {
     id,
     name: 'Document',

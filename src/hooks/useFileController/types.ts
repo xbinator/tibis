@@ -3,7 +3,7 @@
  * @description 定义公共文件控制器的事件、快照、动作与返回值类型。
  */
 import type { ComputedRef, Ref } from 'vue';
-import type { FileSessionState } from '@/hooks/types';
+import type { FileState } from '@/shared/platform/native/types';
 import type { StoredDocumentRecord } from '@/shared/storage/files/types';
 
 /**
@@ -39,7 +39,7 @@ export interface FileCreateContext {
  */
 export interface FileControllerSnapshot<TData> {
   /** 当前文件状态。 */
-  fileState: FileSessionState;
+  fileState: FileState;
   /** 页面业务数据。 */
   data: TData;
   /** 最近一次磁盘同步的内容。 */
@@ -51,7 +51,7 @@ export interface FileControllerSnapshot<TData> {
  */
 export interface FileDraftCandidate {
   /** 最近文件中的文件状态。 */
-  fileState: FileSessionState;
+  fileState: FileState;
   /** 最近一次磁盘同步内容；历史记录缺失时为 null。 */
   savedContent: string | null;
 }
@@ -61,7 +61,7 @@ export interface FileDraftCandidate {
  */
 export interface FileDiskCandidate {
   /** 磁盘内容转换后的文件状态。 */
-  fileState: FileSessionState;
+  fileState: FileState;
 }
 
 /**
@@ -133,7 +133,7 @@ export interface FileWriteContext {
  */
 export interface FileSaveAsContext {
   /** 操作开始时的文件状态。 */
-  fileState: Readonly<FileSessionState>;
+  fileState: Readonly<FileState>;
   /** 本次保存的精确内容快照。 */
   content: string;
   /** 控制器建议的默认保存路径。 */
@@ -145,7 +145,7 @@ export interface FileSaveAsContext {
  */
 export interface FileRestoreContext {
   /** 当前丢失文件状态。 */
-  fileState: Readonly<FileSessionState>;
+  fileState: Readonly<FileState>;
 }
 
 /**
@@ -153,7 +153,7 @@ export interface FileRestoreContext {
  */
 export interface FileDeleteContext {
   /** 删除前捕获的文件状态。 */
-  fileState: Readonly<FileSessionState>;
+  fileState: Readonly<FileState>;
 }
 
 /**
@@ -161,7 +161,7 @@ export interface FileDeleteContext {
  */
 export interface FileRenameContext {
   /** 操作开始时的文件状态。 */
-  fileState: Readonly<FileSessionState>;
+  fileState: Readonly<FileState>;
 }
 
 /**
@@ -273,7 +273,7 @@ export interface FileControllerActions {
  */
 export interface FileControllerResult<TData> {
   /** 当前文件状态。 */
-  fileState: Ref<FileSessionState>;
+  fileState: Ref<FileState>;
   /** 当前页面业务数据。 */
   data: Ref<TData>;
   /** 最近一次磁盘同步的内容。 */

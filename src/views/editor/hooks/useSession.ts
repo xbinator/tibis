@@ -8,8 +8,8 @@ import { computed, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
 import { customAlphabet } from 'nanoid';
-import type { FileSessionState } from '@/hooks/types';
 import { useClipboard } from '@/hooks/useClipboard';
+import { useFileController } from '@/hooks/useFileController';
 import type {
   FileConflictDecision,
   FileControllerErrorContext,
@@ -25,11 +25,10 @@ import type {
   FileSaveAsContext,
   FileSerializeContext,
   FileWriteContext
-} from '@/hooks/useFileController';
-import { useFileController } from '@/hooks/useFileController';
+} from '@/hooks/useFileController/types';
 import { resolveRouteTabInfo } from '@/router/cache';
 import { native } from '@/shared/platform';
-import type { ReadFileResult } from '@/shared/platform/native/types';
+import type { FileState, ReadFileResult } from '@/shared/platform/native/types';
 import type { StoredDocumentRecord, StoredFile } from '@/shared/storage';
 import { useRecentStore } from '@/stores/workspace/recent';
 import { useTabsStore } from '@/stores/workspace/tabs';
@@ -102,7 +101,7 @@ function isStoredFileRecord(record: StoredDocumentRecord | undefined): record is
  * @param record - 普通最近文件记录
  * @returns 控制器文件状态
  */
-function onCreateStoredState(record: StoredFile): FileSessionState {
+function onCreateStoredState(record: StoredFile): FileState {
   return {
     id: record.id,
     path: record.path,
@@ -119,7 +118,7 @@ function onCreateStoredState(record: StoredFile): FileSessionState {
  * @param diskFile - 磁盘读取结果
  * @returns 控制器文件状态
  */
-function onCreateDiskState(fileId: string, filePath: string, diskFile: ReadFileResult): FileSessionState {
+function onCreateDiskState(fileId: string, filePath: string, diskFile: ReadFileResult): FileState {
   const { name, ext } = parseFileName(filePath);
   return {
     id: fileId,
@@ -151,7 +150,7 @@ export function useSession(fileId: Ref<string>): EditorSessionResult {
    * @returns 默认文件快照
    */
   function onCreateFile(context: { fileId: string }): FileControllerSnapshot<string> {
-    const nextFile: FileSessionState = {
+    const nextFile: FileState = {
       id: context.fileId,
       name: 'Untitled',
       content: '',

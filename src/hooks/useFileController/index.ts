@@ -1,5 +1,5 @@
 /**
- * @file useFileController.ts
+ * @file index.ts
  * @description 提供文件状态、业务数据、保存状态与标签脏状态的公共控制器入口。
  */
 import type {
@@ -11,46 +11,18 @@ import type {
   FileControllerSnapshot,
   FileLoadCandidates,
   FileOperationSnapshot
-} from './file-controller/types';
+} from './types';
 import type { Ref } from 'vue';
 import { computed, getCurrentInstance, getCurrentScope, onActivated, onDeactivated, onScopeDispose, ref, watch } from 'vue';
-import { useDiskSave } from '@/hooks/file-controller/useDiskSave';
-import { useDraftPersistence } from '@/hooks/file-controller/useDraftPersistence';
-import { useFileWatch } from '@/hooks/file-controller/useFileWatch';
-import type { FileSessionState } from '@/hooks/types';
-import type { FileChangeEvent } from '@/shared/platform/native/types';
+import type { FileChangeEvent, FileState } from '@/shared/platform/native/types';
 import type { EditorSaveStrategy } from '@/stores/editor/preferences';
 import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 import { useRecentStore } from '@/stores/workspace/recent';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import { asyncTo } from '@/utils/asyncTo';
-
-export type {
-  FileConflictContext,
-  FileConflictDecision,
-  FileControllerActions,
-  FileControllerErrorContext,
-  FileControllerErrorSource,
-  FileControllerEvents,
-  FileControllerOptions,
-  FileControllerResult,
-  FileControllerSnapshot,
-  FileCreateContext,
-  FileDeleteContext,
-  FileDiskCandidate,
-  FileDraftCandidate,
-  FileLoadCandidates,
-  FileLoadContext,
-  FileOperationSnapshot,
-  FileParseContext,
-  FileRecordContext,
-  FileRenameContext,
-  FileRenameResult,
-  FileRestoreContext,
-  FileSaveAsContext,
-  FileSerializeContext,
-  FileWriteContext
-} from './file-controller/types';
+import { useDiskSave } from './useDiskSave';
+import { useDraftPersistence } from './useDraftPersistence';
+import { useFileWatch } from './useFileWatch';
 
 /**
  * 创建通用文件控制器。
@@ -63,7 +35,7 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
   const recentStore = useRecentStore();
   const editorPreferencesStore = useEditorPreferencesStore();
   const initial = events.onCreate({ fileId: fileId.value });
-  const fileState = ref<FileSessionState>({ ...initial.fileState });
+  const fileState = ref<FileState>({ ...initial.fileState });
   const data = ref<TData>(initial.data) as Ref<TData>;
   const savedContent = ref<string>(initial.savedContent);
   const isLoading = ref<boolean>(false);
@@ -189,7 +161,7 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
    * @param nextSavedContent - 最终保存基线
    * @returns 可原子应用的控制器快照
    */
-  function onParseSnapshot(nextFileState: FileSessionState, nextSavedContent: string): FileControllerSnapshot<TData> {
+  function onParseSnapshot(nextFileState: FileState, nextSavedContent: string): FileControllerSnapshot<TData> {
     return {
       fileState: { ...nextFileState },
       data: events.onParse({ content: nextFileState.content, path: nextFileState.path }),

@@ -9,8 +9,8 @@ import { message } from 'ant-design-vue';
 import { parseWidgetJson } from '@/ai/widget/parser';
 import type { WidgetData } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
-import type { FileSessionState } from '@/hooks/types';
 import { useClipboard } from '@/hooks/useClipboard';
+import { useFileController } from '@/hooks/useFileController';
 import type {
   FileConflictDecision,
   FileControllerErrorContext,
@@ -24,10 +24,9 @@ import type {
   FileSaveAsContext,
   FileSerializeContext,
   FileWriteContext
-} from '@/hooks/useFileController';
-import { useFileController } from '@/hooks/useFileController';
+} from '@/hooks/useFileController/types';
 import { native } from '@/shared/platform';
-import type { ReadFileResult } from '@/shared/platform/native/types';
+import type { FileState, ReadFileResult } from '@/shared/platform/native/types';
 import type { StoredDocumentRecord, StoredWidget } from '@/shared/storage/files/types';
 import { useWidgetStore } from '@/stores/ai/widget';
 import { useRecentStore } from '@/stores/workspace/recent';
@@ -79,7 +78,7 @@ export interface WidgetSessionReturn {
   /** 文件加载或解析失败信息。 */
   loadError: Ref<Error | null>;
   /** 当前文件状态。 */
-  fileState: Ref<FileSessionState>;
+  fileState: Ref<FileState>;
   /** 当前 Widget 数据。 */
   data: Ref<WidgetData>;
   /** 当前文件标题。 */
@@ -111,7 +110,7 @@ function resolveWidgetId(fileId: string): string {
  * @param fileId - Widget 文件会话 ID
  * @returns 默认文件状态
  */
-function createDefaultState(fileId: string): FileSessionState {
+function createDefaultState(fileId: string): FileState {
   return {
     id: fileId,
     name: 'Untitled',
@@ -126,7 +125,7 @@ function createDefaultState(fileId: string): FileSessionState {
  * @param stored - 最近 Widget 记录
  * @returns 页面文件状态
  */
-function createStoredState(stored: StoredWidget): FileSessionState {
+function createStoredState(stored: StoredWidget): FileState {
   return {
     id: stored.id,
     name: stored.name,
@@ -143,7 +142,7 @@ function createStoredState(stored: StoredWidget): FileSessionState {
  * @param diskFile - 磁盘读取结果
  * @returns 页面文件状态
  */
-function createDiskState(fileId: string, filePath: string, diskFile: ReadFileResult): FileSessionState {
+function createDiskState(fileId: string, filePath: string, diskFile: ReadFileResult): FileState {
   const { name, ext } = parseFileName(filePath);
   return {
     id: fileId,
