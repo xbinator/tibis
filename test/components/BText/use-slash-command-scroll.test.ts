@@ -6,7 +6,7 @@ import type { EditorView } from '@codemirror/view';
 import { computed, shallowRef, type ComputedRef, type Ref, type ShallowRef } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
 import { useSlashCommand, type UseSlashCommandReturn } from '@/components/BText/hooks/useSlashCommand';
-import type { SlashCommandOption, SlashCommandId } from '@/components/BText/types';
+import type { SlashCommandOption } from '@/components/BText/types';
 
 /**
  * 带滚动标记的斜杠命令 Hook 返回值。
@@ -21,13 +21,13 @@ type UseSlashCommandReturnWithScroll = UseSlashCommandReturn & {
  * @param id - 命令 ID
  * @returns 斜杠命令选项
  */
-function createSlashCommand(id: SlashCommandId): SlashCommandOption {
+function createSlashCommand(id: string): SlashCommandOption {
   return {
     id,
     trigger: `/${id}`,
     title: id,
     description: `Run ${id}`,
-    type: 'action'
+    selectAction: { type: 'emit' }
   };
 }
 

@@ -7,9 +7,14 @@
     @select="handleSelect"
     @update:active-index="handleMouseEnter"
   >
+    <template #before-item="{ item, index }">
+      <div v-if="isGroupTitleVisible(item, index)" class="slash-command-group-title">{{ item.groupTitle }}</div>
+    </template>
     <template #item="{ item }">
-      <div class="slash-command-item-trigger">{{ item.trigger }}</div>
-      <div class="slash-command-item-desc">{{ item.description }}</div>
+      <div class="slash-command-item-content">
+        <span class="slash-command-item-title">{{ item.title }}</span>
+        <span class="slash-command-item-desc">{{ item.description }}</span>
+      </div>
     </template>
   </SelectDropdown>
 </template>
@@ -32,7 +37,7 @@ interface Props {
   scrollActiveIntoView?: boolean;
 }
 
-withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<Props>(), {
   activeIndex: 0,
   scrollActiveIntoView: false
 });
@@ -41,6 +46,17 @@ const emit = defineEmits<{
   (e: 'select', command: SlashCommandOption): void;
   (e: 'update:activeIndex', index: number): void;
 }>();
+
+/**
+ * 判断条目是否应展示自身配置的分组标题。
+ * @param command - 当前条目
+ * @param index - 当前扁平索引
+ * @returns 是否应在条目前展示分组标题
+ */
+function isGroupTitleVisible(command: SlashCommandOption, index: number): boolean {
+  if (!command.groupTitle) return false;
+  return index === 0 || props.commands[index - 1]?.group !== command.group;
+}
 
 /**
  * 选择指定 Slash 命令
@@ -60,18 +76,33 @@ function handleMouseEnter(index: number): void {
 </script>
 
 <style scoped lang="less">
-.slash-command-item-trigger {
-  padding: 2px 6px;
-  font-family: 'SF Mono', Monaco, 'Courier New', monospace;
-  font-size: 12px;
-  color: var(--color-primary);
-  background: var(--color-primary-bg);
-  border-radius: 4px;
+.slash-command-group-title {
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+.slash-command-item-content {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.slash-command-item-title {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
 }
 
 .slash-command-item-desc {
-  margin-left: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 12px;
   color: var(--text-tertiary);
+  white-space: nowrap;
 }
 </style>

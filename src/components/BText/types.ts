@@ -19,30 +19,25 @@ export interface PasteImageContext {
   otherFiles: File[];
 }
 
-/**
- * 斜杠命令选项元数据
- */
-export type SlashCommandId = 'model' | 'new' | 'clear' | 'compact';
+/** 斜杠命令选中后的通用行为。 */
+export type SlashCommandSelectAction = { type: 'emit' } | { type: 'insert'; text: string };
 
-/**
- * 斜杠命令类型
- */
-export type SlashCommandType = 'action' | 'prompt';
-
-/**
- * 斜杠命令选项元数据，供提示词编辑器和聊天侧边栏使用
- */
+/** 供提示词编辑器和上层业务使用的通用斜杠选项。 */
 export interface SlashCommandOption {
-  /** 稳定的命令标识符 */
-  id: SlashCommandId;
-  /** 展示给用户的斜杠触发文本 */
+  /** 稳定选项标识。 */
+  id: string;
+  /** 展示给用户的斜杠触发文本。 */
   trigger: string;
-  /** 人类可读的命令标题 */
+  /** 人类可读标题。 */
   title: string;
-  /** 在 UI 提示中显示的命令描述 */
+  /** UI 提示描述。 */
   description: string;
-  /** 命令类型；action 命令立即执行，prompt 命令打开提示词流程 */
-  type: SlashCommandType;
+  /** 上层业务定义的分组标识。 */
+  group?: string;
+  /** 分组首项上方的展示标题。 */
+  groupTitle?: string;
+  /** 选中条目后由编辑器执行的行为。 */
+  selectAction: SlashCommandSelectAction;
 }
 
 /**

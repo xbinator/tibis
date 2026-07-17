@@ -7,16 +7,12 @@
       </div>
       <!-- 列表区域 -->
       <div v-if="items.length > 0" class="select-dropdown__list">
-        <div
-          v-for="(item, index) in items"
-          :key="index"
-          class="select-dropdown__item"
-          :class="{ active: activeIndex === index }"
-          @click="handleSelect(item)"
-          @mouseenter="handleMouseEnter(index)"
-        >
-          <slot name="item" :item="item" :index="index" :active="activeIndex === index"></slot>
-        </div>
+        <template v-for="(item, index) in items" :key="index">
+          <slot name="before-item" :item="item" :index="index"></slot>
+          <div class="select-dropdown__item" :class="{ active: activeIndex === index }" @click="handleSelect(item)" @mouseenter="handleMouseEnter(index)">
+            <slot name="item" :item="item" :index="index" :active="activeIndex === index"></slot>
+          </div>
+        </template>
       </div>
       <!-- 空状态 -->
       <slot v-else name="empty"></slot>

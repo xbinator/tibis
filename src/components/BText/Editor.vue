@@ -487,6 +487,12 @@ watch(resolvedChipResolver, () => {
   syncChipResolver();
 });
 
+// Skill Store 等外部候选变化时，以当前光标与文档重新计算菜单可见性。
+watch(allSlashCommands, (): void => {
+  if (!instance.value) return;
+  slashCommand.syncSlashCommandState(instance.value.state, instance.value);
+});
+
 onMounted(() => {
   setupEditor();
   document.addEventListener('mousedown', handleDocumentMouseDown);
@@ -552,7 +558,6 @@ defineExpose<BTextEditorExpose>({
 
 <style lang="less">
 @import url('@/assets/styles/scrollbar.less');
-@import url('@/components/BChat/components/FileRefChip/index.less');
 
 .b-text-editor-shell {
   position: relative;

@@ -8,6 +8,59 @@ import type { EditorView } from '@codemirror/view';
 import { computed, ref, type Ref, type ComputedRef, type ShallowRef } from 'vue';
 
 /**
+ * 光标处活动的斜杠查询范围。
+ */
+export interface SlashCommandContext {
+  /** 查询起始位置。 */
+  from: number;
+  /** 查询结束位置。 */
+  to: number;
+  /** 不含 `/` 的查询文本。 */
+  query: string;
+}
+
+/**
+ * 判断候选项是否匹配当前查询。
+ * @param command - 候选项
+ * @param query - 不含 `/` 的查询文本
+ * @returns 是否匹配触发前缀、标题或描述
+ */
+export function isSlashCommandMatch(command: SlashCommandOption, query: string): boolean {
+  const normalizedQuery = query.toLocaleLowerCase();
+  if (!normalizedQuery) return true;
+
+  return (
+    command.trigger.slice(1).toLocaleLowerCase().startsWith(normalizedQuery) ||
+    command.title.toLocaleLowerCase().includes(normalizedQuery) ||
+    command.description.toLocaleLowerCase().includes(normalizedQuery)
+  );
+}
+
+/**
+ * 从纯文本和光标位置读取斜杠查询上下文。
+ * @param text - 编辑器完整文本
+ * @param position - 空选择区的光标位置
+ * @param commands - 当前候选项
+ * @returns 合法且至少有一项匹配时返回活动范围
+ */
+export function findSlashCommandContext(text: string, position: number, commands: readonly SlashCommandOption[]): SlashCommandContext | null {
+  if (commands.length === 0 || position < 0 || position > text.length) return null;
+
+  const textBeforeCursor = text.slice(0, position);
+  const slashIndex = textBeforeCursor.lastIndexOf('/');
+  if (slashIndex < 0) return null;
+
+  const boundary = slashIndex > 0 ? textBeforeCursor[slashIndex - 1] : '';
+  if (slashIndex > 0 && !/\s/u.test(boundary)) return null;
+
+  const query = textBeforeCursor.slice(slashIndex + 1);
+  if (/[\s/]/u.test(query)) return null;
+  if (!commands.some((command: SlashCommandOption): boolean => isSlashCommandMatch(command, query))) return null;
+
+  return { from: slashIndex, to: position, query };
+}
+
+/**
  * useSlashCommand 返回类型
  */
 export interface UseSlashCommandReturn {
@@ -59,22 +112,13 @@ export function useSlashCommand(
 
   // 过滤后的命令列表
   const filteredSlashCommands = computed<readonly SlashCommandOption[]>(() => {
-    const query = slashQuery.value.toLowerCase();
-    if (!query) return slashCommands.value;
-    return slashCommands.value.filter((command) => command.trigger.toLowerCase().startsWith(`/${query}`));
+    return slashCommands.value.filter((command: SlashCommandOption): boolean => isSlashCommandMatch(command, slashQuery.value));
   });
-
-  /**
-   * 判断斜杠命令是否匹配当前查询前缀
-   */
-  function isSlashCommandMatch(command: SlashCommandOption, query: string): boolean {
-    return command.trigger.toLowerCase().startsWith(`/${query.toLowerCase()}`);
-  }
 
   /**
    * 获取光标位置处的当前斜杠命令上下文
    */
-  function getSlashCommandContext(state: EditorState): { from: number; to: number; query: string } | null {
+  function getSlashCommandContext(state: EditorState): SlashCommandContext | null {
     if (slashCommands.value.length === 0) {
       return null;
     }
@@ -84,26 +128,7 @@ export function useSlashCommand(
       return null;
     }
 
-    const pos = selection.head;
-    const line = state.doc.lineAt(pos);
-    const text = state.sliceDoc(line.from, pos);
-
-    if (!text.startsWith('/')) {
-      return null;
-    }
-
-    const query = text.slice(1);
-    const matches = slashCommands.value.filter((command) => isSlashCommandMatch(command, query));
-
-    if (matches.length === 0) {
-      return null;
-    }
-
-    return {
-      from: line.from,
-      to: pos,
-      query
-    };
+    return findSlashCommandContext(state.doc.toString(), selection.head, slashCommands.value);
   }
 
   /**
@@ -171,12 +196,16 @@ export function useSlashCommand(
     if (!view.value || !slashRange.value) return;
 
     const { from, to } = slashRange.value;
+    const { selectAction } = command;
+    const nextCharacter = view.value.state.sliceDoc(to, Math.min(to + 1, view.value.state.doc.length));
+    const suffix = nextCharacter && /\s/u.test(nextCharacter) ? '' : ' ';
+    const insert = selectAction.type === 'insert' ? `${selectAction.text}${suffix}` : '';
     view.value.dispatch({
-      changes: { from, to, insert: '' },
-      selection: { anchor: from }
+      changes: { from, to, insert },
+      selection: { anchor: from + insert.length }
     });
 
-    emit('slash-command', command);
+    if (selectAction.type === 'emit') emit('slash-command', command);
     closeSlashCommandMenu();
     view.value.focus();
   }
