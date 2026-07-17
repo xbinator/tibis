@@ -38,7 +38,7 @@ import { useNavigate } from '@/hooks/useNavigate';
 import { useOpenFile } from '@/hooks/useOpenFile';
 import { native } from '@/shared/platform';
 import { useSkillStore } from '@/stores/ai/skill';
-import logger from '@/utils/logger';
+import { asyncTo } from '@/utils/asyncTo';
 import { Modal } from '@/utils/modal';
 
 /**
@@ -87,16 +87,13 @@ async function handleEditSkill(): Promise<void> {
     return;
   }
 
-  try {
-    const openedFile = await openFileByPath(props.skill.filePath);
+  // 使用 asyncTo 归一化错误：失败时 error.message 已包含原始错误原因，且 asyncTo 内部已记录日志。
+  const [error, openedFile] = await asyncTo(openFileByPath(props.skill.filePath));
 
-    if (!openedFile) {
-      message.error(`无法打开技能 "${props.skill.name}" 的 SKILL.md`);
-    }
-  } catch (error: unknown) {
-    logger.error('Open SKILL.md failed:', error);
-    const reason = error instanceof Error ? error.message : String(error);
-    message.error(`无法打开技能 "${props.skill.name}" 的 SKILL.md：${reason}`);
+  if (error || !openedFile) {
+    // 失败原因可能来自异常（带 message）或空结果（无 message 后缀），统一通过单条提示告知用户。
+    const reason = error ? `：${error.message}` : '';
+    message.error(`无法打开技能 "${props.skill.name}" 的 SKILL.md${reason}`);
   }
 }
 
@@ -110,28 +107,32 @@ async function handleDeleteSkill(): Promise<void> {
 
   // 删除锁覆盖确认弹窗和文件操作，避免快速重复点击生成多个确认流程。
   deleting.value = true;
-  let movedToTrash = false;
+
   try {
+    // Modal.delete 通过 Promise 决议不会 reject，直接解构取消 / 确认标记即可。
     const [, confirmed] = await Modal.delete(`确定要删除技能 "${props.skill.name}" 吗？整个目录及其中的附属文件都会移入系统回收站。`);
 
     if (!confirmed) {
       return;
     }
 
-    await native.trashFile(props.skill.dirPath);
-    movedToTrash = true;
-    await store.rescan();
-    message.success(`技能 "${props.skill.name}" 已删除`);
-  } catch (error: unknown) {
-    // 目录已移入回收站时只提示刷新失败，避免误导用户重复删除。
-    if (movedToTrash) {
-      logger.warn('Refresh skills after deletion failed:', error);
-      message.warning(`技能 "${props.skill.name}" 已移入回收站，但列表刷新失败`);
-    } else {
-      logger.error('Delete Skill failed:', error);
-      const reason = error instanceof Error ? error.message : String(error);
-      message.error(`删除技能 "${props.skill.name}" 失败：${reason}`);
+    // 移入回收站失败时直接退出，无需进入刷新阶段。
+    const [trashError] = await asyncTo(native.trashFile(props.skill.dirPath));
+
+    if (trashError) {
+      message.error(`删除技能 "${props.skill.name}" 失败：${trashError.message}`);
+      return;
     }
+
+    // 目录已成功移入回收站时即便刷新失败也仅做警告，避免误导用户重复删除。
+    const [rescanError] = await asyncTo(store.rescan());
+
+    if (rescanError) {
+      message.warning(`技能 "${props.skill.name}" 已移入回收站，但列表刷新失败`);
+      return;
+    }
+
+    message.success(`技能 "${props.skill.name}" 已删除`);
   } finally {
     deleting.value = false;
   }

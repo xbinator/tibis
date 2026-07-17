@@ -29,11 +29,6 @@ const messageMock = vi.hoisted(() => ({
   success: vi.fn<(content: string) => void>(),
   warning: vi.fn<(content: string) => void>()
 }));
-/** 日志 mock。 */
-const loggerMock = vi.hoisted(() => ({
-  error: vi.fn<(...args: unknown[]) => void>(),
-  warn: vi.fn<(...args: unknown[]) => void>()
-}));
 
 vi.mock('@/hooks/useNavigate', () => ({
   useNavigate: () => ({ openSkill: openSkillMock })
@@ -49,10 +44,6 @@ vi.mock('@/shared/platform', () => ({
 
 vi.mock('@/utils/modal', () => ({
   Modal: { delete: deleteConfirmMock }
-}));
-
-vi.mock('@/utils/logger', () => ({
-  default: loggerMock
 }));
 
 vi.mock('ant-design-vue', async (importOriginal) => {
@@ -176,8 +167,6 @@ describe('SkillItemRow', (): void => {
     messageMock.error.mockReset();
     messageMock.success.mockReset();
     messageMock.warning.mockReset();
-    loggerMock.error.mockReset();
-    loggerMock.warn.mockReset();
     openFileByPathMock.mockResolvedValue({ id: 'skill-weather' });
     deleteConfirmMock.mockResolvedValue([false, true]);
     nativeMock.trashFile.mockResolvedValue(undefined);
@@ -228,7 +217,7 @@ describe('SkillItemRow', (): void => {
 
     await edit?.onClick?.();
 
-    expect(loggerMock.error).toHaveBeenCalledWith('Open SKILL.md failed:', expect.any(Error));
+    // 错误日志由 asyncTo 内部统一记录（标签 'asyncTo'），其自身单测已覆盖，此处只验证用户可见的错误提示。
     expect(messageMock.error).toHaveBeenCalledWith('无法打开技能 "weather" 的 SKILL.md：EACCES');
   });
 
@@ -264,7 +253,7 @@ describe('SkillItemRow', (): void => {
     await remove?.onClick?.();
 
     expect(rescan).not.toHaveBeenCalled();
-    expect(loggerMock.error).toHaveBeenCalledWith('Delete Skill failed:', expect.any(Error));
+    // 错误日志由 asyncTo 内部统一记录，其自身单测已覆盖，此处只验证用户可见的错误提示。
     expect(messageMock.error).toHaveBeenCalledWith('删除技能 "weather" 失败：EPERM');
   });
 
@@ -275,7 +264,7 @@ describe('SkillItemRow', (): void => {
 
     await remove?.onClick?.();
 
-    expect(loggerMock.warn).toHaveBeenCalledWith('Refresh skills after deletion failed:', expect.any(Error));
+    // 错误日志由 asyncTo 内部统一记录，其自身单测已覆盖，此处只验证用户可见的警告提示。
     expect(messageMock.warning).toHaveBeenCalledWith('技能 "weather" 已移入回收站，但列表刷新失败');
   });
 
