@@ -344,7 +344,7 @@ export type SettingsMenuKey = 'provider' | 'service-model' | 'tools' | 'editor' 
 export const menuItems: MenuItem[] = [
   { key: 'provider', label: 'AI服务商', icon: 'lucide:brain', path: '/settings/provider' },
   { key: 'service-model', label: '服务模型', icon: 'lucide:sparkles', path: '/settings/service-model' },
-  { key: 'tools', label: '工具', icon: 'lucide:wrench', path: '/settings/tools/search' },
+  { key: 'tools', label: '工具', icon: 'lucide:hammer', path: '/settings/tools/search' },
   { key: 'editor', label: '编辑器', icon: 'lucide:square-pen', path: '/settings/editor' },
   { key: 'speech', label: '语音组件', icon: 'lucide:mic', path: '/settings/speech' },
   { key: 'logger', label: '运行日志', icon: 'lucide:file-text', path: '/settings/logger' }

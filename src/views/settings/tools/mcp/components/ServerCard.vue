@@ -37,7 +37,7 @@
 
     <div v-if="discoveredTools.length > 0" class="server-card__tools">
       <div class="server-card__tools-title" @click="toolsCollapsed = !toolsCollapsed">
-        <Icon icon="lucide:wrench" :width="14" class="server-card__tools-icon" />
+        <Icon icon="lucide:hammer" :width="14" class="server-card__tools-icon" />
         <div class="server-card__tools-title-text">已发现的工具</div>
 
         <Icon :icon="toolsCollapsed ? 'lucide:chevron-down' : 'lucide:chevron-right'" :width="14" class="server-card__tools-arrow" />

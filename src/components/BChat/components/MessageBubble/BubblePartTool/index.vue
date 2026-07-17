@@ -105,7 +105,7 @@ const rawExpanded = ref(false);
 /** 工具状态与图标的映射：inputting 旋转加载、executing 扳手、done 成功/失败/取消/等待用户输入 */
 const ICON_MAP = {
   inputting: 'lucide:loader-circle',
-  executing: 'lucide:wrench',
+  executing: 'lucide:hammer',
   done: { success: 'lucide:check-circle-2', failure: 'lucide:circle-alert', cancelled: 'lucide:circle-x', awaiting_user_input: 'lucide:circle-help' }
 } as const;
 
