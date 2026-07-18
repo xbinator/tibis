@@ -177,6 +177,17 @@ async function flushRuntimeTasks(): Promise<void> {
 }
 
 /**
+ * 等待后台 runtime 微任务推进到指定断言成立。
+ * @param predicate - 等待条件
+ */
+async function flushUntil(predicate: () => boolean): Promise<void> {
+  for (let index = 0; index < 20 && !predicate(); index += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    await Promise.resolve();
+  }
+}
+
+/**
  * 创建压缩测试使用的当前模型解析结果。
  * @returns 当前模型解析结果
  */
@@ -887,6 +898,83 @@ describe('chat runtime service shell', (): void => {
         payload: expect.objectContaining({ runtimeId: result.runtimeId })
       })
     );
+  });
+
+  it('does not count confirmation wait time against the task-wide continuation deadline', async (): Promise<void> => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(0);
+      const collector = createEventCollector();
+      let service: ReturnType<typeof createChatRuntimeService>;
+      let observedSecondRoundTimeout = 0;
+      const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ runtime, assistantMessage, totalTimeoutMs }, updateAssistant) => {
+        if (streamExecutor.mock.calls.length === 1) {
+          assistantMessage.parts = [
+            {
+              id: 'part-confirmation-wait',
+              type: 'tool',
+              toolCallId: 'tool-call-confirmation-wait',
+              toolName: 'write_file',
+              status: 'done',
+              input: { path: 'src/index.ts', content: 'ok' },
+              result: { toolName: 'write_file', status: 'success', data: { path: 'src/index.ts', content: 'ok', created: true } }
+            }
+          ];
+          await updateAssistant(assistantMessage);
+          await service.requestConfirmation({
+            runtimeId: runtime.runtimeId,
+            toolCallId: 'tool-call-confirmation-wait',
+            confirmationId: 'confirmation-wait',
+            request: {
+              toolCallId: 'tool-call-confirmation-wait',
+              toolName: 'write_file',
+              title: '写入文件',
+              description: '是否写入 src/index.ts？',
+              riskLevel: 'write'
+            }
+          });
+          return { shouldContinue: true };
+        }
+
+        observedSecondRoundTimeout = totalTimeoutMs ?? 0;
+        assistantMessage.content = 'final answer';
+        assistantMessage.parts = [...assistantMessage.parts, { id: 'part-after-confirmation-wait', type: 'text', text: 'final answer' }];
+        assistantMessage.loading = false;
+        assistantMessage.finished = true;
+        await updateAssistant(assistantMessage);
+        return {};
+      });
+      service = createChatRuntimeService({
+        emit: collector.emit,
+        createMessageId: (role) => `${role}-message-confirmation-wait`,
+        now: () => '2026-07-19T00:00:00.000Z',
+        messageReader: createNoopMessageReader(),
+        messageWriter: createNoopMessageWriter(),
+        streamExecutor
+      });
+
+      const result = await service.send(createInput({ content: 'write file after long confirmation' }));
+      /** 判断当前 runtime 是否已经完成。 */
+      const didComplete = (): boolean =>
+        collector.events.some((event): boolean => event.name === 'chat:runtime:complete' && event.payload.runtimeId === result.runtimeId);
+      await flushUntil(() => streamExecutor.mock.calls.length === 1);
+      expect(streamExecutor).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(301_000);
+      service.submitConfirmation({
+        runtimeId: result.runtimeId,
+        confirmationId: 'confirmation-wait',
+        decision: { approved: true }
+      });
+      await flushUntil(() => streamExecutor.mock.calls.length === 2);
+      await flushUntil(didComplete);
+
+      expect(streamExecutor).toHaveBeenCalledTimes(2);
+      expect(observedSecondRoundTimeout).toBe(300_000);
+      expect(didComplete()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps explicit Skill context across tool continuation rounds without persisting its content', async (): Promise<void> => {

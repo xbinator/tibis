@@ -3,7 +3,14 @@
  * @description AI SDK 托管工具循环重复调用收口与超时策略测试。
  */
 import { describe, expect, it } from 'vitest';
-import { AI_REQUEST_TIMEOUT, createRequestTimeout, getLoopStopReason, getTaskTimeout } from '../../../../../electron/main/modules/ai/tool-loop-policy.mjs';
+import {
+  AI_REQUEST_TIMEOUT,
+  AI_RUNTIME_TOOL_LOOP_TIMEOUT,
+  createRequestTimeout,
+  createRuntimeToolLoopTimeout,
+  getLoopStopReason,
+  getTaskTimeout
+} from '../../../../../electron/main/modules/ai/tool-loop-policy.mjs';
 
 describe('tool loop policy', (): void => {
   it('does not impose a step limit while tools continue making progress', (): void => {
@@ -76,6 +83,15 @@ describe('tool loop policy', (): void => {
       toolMs: 60_000
     });
     expect(createRequestTimeout(600_000)).toEqual(AI_REQUEST_TIMEOUT);
+  });
+
+  it('omits SDK total timeout when ChatRuntime owns the tool loop', (): void => {
+    expect(AI_RUNTIME_TOOL_LOOP_TIMEOUT).toEqual({
+      chunkMs: 90_000,
+      toolMs: 60_000
+    });
+    expect(createRuntimeToolLoopTimeout()).toEqual(AI_RUNTIME_TOOL_LOOP_TIMEOUT);
+    expect(createRuntimeToolLoopTimeout()).not.toHaveProperty('totalMs');
   });
 
   it('calculates the fixed task-wide remaining time', (): void => {

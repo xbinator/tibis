@@ -190,7 +190,6 @@ describe('AI SDK 7 service integration', (): void => {
         toolChoice: 'none',
         instructions: expect.stringContaining('Do not emit tool-call markup'),
         timeout: {
-          totalMs: 12_345,
           chunkMs: 90_000,
           toolMs: 60_000
         }
@@ -198,6 +197,8 @@ describe('AI SDK 7 service integration', (): void => {
     );
     expect(aiSdkMocks.streamText.mock.calls[0]?.[0]).not.toHaveProperty('prepareStep');
     expect(aiSdkMocks.streamText.mock.calls[0]?.[0]).not.toHaveProperty('stopWhen');
+    expect(aiSdkMocks.streamText.mock.calls[0]?.[0].timeout).not.toHaveProperty('totalMs');
+    expect(aiSdkMocks.streamText.mock.calls[0]?.[0].abortSignal).toBeUndefined();
   });
 
   it('exposes final-step and total usage for generated text', async (): Promise<void> => {

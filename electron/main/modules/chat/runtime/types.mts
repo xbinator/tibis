@@ -74,6 +74,12 @@ export interface ActiveChatRuntime {
   abortController: AbortController;
   /** 创建时间戳。 */
   createdAt: number;
+  /** 当前任务级执行时钟暂停开始时间戳。 */
+  taskPausedAt?: number;
+  /** 当前任务级执行时钟累计暂停时长。 */
+  taskPausedDurationMs?: number;
+  /** 当前任务级执行时钟暂停嵌套深度。 */
+  taskPauseDepth?: number;
 }
 
 /** Runtime 事件发送函数。 */
@@ -155,6 +161,14 @@ export interface ChatRuntimeRendererToolExecutionInput {
 /** Renderer 工具执行函数。 */
 export type ChatRuntimeRendererToolExecutor = (input: ChatRuntimeRendererToolExecutionInput) => Promise<AIToolExecutionResult>;
 
+/** 工具执行超时控制器。 */
+export interface ChatRuntimeToolTimeoutControls {
+  /** 暂停当前工具执行超时计时。 */
+  pause: () => void;
+  /** 恢复当前工具执行超时计时。 */
+  resume: () => void;
+}
+
 /** 主进程工具执行输入。 */
 export interface ChatRuntimeMainToolExecutionInput {
   /** runtime 状态。 */
@@ -167,6 +181,8 @@ export interface ChatRuntimeMainToolExecutionInput {
   input: unknown;
   /** 当前工具调用的组合中止信号。 */
   signal?: AbortSignal;
+  /** 当前工具调用的超时控制器，用于等待人工确认时暂停计时。 */
+  timeoutControls?: ChatRuntimeToolTimeoutControls;
 }
 
 /** 主进程工具执行函数。 */

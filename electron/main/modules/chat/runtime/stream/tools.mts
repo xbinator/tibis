@@ -2,7 +2,7 @@
  * @file stream/tools.mts
  * @description ChatRuntime 流式执行器工具执行与结果工厂。
  */
-import type { ActiveChatRuntime, ChatRuntimeMainToolExecutor, ChatRuntimeRendererToolExecutor } from '../types.mjs';
+import type { ActiveChatRuntime, ChatRuntimeMainToolExecutor, ChatRuntimeRendererToolExecutor, ChatRuntimeToolTimeoutControls } from '../types.mjs';
 import type { AIToolExecutionError, AIToolExecutionResult } from 'types/ai';
 import { AI_ERROR_CODE, createAIServiceError, isAIServiceError } from '../../../ai/errors/codes.mjs';
 import { MAIN_PROCESS_TOOL_NAMES } from '../tools/constants.mjs';
@@ -34,6 +34,16 @@ const TOOL_EXECUTION_ERROR_CODES: ReadonlySet<AIToolExecutionError['code']> = ne
   'CONFIRMATION_DISMISSED',
   'EXECUTION_FAILED'
 ] satisfies AIToolExecutionError['code'][]);
+
+/** 可暂停的工具执行超时。 */
+interface PausableToolTimeout {
+  /** 超时结果 Promise。 */
+  promise: Promise<AIToolExecutionResult>;
+  /** 暴露给工具执行链路的暂停控制器。 */
+  controls: ChatRuntimeToolTimeoutControls;
+  /** 清理超时计时器。 */
+  clear: () => void;
+}
 
 /**
  * 将异常规范化为 AIServiceError。
@@ -170,6 +180,98 @@ function attachToolSignal<TInput extends { signal?: AbortSignal }>(input: TInput
 }
 
 /**
+ * 创建可暂停的工具执行超时。
+ * @param timeoutMs - 超时时间
+ * @param createTimeoutResult - 创建超时结果
+ * @param abortController - 超时中止控制器
+ * @param abortReason - 超时中止原因
+ * @returns 可暂停的超时 Promise 与控制器
+ */
+function createPausableToolTimeout(
+  timeoutMs: number,
+  createTimeoutResult: () => AIToolExecutionResult,
+  abortController: AbortController,
+  abortReason: DOMException
+): PausableToolTimeout {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  let timeoutStartedAt = 0;
+  let remainingMs = Math.max(0, timeoutMs);
+  let pauseDepth = 0;
+  let settled = false;
+  let resolveTimeout: (result: AIToolExecutionResult) => void = () => undefined;
+
+  /**
+   * 清理当前活动计时器。
+   */
+  function clearTimer(): void {
+    if (timeoutId === undefined) return;
+
+    clearTimeout(timeoutId);
+    timeoutId = undefined;
+  }
+
+  /**
+   * 触发工具超时。
+   */
+  function triggerTimeout(): void {
+    if (settled) return;
+
+    settled = true;
+    clearTimer();
+    resolveTimeout(createTimeoutResult());
+    abortController.abort(abortReason);
+  }
+
+  /**
+   * 按剩余时间启动计时器。
+   */
+  function scheduleTimer(): void {
+    if (settled || pauseDepth > 0 || timeoutId !== undefined) return;
+
+    if (remainingMs <= 0) {
+      triggerTimeout();
+      return;
+    }
+
+    timeoutStartedAt = Date.now();
+    timeoutId = setTimeout(triggerTimeout, remainingMs);
+  }
+
+  const controls: ChatRuntimeToolTimeoutControls = {
+    pause(): void {
+      if (settled) return;
+
+      pauseDepth += 1;
+      if (pauseDepth > 1 || timeoutId === undefined) return;
+
+      remainingMs = Math.max(0, remainingMs - Math.max(0, Date.now() - timeoutStartedAt));
+      clearTimer();
+    },
+
+    resume(): void {
+      if (settled || pauseDepth <= 0) return;
+
+      pauseDepth -= 1;
+      if (pauseDepth === 0) scheduleTimer();
+    }
+  };
+
+  const promise = new Promise<AIToolExecutionResult>((resolve) => {
+    resolveTimeout = resolve;
+    scheduleTimer();
+  });
+
+  return {
+    promise,
+    controls,
+    clear(): void {
+      settled = true;
+      clearTimer();
+    }
+  };
+}
+
+/**
  * 执行 renderer 本地工具，并把异常或超时转换为工具失败结果。
  * @param executeRendererTool - renderer 工具执行器
  * @param input - renderer 工具输入
@@ -217,27 +319,23 @@ export async function executeMainToolSafely(
   input: Parameters<ChatRuntimeMainToolExecutor>[0],
   timeoutMs: number
 ): Promise<AIToolExecutionResult> {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeoutController = new AbortController();
   const signal = AbortSignal.any([input.runtime.abortController.signal, timeoutController.signal]);
+  const timeout = createPausableToolTimeout(
+    timeoutMs,
+    () => createMainToolTimeoutResult(input.toolName, timeoutMs),
+    timeoutController,
+    new DOMException('Main tool execution timed out', 'TimeoutError')
+  );
   const executionInput = attachToolSignal(input, signal);
+  Object.defineProperty(executionInput, 'timeoutControls', { value: timeout.controls, enumerable: false });
 
   try {
-    return await Promise.race([
-      executeMainTool(executionInput),
-      new Promise<AIToolExecutionResult>((resolve) => {
-        timeoutId = setTimeout(() => {
-          resolve(createMainToolTimeoutResult(input.toolName, timeoutMs));
-          timeoutController.abort(new DOMException('Main tool execution timed out', 'TimeoutError'));
-        }, timeoutMs);
-      })
-    ]);
+    return await Promise.race([executeMainTool(executionInput), timeout.promise]);
   } catch (error: unknown) {
     return createToolFailureResultFromError(input.toolName, error);
   } finally {
-    if (timeoutId !== undefined) {
-      clearTimeout(timeoutId);
-    }
+    timeout.clear();
   }
 }
 

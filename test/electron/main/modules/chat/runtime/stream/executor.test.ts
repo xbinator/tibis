@@ -2,7 +2,8 @@
  * @file stream/executor.test.ts
  * @description ChatRuntime 主进程流式执行器测试。
  */
-import type { ActiveChatRuntime } from '../../../../../../../electron/main/modules/chat/runtime/types.mjs';
+import type { ActiveChatRuntime, ChatRuntimeMainToolExecutionInput } from '../../../../../../../electron/main/modules/chat/runtime/types.mjs';
+import type { AIToolExecutionResult } from 'types/ai';
 import type { ChatMessageRecord } from 'types/chat';
 import { cloneDeep } from 'lodash-es';
 import { describe, expect, it, vi } from 'vitest';
@@ -2313,6 +2314,84 @@ describe('runtime stream executor', (): void => {
               toolName: 'read_file',
               status: 'failure',
               error: { code: 'TOOL_TIMEOUT', message: '主进程工具 read_file 执行超时，已等待 5ms' }
+            }
+          }
+        ]
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('pauses main-process tool timeout while waiting for user confirmation', async (): Promise<void> => {
+    vi.useFakeTimers();
+    try {
+      const assistantMessage = createAssistantMessage();
+      const updates: ChatMessageRecord[] = [];
+      const writeFileResult = { path: '/workspace/docs/report.md', content: '# Report', created: true };
+      let approveConfirmation: (() => void) | undefined;
+      const executeMainTool = vi.fn(
+        (input: ChatRuntimeMainToolExecutionInput) =>
+          new Promise<AIToolExecutionResult>((resolve) => {
+            input.timeoutControls?.pause();
+            approveConfirmation = (): void => {
+              input.timeoutControls?.resume();
+              resolve({
+                toolName: 'write_file',
+                status: 'success',
+                data: writeFileResult
+              });
+            };
+          })
+      );
+      const resolve = vi.fn().mockResolvedValue({
+        createOptions: {
+          providerId: 'openai',
+          providerName: 'OpenAI',
+          providerType: 'openai',
+          apiKey: 'sk-test',
+          baseUrl: 'https://api.openai.com/v1'
+        },
+        modelId: 'gpt-test'
+      });
+      const streamText = vi.fn().mockResolvedValue([undefined, { stream: createMainWriteFileToolStream() }]);
+      const executor = createRuntimeStreamExecutor({ resolver: { resolve }, streamText, executeMainTool, rendererToolTimeoutMs: 5 });
+
+      const task = executor({ runtime: { ...runtime, workspaceRoot: '/workspace' }, userMessage, assistantMessage }, async (message) => {
+        updates.push({ ...message, parts: [...message.parts] });
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(executeMainTool).toHaveBeenCalledOnce();
+
+      let settled = false;
+      task
+        .then(() => {
+          settled = true;
+        })
+        .catch(() => undefined);
+      await vi.advanceTimersByTimeAsync(10);
+      await Promise.resolve();
+
+      expect(settled).toBe(false);
+      if (!approveConfirmation) throw new Error('确认回调未初始化');
+
+      approveConfirmation();
+      await expect(task).resolves.toEqual({
+        totalUsage: { inputTokens: 10, outputTokens: 4, totalTokens: 14 },
+        shouldContinue: true
+      });
+      expect(updates.at(-1)).toMatchObject({
+        parts: [
+          {
+            type: 'tool',
+            toolCallId: 'tool-call-1',
+            toolName: 'write_file',
+            status: 'done',
+            result: {
+              toolName: 'write_file',
+              status: 'success',
+              data: writeFileResult
             }
           }
         ]

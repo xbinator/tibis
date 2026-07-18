@@ -23,6 +23,12 @@ export const AI_REQUEST_TIMEOUT = {
   toolMs: 60_000
 } as const satisfies TimeoutConfiguration<ToolSet>;
 
+/** ChatRuntime 托管工具循环时交给 SDK 的局部超时策略。 */
+export const AI_RUNTIME_TOOL_LOOP_TIMEOUT = {
+  chunkMs: AI_REQUEST_TIMEOUT.chunkMs,
+  toolMs: AI_REQUEST_TIMEOUT.toolMs
+} as const satisfies TimeoutConfiguration<ToolSet>;
+
 /** 单次用户任务允许占用的总时长。 */
 export const AI_TASK_TIMEOUT_MS = AI_REQUEST_TIMEOUT.totalMs;
 
@@ -54,6 +60,14 @@ type ToolStepOptions = Parameters<PrepareStepFunction<ToolSet>>[0];
 export function createRequestTimeout(totalMs: number = AI_TASK_TIMEOUT_MS): TimeoutConfiguration<ToolSet> {
   const normalizedTotalMs = Math.max(1, Math.min(AI_TASK_TIMEOUT_MS, Math.floor(totalMs)));
   return { ...AI_REQUEST_TIMEOUT, totalMs: normalizedTotalMs };
+}
+
+/**
+ * 创建 ChatRuntime 托管工具循环的 SDK 局部超时。
+ * @returns 不含不可暂停 totalMs 的 SDK 超时配置
+ */
+export function createRuntimeToolLoopTimeout(): TimeoutConfiguration<ToolSet> {
+  return AI_RUNTIME_TOOL_LOOP_TIMEOUT;
 }
 
 /**

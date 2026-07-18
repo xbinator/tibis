@@ -40,7 +40,7 @@ import { groupBy } from 'lodash-es';
 import { nanoid } from 'nanoid';
 import { AI_ERROR_CODE, createAIServiceError, isAIServiceError } from '../../ai/errors/codes.mjs';
 import { aiService } from '../../ai/service.mjs';
-import { AI_TASK_TIMEOUT_MS, getLoopStopReason, getTaskTimeout, type ToolLoopStopReason, type ToolStepSnapshot } from '../../ai/tool-loop-policy.mjs';
+import { getLoopStopReason, type ToolLoopStopReason, type ToolStepSnapshot } from '../../ai/tool-loop-policy.mjs';
 import { log } from '../../logger/service.mjs';
 import { chatSessionManager } from '../service.mjs';
 import { createArtifactRegistry } from './compaction/artifact-registry.mjs';
@@ -69,6 +69,7 @@ import { createAutoNamePrompt, normalizeAutoNameTitle } from './model/auto-name.
 import { createDefaultChatModelResolver } from './model/resolver.mjs';
 import { createCompactRuntime, createContinuationRuntime, createSendRuntime, createUserChoiceRuntime } from './runners/factory.mjs';
 import { createRuntimeStreamExecutor } from './stream/index.mjs';
+import { getRuntimeTaskDeadlineAt, getRuntimeTaskTimeout } from './task-clock.mjs';
 import { createMainToolExecutor } from './tools/index.mjs';
 
 /** Renderer 请求默认超时时间。 */
@@ -588,7 +589,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
             system: runtime.system,
             tools: runtime.tools,
             skillContentHashes: runtime.skillContentHashes,
-            taskDeadlineAt: runtime.createdAt + AI_TASK_TIMEOUT_MS
+            taskDeadlineAt: getRuntimeTaskDeadlineAt(runtime)
           })
         ]);
         activeCompactionSources.delete(runtime.runtimeId);
@@ -688,7 +689,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     const toolSteps: ToolStepSnapshot[] = [];
 
     while (shouldRun) {
-      const totalTimeoutMs = getTaskTimeout(runtime.createdAt);
+      const totalTimeoutMs = getRuntimeTaskTimeout(runtime);
       if (totalTimeoutMs <= 0) {
         throw createAIServiceError(AI_ERROR_CODE.REQUEST_FAILED, '本次 AI 任务已达到固定的 300 秒总时限');
       }
@@ -876,7 +877,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
           system: runtime.system,
           tools: runtime.tools,
           skillContentHashes: runtime.skillContentHashes,
-          taskDeadlineAt: runtime.createdAt + AI_TASK_TIMEOUT_MS
+          taskDeadlineAt: getRuntimeTaskDeadlineAt(runtime)
         })
       ]);
       if (executionResult.status === 'rejected' && !assistantMessage.parts.some((part: ChatMessagePart): boolean => part.type === 'compaction')) {

@@ -18,14 +18,22 @@ import { executeWebviewTool, isWebviewTool } from './WebviewTool/index.mjs';
  */
 export function createMainToolExecutor(deps: MainToolsDependencies): MainToolExecutor {
   return async (input: ChatRuntimeMainToolExecutionInput) => {
-    // 工具无需逐个手动透传 signal，统一在依赖边界注入到所有 bridge 与确认请求。
-    const toolDeps: MainToolsDependencies = input.signal
-      ? {
-          ...deps,
-          requestBridge: (request) => deps.requestBridge({ ...request, signal: input.signal }),
-          requestConfirmation: (request) => deps.requestConfirmation({ ...request, signal: input.signal })
-        }
-      : deps;
+    // 工具无需逐个手动透传 signal；确认请求等待用户时暂停外层执行超时。
+    const toolDeps: MainToolsDependencies =
+      input.signal || input.timeoutControls
+        ? {
+            ...deps,
+            requestBridge: (request) => deps.requestBridge({ ...request, signal: input.signal }),
+            requestConfirmation: async (request) => {
+              input.timeoutControls?.pause();
+              try {
+                return await deps.requestConfirmation({ ...request, signal: input.signal });
+              } finally {
+                input.timeoutControls?.resume();
+              }
+            }
+          }
+        : deps;
 
     if (isReadTool(input.toolName)) return executeReadTool(input, toolDeps);
     if (isFileTool(input.toolName)) return executeFileTool(input, toolDeps);

@@ -10,7 +10,7 @@ import { connectMcpServer, executeMcpTool, getMcpDiscoveryCache } from '../mcp/s
 import { createMcpSdkTools, resolveMcpExposedTools } from '../mcp/tools.mjs';
 import { AI_ERROR_CODE } from './errors/codes.mjs';
 import { AIProviderRegistry } from './providers/_index.mjs';
-import { AI_TASK_TIMEOUT_MS, appendFinalInstructions, createRequestTimeout, prepareToolStep } from './tool-loop-policy.mjs';
+import { AI_TASK_TIMEOUT_MS, appendFinalInstructions, createRequestTimeout, createRuntimeToolLoopTimeout, prepareToolStep } from './tool-loop-policy.mjs';
 import { normalizeAIUsage } from './usage.mjs';
 
 // ─── 纯工具函数 ──────────────────────────────────────────────────────────────
@@ -625,6 +625,19 @@ function isExpectedTransientError(error: AIServiceError): boolean {
   return error.code === AI_ERROR_CODE.RATE_LIMITED || error.code === AI_ERROR_CODE.SERVICE_UNAVAILABLE;
 }
 
+/**
+ * 合并可选中止信号。
+ * @param signals - 可选中止信号列表
+ * @returns 单个中止信号，不存在可用信号时返回 undefined
+ */
+function mergeOptionalSignals(signals: Array<AbortSignal | undefined>): AbortSignal | undefined {
+  const activeSignals = signals.filter((signal): signal is AbortSignal => Boolean(signal));
+  if (activeSignals.length === 0) return undefined;
+  if (activeSignals.length === 1) return activeSignals[0];
+
+  return AbortSignal.any(activeSignals);
+}
+
 // ─── AIService ───────────────────────────────────────────────────────────────
 
 /**
@@ -672,12 +685,7 @@ class AIService {
   /**
    * 构建 generateText / streamText 共用的基础选项。
    */
-  private async buildBaseOptions(
-    createOptions: AICreateOptions,
-    request: AIRequestOptions,
-    callOptions: AIServiceCallOptions = {},
-    abortSignal?: AbortSignal
-  ) {
+  private async buildBaseOptions(createOptions: AICreateOptions, request: AIRequestOptions, callOptions: AIServiceCallOptions, abortSignal?: AbortSignal) {
     const tools = await toSdkTools(request.tools, request.tavily, request.mcp, abortSignal);
     const hasExecutableTools = hasTavilyHttpTools(request.tavily) || hasMcpSdkTools(request.mcp);
     const instructions = appendMcpToolInstructions(request.system, request.mcp);
@@ -689,7 +697,7 @@ class AIService {
       maxOutputTokens: request.maxOutputTokens,
       providerOptions: this.aiProvider.createProviderOptions(createOptions.providerType, request),
       tools,
-      timeout: createRequestTimeout(callOptions.totalTimeoutMs),
+      timeout: callOptions.runtimeToolLoop ? createRuntimeToolLoopTimeout() : createRequestTimeout(callOptions.totalTimeoutMs),
       // 压缩边界的 system 消息由 Tibis 内部生成并持久化，保留其原始消息位置以维持上下文语义。
       ...(request.messages ? { allowSystemInMessages: true } : {}),
       ...(hasExecutableTools && !callOptions.runtimeToolLoop ? { prepareStep: prepareToolStep, stopWhen: isLoopFinished() } : {}),
@@ -727,11 +735,11 @@ class AIService {
       log.info(`[AIService] generateText request:`, createRequestLog(request));
       const manualSignal = this.registerAbortSignal(request.requestId);
       const deadlineSignal = AbortSignal.timeout(Math.max(1, Math.min(AI_TASK_TIMEOUT_MS, callOptions.totalTimeoutMs ?? AI_TASK_TIMEOUT_MS)));
-      const abortSignal = manualSignal ? AbortSignal.any([manualSignal, deadlineSignal]) : deadlineSignal;
+      const abortSignal = mergeOptionalSignals([manualSignal, deadlineSignal]);
 
       const baseOptions = {
         ...(await this.buildBaseOptions(createOptions, request, callOptions, abortSignal)),
-        abortSignal,
+        ...(abortSignal ? { abortSignal } : {}),
         output: toOutput(request.output)
       };
 
@@ -762,11 +770,12 @@ class AIService {
       log.info(`[AIService] streamText request:`, createRequestLog(request));
       const manualSignal = this.registerAbortSignal(request.requestId);
       const deadlineSignal = AbortSignal.timeout(Math.max(1, Math.min(AI_TASK_TIMEOUT_MS, callOptions.totalTimeoutMs ?? AI_TASK_TIMEOUT_MS)));
-      const abortSignal = manualSignal ? AbortSignal.any([manualSignal, deadlineSignal]) : deadlineSignal;
+      const buildAbortSignal = mergeOptionalSignals([manualSignal, deadlineSignal]);
+      const streamAbortSignal = callOptions.runtimeToolLoop ? manualSignal : buildAbortSignal;
 
       const baseOptions = {
-        ...(await this.buildBaseOptions(createOptions, request, callOptions, abortSignal)),
-        abortSignal,
+        ...(await this.buildBaseOptions(createOptions, request, callOptions, buildAbortSignal)),
+        ...(streamAbortSignal ? { abortSignal: streamAbortSignal } : {}),
         // ChatRuntime 直接消费完整流时没有 IPC finally，由 v7 onEnd 统一释放请求控制器。
         ...(request.requestId ? { onEnd: this.removeController.bind(this, request.requestId) } : {})
       };
