@@ -428,6 +428,7 @@ function confirmComplexEditInline(): void {
 }
 
 .b-markdown-frontmatter {
+  margin-bottom: 25px;
   background-color: var(--frontmatter-bg);
   border: 1px solid var(--frontmatter-border);
   border-radius: 8px;
