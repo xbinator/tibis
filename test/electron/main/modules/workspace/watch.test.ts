@@ -3,15 +3,19 @@
  * @description Workspace 目录监听匹配规则测试。
  */
 import { describe, expect, it } from 'vitest';
-import { isDirectoryWatchMatch } from '../../../../../electron/main/modules/workspace/watch.mts';
+import { createDirectoryWatchOptions, isDirectoryWatchMatch } from '../../../../../electron/main/modules/workspace/watch.mts';
 
 describe('isDirectoryWatchMatch', (): void => {
-  it('matches regular files when watching a whole directory', (): void => {
+  it('matches only direct children when watching a whole directory', (): void => {
     const rootPath = '/Users/test/.tibis/widgets';
 
-    expect(isDirectoryWatchMatch('/Users/test/.tibis/widgets/weather/widget.json', undefined, rootPath)).toBe(true);
-    expect(isDirectoryWatchMatch('/Users/test/.tibis/widgets/weather/preview.png', undefined, rootPath)).toBe(true);
+    expect(isDirectoryWatchMatch('/Users/test/.tibis/widgets/weather', undefined, rootPath)).toBe(true);
+    expect(isDirectoryWatchMatch('/Users/test/.tibis/widgets/weather/widget.json', undefined, rootPath)).toBe(false);
     expect(isDirectoryWatchMatch('/Users/test/.tibis/widgets/.draft/widget.json', undefined, rootPath)).toBe(false);
+  });
+
+  it('limits directory watchers to the watched root directory', (): void => {
+    expect(createDirectoryWatchOptions().depth).toBe(0);
   });
 
   it('matches regular Skill files', (): void => {

@@ -5,7 +5,7 @@
 
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
-import chokidar from 'chokidar';
+import chokidar, { type ChokidarOptions } from 'chokidar';
 import { BrowserWindow } from 'electron';
 
 /**
@@ -62,20 +62,61 @@ function isInstallerScratchPath(filePath: string): boolean {
 }
 
 /**
- * 判断文件是否位于被监听根目录下的隐藏目录。
+ * 判断路径是否包含被监听根目录下的隐藏路径段。
  * @param filePath - 原始文件路径
  * @param rootDirPath - 被监听根目录路径
- * @returns 位于隐藏目录时返回 true
+ * @returns 包含隐藏路径段时返回 true
  */
-function isHiddenPathUnderWatchRoot(filePath: string, rootDirPath: string | undefined): boolean {
+function hasHiddenSegmentUnderWatchRoot(filePath: string, rootDirPath: string | undefined): boolean {
   if (!rootDirPath) return false;
 
   const normalizedPath = normalizeWatchPath(filePath);
   const normalizedRoot = normalizeWatchPath(rootDirPath).replace(/\/+$/u, '');
+  if (normalizedPath === normalizedRoot) {
+    return false;
+  }
   const relativePath = normalizedPath.startsWith(`${normalizedRoot}/`) ? normalizedPath.slice(normalizedRoot.length + 1) : normalizedPath;
-  const directorySegments = relativePath.split('/').slice(0, -1);
 
-  return directorySegments.some((segment: string): boolean => segment.startsWith('.'));
+  return relativePath.split('/').some((segment: string): boolean => segment.startsWith('.'));
+}
+
+/**
+ * 判断路径是否为被监听根目录下的直接子项。
+ * @param filePath - 原始文件路径
+ * @param rootDirPath - 被监听根目录路径
+ * @returns 是直接子项时返回 true
+ */
+function isDirectWatchChild(filePath: string, rootDirPath: string | undefined): boolean {
+  const basename = getWatchPathBasename(filePath);
+  if (!rootDirPath) {
+    return basename.length > 0;
+  }
+
+  const normalizedPath = normalizeWatchPath(filePath);
+  const normalizedRoot = normalizeWatchPath(rootDirPath).replace(/\/+$/u, '');
+  if (!normalizedPath.startsWith(`${normalizedRoot}/`)) {
+    return false;
+  }
+
+  const relativePath = normalizedPath.slice(normalizedRoot.length + 1);
+  return relativePath.length > 0 && !relativePath.includes('/');
+}
+
+/**
+ * 创建资源根目录 watcher 配置。
+ * @returns Chokidar 目录监听配置
+ */
+export function createDirectoryWatchOptions(): ChokidarOptions {
+  return {
+    persistent: true,
+    ignoreInitial: true,
+    depth: 0,
+    ignored: ['**/node_modules/**', '**/.git/**', '**/.tmp-*/**', '**/.bak-*/**'],
+    awaitWriteFinish: {
+      stabilityThreshold: 100,
+      pollInterval: 100
+    }
+  };
 }
 
 /**
@@ -86,12 +127,12 @@ function isHiddenPathUnderWatchRoot(filePath: string, rootDirPath: string | unde
  * @returns 是否应该广播目录变更事件
  */
 export function isDirectoryWatchMatch(filePath: string, globPattern?: string, rootDirPath?: string): boolean {
-  if (isInstallerScratchPath(filePath) || isHiddenPathUnderWatchRoot(filePath, rootDirPath)) {
+  if (isInstallerScratchPath(filePath) || hasHiddenSegmentUnderWatchRoot(filePath, rootDirPath)) {
     return false;
   }
 
   if (!globPattern) {
-    return getWatchPathBasename(filePath).length > 0;
+    return isDirectWatchChild(filePath, rootDirPath);
   }
 
   if (globPattern.endsWith('SKILL.md')) {
@@ -209,16 +250,7 @@ class FileWatchService {
     const watcherKey = `${dirPath}:${globPattern ?? ''}`;
     if (this.directoryWatchers.has(watcherKey)) return;
 
-    const watcher = chokidar.watch(dirPath, {
-      persistent: true,
-      ignoreInitial: true,
-      depth: 3,
-      ignored: ['**/node_modules/**', '**/.git/**', '**/.tmp-*/**', '**/.bak-*/**'],
-      awaitWriteFinish: {
-        stabilityThreshold: 100,
-        pollInterval: 100
-      }
-    });
+    const watcher = chokidar.watch(dirPath, createDirectoryWatchOptions());
 
     watcher.on('change', async (changedPath: string) => {
       if (!isDirectoryWatchMatch(changedPath, globPattern, dirPath)) return;
