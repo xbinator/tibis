@@ -10,7 +10,7 @@ import { scanSkills, type SkillScannerAPI } from '@/ai/skill/scanner';
  */
 interface SkillScannerAPIMock extends SkillScannerAPI {
   /** 获取安装锁 mock */
-  acquireDirectoryInstallLock: Mock<NonNullable<SkillScannerAPI['acquireDirectoryInstallLock']>>;
+  acquireDirectoryInstallLock: Mock<(targetDir: string) => Promise<string>>;
   /** 读取文件 mock */
   readFile: Mock<SkillScannerAPI['readFile']>;
   /** 读取目录 mock */
@@ -18,11 +18,11 @@ interface SkillScannerAPIMock extends SkillScannerAPI {
   /** 路径状态 mock */
   getPathStatus: Mock<NonNullable<SkillScannerAPI['getPathStatus']>>;
   /** 移动文件 mock */
-  trashFile: Mock<NonNullable<SkillScannerAPI['trashFile']>>;
+  trashFile: Mock<(filePath: string) => Promise<void>>;
   /** 重命名目录 mock */
-  renameFile: Mock<NonNullable<SkillScannerAPI['renameFile']>>;
+  renameFile: Mock<(oldPath: string, newPath: string) => Promise<void>>;
   /** 释放安装锁 mock */
-  releaseDirectoryInstallLock: Mock<NonNullable<SkillScannerAPI['releaseDirectoryInstallLock']>>;
+  releaseDirectoryInstallLock: Mock<(token: string) => Promise<void>>;
 }
 
 /**
@@ -31,32 +31,43 @@ interface SkillScannerAPIMock extends SkillScannerAPI {
  */
 function createScannerAPI(): SkillScannerAPIMock {
   return {
-    acquireDirectoryInstallLock: vi.fn<NonNullable<SkillScannerAPI['acquireDirectoryInstallLock']>>().mockResolvedValue('skill-lock'),
+    acquireDirectoryInstallLock: vi.fn<(targetDir: string) => Promise<string>>().mockResolvedValue('skill-lock'),
     readFile: vi.fn<SkillScannerAPI['readFile']>(),
     readWorkspaceDirectory: vi.fn<SkillScannerAPI['readWorkspaceDirectory']>(),
     getPathStatus: vi.fn<NonNullable<SkillScannerAPI['getPathStatus']>>().mockResolvedValue({ exists: true, isFile: false, isDirectory: true }),
-    trashFile: vi.fn<NonNullable<SkillScannerAPI['trashFile']>>(),
-    renameFile: vi.fn<NonNullable<SkillScannerAPI['renameFile']>>(),
-    releaseDirectoryInstallLock: vi.fn<NonNullable<SkillScannerAPI['releaseDirectoryInstallLock']>>().mockResolvedValue(undefined)
+    trashFile: vi.fn<(filePath: string) => Promise<void>>(),
+    renameFile: vi.fn<(oldPath: string, newPath: string) => Promise<void>>(),
+    releaseDirectoryInstallLock: vi.fn<(token: string) => Promise<void>>().mockResolvedValue(undefined)
   };
 }
 
 describe('scanSkills', (): void => {
-  it('recovers an interrupted replacement before scanning skills', async (): Promise<void> => {
+  it('ignores stale install transaction files while scanning skills', async (): Promise<void> => {
     const api = createScannerAPI();
-    api.readWorkspaceDirectory.mockResolvedValueOnce({ entries: [{ name: '.install-test.json', type: 'file' }] }).mockResolvedValueOnce({ entries: [] });
-    api.readFile.mockResolvedValue({
-      content: JSON.stringify({ version: 1, targetName: 'demo', temporaryName: '.tmp-test', backupName: '.bak-test' })
+    api.readWorkspaceDirectory.mockResolvedValue({
+      entries: [
+        { name: '.install-test.json', type: 'file' },
+        { name: 'demo', type: 'directory' }
+      ]
     });
-    api.getPathStatus.mockImplementation(async (path: string) => ({
-      exists: path.endsWith('/skills') || path.endsWith('/.bak-test'),
-      isFile: false,
-      isDirectory: path.endsWith('/skills') || path.endsWith('/.bak-test')
+    api.readFile.mockImplementation(async (filePath: string) => {
+      if (filePath.endsWith('/.install-test.json')) {
+        return { content: JSON.stringify({ version: 1, targetName: 'demo', temporaryName: '.tmp-test', backupName: '.bak-test' }) };
+      }
+
+      return { content: ['---', 'name: demo', 'description: Demo skill', '---', 'body'].join('\n') };
+    });
+    api.getPathStatus.mockImplementation(async (filePath: string) => ({
+      exists: filePath.endsWith('/skills') || filePath.endsWith('/.bak-test') || filePath.endsWith('/SKILL.md'),
+      isFile: filePath.endsWith('/SKILL.md'),
+      isDirectory: filePath.endsWith('/skills') || filePath.endsWith('/.bak-test')
     }));
 
-    await scanSkills({ homeDir: '/Users/test' }, api);
+    const skills = await scanSkills({ homeDir: '/Users/test' }, api);
 
-    expect(api.renameFile).toHaveBeenCalledWith('/Users/test/.agents/skills/.bak-test', '/Users/test/.agents/skills/demo');
+    expect(api.renameFile).not.toHaveBeenCalled();
+    expect(api.trashFile).not.toHaveBeenCalled();
+    expect(skills).toHaveLength(1);
   });
 
   it('skips directory reads when the global skills directory does not exist', async (): Promise<void> => {

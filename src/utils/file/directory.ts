@@ -1,6 +1,6 @@
 /**
  * @file directory.ts
- * @description 通用目录安装事务，统一文件写入、冲突策略、重命名重试、回滚与清理。
+ * @description 通用目录安装流程，统一文件写入、冲突策略、重命名重试、回滚与清理。
  */
 import { nanoid } from 'nanoid';
 import { path } from '@/utils/file/path';
@@ -45,52 +45,11 @@ export interface DirectoryInstallerAPI {
   writeFile: (path: string, content: string) => Promise<void>;
 }
 
-/** 目录安装事务恢复依赖。 */
-export interface DirectoryInstallRecoveryAPI {
-  /** 获取目标目录跨窗口安装锁。 */
-  acquireDirectoryInstallLock: DirectoryInstallerAPI['acquireDirectoryInstallLock'];
-  /** 获取路径状态。 */
-  getPathStatus: DirectoryInstallerAPI['getPathStatus'];
-  /** 读取事务记录。 */
-  readFile: (path: string) => Promise<{ content: string }>;
-  /** 读取安装根目录的直接子项。 */
-  readWorkspaceDirectory: (options: { directoryPath: string }) => Promise<{ entries: Array<{ name: string; type: 'file' | 'directory' }> }>;
-  /** 恢复备份目录。 */
-  renameFile: DirectoryInstallerAPI['renameFile'];
-  /** 释放目标目录跨窗口安装锁。 */
-  releaseDirectoryInstallLock: DirectoryInstallerAPI['releaseDirectoryInstallLock'];
-  /** 清理已确认无用的事务文件或中间目录。 */
-  trashFile: DirectoryInstallerAPI['trashFile'];
-}
-
-/** 持久化目录安装事务记录。 */
-interface DirectoryInstallTransactionRecord {
-  /** 记录格式版本。 */
-  version: 1;
-  /** 目标目录在安装根目录下的名称。 */
-  targetName: string;
-  /** 临时目录在安装根目录下的名称。 */
-  temporaryName: string;
-  /** 备份目录在安装根目录下的名称。 */
-  backupName: string;
-}
-
-/** 目录安装事务恢复失败信息。 */
-export interface DirectoryInstallRecoveryFailure {
-  /** 恢复失败的事务文件或安装根目录。 */
-  transactionPath: string;
-  /** 原始恢复错误。 */
-  error: unknown;
-}
-
-/** 目录安装事务恢复失败回调。 */
-export type DirectoryInstallRecoveryFailureHandler = (failure: DirectoryInstallRecoveryFailure) => void | Promise<void>;
-
 /** 目录安装阶段事件。 */
 export type DirectoryInstallEvent =
   | { type: 'stage'; stage: 'check-target' | 'write-files' | 'backup' | 'activate' | 'cleanup' | 'rollback' }
   | { type: 'rename-retry'; stage: DirectoryInstallRenameStage; attempt: number; error: unknown }
-  | { type: 'cleanup-failed'; target: 'temporary' | 'backup' | 'transaction'; error: unknown }
+  | { type: 'cleanup-failed'; target: 'temporary' | 'backup'; error: unknown }
   | { type: 'rollback-failed'; error: unknown }
   | { type: 'rollback-completed' };
 
@@ -106,8 +65,6 @@ export interface DirectoryInstallerOptions {
   files: DirectoryInstallFile[];
   /** 测试或调用方自定义临时目录名称。 */
   scratchNameFactory?: (kind: 'temporary' | 'backup') => string;
-  /** 测试或调用方自定义事务记录名称。 */
-  transactionNameFactory?: () => string;
   /** 安装阶段事件回调。 */
   onEvent?: (event: DirectoryInstallEvent) => void | Promise<void>;
   /** 最大重命名执行次数，包含首次执行。 */
@@ -122,8 +79,6 @@ const DEFAULT_MAX_RENAME_ATTEMPTS = 3;
 const DEFAULT_RETRY_DELAY_MS = 80;
 /** Windows 常见瞬时文件占用错误码。 */
 const TRANSIENT_RENAME_ERROR_PATTERN = /\b(?:EPERM|EACCES|EBUSY)\b/iu;
-/** 安装事务记录文件名前缀。 */
-const TRANSACTION_FILE_PATTERN = /^\.install-[A-Za-z0-9_-]+\.json$/u;
 
 /**
  * 目标目录已经存在且策略禁止覆盖时抛出的错误。
@@ -197,20 +152,6 @@ async function emitInstallEvent(callback: DirectoryInstallerOptions['onEvent'], 
     await callback?.(event);
   } catch {
     // 观察者失败不能改变安装事务结果。
-  }
-}
-
-/**
- * 安全报告事务恢复失败，观察者异常不能阻断资源扫描。
- * @param callback - 恢复失败回调
- * @param failure - 恢复失败信息
- * @returns 回调完成信号
- */
-async function emitRecoveryFailure(callback: DirectoryInstallRecoveryFailureHandler | undefined, failure: DirectoryInstallRecoveryFailure): Promise<void> {
-  try {
-    await callback?.(failure);
-  } catch {
-    // 恢复日志失败不能覆盖原始恢复错误或阻断扫描。
   }
 }
 
@@ -312,127 +253,13 @@ async function writeInstallFile(options: DirectoryInstallerOptions, temporaryDir
  * @param target - 临时或备份目录标记
  * @returns 清理完成信号
  */
-async function cleanupDirectory(options: DirectoryInstallerOptions, filePath: string, target: 'temporary' | 'backup' | 'transaction'): Promise<boolean> {
+async function cleanupDirectory(options: DirectoryInstallerOptions, filePath: string, target: 'temporary' | 'backup'): Promise<boolean> {
   try {
     await options.api.trashFile(filePath);
     return true;
   } catch (error: unknown) {
     await emitInstallEvent(options.onEvent, { type: 'cleanup-failed', target, error });
     return false;
-  }
-}
-
-/**
- * 解析并校验安装事务记录，避免伪造记录越过安装根目录。
- * @param content - 事务记录文本
- * @returns 安全事务记录，格式无效时返回 null
- */
-function parseTransactionRecord(content: string): DirectoryInstallTransactionRecord | null {
-  try {
-    const value = JSON.parse(content) as Partial<DirectoryInstallTransactionRecord>;
-    if (
-      value.version !== 1 ||
-      typeof value.targetName !== 'string' ||
-      typeof value.temporaryName !== 'string' ||
-      typeof value.backupName !== 'string' ||
-      !path.isValidSegment(value.targetName) ||
-      !/^\.tmp-[A-Za-z0-9_-]+$/u.test(value.temporaryName) ||
-      !/^\.bak-[A-Za-z0-9_-]+$/u.test(value.backupName)
-    ) {
-      return null;
-    }
-
-    return value as DirectoryInstallTransactionRecord;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * 恢复单个被进程崩溃打断的目录安装事务。
- * @param parentDir - 安装根目录
- * @param transactionName - 事务记录文件名
- * @param api - 恢复依赖
- */
-async function recoverTransaction(
-  parentDir: string,
-  transactionName: string,
-  api: DirectoryInstallRecoveryAPI,
-  onFailure: DirectoryInstallRecoveryFailureHandler | undefined
-): Promise<void> {
-  const transactionPath = posix.join(parentDir, transactionName);
-  let lockToken: string | null = null;
-
-  try {
-    const initialRecord = parseTransactionRecord((await api.readFile(transactionPath)).content);
-    if (!initialRecord) {
-      return;
-    }
-
-    const initialTargetDir = posix.join(parentDir, initialRecord.targetName);
-    lockToken = await api.acquireDirectoryInstallLock(initialTargetDir);
-
-    // 等待锁期间事务可能已由正常安装流程完成，必须在锁内重新读取记录。
-    const record = parseTransactionRecord((await api.readFile(transactionPath)).content);
-    if (!record) {
-      return;
-    }
-
-    const targetDir = posix.join(parentDir, record.targetName);
-    const temporaryDir = posix.join(parentDir, record.temporaryName);
-    const backupDir = posix.join(parentDir, record.backupName);
-    const [targetStatus, temporaryStatus, backupStatus] = await Promise.all([
-      api.getPathStatus(targetDir),
-      api.getPathStatus(temporaryDir),
-      api.getPathStatus(backupDir)
-    ]);
-
-    // 目标缺失且备份存在说明崩溃发生在备份与激活之间，优先恢复用户旧数据。
-    if (!targetStatus.exists && backupStatus.exists) {
-      await api.renameFile(backupDir, targetDir);
-    } else if (targetStatus.exists && backupStatus.exists) {
-      await api.trashFile(backupDir);
-    }
-
-    if (temporaryStatus.exists) {
-      await api.trashFile(temporaryDir);
-    }
-
-    await api.trashFile(transactionPath);
-  } catch (error: unknown) {
-    // 恢复失败时保留事务记录，供下次扫描重试，不能影响正常资源扫描。
-    await emitRecoveryFailure(onFailure, { transactionPath, error });
-  } finally {
-    if (lockToken) {
-      try {
-        await api.releaseDirectoryInstallLock(lockToken);
-      } catch {
-        // 锁释放失败交由主进程在渲染窗口销毁时兜底。
-      }
-    }
-  }
-}
-
-/**
- * 恢复安装根目录中所有持久化目录安装事务。
- * @param parentDir - Skill 或 Widget 安装根目录
- * @param api - 恢复依赖
- */
-export async function recoverDirectoryInstallTransactions(
-  parentDir: string,
-  api: DirectoryInstallRecoveryAPI,
-  onFailure?: DirectoryInstallRecoveryFailureHandler
-): Promise<void> {
-  try {
-    const { entries } = await api.readWorkspaceDirectory({ directoryPath: parentDir });
-    const transactionNames = entries
-      .filter((entry: { name: string; type: 'file' | 'directory' }): boolean => entry.type === 'file' && TRANSACTION_FILE_PATTERN.test(entry.name))
-      .map((entry: { name: string; type: 'file' | 'directory' }): string => entry.name);
-
-    await Promise.all(transactionNames.map((transactionName: string): Promise<void> => recoverTransaction(parentDir, transactionName, api, onFailure)));
-  } catch (error: unknown) {
-    // 安装根目录不可读时保持现状，后续扫描仍按原有容错策略执行。
-    await emitRecoveryFailure(onFailure, { transactionPath: parentDir, error });
   }
 }
 
@@ -453,21 +280,13 @@ async function installDirectoryUnlocked(options: DirectoryInstallerOptions): Pro
   const scratchNameFactory = options.scratchNameFactory ?? ((kind: 'temporary' | 'backup'): string => `.${kind === 'temporary' ? 'tmp' : 'bak'}-${nanoid(8)}`);
   const temporaryName = scratchNameFactory('temporary');
   const backupName = scratchNameFactory('backup');
-  const transactionName = options.transactionNameFactory?.() ?? `.install-${nanoid(8)}.json`;
-  if (
-    !path.isValidSegment(targetName) ||
-    !/^\.tmp-[A-Za-z0-9_-]+$/u.test(temporaryName) ||
-    !/^\.bak-[A-Za-z0-9_-]+$/u.test(backupName) ||
-    !TRANSACTION_FILE_PATTERN.test(transactionName)
-  ) {
-    throw new Error('目录安装事务路径不安全');
+  if (!path.isValidSegment(targetName) || !/^\.tmp-[A-Za-z0-9_-]+$/u.test(temporaryName) || !/^\.bak-[A-Za-z0-9_-]+$/u.test(backupName)) {
+    throw new Error('目录安装路径不安全');
   }
   const temporaryDir = posix.join(parentDir, temporaryName);
   const backupDir = posix.join(parentDir, backupName);
-  const transactionPath = posix.join(parentDir, transactionName);
   let backupCreated = false;
   let temporaryActive = false;
-  let transactionActive = false;
 
   await emitInstallEvent(options.onEvent, { type: 'stage', stage: 'check-target' });
   const targetStatus = await options.api.getPathStatus(targetDir);
@@ -476,11 +295,8 @@ async function installDirectoryUnlocked(options: DirectoryInstallerOptions): Pro
   }
 
   try {
-    // 先创建安装根目录与事务记录，使写入临时文件期间的进程崩溃也可在下次扫描时恢复。
+    // 先创建安装根目录，再写入隐藏临时目录，避免扫描器读取半成品资源。
     await options.api.ensureDir(parentDir);
-    const transaction: DirectoryInstallTransactionRecord = { version: 1, targetName, temporaryName, backupName };
-    await options.api.writeFile(transactionPath, JSON.stringify(transaction));
-    transactionActive = true;
 
     await emitInstallEvent(options.onEvent, { type: 'stage', stage: 'write-files' });
     await options.api.ensureDir(temporaryDir);
@@ -522,29 +338,11 @@ async function installDirectoryUnlocked(options: DirectoryInstallerOptions): Pro
 
     if (backupCreated) {
       await emitInstallEvent(options.onEvent, { type: 'stage', stage: 'cleanup' });
-      const backupCleaned = await cleanupDirectory(options, backupDir, 'backup');
-      if (!backupCleaned) {
-        return;
-      }
-    }
-
-    if (await cleanupDirectory(options, transactionPath, 'transaction')) {
-      transactionActive = false;
+      await cleanupDirectory(options, backupDir, 'backup');
     }
   } catch (error: unknown) {
-    let temporaryCleaned = !temporaryActive;
     if (temporaryActive) {
-      temporaryCleaned = await cleanupDirectory(options, temporaryDir, 'temporary');
-    }
-
-    // 回滚成功或尚未备份时已经没有恢复价值；回滚失败则必须保留事务记录。
-    if (transactionActive && !backupCreated && temporaryCleaned) {
-      try {
-        await options.api.trashFile(transactionPath);
-        transactionActive = false;
-      } catch {
-        // 事务记录清理失败不覆盖原始安装错误。
-      }
+      await cleanupDirectory(options, temporaryDir, 'temporary');
     }
     throw error;
   }

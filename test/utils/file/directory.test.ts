@@ -6,8 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DirectoryInstallConflictError,
   installDirectory,
-  recoverDirectoryInstallTransactions,
-  type DirectoryInstallRecoveryAPI,
   type DirectoryInstallerAPI
 } from '@/utils/file/directory';
 
@@ -21,17 +19,6 @@ interface DirectoryInstallerAPIMock extends DirectoryInstallerAPI {
   saveBinaryFile: ReturnType<typeof vi.fn<DirectoryInstallerAPI['saveBinaryFile']>>;
   trashFile: ReturnType<typeof vi.fn<DirectoryInstallerAPI['trashFile']>>;
   writeFile: ReturnType<typeof vi.fn<DirectoryInstallerAPI['writeFile']>>;
-}
-
-/** 安装事务恢复 API 测试替身。 */
-interface DirectoryInstallRecoveryAPIMock extends DirectoryInstallRecoveryAPI {
-  acquireDirectoryInstallLock: ReturnType<typeof vi.fn<DirectoryInstallRecoveryAPI['acquireDirectoryInstallLock']>>;
-  getPathStatus: ReturnType<typeof vi.fn<DirectoryInstallRecoveryAPI['getPathStatus']>>;
-  readFile: ReturnType<typeof vi.fn<DirectoryInstallRecoveryAPI['readFile']>>;
-  readWorkspaceDirectory: ReturnType<typeof vi.fn<DirectoryInstallRecoveryAPI['readWorkspaceDirectory']>>;
-  renameFile: ReturnType<typeof vi.fn<DirectoryInstallRecoveryAPI['renameFile']>>;
-  releaseDirectoryInstallLock: ReturnType<typeof vi.fn<DirectoryInstallRecoveryAPI['releaseDirectoryInstallLock']>>;
-  trashFile: ReturnType<typeof vi.fn<DirectoryInstallRecoveryAPI['trashFile']>>;
 }
 
 /**
@@ -58,22 +45,6 @@ function createInstallerAPI(): DirectoryInstallerAPIMock {
  */
 function createScratchName(kind: 'temporary' | 'backup'): string {
   return kind === 'temporary' ? '.tmp-test' : '.bak-test';
-}
-
-/**
- * 创建默认事务恢复 API 测试替身。
- * @returns 所有恢复操作默认成功的测试替身
- */
-function createRecoveryAPI(): DirectoryInstallRecoveryAPIMock {
-  return {
-    acquireDirectoryInstallLock: vi.fn<DirectoryInstallRecoveryAPI['acquireDirectoryInstallLock']>().mockResolvedValue('recovery-lock'),
-    getPathStatus: vi.fn<DirectoryInstallRecoveryAPI['getPathStatus']>().mockResolvedValue({ exists: false, isFile: false, isDirectory: false }),
-    readFile: vi.fn<DirectoryInstallRecoveryAPI['readFile']>(),
-    readWorkspaceDirectory: vi.fn<DirectoryInstallRecoveryAPI['readWorkspaceDirectory']>(),
-    renameFile: vi.fn<DirectoryInstallRecoveryAPI['renameFile']>().mockResolvedValue(undefined),
-    releaseDirectoryInstallLock: vi.fn<DirectoryInstallRecoveryAPI['releaseDirectoryInstallLock']>().mockResolvedValue(undefined),
-    trashFile: vi.fn<DirectoryInstallRecoveryAPI['trashFile']>().mockResolvedValue(undefined)
-  };
 }
 
 describe('installDirectory', (): void => {
@@ -110,7 +81,7 @@ describe('installDirectory', (): void => {
   });
 
   it.each(['../outside.txt', 'assets/../../outside.txt', '/absolute.txt', 'C:\\outside.txt'])(
-    'rejects unsafe relative file path %s before creating a transaction',
+    'rejects unsafe relative file path %s before creating directories',
     async (relativePath: string): Promise<void> => {
       const api = createInstallerAPI();
 
@@ -129,7 +100,7 @@ describe('installDirectory', (): void => {
     }
   );
 
-  it('writes a recovery transaction before replacing an existing target and removes it after success', async (): Promise<void> => {
+  it('replaces an existing target without writing an install transaction file', async (): Promise<void> => {
     const api = createInstallerAPI();
     api.getPathStatus.mockResolvedValue({ exists: true, isFile: false, isDirectory: true });
 
@@ -138,16 +109,11 @@ describe('installDirectory', (): void => {
       targetDir: '/Users/test/.agents/skills/demo',
       conflictStrategy: 'replace',
       files: [{ kind: 'text', relativePath: 'SKILL.md', content: '# Demo' }],
-      scratchNameFactory: createScratchName,
-      transactionNameFactory: (): string => '.install-test.json'
+      scratchNameFactory: createScratchName
     });
 
-    expect(api.writeFile).toHaveBeenCalledWith('/Users/test/.agents/skills/.install-test.json', expect.stringContaining('"targetName":"demo"'));
-    const transactionCallIndex = api.writeFile.mock.calls.findIndex(([path]: [string, string]): boolean => path.endsWith('/.install-test.json'));
-    expect(api.writeFile.mock.invocationCallOrder[transactionCallIndex] ?? Number.MAX_SAFE_INTEGER).toBeLessThan(
-      api.renameFile.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER
-    );
-    expect(api.trashFile).toHaveBeenCalledWith('/Users/test/.agents/skills/.install-test.json');
+    expect(api.writeFile.mock.calls.some(([filePath]: [string, string]): boolean => filePath.includes('/.install-'))).toBe(false);
+    expect(api.trashFile.mock.calls.some(([filePath]: [string]): boolean => filePath.includes('/.install-'))).toBe(false);
   });
 
   it('rejects an existing target without writing or deleting it', async (): Promise<void> => {
@@ -273,7 +239,7 @@ describe('installDirectory', (): void => {
     expect(api.trashFile).toHaveBeenCalledWith('/Users/test/.tibis/widgets/.tmp-test');
   });
 
-  it('keeps the transaction when temporary cleanup fails so recovery can retry', async (): Promise<void> => {
+  it('does not leave an install transaction when temporary cleanup fails', async (): Promise<void> => {
     const api = createInstallerAPI();
     const activationError = new Error('EACCES: activation failed');
     api.renameFile.mockRejectedValue(activationError);
@@ -289,98 +255,12 @@ describe('installDirectory', (): void => {
         targetDir: '/Users/test/.tibis/widgets/weather',
         conflictStrategy: 'reject',
         files: [{ kind: 'text', relativePath: 'widget.json', content: '{}' }],
-        scratchNameFactory: createScratchName,
-        transactionNameFactory: (): string => '.install-test.json'
+        scratchNameFactory: createScratchName
       })
     ).rejects.toBe(activationError);
 
-    expect(api.trashFile).not.toHaveBeenCalledWith('/Users/test/.tibis/widgets/.install-test.json');
+    expect(api.writeFile.mock.calls.some(([filePath]: [string, string]): boolean => filePath.includes('/.install-'))).toBe(false);
+    expect(api.trashFile.mock.calls.some(([filePath]: [string]): boolean => filePath.includes('/.install-'))).toBe(false);
     expect(api.releaseDirectoryInstallLock).toHaveBeenCalledWith('install-lock');
-  });
-});
-
-describe('recoverDirectoryInstallTransactions', (): void => {
-  it('reports recovery failures without interrupting the scan', async (): Promise<void> => {
-    const api = createRecoveryAPI();
-    const onFailure = vi.fn();
-    const recoveryError = new Error('EACCES: restore failed');
-    api.readWorkspaceDirectory.mockResolvedValue({ entries: [{ name: '.install-test.json', type: 'file' }] });
-    api.readFile.mockResolvedValue({
-      content: JSON.stringify({ version: 1, targetName: 'demo', temporaryName: '.tmp-test', backupName: '.bak-test' })
-    });
-    api.getPathStatus.mockImplementation(async (path: string) => ({
-      exists: path.endsWith('/.bak-test'),
-      isFile: false,
-      isDirectory: path.endsWith('/.bak-test')
-    }));
-    api.renameFile.mockRejectedValue(recoveryError);
-
-    await recoverDirectoryInstallTransactions('/Users/test/.agents/skills', api, onFailure);
-
-    expect(onFailure).toHaveBeenCalledWith(expect.objectContaining({ transactionPath: '/Users/test/.agents/skills/.install-test.json', error: recoveryError }));
-  });
-
-  it('holds the shared target lock while recovering a transaction', async (): Promise<void> => {
-    const api = createRecoveryAPI();
-    api.acquireDirectoryInstallLock.mockResolvedValue('lock-token');
-    api.readWorkspaceDirectory.mockResolvedValue({ entries: [{ name: '.install-test.json', type: 'file' }] });
-    api.readFile.mockResolvedValue({
-      content: JSON.stringify({ version: 1, targetName: 'demo', temporaryName: '.tmp-test', backupName: '.bak-test' })
-    });
-
-    await recoverDirectoryInstallTransactions('/Users/test/.agents/skills', api);
-
-    expect(api.acquireDirectoryInstallLock).toHaveBeenCalledWith('/Users/test/.agents/skills/demo');
-    expect(api.releaseDirectoryInstallLock).toHaveBeenCalledWith('lock-token');
-    expect(api.readFile).toHaveBeenCalledTimes(2);
-  });
-
-  it('restores a backup when a crash left the target missing', async (): Promise<void> => {
-    const api = createRecoveryAPI();
-    api.readWorkspaceDirectory.mockResolvedValue({ entries: [{ name: '.install-test.json', type: 'file' }] });
-    api.readFile.mockResolvedValue({
-      content: JSON.stringify({ version: 1, targetName: 'demo', temporaryName: '.tmp-test', backupName: '.bak-test' })
-    });
-    api.getPathStatus.mockImplementation(async (path: string) => ({
-      exists: path.endsWith('/.bak-test') || path.endsWith('/.tmp-test'),
-      isFile: false,
-      isDirectory: path.endsWith('/.bak-test') || path.endsWith('/.tmp-test')
-    }));
-
-    await recoverDirectoryInstallTransactions('/Users/test/.agents/skills', api);
-
-    expect(api.renameFile).toHaveBeenCalledWith('/Users/test/.agents/skills/.bak-test', '/Users/test/.agents/skills/demo');
-    expect(api.trashFile).toHaveBeenCalledWith('/Users/test/.agents/skills/.tmp-test');
-    expect(api.trashFile).toHaveBeenCalledWith('/Users/test/.agents/skills/.install-test.json');
-  });
-
-  it('keeps the activated target and cleans its stale backup after a crash', async (): Promise<void> => {
-    const api = createRecoveryAPI();
-    api.readWorkspaceDirectory.mockResolvedValue({ entries: [{ name: '.install-test.json', type: 'file' }] });
-    api.readFile.mockResolvedValue({
-      content: JSON.stringify({ version: 1, targetName: 'demo', temporaryName: '.tmp-test', backupName: '.bak-test' })
-    });
-    api.getPathStatus.mockResolvedValue({ exists: true, isFile: false, isDirectory: true });
-
-    await recoverDirectoryInstallTransactions('/Users/test/.agents/skills', api);
-
-    expect(api.renameFile).not.toHaveBeenCalled();
-    expect(api.trashFile).toHaveBeenCalledWith('/Users/test/.agents/skills/.bak-test');
-    expect(api.trashFile).toHaveBeenCalledWith('/Users/test/.agents/skills/.tmp-test');
-    expect(api.trashFile).toHaveBeenCalledWith('/Users/test/.agents/skills/.install-test.json');
-  });
-
-  it('ignores a forged transaction that points outside the install root', async (): Promise<void> => {
-    const api = createRecoveryAPI();
-    api.readWorkspaceDirectory.mockResolvedValue({ entries: [{ name: '.install-test.json', type: 'file' }] });
-    api.readFile.mockResolvedValue({
-      content: JSON.stringify({ version: 1, targetName: '../outside', temporaryName: '.tmp-test', backupName: '.bak-test' })
-    });
-
-    await recoverDirectoryInstallTransactions('/Users/test/.agents/skills', api);
-
-    expect(api.getPathStatus).not.toHaveBeenCalled();
-    expect(api.renameFile).not.toHaveBeenCalled();
-    expect(api.trashFile).not.toHaveBeenCalled();
   });
 });

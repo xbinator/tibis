@@ -3,8 +3,6 @@
  * @description Skill 目录扫描器，发现并解析 SKILL.md 文件。
  */
 import type { SkillDefinition, SkillScanConfig } from './types';
-import { logDirectoryInstallRecoveryFailure } from '@/shared/logger/directoryInstall';
-import { recoverDirectoryInstallTransactions } from '@/utils/file/directory';
 import { posix } from '@/utils/file/posix';
 import { canReadDirectory, type PathStatusReader } from '@/utils/file/status';
 import { parseSkillMarkdown } from './parser';
@@ -14,8 +12,6 @@ import { parseSkillMarkdown } from './parser';
  * 仅声明扫描所需的方法，便于测试注入。
  */
 export interface SkillScannerAPI extends PathStatusReader {
-  /** 获取目标目录跨窗口安装锁。 */
-  acquireDirectoryInstallLock?: (targetDir: string) => Promise<string>;
   /** 读取文件内容 */
   readFile: (filePath: string) => Promise<{ content: string }>;
   /** 读取工作区目录 */
@@ -23,12 +19,6 @@ export interface SkillScannerAPI extends PathStatusReader {
     directoryPath: string;
     workspaceRoot?: string;
   }) => Promise<{ entries: Array<{ name: string; type: 'file' | 'directory' }> }>;
-  /** 移动文件/目录到系统回收站 */
-  trashFile?: (filePath: string) => Promise<void>;
-  /** 重命名文件或目录，用于恢复中断的安装事务。 */
-  renameFile?: (oldPath: string, newPath: string) => Promise<void>;
-  /** 释放目标目录跨窗口安装锁。 */
-  releaseDirectoryInstallLock?: (token: string) => Promise<void>;
 }
 
 /**
@@ -94,23 +84,6 @@ export async function scanSkills(config: SkillScanConfig, api: SkillScannerAPI):
 
   if (!hasGlobalSkillsDir) {
     return [];
-  }
-
-  // 只有带有效事务记录的中间目录才能恢复或清理，匿名备份不能被当作垃圾删除。
-  if (api.trashFile && api.renameFile && api.getPathStatus && api.acquireDirectoryInstallLock && api.releaseDirectoryInstallLock) {
-    await recoverDirectoryInstallTransactions(
-      globalSkillsDir,
-      {
-        acquireDirectoryInstallLock: api.acquireDirectoryInstallLock,
-        getPathStatus: api.getPathStatus,
-        readFile: api.readFile,
-        readWorkspaceDirectory: api.readWorkspaceDirectory,
-        renameFile: api.renameFile,
-        releaseDirectoryInstallLock: api.releaseDirectoryInstallLock,
-        trashFile: api.trashFile
-      },
-      (failure) => logDirectoryInstallRecoveryFailure('skill', failure)
-    );
   }
 
   const globalSkills = await scanDirectory(globalSkillsDir, 'global', api, maxContentLength);

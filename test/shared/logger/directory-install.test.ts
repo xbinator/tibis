@@ -3,7 +3,7 @@
  * @description 通用目录安装阶段事件的持久化日志适配测试。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDirectoryInstallLogger, logDirectoryInstallRecoveryFailure } from '@/shared/logger/directoryInstall';
+import { createDirectoryInstallLogger } from '@/shared/logger/directoryInstall';
 
 /** 持久化 Logger 测试替身。 */
 const loggerMock = vi.hoisted(() => ({
@@ -48,22 +48,5 @@ describe('createDirectoryInstallLogger', (): void => {
     expect(loggerMock.error).toHaveBeenCalledWith(expect.stringContaining('rollback-failed resource=demo error=rollback failed'));
     expect(loggerMock.warn).toHaveBeenCalledWith('[skill-install] rollback-completed resource=demo');
     expect(loggerMock.info).toHaveBeenCalledWith('[skill-install] success resource=demo');
-  });
-});
-
-describe('logDirectoryInstallRecoveryFailure', (): void => {
-  beforeEach((): void => {
-    loggerMock.error.mockReset().mockResolvedValue(undefined);
-  });
-
-  it('records the transaction path and original recovery error', async (): Promise<void> => {
-    await logDirectoryInstallRecoveryFailure('skill', {
-      transactionPath: 'C:/Users/test/.agents/skills/.install-test.json',
-      error: new Error('EACCES: restore failed')
-    });
-
-    expect(loggerMock.error).toHaveBeenCalledWith(
-      '[skill-install] recovery-failed transaction=C:/Users/test/.agents/skills/.install-test.json error=EACCES: restore failed'
-    );
   });
 });

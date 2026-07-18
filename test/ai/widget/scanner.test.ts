@@ -10,7 +10,7 @@ import { scanWidgets, type WidgetScannerAPI } from '@/ai/widget/scanner';
  */
 interface WidgetScannerAPIMock extends WidgetScannerAPI {
   /** 获取安装锁 mock */
-  acquireDirectoryInstallLock: Mock<NonNullable<WidgetScannerAPI['acquireDirectoryInstallLock']>>;
+  acquireDirectoryInstallLock: Mock<(targetDir: string) => Promise<string>>;
   /** 读取文件 mock */
   readFile: Mock<WidgetScannerAPI['readFile']>;
   /** 读取目录 mock */
@@ -18,11 +18,11 @@ interface WidgetScannerAPIMock extends WidgetScannerAPI {
   /** 路径状态 mock */
   getPathStatus: Mock<NonNullable<WidgetScannerAPI['getPathStatus']>>;
   /** 移动文件到回收站 mock */
-  trashFile: Mock<NonNullable<WidgetScannerAPI['trashFile']>>;
+  trashFile: Mock<(filePath: string) => Promise<void>>;
   /** 重命名目录 mock */
-  renameFile: Mock<NonNullable<WidgetScannerAPI['renameFile']>>;
+  renameFile: Mock<(oldPath: string, newPath: string) => Promise<void>>;
   /** 释放安装锁 mock */
-  releaseDirectoryInstallLock: Mock<NonNullable<WidgetScannerAPI['releaseDirectoryInstallLock']>>;
+  releaseDirectoryInstallLock: Mock<(token: string) => Promise<void>>;
 }
 
 /**
@@ -31,33 +31,43 @@ interface WidgetScannerAPIMock extends WidgetScannerAPI {
  */
 function createScannerAPI(): WidgetScannerAPIMock {
   return {
-    acquireDirectoryInstallLock: vi.fn<NonNullable<WidgetScannerAPI['acquireDirectoryInstallLock']>>().mockResolvedValue('widget-lock'),
+    acquireDirectoryInstallLock: vi.fn<(targetDir: string) => Promise<string>>().mockResolvedValue('widget-lock'),
     readFile: vi.fn<WidgetScannerAPI['readFile']>(),
     readWorkspaceDirectory: vi.fn<WidgetScannerAPI['readWorkspaceDirectory']>(),
     getPathStatus: vi.fn<NonNullable<WidgetScannerAPI['getPathStatus']>>().mockResolvedValue({ exists: true, isFile: false, isDirectory: true }),
-    trashFile: vi.fn<NonNullable<WidgetScannerAPI['trashFile']>>(),
-    renameFile: vi.fn<NonNullable<WidgetScannerAPI['renameFile']>>(),
-    releaseDirectoryInstallLock: vi.fn<NonNullable<WidgetScannerAPI['releaseDirectoryInstallLock']>>().mockResolvedValue(undefined)
+    trashFile: vi.fn<(filePath: string) => Promise<void>>(),
+    renameFile: vi.fn<(oldPath: string, newPath: string) => Promise<void>>(),
+    releaseDirectoryInstallLock: vi.fn<(token: string) => Promise<void>>().mockResolvedValue(undefined)
   };
 }
 
 describe('scanWidgets', (): void => {
-  it('cleans an interrupted rejected install before scanning widgets', async (): Promise<void> => {
+  it('ignores stale install transaction files while scanning widgets', async (): Promise<void> => {
     const api = createScannerAPI();
-    api.readWorkspaceDirectory.mockResolvedValueOnce({ entries: [{ name: '.install-test.json', type: 'file' }] }).mockResolvedValueOnce({ entries: [] });
-    api.readFile.mockResolvedValue({
-      content: JSON.stringify({ version: 1, targetName: 'weather', temporaryName: '.tmp-test', backupName: '.bak-test' })
+    api.readWorkspaceDirectory.mockResolvedValue({
+      entries: [
+        { name: '.install-test.json', type: 'file' },
+        { name: 'weather', type: 'directory' }
+      ]
     });
-    api.getPathStatus.mockImplementation(async (path: string) => ({
-      exists: path.endsWith('/widgets') || path.endsWith('/.tmp-test'),
+    api.readFile.mockImplementation(async (filePath: string) => {
+      if (filePath.endsWith('/.install-test.json')) {
+        return { content: JSON.stringify({ version: 1, targetName: 'weather', temporaryName: '.tmp-test', backupName: '.bak-test' }) };
+      }
+
+      return { content: JSON.stringify({ name: '天气', description: '查询指定城市天气' }) };
+    });
+    api.getPathStatus.mockImplementation(async (filePath: string) => ({
+      exists: filePath.endsWith('/widgets') || filePath.endsWith('/.tmp-test'),
       isFile: false,
-      isDirectory: path.endsWith('/widgets') || path.endsWith('/.tmp-test')
+      isDirectory: filePath.endsWith('/widgets') || filePath.endsWith('/.tmp-test')
     }));
 
-    await scanWidgets({ homeDir: '/Users/test' }, api);
+    const widgets = await scanWidgets({ homeDir: '/Users/test' }, api);
 
-    expect(api.trashFile).toHaveBeenCalledWith('/Users/test/.tibis/widgets/.tmp-test');
-    expect(api.trashFile).toHaveBeenCalledWith('/Users/test/.tibis/widgets/.install-test.json');
+    expect(api.renameFile).not.toHaveBeenCalled();
+    expect(api.trashFile).not.toHaveBeenCalled();
+    expect(widgets).toHaveLength(1);
   });
 
   it('scans widget directories from .tibis/widgets and uses directory name as id', async (): Promise<void> => {

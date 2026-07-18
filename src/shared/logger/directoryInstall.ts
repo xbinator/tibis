@@ -2,7 +2,7 @@
  * @file directoryInstall.ts
  * @description Skill 与 Widget 共用的目录安装阶段日志适配器。
  */
-import { formatDirectoryInstallError, type DirectoryInstallEvent, type DirectoryInstallRecoveryFailure } from '@/utils/file/directory';
+import { formatDirectoryInstallError, type DirectoryInstallEvent } from '@/utils/file/directory';
 import { logger } from './index';
 
 /** 支持目录安装日志的资源类型。 */
@@ -80,14 +80,4 @@ export function createDirectoryInstallLogger(resourceType: DirectoryInstallResou
   }
 
   return { start, onEvent, success, failure };
-}
-
-/**
- * 记录目录安装事务恢复失败，不改变扫描流程结果。
- * @param resourceType - Skill 或 Widget
- * @param failure - 恢复失败信息
- * @returns 日志写入完成信号
- */
-export async function logDirectoryInstallRecoveryFailure(resourceType: DirectoryInstallResourceType, failure: DirectoryInstallRecoveryFailure): Promise<void> {
-  await logger.error(`[${resourceType}-install] recovery-failed transaction=${failure.transactionPath} error=${formatDirectoryInstallError(failure.error)}`);
 }
