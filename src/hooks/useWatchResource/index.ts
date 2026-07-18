@@ -2,7 +2,7 @@
  * @file index.ts
  * @description 通用资源监听 hook，负责扫描用户目录、监听变更及增量更新到 Store。
  *              适用于按根目录（如 `.agents`、`.tibis`）+ 子目录（如 `skills`、`widgets`）
- *              下单一类型文件（如 `SKILL.md`、`widget.json`）管理的 Store 同步场景。
+ *              管理资源文件并由渲染进程按业务谓词过滤目标文件的 Store 同步场景。
  */
 
 import { onMounted, onUnmounted } from 'vue';
@@ -20,9 +20,6 @@ export interface WatchResourceConfig<TDefinition> {
   rootDir: string;
   /** 根目录下的子目录名，例如 `skills`、`widgets`。 */
   subDir: string;
-  /** 监听该目录时的 glob 模式，例如 `**\/SKILL.md`、`**\/widget.json`。 */
-  watchGlob: string;
-
   /** 初始化之前触发（建立屏障），由 hook 在 setup 阶段同步调用。 */
   onBeforeInitialize: () => void;
   /** 执行初始化（扫描 Store），由 hook 在 onMounted 异步调用。 */
@@ -105,10 +102,10 @@ async function startWatching<TDefinition>(config: WatchResourceConfig<TDefinitio
   cleanupCallbacks.push(removeChangeListener);
 
   const homeDir = await native.getHomeDir();
-  // 监听用户级全局目录，事件只关注配置中指定的 glob 文件。
+  // 只监听用户级全局资源目录，目标文件筛选统一交给渲染进程业务谓词。
   const targetDir = posix.join(homeDir, config.rootDir, config.subDir);
-  await native.watchDirectory(targetDir, config.watchGlob);
-  cleanupCallbacks.push((): Promise<void> => native.unwatchDirectory(targetDir, config.watchGlob));
+  await native.watchDirectory(targetDir);
+  cleanupCallbacks.push((): Promise<void> => native.unwatchDirectory(targetDir));
 
   await config.onInitialize(homeDir, native);
 }

@@ -37,7 +37,6 @@ export function useWatchSkill(): void {
   useWatchResource<SkillDefinition>({
     rootDir: '.agents',
     subDir: 'skills',
-    watchGlob: '**/SKILL.md',
     logLabel: 'Skill',
     onBeforeInitialize: (): void => skillStore.beforeInitialize(),
     onAfterInitialize: (): void => skillStore.afterInitialize(),

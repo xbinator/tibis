@@ -79,15 +79,19 @@ function isHiddenPathUnderWatchRoot(filePath: string, rootDirPath: string | unde
 }
 
 /**
- * 判断目录监听事件是否匹配请求的 skill 文件模式。
+ * 判断目录监听事件是否匹配请求的目录监听规则。
  * @param filePath - 变更文件路径
- * @param globPattern - 调用方传入的匹配模式
+ * @param globPattern - 调用方传入的匹配模式；为空时匹配目录内普通文件
  * @param rootDirPath - 被监听根目录路径
- * @returns 是否应该广播 skill 变更事件
+ * @returns 是否应该广播目录变更事件
  */
-export function isDirectoryWatchMatch(filePath: string, globPattern: string, rootDirPath?: string): boolean {
+export function isDirectoryWatchMatch(filePath: string, globPattern?: string, rootDirPath?: string): boolean {
   if (isInstallerScratchPath(filePath) || isHiddenPathUnderWatchRoot(filePath, rootDirPath)) {
     return false;
+  }
+
+  if (!globPattern) {
+    return getWatchPathBasename(filePath).length > 0;
   }
 
   if (globPattern.endsWith('SKILL.md')) {
@@ -197,12 +201,12 @@ class FileWatchService {
   }
 
   /**
-   * 注册指定目录的监听，匹配 glob 模式的文件变化时广播 skill:changed 事件。
+   * 注册指定目录的监听，文件变化时广播 skill:changed 事件。
    * @param dirPath - 需要监听的目录路径
-   * @param globPattern - 文件匹配模式
+   * @param globPattern - 可选文件匹配模式；为空时匹配目录内普通文件
    */
-  async watchDirectory(dirPath: string, globPattern = `**/SKILL.md`): Promise<void> {
-    const watcherKey = `${dirPath}:${globPattern}`;
+  async watchDirectory(dirPath: string, globPattern?: string): Promise<void> {
+    const watcherKey = `${dirPath}:${globPattern ?? ''}`;
     if (this.directoryWatchers.has(watcherKey)) return;
 
     const watcher = chokidar.watch(dirPath, {
@@ -247,10 +251,10 @@ class FileWatchService {
   /**
    * 停止监听指定目录。
    * @param dirPath - 需要停止监听的目录路径
-   * @param globPattern - 文件匹配模式
+   * @param globPattern - 可选文件匹配模式；为空时匹配目录内普通文件
    */
-  async unwatchDirectory(dirPath: string, globPattern = `**/SKILL.md`): Promise<void> {
-    const watcherKey = `${dirPath}:${globPattern}`;
+  async unwatchDirectory(dirPath: string, globPattern?: string): Promise<void> {
+    const watcherKey = `${dirPath}:${globPattern ?? ''}`;
     const watcher = this.directoryWatchers.get(watcherKey);
     if (!watcher) return;
 

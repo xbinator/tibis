@@ -8,6 +8,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useWatchSkill } from '@/layouts/default/hooks/useWatchSkill';
 import { useWatchWidget } from '@/layouts/default/hooks/useWatchWidget';
+import { native } from '@/shared/platform';
 
 /** Skill 目录变更事件。 */
 interface SkillChangedEvent {
@@ -100,6 +101,8 @@ describe('AI resource initialization', (): void => {
     skillChangedCallbacks.splice(0);
     handleSkillChangeMock.mockClear();
     handleWidgetChangeMock.mockClear();
+    vi.mocked(native.watchDirectory).mockClear();
+    vi.mocked(native.unwatchDirectory).mockClear();
   });
 
   it('subscribes to change events before asynchronous scans and directory watches', async (): Promise<void> => {
@@ -115,6 +118,21 @@ describe('AI resource initialization', (): void => {
     expect(initOrder.indexOf('listener')).toBeLessThan(initOrder.indexOf('skill-init'));
     expect(initOrder.indexOf('listener')).toBeLessThan(initOrder.indexOf('watch'));
     wrapper.unmount();
+  });
+
+  it('watches resource directories without file-specific globs', async (): Promise<void> => {
+    const wrapper = mount(createResourceInitHarness());
+
+    await flushPromises();
+
+    expect(native.watchDirectory).toHaveBeenCalledWith('/Users/test/.agents/skills');
+    expect(native.watchDirectory).toHaveBeenCalledWith('/Users/test/.tibis/widgets');
+    wrapper.unmount();
+
+    await flushPromises();
+
+    expect(native.unwatchDirectory).toHaveBeenCalledWith('/Users/test/.agents/skills');
+    expect(native.unwatchDirectory).toHaveBeenCalledWith('/Users/test/.tibis/widgets');
   });
 
   it('ignores Skill changes from temporary installer directories', async (): Promise<void> => {

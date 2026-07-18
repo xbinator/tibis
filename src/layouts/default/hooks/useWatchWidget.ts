@@ -18,7 +18,6 @@ export function useWatchWidget(): void {
   useWatchResource<WidgetDefinition>({
     rootDir: '.tibis',
     subDir: 'widgets',
-    watchGlob: '**/widget.json',
     logLabel: 'Widget',
     onBeforeInitialize: (): void => widgetStore.beforeInitialize(),
     onAfterInitialize: (): void => widgetStore.afterInitialize(),
