@@ -277,6 +277,16 @@ class FileWatchService {
       this.notifyWindowsSkill('unlink', removedPath);
     });
 
+    watcher.on('addDir', (addedDir: string) => {
+      if (!isDirectoryWatchMatch(addedDir, globPattern, dirPath)) return;
+      this.notifyWindowsSkill('addDir', addedDir);
+    });
+
+    watcher.on('unlinkDir', (removedDir: string) => {
+      if (!isDirectoryWatchMatch(removedDir, globPattern, dirPath)) return;
+      this.notifyWindowsSkill('unlinkDir', removedDir);
+    });
+
     this.directoryWatchers.set(watcherKey, watcher);
   }
 
@@ -295,12 +305,12 @@ class FileWatchService {
   }
 
   /**
-   * 向所有窗口广播 skill 目录变化事件。
+   * 向所有窗口广播资源目录变化事件。
    * @param type - 事件类型
    * @param filePath - 文件路径
    * @param content - 文件内容（仅 change/add 事件携带）
    */
-  private notifyWindowsSkill(type: 'change' | 'add' | 'unlink', filePath: string, content?: string): void {
+  private notifyWindowsSkill(type: 'change' | 'add' | 'unlink' | 'addDir' | 'unlinkDir', filePath: string, content?: string): void {
     BrowserWindow.getAllWindows().forEach((win) => {
       win.webContents.send('skill:changed', { type, filePath, content });
     });

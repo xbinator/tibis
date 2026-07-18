@@ -24,6 +24,8 @@ export interface WatchResourceConfig<TDefinition> {
   onBeforeInitialize: () => void;
   /** 执行初始化（扫描 Store），由 hook 在 onMounted 异步调用。 */
   onInitialize: (homeDir: string, api: Native) => Promise<void>;
+  /** 资源一级目录新增或删除后触发，用于重新同步磁盘状态。 */
+  onDirectoryChange: () => Promise<void>;
   /** 初始化完成之后触发（释放屏障），初始化成功或失败时各调用一次。 */
   onAfterInitialize: () => void;
   /** 处理变化事件（add / change / unlink），由 hook 在收到变更通知时调用。 */
@@ -70,6 +72,33 @@ function isHiddenPath(normalizedPath: string, rootDir: string, subDir: string): 
 }
 
 /**
+ * 判断事件类型是否为资源一级目录变化。
+ * @param type - 文件监听事件类型
+ * @returns 是否为目录增删事件
+ */
+function isDirectoryChangeEvent(type: string): type is 'addDir' | 'unlinkDir' {
+  return type === 'addDir' || type === 'unlinkDir';
+}
+
+/**
+ * 判断路径是否为资源根目录下的直接子目录。
+ * @param normalizedPath - 已使用 / 统一分隔符的文件路径
+ * @param rootDir - 根目录名（带 `.`）
+ * @param subDir - 子目录名
+ * @returns 直接子目录返回 true
+ */
+function isDirectResourceDir(normalizedPath: string, rootDir: string, subDir: string): boolean {
+  const segments = normalizedPath.split('/').filter(Boolean);
+  const rootIndex = segments.lastIndexOf(rootDir);
+  if (rootIndex === -1 || segments[rootIndex + 1] !== subDir) {
+    return false;
+  }
+
+  const resourceDirName = segments[rootIndex + 2];
+  return segments.length === rootIndex + 3 && !!resourceDirName && !resourceDirName.startsWith('.');
+}
+
+/**
  * 启动资源监听：订阅变更事件、注册目录观察、调用 Store 初始化。
  * 任一步骤失败直接抛错，由调用方统一处理屏障释放。
  * @param config - 通用配置
@@ -82,6 +111,13 @@ async function startWatching<TDefinition>(config: WatchResourceConfig<TDefinitio
     const normalizedPath = data.filePath.replace(/\\/g, '/');
     // 过滤掉安装器等写入的隐藏临时目录，避免在 unlink 时找不到 Store 中已删除的条目
     if (isHiddenPath(normalizedPath, config.rootDir, config.subDir)) {
+      return;
+    }
+    if (isDirectoryChangeEvent(data.type)) {
+      if (!isDirectResourceDir(normalizedPath, config.rootDir, config.subDir)) {
+        return;
+      }
+      asyncTo(config.onDirectoryChange()).catch(() => undefined);
       return;
     }
     if (!config.onIsTargetFile(normalizedPath)) {

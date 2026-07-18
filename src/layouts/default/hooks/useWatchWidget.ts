@@ -22,6 +22,7 @@ export function useWatchWidget(): void {
     onBeforeInitialize: (): void => widgetStore.beforeInitialize(),
     onAfterInitialize: (): void => widgetStore.afterInitialize(),
     onInitialize: (homeDir: string): Promise<void> => widgetStore.initialize(homeDir, native),
+    onDirectoryChange: (): Promise<void> => widgetStore.syncFromDisk(),
     onChange: (type, definition): void => widgetStore.handleWidgetChange(type, definition),
     onParseFile: (content: string, filePath: string): WidgetDefinition => parseWidgetJson(content, filePath),
     // 走一遍 parser，从路径推断 id，便于 Store 在 unlink 路径命中失败时仍可按 id 兜底

@@ -27,6 +27,8 @@ const initOrder = vi.hoisted((): string[] => []);
 const skillChangedCallbacks = vi.hoisted((): SkillChangedCallback[] => []);
 const handleSkillChangeMock = vi.hoisted(() => vi.fn());
 const handleWidgetChangeMock = vi.hoisted(() => vi.fn());
+const syncSkillFromDiskMock = vi.hoisted(() => vi.fn(async (): Promise<void> => undefined));
+const syncWidgetFromDiskMock = vi.hoisted(() => vi.fn(async (): Promise<void> => undefined));
 
 vi.mock('@/shared/platform', () => ({
   native: {
@@ -62,7 +64,8 @@ vi.mock('@/stores/ai/skill', () => ({
     initialize: vi.fn(async (): Promise<void> => {
       initOrder.push('skill-init');
     }),
-    handleSkillChange: handleSkillChangeMock
+    handleSkillChange: handleSkillChangeMock,
+    syncFromDisk: syncSkillFromDiskMock
   }))
 }));
 
@@ -75,7 +78,8 @@ vi.mock('@/stores/ai/widget', () => ({
     initialize: vi.fn(async (): Promise<void> => {
       initOrder.push('widget-init');
     }),
-    handleWidgetChange: handleWidgetChangeMock
+    handleWidgetChange: handleWidgetChangeMock,
+    syncFromDisk: syncWidgetFromDiskMock
   }))
 }));
 
@@ -101,6 +105,8 @@ describe('AI resource initialization', (): void => {
     skillChangedCallbacks.splice(0);
     handleSkillChangeMock.mockClear();
     handleWidgetChangeMock.mockClear();
+    syncSkillFromDiskMock.mockClear();
+    syncWidgetFromDiskMock.mockClear();
     vi.mocked(native.watchDirectory).mockClear();
     vi.mocked(native.unwatchDirectory).mockClear();
   });
@@ -133,6 +139,35 @@ describe('AI resource initialization', (): void => {
 
     expect(native.unwatchDirectory).toHaveBeenCalledWith('/Users/test/.agents/skills');
     expect(native.unwatchDirectory).toHaveBeenCalledWith('/Users/test/.tibis/widgets');
+  });
+
+  it('rescans resources when direct child directories change', async (): Promise<void> => {
+    const wrapper = mount(createResourceInitHarness());
+
+    await flushPromises();
+
+    const skillCallback = skillChangedCallbacks[0];
+    const widgetCallback = skillChangedCallbacks[1];
+    if (!skillCallback || !widgetCallback) {
+      throw new Error('Resource changed callbacks were not registered');
+    }
+
+    skillCallback({
+      type: 'unlinkDir',
+      filePath: '/Users/test/.agents/skills/demo'
+    });
+    widgetCallback({
+      type: 'addDir',
+      filePath: '/Users/test/.tibis/widgets/weather'
+    });
+
+    await flushPromises();
+
+    expect(syncSkillFromDiskMock).toHaveBeenCalledTimes(1);
+    expect(syncWidgetFromDiskMock).toHaveBeenCalledTimes(1);
+    expect(handleSkillChangeMock).not.toHaveBeenCalled();
+    expect(handleWidgetChangeMock).not.toHaveBeenCalled();
+    wrapper.unmount();
   });
 
   it('ignores Skill changes from temporary installer directories', async (): Promise<void> => {

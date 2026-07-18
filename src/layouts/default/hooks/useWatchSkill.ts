@@ -41,6 +41,7 @@ export function useWatchSkill(): void {
     onBeforeInitialize: (): void => skillStore.beforeInitialize(),
     onAfterInitialize: (): void => skillStore.afterInitialize(),
     onInitialize: (homeDir: string): Promise<void> => skillStore.initialize(homeDir, native),
+    onDirectoryChange: (): Promise<void> => skillStore.syncFromDisk(),
     onChange: (type, definition): void => skillStore.handleSkillChange(type, definition),
     onParseFile: (content: string, filePath: string): SkillDefinition => parseSkillMarkdown(content, filePath, { source: 'global' }),
     onCreateUnlinkPayload: createUnlinkPayload,
