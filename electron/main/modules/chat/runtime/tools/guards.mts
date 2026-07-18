@@ -3,6 +3,7 @@
  * @description ChatRuntime 主进程工具 bridge payload 类型守卫。
  */
 import type {
+  RuntimeDocumentSelection,
   RuntimeDocumentSnapshot,
   RuntimeFileContentSnapshot,
   RuntimeOpenResourceResult,
@@ -27,6 +28,15 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * 判断 bridge payload 字段是否为文档选区。
+ * @param value - bridge payload 字段
+ * @returns 是否为文档选区
+ */
+function isRuntimeDocumentSelection(value: unknown): value is RuntimeDocumentSelection {
+  return isRecord(value) && typeof value.from === 'number' && typeof value.to === 'number' && typeof value.text === 'string';
+}
+
+/**
  * 判断 bridge payload 是否为文档快照。
  * @param value - bridge payload
  * @returns 是否为文档快照
@@ -38,7 +48,8 @@ export function isRuntimeDocumentSnapshot(value: unknown): value is RuntimeDocum
     typeof value.title === 'string' &&
     (typeof value.path === 'string' || value.path === null) &&
     (value.locator === undefined || typeof value.locator === 'string') &&
-    typeof value.content === 'string'
+    typeof value.content === 'string' &&
+    (value.selection === undefined || value.selection === null || isRuntimeDocumentSelection(value.selection))
   );
 }
 

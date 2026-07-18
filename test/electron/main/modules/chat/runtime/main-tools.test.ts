@@ -42,7 +42,8 @@ function createMainToolDependencies(bridgeRequests: MainToolBridgeRequest[]): Ma
           id: 'doc-1',
           title: 'Notes',
           path: null,
-          content: 'hello'
+          content: 'hello selected text',
+          selection: { from: 6, to: 19, text: 'selected text' }
         }
       };
     },
@@ -112,7 +113,13 @@ describe('createMainToolExecutor', (): void => {
 
     expect(result.status).toBe('success');
     expect(result.toolName).toBe('read_current_document');
-    expect(result.data).toMatchObject({ id: 'doc-1', artifactId: 'doc-1', title: 'Notes', content: 'hello' });
+    expect(result.data).toMatchObject({
+      id: 'doc-1',
+      artifactId: 'doc-1',
+      title: 'Notes',
+      content: 'hello selected text',
+      selected: { content: 'selected text' }
+    });
     expect(bridgeRequests).toEqual([
       {
         runtimeId: 'runtime-1',
@@ -431,10 +438,12 @@ describe('createMainToolExecutor', (): void => {
       const homeRoot = path.join(tempRoot, 'home');
       const trustedFiles = [path.join(homeRoot, '.agents', 'skills', 'demo', 'SKILL.md'), path.join(homeRoot, '.tibis', 'runtime', 'config.md')];
       await fs.mkdir(workspaceRoot);
-      for (const trustedFile of trustedFiles) {
-        await fs.mkdir(path.dirname(trustedFile), { recursive: true });
-        await fs.writeFile(trustedFile, `trusted:${path.basename(trustedFile)}`, 'utf8');
-      }
+      await Promise.all(
+        trustedFiles.map(async (trustedFile: string): Promise<void> => {
+          await fs.mkdir(path.dirname(trustedFile), { recursive: true });
+          await fs.writeFile(trustedFile, `trusted:${path.basename(trustedFile)}`, 'utf8');
+        })
+      );
       process.env.HOME = homeRoot;
       process.env.USERPROFILE = homeRoot;
 
@@ -447,21 +456,23 @@ describe('createMainToolExecutor', (): void => {
         requestConfirmation
       });
 
-      for (const trustedFile of trustedFiles) {
-        const realTrustedFile = await fs.realpath(trustedFile);
-        const result = await executeMainTool({
-          runtime: { ...runtime, workspaceRoot },
-          toolCallId: `tool-call-trusted-${path.basename(trustedFile)}`,
-          toolName: 'read_file',
-          input: { path: trustedFile }
-        });
+      await Promise.all(
+        trustedFiles.map(async (trustedFile: string): Promise<void> => {
+          const realTrustedFile = await fs.realpath(trustedFile);
+          const result = await executeMainTool({
+            runtime: { ...runtime, workspaceRoot },
+            toolCallId: `tool-call-trusted-${path.basename(trustedFile)}`,
+            toolName: 'read_file',
+            input: { path: trustedFile }
+          });
 
-        expect(result).toMatchObject({
-          toolName: 'read_file',
-          status: 'success',
-          data: { path: realTrustedFile }
-        });
-      }
+          expect(result).toMatchObject({
+            toolName: 'read_file',
+            status: 'success',
+            data: { path: realTrustedFile }
+          });
+        })
+      );
       expect(requestConfirmation).not.toHaveBeenCalled();
     } finally {
       if (originalHome === undefined) delete process.env.HOME;

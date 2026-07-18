@@ -47,6 +47,16 @@ export interface MainToolsDependencies {
 /** 主进程工具执行器。 */
 export type MainToolExecutor = (input: ChatRuntimeMainToolExecutionInput) => Promise<AIToolExecutionResult>;
 
+/** Runtime 文档选区。 */
+export interface RuntimeDocumentSelection {
+  /** 选区起始位置。 */
+  from: number;
+  /** 选区结束位置。 */
+  to: number;
+  /** 选中的文本内容。 */
+  text: string;
+}
+
 /** Runtime 文档快照。 */
 export interface RuntimeDocumentSnapshot {
   /** 文档 ID。 */
@@ -59,6 +69,8 @@ export interface RuntimeDocumentSnapshot {
   locator?: string;
   /** 文档内容。 */
   content: string;
+  /** 当前编辑器选区。 */
+  selection?: RuntimeDocumentSelection | null;
 }
 
 /** Runtime 网页快照。 */

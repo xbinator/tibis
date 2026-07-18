@@ -75,7 +75,8 @@ function createReadCurrentDocumentSuccessResult(snapshot: RuntimeDocumentSnapsho
     artifactId: snapshot.id,
     title: snapshot.title,
     path: snapshot.path ?? snapshot.locator ?? createRuntimeUnsavedPath(snapshot),
-    content: snapshot.content
+    content: snapshot.content,
+    selected: { content: snapshot.selection?.text ?? '' }
   });
 }
 

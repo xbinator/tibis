@@ -17,7 +17,7 @@ export const readCurrentDocumentToolRegistryEntry = {
   exposure: 'default-readonly',
   definition: {
     name: READ_CURRENT_DOCUMENT_TOOL_NAME,
-    description: '读取当前编辑器文档的标题、路径和 Markdown 内容。',
+    description: '读取当前编辑器文档的标题、路径、Markdown 内容和用户选中的内容。',
     source: 'builtin',
     riskLevel: 'read',
     parameters: { type: 'object', properties: {}, additionalProperties: false }
