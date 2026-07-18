@@ -33,6 +33,8 @@ export const useWidgetStore = defineStore('widget', () => {
   const widgets = ref<WidgetDefinition[]>([]);
   /** 是否已完成初始化扫描。 */
   const initialized = ref(false);
+  /** 是否需要在聊天发送前重新扫描磁盘。 */
+  const dirty = ref(false);
   /** 初始化等待屏障，用于覆盖布局挂载到真正开始扫描之间的窗口。 */
   let initPromise: Promise<void> | null = null;
   /** 完成初始化等待屏障的回调。 */
@@ -216,6 +218,7 @@ export const useWidgetStore = defineStore('widget', () => {
     }
 
     initialized.value = true;
+    dirty.value = false;
   }
 
   /**
@@ -291,6 +294,22 @@ export const useWidgetStore = defineStore('widget', () => {
   }
 
   /**
+   * 标记 Widget 磁盘资源需要重新同步。
+   */
+  function markDirty(): void {
+    dirty.value = true;
+  }
+
+  /**
+   * 仅在资源被标脏时重新同步 Widget 目录，供聊天发送前轻量检查使用。
+   */
+  async function syncDirtyFromDisk(): Promise<void> {
+    if (!dirty.value) return;
+
+    await syncFromDisk();
+  }
+
+  /**
    * 执行工具前从磁盘读取最新启用 Widget。
    * @param id - Widget ID
    * @returns 最新 Widget 定义，不存在或已禁用时返回 undefined
@@ -363,6 +382,7 @@ export const useWidgetStore = defineStore('widget', () => {
   return {
     widgets,
     initialized,
+    dirty,
     scanConfig,
     getWidgetById,
     getEnabledWidgets,
@@ -372,7 +392,9 @@ export const useWidgetStore = defineStore('widget', () => {
     beforeInitialize,
     afterInitialize,
     initialize,
+    markDirty,
     syncFromDisk,
+    syncDirtyFromDisk,
     resolveLatestEnabledWidget,
     rescan,
     waitForInit

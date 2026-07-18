@@ -33,6 +33,8 @@ export const useSkillStore = defineStore('skill', () => {
 
   /** 是否已完成初始化扫描。 */
   const initialized = ref(false);
+  /** 是否需要在聊天发送前重新扫描磁盘。 */
+  const dirty = ref(false);
 
   /** 初始化等待屏障，用于覆盖布局挂载到真正开始扫描之间的窗口。 */
   let initPromise: Promise<void> | null = null;
@@ -205,6 +207,7 @@ export const useSkillStore = defineStore('skill', () => {
     }
 
     initialized.value = true;
+    dirty.value = false;
   }
 
   /**
@@ -294,6 +297,22 @@ export const useSkillStore = defineStore('skill', () => {
   }
 
   /**
+   * 标记 Skill 磁盘资源需要重新同步。
+   */
+  function markDirty(): void {
+    dirty.value = true;
+  }
+
+  /**
+   * 仅在资源被标脏时重新同步 Skill 目录，供聊天发送前轻量检查使用。
+   */
+  async function syncDirtyFromDisk(): Promise<void> {
+    if (!dirty.value) return;
+
+    await syncFromDisk();
+  }
+
+  /**
    * 从磁盘读取最新 Skill，不限制启用状态。
    * @param name - Skill 名称
    * @returns 无解析错误的最新 Skill，不存在时返回 undefined
@@ -376,6 +395,7 @@ export const useSkillStore = defineStore('skill', () => {
   return {
     skills,
     initialized,
+    dirty,
     scanConfig,
     parseErrors,
     getSkillByName,
@@ -385,7 +405,9 @@ export const useSkillStore = defineStore('skill', () => {
     beforeInitialize,
     afterInitialize,
     initialize,
+    markDirty,
     syncFromDisk,
+    syncDirtyFromDisk,
     resolveLatestSkill,
     resolveLatestEnabledSkill,
     rescan,

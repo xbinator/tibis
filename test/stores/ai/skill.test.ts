@@ -88,6 +88,23 @@ describe('skill store disk freshness', (): void => {
     expect(store.getSkillByName('weather')?.enabled).toBe(false);
   });
 
+  it('only synchronizes dirty Skill resources for chat preflight', async (): Promise<void> => {
+    const api = createScannerAPI(createSkillMarkdown('old instructions'));
+    const store = useSkillStore();
+    await store.initialize('/Users/test', api);
+    api.readFile.mockClear();
+    api.readFile.mockResolvedValue({ content: createSkillMarkdown('new instructions') });
+
+    await store.syncDirtyFromDisk();
+    expect(api.readFile).not.toHaveBeenCalled();
+
+    store.markDirty();
+    await store.syncDirtyFromDisk();
+
+    expect(api.readFile).toHaveBeenCalledTimes(1);
+    expect(store.getSkillByName('weather')?.content).toBe('new instructions');
+  });
+
   it('resolves the latest enabled Skill directly from disk', async (): Promise<void> => {
     const api = createScannerAPI(createSkillMarkdown('old instructions'));
     const store = useSkillStore();

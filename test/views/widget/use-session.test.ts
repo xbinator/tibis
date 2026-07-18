@@ -17,6 +17,7 @@ import { useSession } from '@/views/widget/hooks/useSession';
 const getFileByIdMock = vi.hoisted(() => vi.fn());
 const getWidgetByIdMock = vi.hoisted(() => vi.fn());
 const waitForInitMock = vi.hoisted(() => vi.fn());
+const markWidgetDirtyMock = vi.hoisted(() => vi.fn());
 const readFileMock = vi.hoisted(() => vi.fn());
 const getPathStatusMock = vi.hoisted(() => vi.fn());
 const writeFileMock = vi.hoisted(() => vi.fn());
@@ -90,7 +91,8 @@ vi.mock('@/hooks/useFileController', async () => {
 vi.mock('@/stores/ai/widget', () => ({
   useWidgetStore: () => ({
     getWidgetById: getWidgetByIdMock,
-    waitForInit: waitForInitMock
+    waitForInit: waitForInitMock,
+    markDirty: markWidgetDirtyMock
   })
 }));
 
@@ -168,6 +170,7 @@ describe('Widget useSession adapter', (): void => {
     getFileByIdMock.mockReset();
     getWidgetByIdMock.mockReset();
     waitForInitMock.mockReset().mockResolvedValue(undefined);
+    markWidgetDirtyMock.mockReset();
     readFileMock.mockReset();
     getPathStatusMock.mockReset().mockResolvedValue({ exists: true, isFile: true, isDirectory: false });
     writeFileMock.mockReset().mockResolvedValue(undefined);
@@ -189,11 +192,10 @@ describe('Widget useSession adapter', (): void => {
     controllerHarness.onDispose.mockReset().mockResolvedValue(undefined);
   });
 
-  it('loads installed path, recent draft, and disk content as controller candidates', async (): Promise<void> => {
+  it('loads recent path, recent draft, and disk content as controller candidates', async (): Promise<void> => {
     const draftContent = JSON.stringify({ ...createDefaultWidgetData('weather'), name: '草稿天气' }, null, 2);
     const diskContent = JSON.stringify({ ...createDefaultWidgetData('weather'), name: '磁盘天气' }, null, 2);
     getFileByIdMock.mockResolvedValue(createStoredWidget(draftContent));
-    getWidgetByIdMock.mockReturnValue({ id: 'weather', filePath: '/installed/weather/widget.json' });
     readFileMock.mockResolvedValue({ name: 'widget', ext: 'json', content: diskContent });
     mountSession();
     await flushPromises();
@@ -203,8 +205,8 @@ describe('Widget useSession adapter', (): void => {
 
     const candidates = await options.events.onLoad({ fileId: 'widget-weather', sessionVersion: 1 });
 
-    expect(candidates.draft?.fileState).toEqual(expect.objectContaining({ path: '/installed/weather/widget.json', content: draftContent }));
-    expect(candidates.disk?.fileState).toEqual(expect.objectContaining({ path: '/installed/weather/widget.json', content: diskContent }));
+    expect(candidates.draft?.fileState).toEqual(expect.objectContaining({ path: '/old/widget.json', content: draftContent }));
+    expect(candidates.disk?.fileState).toEqual(expect.objectContaining({ path: '/old/widget.json', content: diskContent }));
   });
 
   it('parses, serializes, and builds only Widget records through events', async (): Promise<void> => {
@@ -273,6 +275,19 @@ describe('Widget useSession adapter', (): void => {
     expect(savedPath).toBe('/tmp/widget-copy.json');
     expect(renameResult).toBeNull();
     expect(alertMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks Widget resources dirty after writing the current widget file', async (): Promise<void> => {
+    mountSession();
+    await flushPromises();
+    const { options } = controllerHarness;
+    expect(options).not.toBeNull();
+    if (!options) return;
+
+    await options.events.onWriteFile({ path: '/installed/weather/widget.json', content: '{"name":"天气"}' });
+
+    expect(writeFileMock).toHaveBeenCalledWith('/installed/weather/widget.json', '{"name":"天气"}');
+    expect(markWidgetDirtyMock).toHaveBeenCalledTimes(1);
   });
 
   it('removes the Widget tab and leaves the disposed route after deletion', async (): Promise<void> => {

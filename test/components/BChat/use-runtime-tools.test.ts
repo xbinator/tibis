@@ -65,13 +65,15 @@ const storeMockState = vi.hoisted(() => ({
     resolveLatestSkill: vi.fn(),
     resolveLatestEnabledSkill: vi.fn(),
     waitForInit: vi.fn(() => Promise.resolve()),
-    syncFromDisk: vi.fn(() => Promise.resolve())
+    syncFromDisk: vi.fn(() => Promise.resolve()),
+    syncDirtyFromDisk: vi.fn(() => Promise.resolve())
   },
   widgetStore: {
     initialized: false,
     getEnabledWidgets: vi.fn<() => unknown[]>(() => []),
     waitForInit: vi.fn(() => Promise.resolve()),
-    syncFromDisk: vi.fn(() => Promise.resolve())
+    syncFromDisk: vi.fn(() => Promise.resolve()),
+    syncDirtyFromDisk: vi.fn(() => Promise.resolve())
   },
   toolSettingsStore: {
     hasEnabledMcpServers: false
@@ -245,8 +247,12 @@ describe('useRuntimeTools', () => {
     storeMockState.skillStore.getEnabledSkills.mockReturnValue([]);
     storeMockState.skillStore.resolveLatestSkill.mockReset();
     storeMockState.skillStore.resolveLatestEnabledSkill.mockReset();
+    storeMockState.skillStore.syncDirtyFromDisk.mockClear();
+    storeMockState.skillStore.syncFromDisk.mockClear();
     storeMockState.widgetStore.initialized = false;
     storeMockState.widgetStore.getEnabledWidgets.mockReturnValue([]);
+    storeMockState.widgetStore.syncDirtyFromDisk.mockClear();
+    storeMockState.widgetStore.syncFromDisk.mockClear();
   });
 
   it('only exposes WebView tools while a WebView context is active', (): void => {
@@ -282,15 +288,17 @@ describe('useRuntimeTools', () => {
     expect(readActiveToolNames(runtimeTools.getActiveTools)).toContain('open_widget');
   });
 
-  it('synchronizes Skill and Widget stores before request tool discovery', async (): Promise<void> => {
+  it('synchronizes dirty Skill and Widget stores before request tool discovery', async (): Promise<void> => {
     const runtimeTools = createRuntimeTools();
 
     await runtimeTools.syncAIResources();
 
     expect(storeMockState.skillStore.waitForInit).toHaveBeenCalledTimes(1);
     expect(storeMockState.widgetStore.waitForInit).toHaveBeenCalledTimes(1);
-    expect(storeMockState.skillStore.syncFromDisk).toHaveBeenCalledTimes(1);
-    expect(storeMockState.widgetStore.syncFromDisk).toHaveBeenCalledTimes(1);
+    expect(storeMockState.skillStore.syncDirtyFromDisk).toHaveBeenCalledTimes(1);
+    expect(storeMockState.widgetStore.syncDirtyFromDisk).toHaveBeenCalledTimes(1);
+    expect(storeMockState.skillStore.syncFromDisk).not.toHaveBeenCalled();
+    expect(storeMockState.widgetStore.syncFromDisk).not.toHaveBeenCalled();
   });
 
   it('deduplicates explicitly selected Skills and allows disabled definitions', async (): Promise<void> => {

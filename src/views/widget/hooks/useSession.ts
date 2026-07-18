@@ -29,6 +29,7 @@ import type {
 import { native } from '@/shared/platform';
 import type { FileState, ReadFileResult } from '@/shared/platform/native/types';
 import type { StoredDocumentRecord, StoredWidget } from '@/shared/storage/files/types';
+import { useWidgetStore } from '@/stores/ai/widget';
 import { useRecentStore } from '@/stores/workspace/recent';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import { asyncTo } from '@/utils/asyncTo';
@@ -164,6 +165,7 @@ export function useSession(): WidgetSessionReturn {
   const isActive = ref<boolean>(true);
   const recentStore = useRecentStore();
   const tabsStore = useTabsStore();
+  const widgetStore = useWidgetStore();
   const { clipboard } = useClipboard();
 
   /**
@@ -264,6 +266,7 @@ export function useSession(): WidgetSessionReturn {
    */
   async function onWriteWidget(context: FileWriteContext): Promise<void> {
     await native.writeFile(context.path, context.content);
+    widgetStore.markDirty();
   }
 
   /**

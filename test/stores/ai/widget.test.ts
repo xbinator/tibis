@@ -89,6 +89,37 @@ describe('widget store', (): void => {
     expect(nextStore.getWidgetById('weather')?.enabled).toBe(false);
   });
 
+  it('only synchronizes dirty Widget resources for chat preflight', async (): Promise<void> => {
+    const api = createScannerAPI();
+    api.readWorkspaceDirectory.mockResolvedValue({
+      entries: [{ name: 'weather', type: 'directory' }]
+    });
+    api.readFile.mockResolvedValue({
+      content: JSON.stringify({
+        name: '天气',
+        description: '旧描述'
+      })
+    });
+    const store = useWidgetStore();
+    await store.initialize('/Users/test', api);
+    api.readFile.mockClear();
+    api.readFile.mockResolvedValue({
+      content: JSON.stringify({
+        name: '天气',
+        description: '新描述'
+      })
+    });
+
+    await store.syncDirtyFromDisk();
+    expect(api.readFile).not.toHaveBeenCalled();
+
+    store.markDirty();
+    await store.syncDirtyFromDisk();
+
+    expect(api.readFile).toHaveBeenCalledTimes(1);
+    expect(store.getWidgetById('weather')?.description).toBe('新描述');
+  });
+
   it('updates widgets from watched widget.json changes', (): void => {
     const store = useWidgetStore();
     const filePath = posix.join('/Users/test', '.tibis', 'widgets', 'weather', 'widget.json');

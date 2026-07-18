@@ -223,7 +223,7 @@ export function useRuntimeTools(options: UseRuntimeToolsOptions): UseRuntimeTool
    */
   async function syncAIResources(): Promise<void> {
     await Promise.allSettled([skillStore.waitForInit(), widgetStore.waitForInit()]);
-    const results = await Promise.allSettled([skillStore.syncFromDisk(), widgetStore.syncFromDisk()]);
+    const results = await Promise.allSettled([skillStore.syncDirtyFromDisk(), widgetStore.syncDirtyFromDisk()]);
 
     for (const result of results) {
       if (result.status === 'rejected') {
