@@ -209,6 +209,36 @@ describe('Widget useSession adapter', (): void => {
     expect(candidates.disk?.fileState).toEqual(expect.objectContaining({ path: '/old/widget.json', content: diskContent }));
   });
 
+  it('loads installed widget path when recent record is missing', async (): Promise<void> => {
+    const diskContent = JSON.stringify({ ...createDefaultWidgetData('weather'), name: '磁盘天气' }, null, 2);
+    getFileByIdMock.mockResolvedValue(undefined);
+    getWidgetByIdMock.mockReturnValue({
+      id: 'weather',
+      name: '天气',
+      description: '查询指定城市天气',
+      data: createDefaultWidgetData('weather'),
+      filePath: '/installed/weather/widget.json',
+      dirPath: '/installed/weather',
+      enabled: true,
+      parsedAt: 1
+    });
+    readFileMock.mockResolvedValue({ name: 'widget', ext: 'json', content: diskContent });
+    mountSession();
+    await flushPromises();
+    const { options } = controllerHarness;
+    expect(options).not.toBeNull();
+    if (!options) return;
+
+    const candidates = await options.events.onLoad({ fileId: 'widget-weather', sessionVersion: 1 });
+
+    expect(waitForInitMock).toHaveBeenCalledTimes(1);
+    expect(getWidgetByIdMock).toHaveBeenCalledWith('weather');
+    expect(readFileMock).toHaveBeenCalledWith('/installed/weather/widget.json');
+    expect(candidates.draft).toBeNull();
+    expect(candidates.disk?.fileState).toEqual(expect.objectContaining({ path: '/installed/weather/widget.json', content: diskContent }));
+    expect(candidates.error).toBeNull();
+  });
+
   it('parses, serializes, and builds only Widget records through events', async (): Promise<void> => {
     mountSession();
     await flushPromises();
@@ -231,6 +261,24 @@ describe('Widget useSession adapter', (): void => {
     const [invalidError] = options.events.onParse({ content: '{invalid', path: '/tmp/widget.json' });
     expect(invalidError).toBeInstanceOf(Error);
     expect(invalidError?.message).toContain('Widget JSON');
+  });
+
+  it('uses widget directory id as the tab title for installed widget files', async (): Promise<void> => {
+    const wrapper = mountSession();
+    await flushPromises();
+    const exposed = wrapper.vm as unknown as SessionExpose;
+    expect(controllerHarness.fileState).not.toBeNull();
+    if (!controllerHarness.fileState) return;
+
+    controllerHarness.fileState.value = {
+      id: 'widget-weather',
+      path: '/installed/weather/widget.json',
+      name: 'widget',
+      ext: 'json',
+      content: JSON.stringify(createDefaultWidgetData('weather'), null, 2)
+    };
+
+    expect(exposed.session.currentTitle.value).toBe('weather');
   });
 
   it('classifies an absent installed Widget path as missing without discarding its draft', async (): Promise<void> => {

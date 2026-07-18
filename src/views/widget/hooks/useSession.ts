@@ -6,7 +6,7 @@ import type { ComputedRef, Ref } from 'vue';
 import { computed, getCurrentInstance, onActivated, onDeactivated, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
-import { parseWidgetJson } from '@/ai/widget/parser';
+import { parseWidgetJson, readWidgetIdFromFilePath } from '@/ai/widget/parser';
 import type { WidgetData } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { useClipboard } from '@/hooks/useClipboard';
@@ -155,6 +155,23 @@ function createDiskState(fileId: string, filePath: string, diskFile: ReadFileRes
 }
 
 /**
+ * 解析 Widget 标签栏展示标题，已安装 widget.json 固定展示目录 ID。
+ * @param fileState - 当前 Widget 文件状态
+ * @returns 标签栏展示标题
+ */
+function resolveWidgetTitle(fileState: FileState): string {
+  if (fileState.path?.replace(/\\/g, '/').endsWith('/widget.json')) {
+    return readWidgetIdFromFilePath(fileState.path);
+  }
+
+  if (fileState.path === null && fileState.id.startsWith(WIDGET_FILE_PREFIX)) {
+    return resolveWidgetId(fileState.id);
+  }
+
+  return resolveFileTitle(fileState);
+}
+
+/**
  * 创建 Widget 页面专用文件会话。
  * @returns Widget 文件会话
  */
@@ -180,6 +197,17 @@ export function useSession(): WidgetSessionReturn {
   }
 
   /**
+   * 从已发现的 Widget 列表兜底解析磁盘配置路径。
+   * @param sessionFileId - Widget 文件会话 ID
+   * @returns 已安装 Widget 配置路径，未发现时返回 null
+   */
+  async function resolveInstalledPath(sessionFileId: string): Promise<string | null> {
+    await widgetStore.waitForInit();
+
+    return widgetStore.getWidgetById(resolveWidgetId(sessionFileId))?.filePath ?? null;
+  }
+
+  /**
    * 读取 Widget 最近草稿、已安装路径与磁盘内容。
    * @param context - 当前加载上下文
    * @returns Widget 草稿与磁盘候选内容
@@ -193,7 +221,7 @@ export function useSession(): WidgetSessionReturn {
 
     // 2. 解析候选路径：直接使用最近记录中保存的 path
     const stored = isStoredWidget(record) ? record : undefined;
-    const filePath = stored?.path ?? null;
+    const filePath = stored?.path ?? (await resolveInstalledPath(context.fileId));
 
     // 3. 用最近记录构造草稿状态
     const storedState = stored ? createStoredState(stored) : null;
@@ -351,7 +379,7 @@ export function useSession(): WidgetSessionReturn {
       onError: onReportFileError
     }
   });
-  const currentTitle = computed<string>((): string => resolveFileTitle(controller.fileState.value));
+  const currentTitle = computed<string>((): string => resolveWidgetTitle(controller.fileState.value));
   const routePath = computed<string>((): string => `/widget/${fileId.value}`);
 
   /**
