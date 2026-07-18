@@ -36,15 +36,7 @@ async function createDroppedDraft(file: File, ext: string): Promise<StoredFile> 
   const content = await file.text();
   const name = file.name.split('.').slice(0, -1).join('.') || file.name;
 
-  return recentStore.createAndOpen({
-    type: 'file',
-    id: nanoid(),
-    path: null,
-    name,
-    ext,
-    content,
-    savedContent: content
-  });
+  return recentStore.createAndOpen({ type: 'file', id: nanoid(), path: null, name, ext, content, savedContent: content });
 }
 
 /**
