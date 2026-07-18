@@ -169,10 +169,8 @@ export function useSession(fileId: Ref<string>): EditorSessionResult {
     }
 
     // 4. 用最近记录构造草稿（fileState + savedContent）
-    const draft = {
-      fileState: onCreateStoredState(record),
-      savedContent: record.savedContent ?? null
-    };
+    const draft = { fileState: onCreateStoredState(record), savedContent: record.savedContent ?? null };
+
     // 5. 记录里没有 path，表示文件从未落盘，仅返回草稿
     if (!record.path) {
       return { draft, disk: null, error: null };
@@ -375,12 +373,7 @@ export function useSession(fileId: Ref<string>): EditorSessionResult {
    */
   function onUpdateTab(): void {
     if (!fileId.value) return;
-    tabsStore.addTab({
-      id: fileId.value,
-      path: sessionPath.value,
-      title: currentTitle.value,
-      cacheKey: sessionCacheKey.value
-    });
+    tabsStore.addTab({ id: fileId.value, path: sessionPath.value, title: currentTitle.value, cacheKey: sessionCacheKey.value });
   }
 
   watch([fileId, () => fileState.value.name, () => fileState.value.ext], onUpdateTab, { immediate: true });
@@ -392,14 +385,7 @@ export function useSession(fileId: Ref<string>): EditorSessionResult {
     const nextId = nanoid();
     const nextName = fileState.value.name ? `${fileState.value.name}-副本` : '';
     const [addError] = await asyncTo(
-      recentStore.addFile({
-        ...fileState.value,
-        type: 'file' as const,
-        id: nextId,
-        name: nextName,
-        path: null,
-        savedContent: fileState.value.content
-      })
+      recentStore.addFile({ ...fileState.value, type: 'file' as const, id: nextId, name: nextName, path: null, savedContent: fileState.value.content })
     );
     if (addError) return;
     await asyncTo(router.push({ name: 'editor', params: { id: nextId } }));

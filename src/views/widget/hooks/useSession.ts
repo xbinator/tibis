@@ -29,7 +29,6 @@ import type {
 import { native } from '@/shared/platform';
 import type { FileState, ReadFileResult } from '@/shared/platform/native/types';
 import type { StoredDocumentRecord, StoredWidget } from '@/shared/storage/files/types';
-import { useWidgetStore } from '@/stores/ai/widget';
 import { useRecentStore } from '@/stores/workspace/recent';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import { asyncTo } from '@/utils/asyncTo';
@@ -165,7 +164,6 @@ export function useSession(): WidgetSessionReturn {
   const isActive = ref<boolean>(true);
   const recentStore = useRecentStore();
   const tabsStore = useTabsStore();
-  const widgetStore = useWidgetStore();
   const { clipboard } = useClipboard();
 
   /**
@@ -185,41 +183,27 @@ export function useSession(): WidgetSessionReturn {
    * @returns Widget 草稿与磁盘候选内容
    */
   async function onLoadWidget(context: FileLoadContext): Promise<FileLoadCandidates> {
-    // 1. 等待 Widget 状态初始化完成，避免在未 ready 时读取已安装路径
-    const [initError] = await asyncTo(widgetStore.waitForInit());
-    if (initError) {
-      return { draft: null, disk: null, error: initError };
-    }
-
-    // 2. 读取最近文件记录（含未保存草稿与最近已知 path）
+    // 1. 读取最近文件记录（含未保存草稿与最近已知 path）
     const [recordError, record] = await asyncTo(recentStore.getFileById(context.fileId));
     if (recordError) {
       return { draft: null, disk: null, error: recordError };
     }
 
-    // 3. 解析候选路径：已安装路径优先于草稿里残留的 path
+    // 2. 解析候选路径：直接使用最近记录中保存的 path
     const stored = isStoredWidget(record) ? record : undefined;
-    const installedPath = widgetStore.getWidgetById(resolveWidgetId(context.fileId))?.filePath ?? null;
-    const filePath = installedPath ?? stored?.path ?? null;
+    const filePath = stored?.path ?? null;
 
-    // 4. 用最近记录构造草稿状态；若存在已安装路径，按其重新解析文件名 / 扩展名
+    // 3. 用最近记录构造草稿状态
     const storedState = stored ? createStoredState(stored) : null;
-    if (storedState && installedPath) {
-      const { name, ext } = parseFileName(installedPath);
-      storedState.path = installedPath;
-      storedState.name = name || storedState.name;
-      storedState.ext = ext || storedState.ext;
-    }
-
     const draft = storedState ? { fileState: storedState, savedContent: stored?.savedContent ?? null } : null;
 
-    // 5. 没有可读路径时：有草稿就仅返回草稿，否则视为未找到已安装 Widget
+    // 4. 没有可读路径时：有草稿就仅返回草稿，否则视为未找到已安装 Widget
     if (!filePath) {
       const error = draft ? null : new Error('未找到已安装 Widget 的文件路径');
       return { draft, disk: null, error };
     }
 
-    // 6. 读取磁盘文件；失败时回查 path status，区分"不存在"与"读取失败"
+    // 5. 读取磁盘文件；失败时回查 path status，区分"不存在"与"读取失败"
     const [diskError, diskFile] = await asyncTo(native.readFile(filePath));
     if (diskError) {
       const [statusError, status] = await asyncTo(native.getPathStatus(filePath));
