@@ -162,7 +162,6 @@ describe('AI SDK 7 service integration', (): void => {
         stopWhen: { naturalTermination: true },
         timeout: {
           totalMs: 300_000,
-          stepMs: 120_000,
           chunkMs: 90_000,
           toolMs: 60_000
         }
@@ -192,7 +191,6 @@ describe('AI SDK 7 service integration', (): void => {
         instructions: expect.stringContaining('Do not emit tool-call markup'),
         timeout: {
           totalMs: 12_345,
-          stepMs: 120_000,
           chunkMs: 90_000,
           toolMs: 60_000
         }

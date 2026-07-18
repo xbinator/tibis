@@ -64,7 +64,6 @@ describe('tool loop policy', (): void => {
   it('uses the fixed internal timeout policy', (): void => {
     expect(AI_REQUEST_TIMEOUT).toEqual({
       totalMs: 300_000,
-      stepMs: 120_000,
       chunkMs: 90_000,
       toolMs: 60_000
     });
@@ -73,7 +72,6 @@ describe('tool loop policy', (): void => {
   it('caps every SDK call by the remaining task deadline', (): void => {
     expect(createRequestTimeout(12_345)).toEqual({
       totalMs: 12_345,
-      stepMs: 120_000,
       chunkMs: 90_000,
       toolMs: 60_000
     });

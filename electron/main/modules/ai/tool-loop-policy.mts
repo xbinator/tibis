@@ -19,7 +19,6 @@ const FINAL_ANSWER_INSTRUCTION = [
 /** 所有模型调用共享的固定超时策略。 */
 export const AI_REQUEST_TIMEOUT = {
   totalMs: 300_000,
-  stepMs: 120_000,
   chunkMs: 90_000,
   toolMs: 60_000
 } as const satisfies TimeoutConfiguration<ToolSet>;
