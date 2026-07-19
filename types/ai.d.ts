@@ -10,6 +10,12 @@ import type { JSONSchema7 } from 'json-schema';
  */
 export type AIProviderType = 'openai' | 'anthropic' | 'google' | 'deepseek' | 'alibaba' | 'volcengine' | 'moonshot' | 'glm' | 'minimax' | 'mimo';
 
+/**
+ * 模型类型。
+ * @description 限制模型可选的分类，覆盖设置页模型编辑弹窗与列表筛选所支持的取值。
+ */
+export type AIModelType = 'chat' | 'image' | 'video';
+
 /** AI 工具来源类型。 */
 export type AIToolSource = 'builtin' | 'custom' | 'mcp';
 
@@ -583,7 +589,7 @@ export interface AIProviderModel {
   /** 显示名称。 */
   name: string;
   /** 模型类型。 */
-  type: string;
+  type: AIModelType;
   /** 此模型是否启用。 */
   isEnabled: boolean;
   /** 此模型是否已被用户删除。 */

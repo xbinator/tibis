@@ -17,7 +17,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'qwen3.7-max',
         name: 'Qwen3.7 Max',
-        type: 'reasoning',
+        type: 'chat',
         isEnabled: true,
         contextWindow: 1000000,
         supportsTools: true,
@@ -66,7 +66,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'claude-fable-5',
         name: 'Claude Fable 5',
-        type: 'reasoning',
+        type: 'chat',
         isEnabled: true,
         contextWindow: 1000000,
         supportsTools: true,
@@ -79,7 +79,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'claude-opus-4-8',
         name: 'Claude Opus 4.8',
-        type: 'reasoning',
+        type: 'chat',
         isEnabled: true,
         contextWindow: 1000000,
         supportsTools: true,
@@ -92,7 +92,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'claude-sonnet-4-6',
         name: 'Claude Sonnet 4.6',
-        type: 'reasoning',
+        type: 'chat',
         isEnabled: true,
         contextWindow: 1000000,
         supportsTools: true,
@@ -129,7 +129,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'ernie-5.1',
         name: 'ERNIE 5.1',
-        type: 'reasoning',
+        type: 'chat',
         isEnabled: true,
         contextWindow: 128000,
         supportsTools: true,
@@ -153,7 +153,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'deepseek-v4-pro',
         name: 'DeepSeek V4 Pro',
-        type: 'reasoning',
+        type: 'chat',
         isEnabled: true,
         contextWindow: 1000000,
         supportsTools: true,
@@ -190,7 +190,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'gemini-3.5-pro',
         name: 'Gemini 3.5 Pro',
-        type: 'reasoning',
+        type: 'chat',
         isEnabled: true,
         contextWindow: 2000000,
         supportsTools: true,
@@ -239,7 +239,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'LongCat-2.0',
         name: 'LongCat-2.0',
-        type: 'reasoning',
+        type: 'chat',
         isEnabled: true,
         contextWindow: 1000000,
         supportsTools: true,
@@ -265,7 +265,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'LongCat-Flash-Thinking-2601',
         name: 'LongCat Flash Thinking',
-        type: 'reasoning',
+        type: 'chat',
         isEnabled: true,
         contextWindow: 128000,
         supportsTools: true,
@@ -289,7 +289,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'MiniMax-M3',
         name: 'MiniMax M3',
-        type: 'reasoning',
+        type: 'chat',
         isEnabled: true,
         contextWindow: 1000000,
         supportsTools: true,
@@ -313,7 +313,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'kimi-k2.6',
         name: 'Kimi K2.6',
-        type: 'reasoning',
+        type: 'chat',
         isEnabled: true,
         contextWindow: 256000,
         supportsTools: true,
@@ -347,7 +347,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'gpt-5.6-sol',
         name: 'GPT-5.6 Sol',
-        type: 'reasoning',
+        type: 'chat',
         isEnabled: true,
         contextWindow: 1050000,
         supportsTools: true,
@@ -360,7 +360,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'gpt-5.6-terra',
         name: 'GPT-5.6 Terra',
-        type: 'reasoning',
+        type: 'chat',
         isEnabled: true,
         contextWindow: 1050000,
         supportsTools: true,
@@ -386,7 +386,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'gpt-5.5-pro',
         name: 'GPT-5.5 Pro',
-        type: 'reasoning',
+        type: 'chat',
         isEnabled: true,
         contextWindow: 400000,
         supportsTools: true,
@@ -399,7 +399,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'gpt-5.5',
         name: 'GPT-5.5',
-        type: 'reasoning',
+        type: 'chat',
         isEnabled: true,
         contextWindow: 400000,
         supportsTools: true,
@@ -448,7 +448,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'sensenova-u1-fast',
         name: 'SenseNova U1 Fast',
-        type: 'reasoning',
+        type: 'chat',
         isEnabled: true,
         contextWindow: 256000,
         supportsTools: true,
@@ -485,7 +485,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'hy3',
         name: 'Hy3',
-        type: 'reasoning',
+        type: 'chat',
         isEnabled: true,
         contextWindow: 256000,
         supportsTools: true,
@@ -498,7 +498,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'hy3-preview',
         name: 'Hy3 Preview',
-        type: 'reasoning',
+        type: 'chat',
         isEnabled: true,
         contextWindow: 256000,
         supportsTools: true,
@@ -522,7 +522,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'doubao-seed-2.1-pro',
         name: 'Doubao Seed 2.1 Pro',
-        type: 'reasoning',
+        type: 'chat',
         isEnabled: true,
         contextWindow: 256000,
         supportsTools: true,
@@ -548,7 +548,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'doubao-seed-2.0-pro',
         name: 'Doubao Seed 2.0 Pro',
-        type: 'reasoning',
+        type: 'chat',
         isEnabled: true,
         contextWindow: 256000,
         supportsTools: true,
@@ -561,7 +561,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'doubao-seed-2.0-code',
         name: 'Doubao Seed 2.0 Code',
-        type: 'code',
+        type: 'chat',
         isEnabled: true,
         contextWindow: 256000,
         supportsTools: true,
@@ -585,7 +585,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'mimo-v2.5-pro',
         name: 'MiMo V2.5 Pro',
-        type: 'reasoning',
+        type: 'chat',
         isEnabled: true,
         contextWindow: 1000000,
         supportsTools: true,
@@ -598,7 +598,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'mimo-v2.5',
         name: 'MiMo V2.5',
-        type: 'reasoning',
+        type: 'chat',
         isEnabled: true,
         contextWindow: 1000000,
         supportsTools: true,
@@ -622,7 +622,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'glm-5.2',
         name: 'GLM-5.2',
-        type: 'reasoning',
+        type: 'chat',
         isEnabled: true,
         contextWindow: 1000000,
         supportsTools: true,
@@ -635,7 +635,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
       {
         id: 'glm-4.6v',
         name: 'GLM-4.6V',
-        type: 'vision',
+        type: 'image',
         isEnabled: true,
         contextWindow: 128000,
         supportsTools: true,

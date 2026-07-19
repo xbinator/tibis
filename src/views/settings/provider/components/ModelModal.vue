@@ -77,8 +77,7 @@ const providerStore = useProviderStore();
 const modelTypeOptions = [
   { label: '对话模型', value: 'chat' },
   { label: '图片模型', value: 'image' },
-  { label: '视频模型', value: 'video' },
-  { label: '多模态模型', value: 'multimodal' }
+  { label: '视频模型', value: 'video' }
 ];
 
 const contextWindowSteps = [0, 4000, 8000, 16000, 32000, 64000, 200000, 1000000, 2000000];
