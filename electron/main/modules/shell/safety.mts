@@ -29,6 +29,18 @@ const PERMISSION_MUTATION_PATTERN = /\bchmod\s+(?:-[a-zA-Z]*[Rr][a-zA-Z]*\s*)?(?
 const SHELL_PROFILE_PATTERN =
   /[>>>]\s*(?:~\/(?:\.bashrc|\.bash_profile|\.profile|\.zshrc|\.zshenv)|\$profile\b|\$PROFILE\b|\$HOME\/\.(?:bashrc|bash_profile|profile|zshrc|zshenv))/i;
 
+/** Bash 中会删除文件或空目录的命令。 */
+const BASH_DELETE_COMMANDS = new Set(['rm', 'rmdir', 'unlink']);
+
+/** PowerShell 中会删除文件或目录的命令与常见别名。 */
+const POWERSHELL_DELETE_COMMANDS = new Set(['remove-item', 'rm', 'rmdir', 'del', 'erase', 'ri']);
+
+/** PowerShell 中表示命令实参的节点类型。 */
+const POWERSHELL_ARGUMENT_NODE_TYPES = ['generic_token', 'string_literal', 'expandable_string_literal', 'verbatim_string_literal'] as const;
+
+/** Bash 中可绕过 alias/function 的命令包装器。 */
+const BASH_COMMAND_WRAPPERS = new Set(['command', 'builtin']);
+
 /**
  * 判断未知值是否为支持的 shell。
  * @param value - 待检查值
@@ -48,6 +60,72 @@ function isSupportedShell(value: unknown): value is ShellCommandShell {
  */
 function createFinding(severity: ShellCommandSafetyFinding['severity'], code: string, message: string, nodeText?: string): ShellCommandSafetyFinding {
   return { severity, code, message, ...(nodeText ? { nodeText } : {}) };
+}
+
+/**
+ * 判断是否已存在同编码发现项。
+ * @param findings - 发现项列表
+ * @param code - 发现项编码
+ * @returns 是否已存在
+ */
+function hasFindingCode(findings: ShellCommandSafetyFinding[], code: string): boolean {
+  return findings.some((finding) => finding.code === code);
+}
+
+/**
+ * 判断 Bash 命令名是否为删除操作。
+ * @param commandName - 命令名
+ * @returns 是否为删除命令
+ */
+function isBashDelete(commandName: string): boolean {
+  return BASH_DELETE_COMMANDS.has(commandName);
+}
+
+/**
+ * 判断 PowerShell 命令名是否为删除操作。
+ * @param commandName - 命令名
+ * @returns 是否为删除命令
+ */
+function isPowerShellDelete(commandName: string): boolean {
+  return POWERSHELL_DELETE_COMMANDS.has(commandName.toLowerCase());
+}
+
+/**
+ * 添加删除操作确认提示。
+ * @param findings - 待追加发现项列表
+ * @param nodeText - 触发规则的命令片段
+ */
+function appendDeleteWarning(findings: ShellCommandSafetyFinding[], nodeText: string): void {
+  findings.push(createFinding('warning', 'DELETE_OPERATION', '命令包含文件或目录删除操作，执行前需要用户确认。', nodeText.slice(0, 80)));
+}
+
+/**
+ * 追加删除操作阻塞项。
+ * @param findings - 待追加发现项列表
+ * @param code - 阻塞编码
+ * @param message - 阻塞说明
+ * @param nodeText - 触发规则的命令片段
+ */
+function appendDeleteBlocker(findings: ShellCommandSafetyFinding[], code: string, message: string, nodeText: string): void {
+  findings.push(createFinding('blocker', code, message, nodeText.slice(0, 80)));
+}
+
+/**
+ * 归一化可执行命令名，支持 /bin/rm 这类绝对命令路径。
+ * @param commandName - 原始命令名
+ * @returns 归一化后的命令名
+ */
+function normalizeCommandName(commandName: string): string {
+  return path.posix.basename(commandName.trim()).toLowerCase();
+}
+
+/**
+ * 判断路径文本是否包含通配删除模式。
+ * @param rawPath - 原始路径文本
+ * @returns 是否包含通配符
+ */
+function hasGlobPattern(rawPath: string): boolean {
+  return /[*?[\]]/.test(rawPath);
 }
 
 /**
@@ -82,7 +160,7 @@ function isPathInsideWorkspace(targetPath: string, workspaceRoot: string): boole
  * @param findings - 待追加发现项列表
  */
 function appendPolicyFindings(command: string, findings: ShellCommandSafetyFinding[]): void {
-  if (DESTRUCTIVE_DELETE_PATTERN.test(command)) {
+  if (DESTRUCTIVE_DELETE_PATTERN.test(command) && !hasFindingCode(findings, 'DESTRUCTIVE_DELETE')) {
     findings.push(createFinding('blocker', 'DESTRUCTIVE_DELETE', '命令包含递归强制删除操作，需要人工改写为更小范围的安全操作。', command));
   }
 
@@ -149,6 +227,145 @@ function resolveTargetPath(rawPath: string | null, cwd: string): string | null {
 }
 
 /**
+ * Bash 命令快照。
+ */
+interface BashCommandSnapshot {
+  /** 有效命令名。 */
+  name: string;
+  /** 有效参数节点。 */
+  args: import('web-tree-sitter').Node[];
+  /** 命令原文。 */
+  text: string;
+}
+
+/**
+ * 从 Bash command 节点中创建有效命令快照。
+ * @param commandNode - Bash command 节点
+ * @returns 命令快照，无法解析时返回 null
+ */
+function createBashCommand(commandNode: import('web-tree-sitter').Node): BashCommandSnapshot | null {
+  const nameNode = commandNode.child(0);
+  if (!nameNode || nameNode.type !== 'command_name') return null;
+
+  const args = commandNode.children.filter((child): boolean => child.id !== nameNode.id && child.type === 'word');
+  const rawName = normalizeCommandName(nameNode.text);
+  // Bash command 节点可能包含 alias/function 包装器，需解析到实际命令名
+  if (BASH_COMMAND_WRAPPERS.has(rawName) && args[0]) {
+    return { name: normalizeCommandName(args[0].text), args: args.slice(1), text: commandNode.text };
+  }
+  // Bash command 节点可能包含 alias/function 包装器，需解析到实际命令名
+  return { name: rawName, args, text: commandNode.text };
+}
+
+/**
+ * 读取 Bash 删除命令的目标参数，跳过选项参数。
+ * @param args - Bash 参数节点
+ * @returns 删除目标参数节点
+ */
+function getBashDeleteTargets(args: import('web-tree-sitter').Node[]): import('web-tree-sitter').Node[] {
+  const targets: import('web-tree-sitter').Node[] = [];
+  let parsingOptions = true;
+
+  for (const arg of args) {
+    const text = arg.text.trim();
+    if (parsingOptions && text === '--') {
+      parsingOptions = false;
+      continue;
+    }
+    if (parsingOptions && text.startsWith('-') && text !== '-') continue;
+
+    targets.push(arg);
+  }
+
+  return targets;
+}
+
+/**
+ * 判断 Bash rm 参数是否同时包含递归和强制删除。
+ * @param args - Bash 参数节点
+ * @returns 是否为递归强制删除
+ */
+function hasBashRecursiveForce(args: import('web-tree-sitter').Node[]): boolean {
+  let recursive = false;
+  let force = false;
+
+  for (const arg of args) {
+    const text = arg.text.trim();
+    if (text === '--') break;
+    if (!text.startsWith('-') || text === '-') continue;
+
+    if (text === '--recursive') recursive = true;
+    if (text === '--force') force = true;
+    if (!text.startsWith('--')) {
+      const normalizedFlags = text.slice(1).toLowerCase();
+      recursive = recursive || normalizedFlags.includes('r');
+      force = force || normalizedFlags.includes('f');
+    }
+  }
+
+  return recursive && force;
+}
+
+/**
+ * 按工作区约束检查删除目标。
+ * @param targetNodes - 删除目标节点
+ * @param cwd - 执行目录
+ * @param workspaceRoot - 工作区根目录
+ * @param findings - 待追加发现项列表
+ * @returns 是否产生阻塞项
+ */
+function appendDeleteTargetFindings(
+  targetNodes: import('web-tree-sitter').Node[],
+  cwd: string,
+  workspaceRoot: string,
+  findings: ShellCommandSafetyFinding[]
+): boolean {
+  let blocked = false;
+
+  for (const targetNode of targetNodes) {
+    const rawPath = extractLiteralPath(targetNode);
+    if (rawPath === null) continue;
+
+    if (hasGlobPattern(rawPath)) {
+      appendDeleteBlocker(findings, 'DELETE_GLOB_PATTERN', `删除目标包含通配符: ${rawPath}`, targetNode.text);
+      blocked = true;
+    }
+
+    const resolvedTarget = resolveTargetPath(rawPath, cwd);
+    if (resolvedTarget && !isPathInsideWorkspace(resolvedTarget, workspaceRoot)) {
+      appendDeleteBlocker(findings, 'DELETE_OUTSIDE_WORKSPACE', `删除目标位于工作区外: ${rawPath}`, targetNode.text);
+      blocked = true;
+    }
+  }
+
+  return blocked;
+}
+
+/**
+ * 向上查找指定类型的祖先节点。
+ * @param node - 起始节点
+ * @param type - 目标节点类型
+ * @returns 匹配的祖先节点，未找到时返回 null
+ */
+function findAncestor(node: import('web-tree-sitter').Node, type: string): import('web-tree-sitter').Node | null {
+  let current = node.parent;
+  while (current) {
+    if (current.type === type) return current;
+    current = current.parent;
+  }
+  return null;
+}
+
+/**
+ * 读取 PowerShell 命令的字面量实参节点。
+ * @param commandNode - PowerShell command 节点
+ * @returns 实参节点列表
+ */
+function getPowerShellArguments(commandNode: import('web-tree-sitter').Node): import('web-tree-sitter').Node[] {
+  return commandNode.descendantsOfType([...POWERSHELL_ARGUMENT_NODE_TYPES]).filter((node): boolean => !node.text.trim().startsWith('-'));
+}
+
+/**
  * Bash 安全重定向目标白名单。
  * /dev/null 是 Unix 空设备，丢弃输出，不构成文件写入风险。
  */
@@ -200,18 +417,24 @@ function appendBashStructuralFindings(options: StructuralCheckOptions): void {
   // 收集所有 command 节点，检查 cd 到 workspace 外
   const commands = rootNode.descendantsOfType('command');
   for (const cmd of commands) {
-    const nameNode = cmd.child(0);
-    if (!nameNode || nameNode.type !== 'command_name') continue;
-    const cmdName = nameNode.text.trim();
+    const bashCommand = createBashCommand(cmd);
+    if (!bashCommand) continue;
+    const cmdName = bashCommand.name;
+
+    if (isBashDelete(cmdName)) {
+      let blocked = appendDeleteTargetFindings(getBashDeleteTargets(bashCommand.args), cwd, workspaceRoot, findings);
+      if (cmdName === 'rm' && hasBashRecursiveForce(bashCommand.args)) {
+        appendDeleteBlocker(findings, 'DESTRUCTIVE_DELETE', '命令包含递归强制删除操作，需要人工改写为更小范围的安全操作。', bashCommand.text);
+        blocked = true;
+      }
+      if (!blocked) {
+        appendDeleteWarning(findings, bashCommand.text);
+      }
+    }
 
     // 检查 cd / builtin cd
-    if (cmdName === 'cd' || cmdName === 'builtin') {
-      // 对于 builtin，第二个 child 是子命令名
-      const effectiveName = cmdName === 'builtin' ? cmd.child(1)?.text.trim() : cmdName;
-      if (effectiveName !== 'cd') continue;
-
-      // 找到路径参数（跳过 command_name 和可能的 builtin）
-      const argNode = cmdName === 'builtin' ? cmd.child(2) : cmd.child(1);
+    if (cmdName === 'cd') {
+      const argNode = bashCommand.args[0];
       if (!argNode) continue;
 
       const rawPath = extractLiteralPath(argNode);
@@ -273,19 +496,26 @@ function appendBashStructuralFindings(options: StructuralCheckOptions): void {
  */
 function appendPowerShellStructuralFindings(options: StructuralCheckOptions): void {
   const { cwd, workspaceRoot, rootNode, findings } = options;
-  // 收集所有 command_name_expr 节点，检查 cd / Set-Location 到 workspace 外
-  const commandNames = rootNode.descendantsOfType('command_name_expr');
+  // 收集所有 PowerShell 命令名节点，检查删除操作和 cd / Set-Location 到 workspace 外
+  const commandNames = rootNode.descendantsOfType(['command_name_expr', 'command_name']);
+  const visitedCommandIds = new Set<number>();
   for (const nameNode of commandNames) {
+    const commandNode = findAncestor(nameNode, 'command');
+    if (!commandNode || visitedCommandIds.has(commandNode.id)) continue;
+    visitedCommandIds.add(commandNode.id);
+
     const cmdName = nameNode.text.trim().toLowerCase();
+    const argumentNodes = getPowerShellArguments(commandNode);
+
+    if (isPowerShellDelete(cmdName)) {
+      const blocked = appendDeleteTargetFindings(argumentNodes, cwd, workspaceRoot, findings);
+      if (!blocked) {
+        appendDeleteWarning(findings, commandNode.text);
+      }
+    }
 
     if (cmdName === 'cd' || cmdName === 'sl' || cmdName === 'set-location' || cmdName === 'chdir') {
-      // 找到父级的 command_elements 或 argument_list
-      const { parent } = nameNode;
-      if (!parent) continue;
-
-      // 在父节点中查找参数（排除当前 node）
-      const args = parent.children.filter((c) => c.id !== nameNode.id && c.type !== 'command_argument_sep');
-      const pathArg = args[0];
+      const pathArg = argumentNodes[0];
       if (!pathArg) continue;
 
       const rawPath = extractLiteralPath(pathArg);
