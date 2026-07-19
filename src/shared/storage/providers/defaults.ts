@@ -90,8 +90,8 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         supportsVideoRecognition: false
       },
       {
-        id: 'claude-sonnet-4-6',
-        name: 'Claude Sonnet 4.6',
+        id: 'claude-sonnet-5',
+        name: 'Claude Sonnet 5',
         type: 'chat',
         isEnabled: true,
         contextWindow: 1000000,
@@ -311,11 +311,11 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     readonly: true,
     models: [
       {
-        id: 'kimi-k2.6',
-        name: 'Kimi K2.6',
+        id: 'kimi-k3',
+        name: 'Kimi K3',
         type: 'chat',
         isEnabled: true,
-        contextWindow: 256000,
+        contextWindow: 1000000,
         supportsTools: true,
         supportsVision: true,
         supportsDeepThought: true,
