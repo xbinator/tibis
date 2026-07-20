@@ -74,7 +74,10 @@ const renderSize = computed<WidgetSize>(() =>
       ...props.node,
       size: props.previewSize ?? props.node.size
     },
-    nodeRenderContext.value
+    {
+      renderContext: nodeRenderContext.value,
+      renderOptions: renderState.options.value
+    }
   )
 );
 /** 节点渲染位置，Moveable 预览时优先使用临时位置。 */

@@ -10,7 +10,7 @@ import type { PropType } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import MoveableLayer from '@/components/BWidget/components/MoveableLayer.vue';
-import { provideRenderContext } from '@/components/BWidget/hooks/useRenderContext';
+import { provideRenderContext, type WidgetRenderMode } from '@/components/BWidget/hooks/useRenderContext';
 import type { WidgetElement, WidgetGeometryChange, WidgetSize, WidgetViewport } from '@/components/BWidget/types';
 import { queryWidgetElementTarget, registerWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
@@ -196,6 +196,10 @@ const MoveableLayerHost = defineComponent({
       type: Object as PropType<WidgetRenderContext | undefined>,
       default: undefined
     },
+    renderMode: {
+      type: String as PropType<WidgetRenderMode>,
+      default: 'design'
+    },
     root: {
       type: Object as PropType<HTMLElement | null>,
       default: null
@@ -218,7 +222,7 @@ const MoveableLayerHost = defineComponent({
     /** 测试中透传给子节点渲染和 Moveable 尺寸测量的上下文。 */
     const providedRenderContext = computed<WidgetRenderContext | undefined>(() => props.renderContext);
 
-    provideRenderContext(providedRenderContext);
+    provideRenderContext(providedRenderContext, { mode: props.renderMode });
   },
   template: `
     <MoveableLayer
@@ -341,13 +345,16 @@ async function flushMoveableLayerSync(): Promise<void> {
  * @param selection - 当前选区
  * @param activeElementId - 组合选区内当前编辑的子元素 ID
  * @param elements - 测试元素列表
+ * @param renderContext - 测试渲染上下文
+ * @param renderMode - 测试渲染模式
  * @returns 测试包装器与根元素
  */
 function mountMoveableLayer(
   selection: string[],
   activeElementId: string | null = null,
   elements: WidgetElement[] = [createWidgetElement('text-1', 'text'), createWidgetElement('rect-1', 'rect')],
-  renderContext: WidgetRenderContext | undefined = undefined
+  renderContext: WidgetRenderContext | undefined = undefined,
+  renderMode: WidgetRenderMode = 'design'
 ): { root: HTMLElement; wrapper: VueWrapper } {
   const root = createRootElement(collectWidgetElementIds(elements));
   const viewport: WidgetViewport = { center: { x: 0, y: 0 }, zoom: 1 };
@@ -361,7 +368,8 @@ function mountMoveableLayer(
       viewportSize,
       activeElementId,
       enabled: true,
-      renderContext
+      renderContext,
+      renderMode
     },
     attachTo: document.body
   });
@@ -688,7 +696,7 @@ describe('MoveableLayer', (): void => {
       data: { shortText: 'abcdef' }
     };
     const setStartSize = vi.fn<(size: [number, number]) => void>();
-    const { root, wrapper } = mountMoveableLayer(['text-1'], null, [textElement, createWidgetElement('rect-1', 'rect')], renderContext);
+    const { root, wrapper } = mountMoveableLayer(['text-1'], null, [textElement, createWidgetElement('rect-1', 'rect')], renderContext, 'runtime');
 
     await flushMoveableLayerSync();
 
@@ -717,7 +725,7 @@ describe('MoveableLayer', (): void => {
       output: undefined,
       data: { shortText: 'abcdef' }
     };
-    const { root, wrapper } = mountMoveableLayer(['text-1'], null, [textElement, createWidgetElement('rect-1', 'rect')], renderContext);
+    const { root, wrapper } = mountMoveableLayer(['text-1'], null, [textElement, createWidgetElement('rect-1', 'rect')], renderContext, 'runtime');
 
     await flushMoveableLayerSync();
 
@@ -738,6 +746,32 @@ describe('MoveableLayer', (): void => {
       id: 'text-1',
       size: { width: 30, height: 31 }
     });
+    wrapper.unmount();
+  });
+
+  it('keeps a manual design resize when hidden bindings have no visible content', async (): Promise<void> => {
+    const textElement: WidgetElement = {
+      ...createWidgetElement('text-1', 'text'),
+      size: { width: 30, height: 12 },
+      style: { fontSize: 10 },
+      metadata: { content: "{{ movie.hasScore ? movie.scoreText : '暂无' }}" }
+    };
+    const { root, wrapper } = mountMoveableLayer(['text-1'], null, [textElement]);
+
+    await flushMoveableLayerSync();
+    const moveableComponent = wrapper.findComponent({ name: 'VueMoveableStub' });
+    const textTarget = queryWidgetElementTarget(root, 'text-1');
+
+    expect(textTarget).not.toBeNull();
+    moveableComponent.vm.$emit('resize-end', {
+      target: textTarget as Element,
+      width: 30,
+      height: 24
+    });
+    await nextTick();
+
+    const resizeEvents = wrapper.emitted('resize') as [WidgetGeometryChange[]][] | undefined;
+    expect(resizeEvents?.[0]?.[0][0].size).toEqual({ width: 30, height: 24 });
     wrapper.unmount();
   });
 

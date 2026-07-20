@@ -2,8 +2,8 @@
  * @file widgetGeometry.ts
  * @description BWidget Widget坐标、几何和 DOM 查询工具。
  */
+import type { WidgetRenderEvaluationOptions } from '../renderOptions';
 import type { WidgetElement, WidgetPoint, WidgetShapeElement, WidgetSize, WidgetViewport } from '../types';
-import type { WidgetRenderContext } from 'types/widget';
 import { WIDGET_MIN_ZOOM, WIDGET_VIEWBOX_SIZE } from '../constants/viewport';
 import { getWidgetElementSchema } from '../elements';
 import { flattenWidgetElementTree, type WidgetRenderTreeNode } from './widgetTree';
@@ -114,16 +114,16 @@ function resolveWidgetRenderSizeValue(source: 'model' | 'content' | 'model-min-c
 /**
  * 读取形状渲染时使用的有效尺寸。
  * @param element - 形状元素
- * @param renderContext - Widget渲染上下文
+ * @param options - Widget 渲染求值选项
  * @returns 渲染尺寸
  */
-export function getWidgetShapeRenderSize(element: WidgetShapeElement, renderContext?: WidgetRenderContext): WidgetSize {
+export function getWidgetShapeRenderSize(element: WidgetShapeElement, options: WidgetRenderEvaluationOptions = {}): WidgetSize {
   const renderSize = getWidgetElementSchema(element.name)?.renderSize;
   if (!renderSize) {
     return element.size;
   }
 
-  const contentSize = renderSize.measureContent(element, renderContext);
+  const contentSize = renderSize.measureContent(element, options);
 
   return {
     width: resolveWidgetRenderSizeValue(renderSize.width, element.size.width, contentSize.width),
@@ -140,10 +140,7 @@ function getWidgetContentBounds(elements: WidgetElement[]): WidgetContentBounds 
   const visibleElements = flattenWidgetElementTree(elements)
     .map(
       (item: WidgetRenderTreeNode): WidgetVisibleElement => ({
-        element: {
-          ...item.element,
-          position: item.absolutePosition
-        },
+        element: { ...item.element, position: item.absolutePosition },
         renderSize: getWidgetShapeRenderSize(item.element)
       })
     )

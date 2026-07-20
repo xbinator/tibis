@@ -56,6 +56,18 @@ interface DisplayValueOptions {
 }
 
 /**
+ * 展示值测试组件挂载选项。
+ */
+interface DisplayValueMountOptions {
+  /** Widget 渲染上下文 */
+  renderContext?: WidgetRenderContext;
+  /** 元素值解析选项 */
+  valueOptions?: DisplayValueOptions;
+  /** Widget 渲染选项 */
+  renderOptions?: WidgetRenderContextOptions;
+}
+
+/**
  * 创建文本展示测试元素。
  * @param content - 元素内容模板
  * @returns 文本元素
@@ -83,24 +95,21 @@ function createDisplayElement(content?: string): WidgetShapeElement<DisplayEleme
  * 挂载展示值测试组件。
  * @param element - 元素数据
  * @param fieldName - 元数据字段名称
- * @param renderContext - Widget 渲染上下文
- * @param options - 元素值解析选项
- * @param renderOptions - Widget 渲染选项
+ * @param options - 展示值测试组件挂载选项
  * @returns 组件包装器
  */
 function mountDisplayValue<TField extends keyof DisplayElementMetadata & string>(
   element: WidgetShapeElement<DisplayElementMetadata>,
   fieldName: TField,
-  renderContext?: WidgetRenderContext,
-  options?: DisplayValueOptions,
-  renderOptions?: WidgetRenderContextOptions
+  options: DisplayValueMountOptions = {}
 ): VueWrapper {
+  const { renderContext, renderOptions, valueOptions } = options;
   const elementRef = ref<WidgetShapeElement<DisplayElementMetadata> | undefined>(element);
   const contextRef = ref<WidgetRenderContext | undefined>(renderContext);
   const Consumer: Component = {
     name: 'ElementValueConsumer',
     setup(): () => VNode {
-      const value = useElementValue(elementRef, fieldName, options);
+      const value = useElementValue(elementRef, fieldName, valueOptions);
 
       return (): VNode => h('span', typeof value.value === 'object' ? JSON.stringify(value.value) : String(value.value ?? ''));
     }
@@ -137,11 +146,13 @@ describe('useElementValue', (): void => {
 
   it('hides template variables in design mode even when a render context exists', (): void => {
     const wrapper = mountDisplayValue(createDisplayElement('{{ $input.city }} 天气'), 'content', {
-      input: {
-        city: '上海'
-      },
-      output: undefined,
-      data: {}
+      renderContext: {
+        input: {
+          city: '上海'
+        },
+        output: undefined,
+        data: {}
+      }
     });
 
     expect(wrapper.text()).toBe('天气');
@@ -149,29 +160,24 @@ describe('useElementValue', (): void => {
   });
 
   it('reads a template field and resolves it from the widget render context in runtime mode', (): void => {
-    const wrapper = mountDisplayValue(
-      createDisplayElement('{{ $input.city }} 天气'),
-      'content',
-      {
+    const wrapper = mountDisplayValue(createDisplayElement('{{ $input.city }} 天气'), 'content', {
+      renderContext: {
         input: {
           city: '上海'
         },
         output: undefined,
         data: {}
       },
-      undefined,
-      { mode: 'runtime' }
-    );
+      renderOptions: { mode: 'runtime' }
+    });
 
     expect(wrapper.text()).toBe('上海 天气');
     wrapper.unmount();
   });
 
   it('returns a complex whole-binding value without stringifying it in the hook', (): void => {
-    const wrapper = mountDisplayValue(
-      createDisplayElement('{{ weather }}'),
-      'content',
-      {
+    const wrapper = mountDisplayValue(createDisplayElement('{{ weather }}'), 'content', {
+      renderContext: {
         input: {},
         output: undefined,
         data: {
@@ -181,9 +187,8 @@ describe('useElementValue', (): void => {
           }
         }
       },
-      undefined,
-      { mode: 'runtime' }
-    );
+      renderOptions: { mode: 'runtime' }
+    });
 
     expect(wrapper.text()).toBe('{"condition":"晴","temperature":28}');
     expect(wrapper.text()).not.toBe('[object Object]');
@@ -191,10 +196,8 @@ describe('useElementValue', (): void => {
   });
 
   it('transforms to text only when requested by options', (): void => {
-    const wrapper = mountDisplayValue(
-      createDisplayElement('{{ weather }}'),
-      'content',
-      {
+    const wrapper = mountDisplayValue(createDisplayElement('{{ weather }}'), 'content', {
+      renderContext: {
         input: {},
         output: undefined,
         data: {
@@ -204,24 +207,28 @@ describe('useElementValue', (): void => {
           }
         }
       },
-      { transform: 'text' },
-      { mode: 'runtime' }
-    );
+      valueOptions: { transform: 'text' },
+      renderOptions: { mode: 'runtime' }
+    });
 
     expect(wrapper.text()).toBe('{\n  "condition": "晴",\n  "temperature": 28\n}');
     wrapper.unmount();
   });
 
   it('transforms to boolean only when requested by options', (): void => {
-    const wrapper = mountDisplayValue(createDisplayElement('unexpected'), 'content', undefined, { transform: 'boolean' });
+    const wrapper = mountDisplayValue(createDisplayElement('unexpected'), 'content', {
+      valueOptions: { transform: 'boolean' }
+    });
 
     expect(wrapper.text()).toBe('false');
     wrapper.unmount();
   });
 
   it('supports a custom transform function', (): void => {
-    const wrapper = mountDisplayValue(createDisplayElement('提交'), 'content', undefined, {
-      transform: (value: DisplayElementMetadata[keyof DisplayElementMetadata] | undefined): number => (typeof value === 'string' ? value.length : 0)
+    const wrapper = mountDisplayValue(createDisplayElement('提交'), 'content', {
+      valueOptions: {
+        transform: (value: DisplayElementMetadata[keyof DisplayElementMetadata] | undefined): number => (typeof value === 'string' ? value.length : 0)
+      }
     });
 
     expect(wrapper.text()).toBe('2');
@@ -243,7 +250,9 @@ describe('useElementValue', (): void => {
       null
     ];
 
-    const wrapper = mountDisplayValue(element, 'actions', undefined, { transform: 'method' });
+    const wrapper = mountDisplayValue(element, 'actions', {
+      valueOptions: { transform: 'method' }
+    });
 
     expect(wrapper.text()).toBe('[{"args":["{{ $input.orderId }}","城市：{{ $input.city }}"],"method":"submitOrder"}]');
     wrapper.unmount();
@@ -257,19 +266,16 @@ describe('useElementValue', (): void => {
   });
 
   it('supports an explicit field name for secondary template content', (): void => {
-    const wrapper = mountDisplayValue(
-      createDisplayElement('正文'),
-      'subtitle',
-      {
+    const wrapper = mountDisplayValue(createDisplayElement('正文'), 'subtitle', {
+      renderContext: {
         input: {
           city: '上海'
         },
         output: undefined,
         data: {}
       },
-      undefined,
-      { mode: 'runtime' }
-    );
+      renderOptions: { mode: 'runtime' }
+    });
 
     expect(wrapper.text()).toBe('副标题：上海');
     wrapper.unmount();

@@ -299,7 +299,10 @@ describe('widgetLoop', (): void => {
         index: 1
       }
     };
-    const expectedCellHeight = getWidgetShapeRenderSize(loopElement, longItemContext).height;
+    const expectedCellHeight = getWidgetShapeRenderSize(loopElement, {
+      renderContext: longItemContext,
+      renderOptions: { mode: 'runtime' }
+    }).height;
     const result = createWidgetLoopRenderElements([loopElement], renderContext);
 
     expect(expectedCellHeight).toBeGreaterThan(loopElement.size.height);

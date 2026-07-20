@@ -3,12 +3,11 @@
  * @description BWidget 元素元数据字段值 hook。
  */
 import type { WidgetMetadata, WidgetShapeElement } from '../types';
-import type { WidgetRenderContext } from 'types/widget';
 import type { ComputedRef, Ref } from 'vue';
 import { computed } from 'vue';
-import { formatWidgetDisplayTextValue, removeWidgetTemplateBindings, resolveWidgetTemplateValue } from '../utils/widgetBindings';
+import { formatWidgetDisplayTextValue, resolveWidgetDisplayValue } from '../utils/widgetBindings';
 import { normalizeMethodActions, type MethodAction } from '../utils/widgetMethods';
-import { useRenderContext, type WidgetRenderContextOptions } from './useRenderContext';
+import { useRenderContext } from './useRenderContext';
 
 /**
  * 元素元数据字段解析后的值类型。
@@ -54,29 +53,6 @@ export type UseElementValueResult<
   : TTransform extends UseElementValueTransformFunction<WidgetElementValue<TMetadata, TField>, infer TResult>
   ? TResult
   : WidgetElementValue<TMetadata, TField>;
-
-/**
- * 解析元素元数据字段值。
- * @param fieldValue - 元数据字段原始值
- * @param renderContext - Widget 渲染上下文
- * @param renderOptions - Widget Vue 渲染选项
- * @returns 解析后的字段值
- */
-function resolveElementFieldValue<TMetadata extends WidgetMetadata, TField extends keyof TMetadata>(
-  fieldValue: TMetadata[TField] | undefined,
-  renderContext: WidgetRenderContext | undefined,
-  renderOptions: WidgetRenderContextOptions
-): WidgetElementValue<TMetadata, TField> {
-  if (typeof fieldValue !== 'string') {
-    return fieldValue as WidgetElementValue<TMetadata, TField>;
-  }
-
-  if (renderOptions.mode !== 'runtime') {
-    return removeWidgetTemplateBindings(fieldValue) as WidgetElementValue<TMetadata, TField>;
-  }
-
-  return resolveWidgetTemplateValue(fieldValue, renderContext) as WidgetElementValue<TMetadata, TField>;
-}
 
 /**
  * 将未知值规整为布尔控制值。
@@ -158,7 +134,10 @@ export function useElementValue<
     }
 
     return normalizeElementValueResult<TMetadata, TField, TTransform>(
-      resolveElementFieldValue<TMetadata, TField>(currentElement.metadata[fieldName], renderState.renderContext.value, renderState.options.value),
+      resolveWidgetDisplayValue(currentElement.metadata[fieldName], {
+        renderContext: renderState.renderContext.value,
+        renderOptions: renderState.options.value
+      }) as WidgetElementValue<TMetadata, TField>,
       options
     );
   });

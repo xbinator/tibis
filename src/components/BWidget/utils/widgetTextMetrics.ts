@@ -3,8 +3,8 @@
  * @description BWidget 文本元素尺寸测量工具。
  */
 import type { WidgetElementRenderSizeConfig } from '../elements/types';
+import type { WidgetRenderEvaluationOptions } from '../renderOptions';
 import type { WidgetMetadata, WidgetElementStyle, WidgetShapeElement, WidgetSize } from '../types';
-import type { WidgetRenderContext } from 'types/widget';
 import {
   WIDGET_TEXT_DEFAULT_FONT_SIZE,
   WIDGET_TEXT_DEFAULT_FONT_WEIGHT,
@@ -247,8 +247,8 @@ export function createWidgetTextRenderSize<TMetadata extends WidgetMetadata = Wi
   return {
     width: 'model',
     height: 'model-min-content',
-    measureContent: (element: WidgetShapeElement<TMetadata>, renderContext?: WidgetRenderContext): WidgetSize =>
-      measureWidgetTextElementSize(resolveWidgetTemplateFieldText(element.metadata, fieldName, renderContext), element.style, {
+    measureContent: (element: WidgetShapeElement<TMetadata>, options: WidgetRenderEvaluationOptions = {}): WidgetSize =>
+      measureWidgetTextElementSize(resolveWidgetTemplateFieldText(element.metadata, fieldName, options), element.style, {
         maxWidth: element.size.width,
         maxLines: element.metadata.maxLines as number
       })

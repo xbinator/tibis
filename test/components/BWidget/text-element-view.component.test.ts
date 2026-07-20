@@ -15,6 +15,16 @@ import type { WidgetShapeElement } from '@/components/BWidget/types';
 import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /**
+ * 文本元素视图挂载选项。
+ */
+interface TextElementViewMountOptions {
+  /** Widget 渲染上下文 */
+  renderContext?: WidgetRenderContext;
+  /** Widget 渲染选项 */
+  renderOptions?: WidgetRenderContextOptions;
+}
+
+/**
  * 创建文本视图测试元素。
  * @returns 文本元素
  */
@@ -39,11 +49,11 @@ function createTextElement(): WidgetShapeElement {
 /**
  * 挂载文本元素视图。
  * @param element - 文本元素
- * @param renderContext - Widget 渲染上下文
- * @param renderOptions - Widget 渲染选项
+ * @param options - 文本元素视图挂载选项
  * @returns 组件包装器
  */
-function mountTextElementView(element: WidgetShapeElement, renderContext?: WidgetRenderContext, renderOptions?: WidgetRenderContextOptions): VueWrapper {
+function mountTextElementView(element: WidgetShapeElement, options: TextElementViewMountOptions = {}): VueWrapper {
+  const { renderContext, renderOptions } = options;
   const contextRef = ref<WidgetRenderContext | undefined>(renderContext);
   const Provider = defineComponent({
     name: 'TextElementViewProvider',
@@ -77,9 +87,8 @@ describe('TextElementView', (): void => {
   it('renders content binding from widget render context', (): void => {
     const element = createTextElement();
     element.metadata.content = '{{ $input.city }} 当前 {{ weather.temperature }}°C';
-    const wrapper = mountTextElementView(
-      element,
-      {
+    const wrapper = mountTextElementView(element, {
+      renderContext: {
         input: { city: '上海' },
         output: undefined,
         data: {
@@ -88,8 +97,8 @@ describe('TextElementView', (): void => {
           }
         }
       },
-      { mode: 'runtime' }
-    );
+      renderOptions: { mode: 'runtime' }
+    });
 
     expect(wrapper.text()).toBe('上海 当前 28°C');
     wrapper.unmount();
@@ -98,9 +107,8 @@ describe('TextElementView', (): void => {
   it('renders bracket binding paths produced for non-identifier field names', (): void => {
     const element = createTextElement();
     element.metadata.content = '{{ $input["wind-speed"] }} / {{ ["weather-data"]["feels.like"] }}';
-    const wrapper = mountTextElementView(
-      element,
-      {
+    const wrapper = mountTextElementView(element, {
+      renderContext: {
         input: {
           'wind-speed': 12
         },
@@ -111,8 +119,8 @@ describe('TextElementView', (): void => {
           }
         }
       },
-      { mode: 'runtime' }
-    );
+      renderOptions: { mode: 'runtime' }
+    });
 
     expect(wrapper.text()).toBe('12 / 31');
     wrapper.unmount();
@@ -121,15 +129,14 @@ describe('TextElementView', (): void => {
   it('falls back to static content when binding path cannot be resolved', (): void => {
     const element = createTextElement();
     element.metadata.content = '{{ weather.temperature }}°C';
-    const wrapper = mountTextElementView(
-      element,
-      {
+    const wrapper = mountTextElementView(element, {
+      renderContext: {
         input: {},
         output: undefined,
         data: {}
       },
-      { mode: 'runtime' }
-    );
+      renderOptions: { mode: 'runtime' }
+    });
 
     expect(wrapper.text()).toBe('{{ weather.temperature }}°C');
     wrapper.unmount();
@@ -138,9 +145,8 @@ describe('TextElementView', (): void => {
   it('does not execute filter-like binding expressions', (): void => {
     const element = createTextElement();
     element.metadata.content = '{{ weather.temperature | default("未知") }}';
-    const wrapper = mountTextElementView(
-      element,
-      {
+    const wrapper = mountTextElementView(element, {
+      renderContext: {
         input: {},
         output: undefined,
         data: {
@@ -149,10 +155,51 @@ describe('TextElementView', (): void => {
           }
         }
       },
-      { mode: 'runtime' }
-    );
+      renderOptions: { mode: 'runtime' }
+    });
 
     expect(wrapper.text()).toBe('{{ weather.temperature | default("未知") }}');
+    wrapper.unmount();
+  });
+
+  it('renders safe ternary binding expressions', (): void => {
+    const element = createTextElement();
+    element.metadata.content = "{{ movie.hasScore ? movie.scoreText : '暂无' }}";
+    const wrapper = mountTextElementView(element, {
+      renderContext: {
+        input: {},
+        output: undefined,
+        data: {
+          movie: {
+            hasScore: true,
+            scoreText: '8.6'
+          }
+        }
+      },
+      renderOptions: { mode: 'runtime' }
+    });
+
+    expect(wrapper.text()).toBe('8.6');
+    wrapper.unmount();
+  });
+
+  it('keeps method-call expressions as raw fallback text', (): void => {
+    const element = createTextElement();
+    element.metadata.content = '{{ movie.format() }}';
+    const wrapper = mountTextElementView(element, {
+      renderContext: {
+        input: {},
+        output: undefined,
+        data: {
+          movie: {
+            format: '不可调用'
+          }
+        }
+      },
+      renderOptions: { mode: 'runtime' }
+    });
+
+    expect(wrapper.text()).toBe('{{ movie.format() }}');
     wrapper.unmount();
   });
 
@@ -160,10 +207,12 @@ describe('TextElementView', (): void => {
     const element = createTextElement();
     element.metadata.content = '你好{{ message }}';
     const wrapper = mountTextElementView(element, {
-      input: {},
-      output: undefined,
-      data: {
-        message: '世界'
+      renderContext: {
+        input: {},
+        output: undefined,
+        data: {
+          message: '世界'
+        }
       }
     });
 

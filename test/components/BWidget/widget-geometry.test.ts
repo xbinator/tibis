@@ -177,6 +177,33 @@ describe('widgetGeometry', (): void => {
     expect(getWidgetShapeRenderSize(element)).toEqual({ width: 30, height: 31 });
   });
 
+  it('measures text from the content visible in the requested render mode', (): void => {
+    const element = {
+      ...createTextElement('text-1', '前缀{{ weather.summary }}', { x: 0, y: 0 }, { fontSize: 10 }),
+      size: { width: 30, height: 12 }
+    };
+    const context = {
+      input: {},
+      output: undefined,
+      data: {
+        weather: {
+          summary: '很长很长很长的天气说明'
+        }
+      }
+    };
+
+    const designSize = getWidgetShapeRenderSize(element, {
+      renderContext: context,
+      renderOptions: { mode: 'design' }
+    });
+    const runtimeSize = getWidgetShapeRenderSize(element, {
+      renderContext: context,
+      renderOptions: { mode: 'runtime' }
+    });
+
+    expect(runtimeSize.height).toBeGreaterThan(designSize.height);
+  });
+
   it('creates a viewport from schema render sizes', (): void => {
     const viewport = createWidgetViewportForElements([createShapeElement('node-1'), createTextElement('text-1')], {
       width: 800,

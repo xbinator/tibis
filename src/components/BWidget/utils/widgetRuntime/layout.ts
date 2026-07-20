@@ -239,7 +239,10 @@ function flattenRuntimeLayoutRenderElements(renderElements: WidgetRuntimeLayoutR
  * @returns 元素测量结果
  */
 function createRuntimeMeasuredElement(item: WidgetRuntimeLayoutRenderElement): WidgetRuntimeMeasuredElement {
-  const renderSize = getWidgetShapeRenderSize(item.element, item.renderContext);
+  const renderSize = getWidgetShapeRenderSize(item.element, {
+    renderContext: item.renderContext,
+    renderOptions: { mode: 'runtime' }
+  });
 
   return {
     element: item.element,

@@ -2,22 +2,12 @@
  * @file useRenderContext.ts
  * @description BWidget Widget渲染上下文 provide/inject hook。
  */
+import type { WidgetRenderContextOptions } from '../types';
 import type { WidgetRenderContext } from 'types/widget';
 import { computed, inject, provide, ref } from 'vue';
 import type { InjectionKey, Ref } from 'vue';
 
-/**
- * Widget Vue 渲染模式。
- */
-export type WidgetRenderMode = 'design' | 'runtime';
-
-/**
- * Widget Vue 渲染上下文选项。
- */
-export interface WidgetRenderContextOptions {
-  /** Widget Vue 渲染模式 */
-  mode?: WidgetRenderMode;
-}
+export type { WidgetRenderContextOptions, WidgetRenderMode } from '../types';
 
 /**
  * Widget Vue 渲染上下文状态。

@@ -367,7 +367,10 @@ function normalizeResizeSize(element: WidgetElement, size: WidgetSize): WidgetSi
       ...element,
       size
     },
-    renderState.renderContext.value
+    {
+      renderContext: renderState.renderContext.value,
+      renderOptions: renderState.options.value
+    }
   );
 }
 
@@ -613,7 +616,13 @@ function syncTargetRenderSize(event: MoveableTargetEvent): void {
     return;
   }
 
-  updateNodePreviewSize(event.target, getWidgetShapeRenderSize(element, renderState.renderContext.value));
+  updateNodePreviewSize(
+    event.target,
+    getWidgetShapeRenderSize(element, {
+      renderContext: renderState.renderContext.value,
+      renderOptions: renderState.options.value
+    })
+  );
 }
 
 /**
@@ -627,7 +636,10 @@ function setResizeStartSize(event: MoveableResizeStartEvent): void {
     return;
   }
 
-  const renderSize = getWidgetShapeRenderSize(element, renderState.renderContext.value);
+  const renderSize = getWidgetShapeRenderSize(element, {
+    renderContext: renderState.renderContext.value,
+    renderOptions: renderState.options.value
+  });
   event.set([renderSize.width, renderSize.height]);
 }
 

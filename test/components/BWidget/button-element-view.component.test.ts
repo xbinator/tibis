@@ -20,6 +20,18 @@ import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils
 const BUTTON_ELEMENT_VIEW_SOURCE = readFileSync('src/components/BWidget/elements/Button/index.vue', 'utf-8');
 
 /**
+ * 按钮元素视图挂载选项。
+ */
+interface ButtonElementViewMountOptions {
+  /** Widget 渲染上下文 */
+  renderContext?: WidgetRenderContext;
+  /** Widget 运行态控制器 */
+  runtime?: WidgetRuntimeController;
+  /** Widget 渲染选项 */
+  renderOptions?: WidgetRenderContextOptions;
+}
+
+/**
  * 创建按钮视图测试元素。
  * @param text - 按钮文本模板
  * @returns 按钮元素
@@ -48,17 +60,11 @@ function createButtonElement(text = '确认'): WidgetShapeElement {
 /**
  * 挂载按钮元素视图。
  * @param element - 按钮元素
- * @param renderContext - Widget 渲染上下文
- * @param runtime - Widget 运行态控制器
- * @param renderOptions - Widget 渲染选项
+ * @param options - 按钮元素视图挂载选项
  * @returns 组件包装器
  */
-function mountButtonElementView(
-  element: WidgetShapeElement,
-  renderContext?: WidgetRenderContext,
-  runtime?: WidgetRuntimeController,
-  renderOptions?: WidgetRenderContextOptions
-): VueWrapper {
+function mountButtonElementView(element: WidgetShapeElement, options: ButtonElementViewMountOptions = {}): VueWrapper {
+  const { renderContext, renderOptions, runtime } = options;
   const contextRef = ref<WidgetRenderContext | undefined>(renderContext);
   const runtimeRef = ref<WidgetRuntimeController | undefined>(runtime);
   const Provider = defineComponent({
@@ -97,18 +103,16 @@ describe('ButtonElementView', (): void => {
   });
 
   it('resolves variable interpolation in button text from render context', (): void => {
-    const wrapper = mountButtonElementView(
-      createButtonElement('确认 {{ $input.orderId }}'),
-      {
+    const wrapper = mountButtonElementView(createButtonElement('确认 {{ $input.orderId }}'), {
+      renderContext: {
         input: {
           orderId: 'A-1024'
         },
         output: undefined,
         data: {}
       },
-      undefined,
-      { mode: 'runtime' }
-    );
+      renderOptions: { mode: 'runtime' }
+    });
 
     expect(wrapper.find('button').text()).toBe('确认 A-1024');
     wrapper.unmount();
@@ -116,11 +120,13 @@ describe('ButtonElementView', (): void => {
 
   it('hides variable placeholders in button text outside runtime mode', (): void => {
     const wrapper = mountButtonElementView(createButtonElement('确认 {{ $input.orderId }}'), {
-      input: {
-        orderId: 'A-1024'
-      },
-      output: undefined,
-      data: {}
+      renderContext: {
+        input: {
+          orderId: 'A-1024'
+        },
+        output: undefined,
+        data: {}
+      }
     });
 
     expect(wrapper.find('button').text()).toBe('确认');
@@ -158,9 +164,8 @@ describe('ButtonElementView', (): void => {
     element.metadata.disabled = '{{ disabled }}';
     element.metadata.loading = '{{ loading }}';
 
-    const wrapper = mountButtonElementView(
-      element,
-      {
+    const wrapper = mountButtonElementView(element, {
+      renderContext: {
         input: {},
         output: undefined,
         data: {
@@ -168,9 +173,8 @@ describe('ButtonElementView', (): void => {
           loading: true
         }
       },
-      undefined,
-      { mode: 'runtime' }
-    );
+      renderOptions: { mode: 'runtime' }
+    });
     const button = wrapper.find('button');
 
     expect(button.attributes('disabled')).toBeUndefined();
@@ -198,9 +202,8 @@ describe('ButtonElementView', (): void => {
       }
     ];
 
-    const wrapper = mountButtonElementView(
-      element,
-      {
+    const wrapper = mountButtonElementView(element, {
+      renderContext: {
         input: {
           city: '上海',
           coffeeId: 'latte'
@@ -209,7 +212,7 @@ describe('ButtonElementView', (): void => {
         data: {}
       },
       runtime
-    );
+    });
 
     await wrapper.find('button').trigger('click');
 
@@ -235,7 +238,7 @@ describe('ButtonElementView', (): void => {
     element.metadata.disabled = true;
     element.metadata.loading = true;
 
-    const wrapper = mountButtonElementView(element, undefined, runtime);
+    const wrapper = mountButtonElementView(element, { runtime });
 
     await wrapper.find('button').trigger('click');
 

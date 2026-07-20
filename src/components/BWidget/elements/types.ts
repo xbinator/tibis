@@ -3,8 +3,8 @@
  * @description BWidget 元素注册、创建与渲染配置类型。
  */
 import type { WidgetElementRole } from './roles';
+import type { WidgetRenderEvaluationOptions } from '../renderOptions';
 import type { WidgetElementCreateAnchor, WidgetElementStyle, WidgetMetadata, WidgetShapeElement, WidgetSize } from '../types';
-import type { WidgetRenderContext } from 'types/widget';
 
 /**
  * 元素渲染尺寸来源。
@@ -23,10 +23,10 @@ export interface WidgetElementRenderSizeConfig<TMetadata extends WidgetMetadata 
   /**
    * 测量内容尺寸。
    * @param element - Widget元素
-   * @param renderContext - Widget渲染上下文
+   * @param options - Widget 渲染求值选项
    * @returns 内容尺寸
    */
-  measureContent(element: WidgetShapeElement<TMetadata>, renderContext?: WidgetRenderContext): WidgetSize;
+  measureContent(element: WidgetShapeElement<TMetadata>, options?: WidgetRenderEvaluationOptions): WidgetSize;
 }
 
 /**
