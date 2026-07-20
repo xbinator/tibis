@@ -4,7 +4,7 @@
  */
 import type { WidgetRenderContext } from 'types/widget';
 import { describe, expect, it } from 'vitest';
-import { evaluateWidgetBindingExpression, resolveWidgetTemplateValue } from '@/components/BWidget/utils/widgetBindings';
+import { evaluateWidgetBindingExpression, resolveWidgetTemplateFieldText, resolveWidgetTemplateValue } from '@/components/BWidget/utils/widgetBindings';
 
 /** 已移除的旧根变量名。 */
 const REMOVED_LEGACY_ROOT = ['last', 'Result'].join('');
@@ -16,11 +16,11 @@ const REMOVED_LEGACY_ROOT = ['last', 'Result'].join('');
 function createRenderContext(): WidgetRenderContext {
   return {
     input: {
-        city: '上海'
-      },
-      output: {
-        condition: '晴'
-      },
+      city: '上海'
+    },
+    output: {
+      condition: '晴'
+    },
     data: {
       weather: {
         temperature: 28
@@ -30,6 +30,26 @@ function createRenderContext(): WidgetRenderContext {
 }
 
 describe('widgetBindings', (): void => {
+  it('resolves field text from the content visible in each render mode', (): void => {
+    const context = createRenderContext();
+    const metadata = {
+      content: "评分：{{ weather.temperature }} / {{ movie.hasScore ? movie.scoreText : '暂无' }}"
+    };
+
+    expect(
+      resolveWidgetTemplateFieldText(metadata, 'content', {
+        renderContext: context,
+        renderOptions: { mode: 'design' }
+      })
+    ).toBe('评分： / ');
+    expect(
+      resolveWidgetTemplateFieldText({ content: '{{ weather.temperature }}' }, 'content', {
+        renderContext: context,
+        renderOptions: { mode: 'runtime' }
+      })
+    ).toBe('28');
+  });
+
   it('resolves data fields directly without the data root', (): void => {
     const context = createRenderContext();
 
@@ -39,6 +59,67 @@ describe('widgetBindings', (): void => {
     });
     expect(resolveWidgetTemplateValue('{{ $input.city }} 当前 {{ weather.temperature }}°C', context)).toBe('上海 当前 28°C');
     expect(resolveWidgetTemplateValue('{{ $output.condition }}', context)).toBe('晴');
+  });
+
+  it('resolves safe conditional expressions in widget templates', (): void => {
+    const context: WidgetRenderContext = {
+      ...createRenderContext(),
+      data: {
+        movie: {
+          hasScore: true,
+          scoreText: '8.6'
+        }
+      }
+    };
+    const template = "{{ movie.hasScore ? movie.scoreText : '暂无' }}";
+
+    expect(resolveWidgetTemplateValue(template, context)).toBe('8.6');
+
+    context.data.movie = {
+      hasScore: false,
+      scoreText: '8.6'
+    };
+    expect(resolveWidgetTemplateValue(template, context)).toBe('暂无');
+  });
+
+  it('resolves expressions from input, output and loop-local roots', (): void => {
+    const context: WidgetRenderContext = {
+      input: {
+        taxRate: 0.1
+      },
+      output: {
+        discount: 2
+      },
+      data: {}
+    };
+
+    expect(
+      resolveWidgetTemplateValue('{{ item.price * quantity + $input.taxRate - $output.discount }}', context, {
+        locals: {
+          item: { price: 10 },
+          quantity: 2
+        }
+      })
+    ).toBe(18.1);
+  });
+
+  it('blocks global root names even when widget data defines them', (): void => {
+    const context: WidgetRenderContext = {
+      ...createRenderContext(),
+      data: {
+        window: { location: '不可见' },
+        document: { title: '不可见' },
+        globalThis: { value: '不可见' },
+        process: { env: '不可见' }
+      }
+    };
+
+    ['window.location', 'document.title', 'globalThis.value', 'process.env'].forEach((expression: string): void => {
+      expect(evaluateWidgetBindingExpression(expression, context), expression).toEqual({
+        resolved: false,
+        value: undefined
+      });
+    });
   });
 
   it('resolves direct data fields whose names start with input', (): void => {
@@ -107,9 +188,9 @@ describe('widgetBindings', (): void => {
   it('resolves loop local variables before data fields', (): void => {
     const context: WidgetRenderContext = {
       input: {
-          city: '上海'
-        },
-        output: undefined,
+        city: '上海'
+      },
+      output: undefined,
       data: {
         item: {
           name: 'data item'
@@ -139,6 +220,62 @@ describe('widgetBindings', (): void => {
         locals: { record: { name: '美式' }, rowIndex: 4 }
       })
     ).toBe('美式 #4');
+  });
+
+  it('does not read getters while formatting mixed object bindings', (): void => {
+    let getterCalls = 0;
+    const payload: Record<string, unknown> = {
+      safe: '保留'
+    };
+    Object.defineProperty(payload, 'secret', {
+      enumerable: true,
+      get: (): string => {
+        getterCalls += 1;
+        return '不应读取';
+      }
+    });
+    const context: WidgetRenderContext = {
+      ...createRenderContext(),
+      data: { payload }
+    };
+
+    const resolvedValue = resolveWidgetTemplateValue('结果：{{ payload }}', context);
+
+    expect(getterCalls).toBe(0);
+    expect(resolvedValue).toBe('结果：{\n  "safe": "保留"\n}');
+  });
+
+  it('does not call toJSON while formatting mixed object bindings', (): void => {
+    let toJsonCalls = 0;
+    const payload = {
+      safe: '保留',
+      toJSON: (): Record<string, string> => {
+        toJsonCalls += 1;
+        return { unsafe: '不应执行' };
+      }
+    };
+    const context: WidgetRenderContext = {
+      ...createRenderContext(),
+      data: { payload }
+    };
+
+    const resolvedValue = resolveWidgetTemplateValue('结果：{{ payload }}', context);
+
+    expect(toJsonCalls).toBe(0);
+    expect(resolvedValue).toBe('结果：{\n  "safe": "保留"\n}');
+  });
+
+  it('preserves bigint and circular markers in safely formatted objects', (): void => {
+    const payload: Record<string, unknown> = {
+      count: 2n
+    };
+    payload.self = payload;
+    const context: WidgetRenderContext = {
+      ...createRenderContext(),
+      data: { payload }
+    };
+
+    expect(resolveWidgetTemplateValue('结果：{{ payload }}', context)).toBe('结果：{\n  "count": "2",\n  "self": "[Circular]"\n}');
   });
 
   it('keeps current input and data binding behavior without locals', (): void => {

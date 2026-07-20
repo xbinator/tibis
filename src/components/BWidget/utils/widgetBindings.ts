@@ -2,8 +2,11 @@
  * @file widgetBindings.ts
  * @description BWidget 动态绑定表达式解析工具。
  */
+import type { WidgetRenderEvaluationOptions } from '../renderOptions';
 import type { WidgetMetadata } from '../types';
+import type { WidgetExpressionHost, WidgetExpressionReadResult } from './widgetExpression';
 import type { WidgetRenderContext } from 'types/widget';
+import { evaluateWidgetExpression } from './widgetExpression';
 
 /** 支持的绑定上下文根名称。 */
 export type WidgetBindingContextRoot = 'input' | 'output' | 'data';
@@ -34,6 +37,11 @@ export interface WidgetBindingLocalContext {
 export type WidgetBindingEvaluationOptions = WidgetBindingLocalContext;
 
 /**
+ * Widget 绑定表达式使用的根作用域。
+ */
+type WidgetBindingScope = Record<WidgetBindingContextRoot, unknown> & WidgetBindingLocalContext;
+
+/**
  * 单次绑定表达式解析结果。
  */
 interface WidgetBindingEvaluationResult {
@@ -42,11 +50,6 @@ interface WidgetBindingEvaluationResult {
   /** 表达式解析结果 */
   value: unknown;
 }
-
-/**
- * JSON 序列化替换函数。
- */
-type WidgetDisplayJsonReplacer = (this: unknown, key: string, value: unknown) => unknown;
 
 /** 绑定插值匹配表达式。 */
 const WIDGET_BINDING_PATTERN = /\{\{\s*([^{}]+?)\s*\}\}/g;
@@ -64,14 +67,16 @@ const WIDGET_BINDING_IDENTIFIER_PREFIX_PATTERN = /^[A-Za-z_$][\w$]*/;
 const WIDGET_BINDING_INDEX_PATTERN = /^\[(\d+)\]/;
 /** 禁止读取的对象路径片段，避免原型链相关访问。 */
 const WIDGET_UNSAFE_PATH_SEGMENTS = new Set<string>(['__proto__', 'prototype', 'constructor']);
+/** 禁止表达式访问的 JavaScript 全局根名称。 */
+const BLOCKED_WIDGET_EXPRESSION_ROOTS = new Set<string>(['window', 'document', 'globalThis', 'process']);
 
 /**
- * 判断未知值是否可继续读取路径片段。
- * @param value - 当前路径值
- * @returns 是否可读取属性
+ * 判断路径片段是否允许读取。
+ * @param segment - 路径片段
+ * @returns 是否允许读取
  */
-function isPathReadable(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object';
+export function isWidgetBindingPathSegmentAllowed(segment: string): boolean {
+  return !WIDGET_UNSAFE_PATH_SEGMENTS.has(segment);
 }
 
 /**
@@ -91,10 +96,7 @@ function readContextLocalRoots(context: WidgetRenderContext): Record<string, unk
  * @param options - 绑定解析选项
  * @returns 绑定表达式根作用域
  */
-function createBindingScope(
-  context: WidgetRenderContext,
-  options: WidgetBindingEvaluationOptions = {}
-): Record<WidgetBindingContextRoot, unknown> & WidgetBindingLocalContext {
+function createBindingScope(context: WidgetRenderContext, options: WidgetBindingEvaluationOptions = {}): WidgetBindingScope {
   return {
     input: context.input,
     output: context.output,
@@ -104,12 +106,151 @@ function createBindingScope(
 }
 
 /**
- * 判断路径片段是否允许读取。
- * @param segment - 路径片段
- * @returns 是否允许读取
+ * 创建未解析的 Widget 表达式读取结果。
+ * @returns 未解析结果
  */
-export function isWidgetBindingPathSegmentAllowed(segment: string): boolean {
-  return !WIDGET_UNSAFE_PATH_SEGMENTS.has(segment);
+function createUnresolvedExpression(): WidgetExpressionReadResult {
+  return {
+    resolved: false,
+    value: undefined
+  };
+}
+
+/**
+ * 读取对象的自有数据属性，不沿原型链访问且不触发 getter。
+ * @param target - 属性所属目标值
+ * @param key - 属性名称或数组下标
+ * @param resolveMissing - 缺少自有属性时是否保留内部 undefined
+ * @returns 属性读取结果
+ */
+function readOwnExpressionValue(target: unknown, key: string | number, resolveMissing: boolean): WidgetExpressionReadResult {
+  if (target === null || typeof target !== 'object') {
+    return createUnresolvedExpression();
+  }
+
+  const propertyName = String(key);
+  if (!isWidgetBindingPathSegmentAllowed(propertyName)) {
+    return createUnresolvedExpression();
+  }
+
+  let descriptor: PropertyDescriptor | undefined;
+  try {
+    descriptor = Object.getOwnPropertyDescriptor(target, propertyName);
+  } catch {
+    return createUnresolvedExpression();
+  }
+
+  if (!descriptor) {
+    return resolveMissing
+      ? {
+          resolved: true,
+          value: undefined
+        }
+      : createUnresolvedExpression();
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
+    return createUnresolvedExpression();
+  }
+
+  return {
+    resolved: true,
+    value: descriptor.value
+  };
+}
+
+/**
+ * 从 Widget 根作用域读取表达式标识符。
+ * @param scope - Widget 绑定根作用域
+ * @param name - 标识符名称
+ * @returns 标识符读取结果
+ */
+function readExpressionIdentifier(scope: WidgetBindingScope, name: string): WidgetExpressionReadResult {
+  if (BLOCKED_WIDGET_EXPRESSION_ROOTS.has(name)) {
+    return createUnresolvedExpression();
+  }
+
+  if (name === WIDGET_INPUT_BINDING_ROOT) {
+    return {
+      resolved: true,
+      value: scope.input
+    };
+  }
+
+  if (name === WIDGET_OUTPUT_BINDING_ROOT) {
+    return {
+      resolved: true,
+      value: scope.output
+    };
+  }
+
+  if (scope.locals && Object.prototype.hasOwnProperty.call(scope.locals, name)) {
+    return readOwnExpressionValue(scope.locals, name, false);
+  }
+
+  return readOwnExpressionValue(scope.data, name, false);
+}
+
+/**
+ * 从表达式目标值读取自有属性。
+ * @param target - 属性所属目标值
+ * @param key - 属性名称或数组下标
+ * @returns 属性读取结果
+ */
+function readExpressionProperty(target: unknown, key: string | number): WidgetExpressionReadResult {
+  return readOwnExpressionValue(target, key, true);
+}
+
+/**
+ * 创建 Widget 绑定表达式的受限数据宿主。
+ * @param scope - Widget 绑定根作用域
+ * @returns 安全表达式宿主
+ */
+function createExpressionHost(scope: WidgetBindingScope): WidgetExpressionHost {
+  return {
+    readIdentifier: (name: string): WidgetExpressionReadResult => readExpressionIdentifier(scope, name),
+    readProperty: (target: unknown, key: string | number): WidgetExpressionReadResult => readExpressionProperty(target, key)
+  };
+}
+
+/**
+ * 使用安全表达式宿主求值旧版无 data 根路径。
+ * @param path - 已解析的旧版绑定路径
+ * @param host - 安全表达式宿主
+ * @returns 路径求值结果
+ */
+function evaluateLegacyPath(path: WidgetBindingPath, host: WidgetExpressionHost): WidgetExpressionReadResult {
+  let currentResult: WidgetExpressionReadResult;
+  let remainingSegments = path.segments;
+
+  if (path.root === 'local') {
+    if (!path.localRoot) {
+      return createUnresolvedExpression();
+    }
+
+    currentResult = host.readIdentifier(path.localRoot);
+  } else if (path.root === 'data') {
+    const [firstSegment, ...restSegments] = path.segments;
+    if (!firstSegment) {
+      return createUnresolvedExpression();
+    }
+
+    currentResult = host.readIdentifier(firstSegment);
+    remainingSegments = restSegments;
+  } else {
+    const rootName = path.root === 'input' ? WIDGET_INPUT_BINDING_ROOT : WIDGET_OUTPUT_BINDING_ROOT;
+    currentResult = host.readIdentifier(rootName);
+  }
+
+  for (const segment of remainingSegments) {
+    if (!currentResult.resolved || currentResult.value === null || currentResult.value === undefined) {
+      return createUnresolvedExpression();
+    }
+
+    currentResult = host.readProperty(currentResult.value, segment);
+  }
+
+  return currentResult.resolved && currentResult.value !== undefined ? currentResult : createUnresolvedExpression();
 }
 
 /**
@@ -400,47 +541,78 @@ function formatFirstBindingPathSegment(segment: string): string {
 }
 
 /**
- * 读取绑定路径对应的值。
- * @param scope - 绑定根作用域
- * @param path - 绑定路径
- * @returns 路径值，无法读取时返回 undefined
+ * 将展示对象归一化为不会触发 getter 或 toJSON 的 JSON 安全快照。
+ * @param value - 待归一化的展示值
+ * @param seenObjects - 当前序列化链路已访问的对象集合
+ * @returns JSON 安全值；对象属性不支持 JSON 时返回 undefined
  */
-function readBindingPathValue(scope: Record<WidgetBindingContextRoot, unknown> & WidgetBindingLocalContext, path: WidgetBindingPath): unknown {
-  let currentValue = path.root === 'local' ? scope.locals?.[path.localRoot ?? ''] : scope[path.root];
-
-  for (const segment of path.segments) {
-    if (!isPathReadable(currentValue)) {
-      return undefined;
-    }
-
-    currentValue = currentValue[segment];
+function createDisplayJsonValue(value: unknown, seenObjects: WeakSet<object>): unknown {
+  if (typeof value === 'bigint') {
+    return value.toString();
   }
 
-  return currentValue;
-}
+  if (value === undefined || typeof value === 'function' || typeof value === 'symbol') {
+    return undefined;
+  }
 
-/**
- * 创建展示值 JSON 序列化替换函数。
- * @returns JSON 序列化替换函数
- */
-function createWidgetDisplayJsonReplacer(): WidgetDisplayJsonReplacer {
-  const seenObjects = new WeakSet<object>();
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
 
-  return (_key: string, value: unknown): unknown => {
-    if (typeof value === 'bigint') {
-      return value.toString();
-    }
+  if (seenObjects.has(value)) {
+    return '[Circular]';
+  }
 
-    if (value !== null && typeof value === 'object') {
-      if (seenObjects.has(value)) {
-        return '[Circular]';
+  seenObjects.add(value);
+
+  let descriptors: Record<string, PropertyDescriptor>;
+  try {
+    descriptors = Object.getOwnPropertyDescriptors(value);
+  } catch {
+    return undefined;
+  }
+
+  if (Array.isArray(value)) {
+    const lengthDescriptor = descriptors.length;
+    const length =
+      lengthDescriptor && Object.prototype.hasOwnProperty.call(lengthDescriptor, 'value') && typeof lengthDescriptor.value === 'number'
+        ? lengthDescriptor.value
+        : 0;
+    const snapshot = Array.from({ length }, (_unusedValue: unknown, index: number): unknown => {
+      const descriptor = descriptors[String(index)];
+
+      if (!descriptor || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
+        return null;
       }
 
-      seenObjects.add(value);
+      return createDisplayJsonValue(descriptor.value, seenObjects) ?? null;
+    });
+
+    // 屏蔽可能被全局扩展的 Array.prototype.toJSON，确保后续序列化不会调用代码。
+    Object.defineProperty(snapshot, 'toJSON', {
+      configurable: false,
+      enumerable: false,
+      value: undefined,
+      writable: false
+    });
+
+    return snapshot;
+  }
+
+  const snapshot = Object.create(null) as Record<string, unknown>;
+
+  Object.entries(descriptors).forEach(([key, descriptor]: [string, PropertyDescriptor]): void => {
+    if (!descriptor.enumerable || !isWidgetBindingPathSegmentAllowed(key) || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
+      return;
     }
 
-    return value;
-  };
+    const descriptorValue = createDisplayJsonValue(descriptor.value, seenObjects);
+    if (descriptorValue !== undefined) {
+      snapshot[key] = descriptorValue;
+    }
+  });
+
+  return snapshot;
 }
 
 /**
@@ -461,7 +633,9 @@ export function formatWidgetDisplayTextValue(value: unknown): string {
     return String(value);
   }
 
-  return JSON.stringify(value, createWidgetDisplayJsonReplacer(), 2) ?? '';
+  const safeValue = createDisplayJsonValue(value, new WeakSet<object>());
+
+  return JSON.stringify(safeValue, null, 2) ?? '';
 }
 
 /**
@@ -518,22 +692,19 @@ export function evaluateWidgetBindingExpression(
   context: WidgetRenderContext,
   options: WidgetBindingEvaluationOptions = {}
 ): WidgetBindingEvaluationResult {
+  const normalizedExpression = expression.trim();
   const scope = createBindingScope(context, options);
-  const path = parseWidgetBindingPath(expression.trim(), { ...options, locals: scope.locals });
+  const host = createExpressionHost(scope);
+  const expressionResult = evaluateWidgetExpression(normalizedExpression, host);
 
-  if (!path) {
-    return {
-      resolved: false,
-      value: undefined
-    };
+  if (expressionResult.resolved) {
+    return expressionResult;
   }
 
-  const value = readBindingPathValue(scope, path);
+  // 兼容变量选择器生成的 `["field-name"]` 路径，但仍通过受限宿主读取，不开放数组字面量求值。
+  const legacyPath = parseWidgetBindingPath(normalizedExpression, { ...options, locals: scope.locals });
 
-  return {
-    resolved: value !== undefined,
-    value
-  };
+  return legacyPath ? evaluateLegacyPath(legacyPath, host) : createUnresolvedExpression();
 }
 
 /**
@@ -604,17 +775,32 @@ export function removeWidgetTemplateBindings(template: string): string {
 }
 
 /**
+ * 按当前渲染模式解析字段展示值。
+ * @param value - 字段原始值
+ * @param options - Widget 渲染求值选项
+ * @returns 当前模式下实际展示的字段值
+ */
+export function resolveWidgetDisplayValue(value: unknown, options: WidgetRenderEvaluationOptions = {}): unknown {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const { renderContext, renderOptions = { mode: 'design' } } = options;
+
+  return renderOptions.mode === 'runtime' ? resolveWidgetTemplateValue(value, renderContext) : removeWidgetTemplateBindings(value);
+}
+
+/**
  * 解析元素元数据字段为展示文本。
  * @param metadata - 元素元数据
  * @param fieldName - 字段名称
- * @param defaultValue - 字段缺省文本
- * @param context - Widget渲染上下文
+ * @param options - Widget 渲染求值选项
  * @returns 字段展示文本
  */
-export function resolveWidgetTemplateFieldText(metadata: WidgetMetadata, fieldName: string, context?: WidgetRenderContext): string {
+export function resolveWidgetTemplateFieldText(metadata: WidgetMetadata, fieldName: string, options: WidgetRenderEvaluationOptions = {}): string {
   const fieldValue = metadata[fieldName];
   const template = typeof fieldValue === 'string' ? fieldValue : '';
-  const resolvedValue = resolveWidgetTemplateValue(template, context);
+  const resolvedValue = resolveWidgetDisplayValue(template, options);
 
   return formatWidgetDisplayTextValue(resolvedValue);
 }

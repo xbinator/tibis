@@ -24,6 +24,19 @@ export interface WidgetSize {
 }
 
 /**
+ * Widget Vue 渲染模式。
+ */
+export type WidgetRenderMode = 'design' | 'runtime';
+
+/**
+ * Widget Vue 渲染上下文选项。
+ */
+export interface WidgetRenderContextOptions {
+  /** Widget Vue 渲染模式 */
+  mode?: WidgetRenderMode;
+}
+
+/**
  * 盒模型四边数值。
  */
 export interface WidgetBoxSides {
