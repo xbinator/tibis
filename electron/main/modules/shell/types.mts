@@ -6,6 +6,21 @@
 /** Shell 命令工具支持的 shell 类型。 */
 export type ShellCommandShell = 'bash' | 'powershell';
 
+/** Shell 命令交互模式。 */
+export type ShellInteractionMode = 'none' | 'auto-default';
+
+/** Shell 命令权威终止语义。 */
+export type ShellCommandTermination =
+  | { kind: 'exit'; exitCode: number }
+  | { kind: 'signal'; signal: string }
+  | { kind: 'cancelled' }
+  | { kind: 'tool_timeout' }
+  | { kind: 'interaction_timeout' }
+  | { kind: 'answer_limit' }
+  | { kind: 'unsupported_prompt'; reason: 'text' | 'path' | 'account' | 'secret' }
+  | { kind: 'process_cleanup_failed'; message: string }
+  | { kind: 'spawn_error'; message: string };
+
 /** Shell 命令安全分析状态。 */
 export type ShellCommandSafetyStatus = 'allowed' | 'blocked';
 
@@ -74,6 +89,8 @@ export interface ShellCommandRunRequest {
   timeoutMs: number;
   /** 最终结果中每个输出流的最大字符数。 */
   maxOutputChars?: number;
+  /** 交互模式，缺省时使用普通管道模式。 */
+  interactionMode?: ShellInteractionMode;
 }
 
 /**
@@ -112,10 +129,43 @@ export interface ShellCommandRunResult {
   durationMs: number;
   /** 是否因超时结束。 */
   timedOut: boolean;
-  /** 截断后的 stdout。 */
-  stdout: string;
-  /** 截断后的 stderr。 */
-  stderr: string;
   /** 输出是否被截断。 */
   truncated: boolean;
+  /** 输出采集模式。 */
+  outputMode: 'pipes' | 'pty';
+  /** 管道模式 stdout。 */
+  stdout?: string;
+  /** 管道模式 stderr。 */
+  stderr?: string;
+  /** PTY 模式去除终端控制序列后的有界纯文本输出。 */
+  terminalOutput?: string;
+  /** 权威终止语义。 */
+  termination: ShellCommandTermination;
+  /** 自动交互元数据，仅 auto-default 模式存在。 */
+  autoInteraction?: {
+    /** 是否启用自动交互。 */
+    enabled: boolean;
+    /** 累计自动回答次数。 */
+    answerCount: number;
+    /** 自动交互停止原因。 */
+    stopReason?: 'completed' | 'tool_timeout' | 'interaction_timeout' | 'answer_limit' | 'process_exit' | 'unsupported_prompt' | 'cancelled';
+  };
+}
+
+/** Shell PTY 有序运行事件。 */
+export type ShellRunEvent =
+  | { type: 'terminal_update'; content: string }
+  | { type: 'auto_answer'; count: number }
+  | { type: 'finished'; result: ShellCommandRunResult };
+
+/** Shell PTY 事件信封。 */
+export interface ShellRunEventEnvelope {
+  /** 命令唯一标识。 */
+  commandId: string;
+  /** 单命令递增序号。 */
+  sequence: number;
+  /** ISO 创建时间。 */
+  createdAt: string;
+  /** 事件载荷。 */
+  event: ShellRunEvent;
 }

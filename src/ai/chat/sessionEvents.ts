@@ -10,6 +10,7 @@ import type {
   ChatRuntimeMessageDeletedEvent,
   ChatRuntimeMessageEvent
 } from 'types/chat-runtime';
+import type { ElectronShellRunEventEnvelope } from 'types/electron-api';
 
 /**
  * Session UI 事件。
@@ -21,7 +22,8 @@ export type ChatSessionUIEvent =
   | { type: 'contextUsageUpdated'; event: ChatRuntimeContextUsageEvent }
   | { type: 'confirmationRequested'; event: ChatRuntimeConfirmationRequestEvent }
   | { type: 'runtimeCompleted'; event: ChatRuntimeCompleteEvent }
-  | { type: 'runtimeError'; event: ChatRuntimeErrorEvent };
+  | { type: 'runtimeError'; event: ChatRuntimeErrorEvent }
+  | { type: 'shellRunEvent'; event: ElectronShellRunEventEnvelope };
 
 /** Session UI 事件监听器。 */
 export type ChatSessionUIEventListener = (event: ChatSessionUIEvent) => void;

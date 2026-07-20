@@ -79,6 +79,7 @@ const electronAPIMock = vi.hoisted(() => ({
   }),
   chatRuntimeOnToolRequest: vi.fn(() => vi.fn()),
   chatRuntimeOnToolCancelled: vi.fn(() => vi.fn()),
+  onShellRunEvent: vi.fn(() => vi.fn()),
   chatRuntimeOnConfirmationRequested: vi.fn((callback: NonNullable<typeof runtimeListeners.confirmationRequest>) => {
     runtimeListeners.confirmationRequest = callback;
     return vi.fn();
@@ -222,6 +223,7 @@ vi.mock('@/ai/tools/builtin/SkillTool', () => ({
 vi.mock('@/shared/platform', () => ({
   native: {
     onShellCommandOutput: vi.fn(() => vi.fn()),
+    onShellRunEvent: vi.fn(() => vi.fn()),
     openExternal: vi.fn(),
     getHomeDir: vi.fn(() => '/Users/test'),
     readFile: vi.fn(() => ({ content: '' })),

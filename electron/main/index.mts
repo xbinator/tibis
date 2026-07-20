@@ -21,6 +21,7 @@ import {
   refreshShortcuts,
   setShortcutActionSender
 } from './modules/index.mjs';
+import { runShellPtySmoke } from './modules/shell/native-smoke.mjs';
 import { createWindow } from './window.mjs';
 
 // 设置应用名称（开发模式下也生效）
@@ -28,6 +29,7 @@ app.setName('Tibis');
 
 const startupShortcutAction = getShortcutActionFromArgv(process.argv);
 const startupOpenFilePaths = resolveOpenFilePathsFromArgv(process.argv);
+const shellPtySmokeRequested = process.argv.includes('--shell-pty-smoke');
 let shouldContinueStartup = true;
 
 /** 日志维护定时器句柄，用于 before-quit 时清理 */
@@ -40,7 +42,7 @@ let bootstrapReady = false;
 /** bootstrap 完成前收到的系统快捷入口动作队列 */
 const pendingShortcutActions: string[] = [];
 
-if (process.platform === 'win32') {
+if (process.platform === 'win32' && !shellPtySmokeRequested) {
   const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
   if (!gotSingleInstanceLock) {
@@ -187,7 +189,16 @@ app.on('open-file', (event, filePath) => {
   handleSystemOpenFilePath(filePath);
 });
 
-if (shouldContinueStartup) {
+if (shellPtySmokeRequested) {
+  app.whenReady().then((): Promise<void> => {
+    return runShellPtySmoke().then((result): void => {
+      const output = `${result.message}\n`;
+      if (result.ok) process.stdout.write(output);
+      else process.stderr.write(output);
+      app.exit(result.ok ? 0 : 1);
+    });
+  });
+} else if (shouldContinueStartup) {
   app.whenReady().then(bootstrap);
   app.on('window-all-closed', handleWindowAllClosed);
   app.on('before-quit', handleBeforeQuit);

@@ -415,6 +415,18 @@ export interface ChatMessageShellOutputChunk {
   createdAt: string;
 }
 
+/** Shell PTY 在 renderer 中维护的临时显示状态。 */
+export interface ChatMessageShellRunState {
+  /** 最新当前屏幕快照。 */
+  terminalContent: string;
+  /** 已展示的累计自动回答次数，最多 20 条。 */
+  autoAnswers: number[];
+  /** 已应用的最后事件序号。 */
+  lastSequence: number;
+  /** 是否已收到 finished。 */
+  finished: boolean;
+}
+
 /**
  * 聊天消息统一工具片段。
  * 合并原 tool-input / tool-call / tool-result 为同一片段，通过 status 追踪工具执行生命周期。
@@ -436,6 +448,8 @@ export interface ChatMessageToolPart extends ChatMessagePartBase {
   result?: AIToolExecutionResult;
   /** Shell 命令实时输出缓冲，仅 run_shell_command 使用 */
   shellOutput?: ChatMessageShellOutputChunk[];
+  /** Shell PTY 临时 UI 状态，不进入模型工具结果。 */
+  shellRunState?: ChatMessageShellRunState;
 }
 
 /**

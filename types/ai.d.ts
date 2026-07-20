@@ -179,11 +179,17 @@ export interface AIToolExecutionError {
     | 'SCROLL_TARGET_NOT_FOUND'
     | 'BRIDGE_TIMEOUT'
     | 'TOOL_TIMEOUT'
+    | 'INTERACTION_TIMEOUT'
+    | 'INTERACTION_LIMIT_EXCEEDED'
+    | 'UNSUPPORTED_INTERACTION'
+    | 'PROCESS_CLEANUP_FAILED'
     | 'UNSUPPORTED_PROVIDER'
     | 'CONFIRMATION_DISMISSED'
     | 'EXECUTION_FAILED';
   /** 错误消息。 */
   message: string;
+  /** 保留给模型的结构化、可序列化失败元数据。 */
+  details?: unknown;
 }
 
 /**

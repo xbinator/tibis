@@ -19,10 +19,17 @@ export function createToolSuccessResult<TResult>(toolName: string, data: TResult
  * @param toolName - Tool name.
  * @param code - Error code.
  * @param message - Error message.
+ * @param details - Optional structured failure metadata.
  * @returns Failure result.
  */
-export function createToolFailureResult(toolName: string, code: AIToolExecutionError['code'], message: string): AIToolExecutionResult<never> {
-  return { toolName, status: 'failure', error: { code, message } };
+export function createToolFailureResult<TDetails = undefined>(
+  toolName: string,
+  code: AIToolExecutionError['code'],
+  message: string,
+  details?: TDetails
+): AIToolExecutionResult<never> {
+  const error: AIToolExecutionError = details === undefined ? { code, message } : { code, message, details };
+  return { toolName, status: 'failure', error };
 }
 
 /**

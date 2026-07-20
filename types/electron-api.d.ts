@@ -172,6 +172,35 @@ export interface ElectronReadWorkspaceDirectoryResult {
 /** Shell 命令支持的 shell 类型。 */
 export type ElectronShellCommandShell = 'bash' | 'powershell';
 
+/** Shell 命令交互模式。 */
+export type ElectronShellInteractionMode = 'none' | 'auto-default';
+
+/** Shell auto-default 版本化 capability。 */
+export interface ElectronShellAutoDefaultCapability {
+  /** 当前构建是否允许自动默认交互。 */
+  enabled: boolean;
+  /** 未开放原因。 */
+  reason: 'FEATURE_DISABLED' | 'VERIFICATION_MISMATCH' | null;
+  /** 当前要求的验证版本。 */
+  verificationVersion: string;
+  /** 当前平台。 */
+  platform: string;
+  /** 当前 CPU 架构。 */
+  arch: string;
+}
+
+/** Shell 命令权威终止语义。 */
+export type ElectronShellCommandTermination =
+  | { kind: 'exit'; exitCode: number }
+  | { kind: 'signal'; signal: string }
+  | { kind: 'cancelled' }
+  | { kind: 'tool_timeout' }
+  | { kind: 'interaction_timeout' }
+  | { kind: 'answer_limit' }
+  | { kind: 'unsupported_prompt'; reason: 'text' | 'path' | 'account' | 'secret' }
+  | { kind: 'process_cleanup_failed'; message: string }
+  | { kind: 'spawn_error'; message: string };
+
 /**
  * Electron Shell 命令安全发现项。
  */
@@ -234,6 +263,8 @@ export interface ElectronShellCommandRunRequest {
   timeoutMs: number;
   /** 最终输出最大字符数。 */
   maxOutputChars?: number;
+  /** 交互模式，缺省时使用普通管道模式。 */
+  interactionMode?: ElectronShellInteractionMode;
 }
 
 /**
@@ -250,6 +281,24 @@ export interface ElectronShellCommandOutputChunk {
   sequence: number;
   /** 创建时间。 */
   createdAt: string;
+}
+
+/** Shell PTY 有序运行事件。 */
+export type ElectronShellRunEvent =
+  | { type: 'terminal_update'; content: string }
+  | { type: 'auto_answer'; count: number }
+  | { type: 'finished'; result: ElectronShellCommandRunResult };
+
+/** Shell PTY 事件信封。 */
+export interface ElectronShellRunEventEnvelope {
+  /** 命令唯一标识。 */
+  commandId: string;
+  /** 单命令递增序号。 */
+  sequence: number;
+  /** ISO 创建时间。 */
+  createdAt: string;
+  /** 事件载荷。 */
+  event: ElectronShellRunEvent;
 }
 
 /**
@@ -272,12 +321,34 @@ export interface ElectronShellCommandRunResult {
   durationMs: number;
   /** 是否超时。 */
   timedOut: boolean;
-  /** 截断后的 stdout。 */
-  stdout: string;
-  /** 截断后的 stderr。 */
-  stderr: string;
   /** 是否截断。 */
   truncated: boolean;
+  /** 输出采集模式。 */
+  outputMode: 'pipes' | 'pty';
+  /** 管道模式 stdout。 */
+  stdout?: string;
+  /** 管道模式 stderr。 */
+  stderr?: string;
+  /** PTY 模式去除终端控制序列后的有界纯文本输出。 */
+  terminalOutput?: string;
+  /** 权威终止语义。 */
+  termination: ElectronShellCommandTermination;
+  /** 自动交互元数据，仅 auto-default 模式存在。 */
+  autoInteraction?: {
+    /** 是否启用自动交互。 */
+    enabled: boolean;
+    /** 累计自动回答次数。 */
+    answerCount: number;
+    /** 自动交互停止原因。 */
+    stopReason?:
+      | 'completed'
+      | 'tool_timeout'
+      | 'interaction_timeout'
+      | 'answer_limit'
+      | 'process_exit'
+      | 'unsupported_prompt'
+      | 'cancelled';
+  };
 }
 
 export interface DbExecuteResult {
@@ -571,9 +642,12 @@ export interface ElectronAPI {
   /** 执行平台托管 request。 */
   request: (request: RequestInput) => Promise<RequestResponse>;
   analyzeShellCommand: (request: ElectronShellCommandSafetyRequest) => Promise<ElectronShellCommandSafetyReport>;
+  /** 同步读取当前构建的 Shell auto-default capability。 */
+  getShellAutoDefaultCapability: () => ElectronShellAutoDefaultCapability;
   runShellCommand: (request: ElectronShellCommandRunRequest) => Promise<ElectronShellCommandRunResult>;
   cancelShellCommand: (commandId: string) => Promise<boolean>;
   onShellCommandOutput: (callback: (chunk: ElectronShellCommandOutputChunk) => void) => () => void;
+  onShellRunEvent: (callback: (event: ElectronShellRunEventEnvelope) => void) => () => void;
 
   // 语音转写
   transcribeAudio: (request: ElectronAudioTranscribeRequest) => Promise<ElectronAudioTranscribeResult>;

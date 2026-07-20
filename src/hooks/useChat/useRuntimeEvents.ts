@@ -15,14 +15,35 @@ import type {
   ChatRuntimeToolCancelledEvent,
   ChatRuntimeToolRequestEvent
 } from 'types/chat-runtime';
+import type { ElectronShellRunEventEnvelope } from 'types/electron-api';
 import { onScopeDispose } from 'vue';
 import type { ChatActorSystem } from '@/ai/chat/actorSystem';
 import { getRememberedRuntimeConfirmationDecision } from '@/ai/chat/policies/runtimeConfirmation';
 import { normalizeToolConfirmationRequest } from '@/ai/tools/confirmation';
+import { createShellCommandId } from '@/ai/tools/shellCommandId';
 import { executeToolCall } from '@/ai/tools/stream';
 import { getElectronAPI } from '@/shared/platform/electron-api';
 import { useToolPermissionStore } from '@/stores/chat/toolPermission';
 import { assertRuntimeResult, createBridgeFailure, createToolFailure, createWorkflowError, isManagedRuntime } from './error';
+
+/** 工具 Promise 完成后等待已排队 finished 事件的最大时间。 */
+const SHELL_ROUTE_GRACE_MS = 5_000;
+
+/** 单个 auto-default Shell 工具的 renderer 路由状态。 */
+interface ShellEventRoute extends Pick<ChatRuntimeToolRequestEvent, 'runtimeId' | 'sessionId' | 'toolCallId'> {
+  /** 异常事件缺失时的有界回收定时器。 */
+  cleanupTimer: ReturnType<typeof setTimeout> | null;
+}
+
+/**
+ * 判断工具请求是否会产生 Shell PTY 有序事件。
+ * @param event - Runtime 工具请求
+ * @returns 是否为 auto-default Shell 请求
+ */
+function hasShellRunEvents(event: ChatRuntimeToolRequestEvent): boolean {
+  if (event.toolName !== 'run_shell_command' || typeof event.input !== 'object' || event.input === null || Array.isArray(event.input)) return false;
+  return (event.input as Record<string, unknown>).interactionMode === 'auto-default';
+}
 
 /**
  * 注册应用级 ChatRuntime 事件监听。
@@ -32,6 +53,7 @@ import { assertRuntimeResult, createBridgeFailure, createToolFailure, createWork
 export function useRuntimeEvents(actorSystem: ChatActorSystem): void {
   const electronAPI = getElectronAPI();
   const toolAbortControllers = new Map<string, AbortController>();
+  const shellRoutes = new Map<string, ShellEventRoute>();
 
   /**
    * 创建 renderer 工具调用的稳定索引。
@@ -114,6 +136,15 @@ export function useRuntimeEvents(actorSystem: ChatActorSystem): void {
     const abortKey = createToolAbortKey(event.runtimeId, event.toolCallId);
     const abortController = new AbortController();
     toolAbortControllers.set(abortKey, abortController);
+    const shellCommandId = createShellCommandId(event.runtimeId, event.toolCallId);
+    if (hasShellRunEvents(event)) {
+      shellRoutes.set(shellCommandId, {
+        runtimeId: event.runtimeId,
+        sessionId: event.sessionId,
+        toolCallId: event.toolCallId,
+        cleanupTimer: null
+      });
+    }
 
     try {
       const executed = await executeToolCall(
@@ -133,6 +164,35 @@ export function useRuntimeEvents(actorSystem: ChatActorSystem): void {
       );
     } finally {
       toolAbortControllers.delete(abortKey);
+      const route = shellRoutes.get(shellCommandId);
+      if (route) {
+        route.cleanupTimer = setTimeout((): void => {
+          if (shellRoutes.get(shellCommandId) === route) shellRoutes.delete(shellCommandId);
+        }, SHELL_ROUTE_GRACE_MS);
+      }
+    }
+  }
+
+  /**
+   * 将 Shell PTY 事件路由到拥有该 toolCallId 的会话。
+   * @param event - Shell 有序运行事件
+   */
+  function handleShellRunEvent(event: ElectronShellRunEventEnvelope): void {
+    const route = shellRoutes.get(event.commandId);
+    if (!route || !isManagedRuntime(actorSystem, route.runtimeId)) return;
+    let translatedRunEvent = event.event;
+    if (event.event.type === 'finished') {
+      translatedRunEvent = { ...event.event, result: { ...event.event.result, commandId: route.toolCallId } };
+    }
+    const translatedEvent: ElectronShellRunEventEnvelope = {
+      ...event,
+      commandId: route.toolCallId,
+      event: translatedRunEvent
+    };
+    actorSystem.emitSessionEvent(route.sessionId, { type: 'shellRunEvent', event: translatedEvent });
+    if (event.event.type === 'finished') {
+      if (route.cleanupTimer) clearTimeout(route.cleanupTimer);
+      shellRoutes.delete(event.commandId);
     }
   }
 
@@ -183,6 +243,15 @@ export function useRuntimeEvents(actorSystem: ChatActorSystem): void {
     assertRuntimeResult(await electronAPI.chatRuntimeSubmitBridgeResponse({ runtimeId: event.runtimeId, requestId: event.requestId, result }));
   }
 
+  /**
+   * 兼容尚未暴露 Shell run-event bridge 的旧 preload，并保持 capability fail-closed。
+   * @returns Shell 事件监听释放函数
+   */
+  function subscribeShellEvents(): () => void {
+    if (typeof electronAPI.onShellRunEvent !== 'function') return (): void => undefined;
+    return electronAPI.onShellRunEvent(handleShellRunEvent);
+  }
+
   const disposers = [
     electronAPI.chatRuntimeOnMessageCreated(handleMessageCreated),
     electronAPI.chatRuntimeOnMessageUpdated(handleMessageUpdated),
@@ -192,6 +261,7 @@ export function useRuntimeEvents(actorSystem: ChatActorSystem): void {
       handleToolRequest(event).catch(() => undefined);
     }),
     electronAPI.chatRuntimeOnToolCancelled(handleToolCancelled),
+    subscribeShellEvents(),
     electronAPI.chatRuntimeOnConfirmationRequested((event) => {
       handleConfirmationRequest(event).catch(() => undefined);
     }),
@@ -205,6 +275,10 @@ export function useRuntimeEvents(actorSystem: ChatActorSystem): void {
   onScopeDispose((): void => {
     for (const controller of toolAbortControllers.values()) controller.abort();
     toolAbortControllers.clear();
+    for (const route of shellRoutes.values()) {
+      if (route.cleanupTimer) clearTimeout(route.cleanupTimer);
+    }
+    shellRoutes.clear();
     for (const dispose of disposers) dispose();
   });
 }

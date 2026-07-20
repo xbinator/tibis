@@ -255,6 +255,7 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
     ? createBuiltinShellCommandTool({
         confirm: options.confirm!,
         getWorkspaceRoot: options.getWorkspaceRoot,
+        getAutoDefaultCapability: () => native.getShellAutoDefaultCapability(),
         getAdditionalShellWorkspaceRoots: () => (options.skillStore?.getEnabledSkills() ?? []).map((skill) => skill.dirPath)
       })
     : null;

@@ -7,6 +7,8 @@ import type {
   ElectronShellCommandOutputChunk,
   ElectronShellCommandRunRequest,
   ElectronShellCommandRunResult,
+  ElectronShellAutoDefaultCapability,
+  ElectronShellRunEventEnvelope,
   ElectronShellCommandSafetyReport,
   ElectronShellCommandSafetyRequest,
   RecentFileShortcutInput
@@ -203,11 +205,16 @@ export interface Native {
 
   analyzeShellCommand(request: ElectronShellCommandSafetyRequest): Promise<ElectronShellCommandSafetyReport>;
 
+  /** 同步读取当前构建的 Shell auto-default capability。 */
+  getShellAutoDefaultCapability(): ElectronShellAutoDefaultCapability;
+
   runShellCommand(request: ElectronShellCommandRunRequest): Promise<ElectronShellCommandRunResult>;
 
   cancelShellCommand(commandId: string): Promise<boolean>;
 
   onShellCommandOutput(callback: (chunk: ElectronShellCommandOutputChunk) => void): () => void;
+
+  onShellRunEvent(callback: (event: ElectronShellRunEventEnvelope) => void): () => void;
 
   onMenuAction?(callback: (action: string) => void): () => void;
 

@@ -1,5 +1,7 @@
-/** * @file BubblePartTool.vue * @description 聊天消息中工具调用部分的气泡组件，展示工具的执行状态、输入/输出内容， * 以及提问工具（ask_user_choice
-等）的问答结果和简单工具的人可读摘要。 */
+<!--
+  @file BubblePartTool.vue
+  @description 展示工具执行状态、输入输出、Shell PTY 实时画面和结构化结果摘要。
+-->
 <template>
   <!-- 工具气泡容器：inputting 状态默认展开，其余状态默认折叠 -->
   <BubblePart type="tool" :has-content="hasContent" :default-collapsed="defaultCollapsed">
@@ -16,8 +18,15 @@
       <span v-if="part.status === 'done' && part.result?.status === 'failure'" :class="bem('status', { failure: true })">失败</span>
     </template>
 
+    <!-- Shell PTY 展示当前屏幕和 Tibis 自动行为，不把行为伪装成命令输出 -->
+    <template v-if="isShellCommand && shellDisplay">
+      <div v-if="shellTerminalContent" :class="bem('shell-terminal')">{{ shellTerminalContent }}</div>
+      <div v-for="count in shellAutoAnswers" :key="count" :class="bem('shell-auto-answer')">✓ Automatically selected default option ({{ count }})</div>
+      <div v-if="summary?.text" :class="bem('shell-finished')">{{ summary.text }}</div>
+    </template>
+
     <!-- todowrite 成功结果使用单层任务卡片，避免通用工具气泡和任务面板重复嵌套 -->
-    <TodoList v-if="todoWriteTodos" :todos="todoWriteTodos" />
+    <TodoList v-else-if="todoWriteTodos" :todos="todoWriteTodos" />
 
     <!-- 提问工具结果：以问答形式展示用户选择 -->
     <template v-else-if="isQuestionResult">
@@ -290,6 +299,40 @@ const summary = computed(() => {
 /** 是否为终端命令执行，用于特殊样式（等宽字体 + 背景色） */
 const isShellCommand = computed(() => props.part.toolName === 'run_shell_command');
 
+/** Shell 成功结果中的结构化运行数据。 */
+const shellResultData = computed<Record<string, unknown> | null>(() => {
+  if (props.part.result?.status === 'success' && isPlainObject(props.part.result.data)) {
+    return props.part.result.data as Record<string, unknown>;
+  }
+  if (props.part.result?.status === 'failure' && isPlainObject(props.part.result.error.details)) {
+    return props.part.result.error.details as Record<string, unknown>;
+  }
+  return null;
+});
+
+/** Shell 当前屏幕；实时状态不存在时回退最终 terminalOutput。 */
+const shellTerminalContent = computed<string>(() => {
+  if (props.part.shellRunState?.terminalContent) return props.part.shellRunState.terminalContent;
+  const terminalOutput = shellResultData.value?.terminalOutput;
+  if (typeof terminalOutput === 'string') return terminalOutput;
+  const stdout = shellResultData.value?.stdout;
+  const stderr = shellResultData.value?.stderr;
+  return [stdout, stderr].filter((value): value is string => typeof value === 'string' && value.length > 0).join('\n');
+});
+
+/** Shell 已展示的累计自动回答标记。 */
+const shellAutoAnswers = computed<number[]>(() => {
+  if (props.part.shellRunState?.autoAnswers.length) return props.part.shellRunState.autoAnswers;
+  const metadata = shellResultData.value?.autoInteraction;
+  if (!isPlainObject(metadata)) return [];
+  const { answerCount } = metadata as Record<string, unknown>;
+  if (typeof answerCount !== 'number' || answerCount <= 0) return [];
+  return [answerCount];
+});
+
+/** Shell 是否存在专用终端展示内容。 */
+const shellDisplay = computed<boolean>(() => shellTerminalContent.value.length > 0 || shellAutoAnswers.value.length > 0);
+
 /**
  * 解析提问工具的问答结果，将 value 映射为可读的 label。
  * 兼容多问题（questionAnswers）和单问题（answers）两种返回格式。
@@ -434,6 +477,30 @@ const questionOtherText = computed(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+.bubble-part-tool__shell-terminal {
+  max-height: 280px;
+  padding: 8px;
+  overflow: auto;
+  font-family: Monaco, 'SF Mono', Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  background: var(--color-fill-tertiary, rgb(0 0 0 / 6%));
+  border-radius: 4px;
+}
+
+.bubble-part-tool__shell-auto-answer {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--color-success, #52c41a);
+}
+
+.bubble-part-tool__shell-finished {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 
 .bubble-part-tool__summary-tag {

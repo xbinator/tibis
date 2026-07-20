@@ -4,8 +4,14 @@
  */
 import type { AIToolConfirmationDecision, AIToolConfirmationRequest } from '../../confirmation';
 import type { ToolRequiredConfirmationOptions, ToolWorkspaceOptions } from '../../shared/types';
-import type { AIToolExecutor } from 'types/ai';
-import type { ElectronShellCommandRunResult, ElectronShellCommandSafetyReport, ElectronShellCommandShell } from 'types/electron-api';
+import type { AIToolExecutionResult, AIToolExecutor } from 'types/ai';
+import type {
+  ElectronShellCommandRunResult,
+  ElectronShellCommandSafetyReport,
+  ElectronShellCommandShell,
+  ElectronShellAutoDefaultCapability,
+  ElectronShellInteractionMode
+} from 'types/electron-api';
 import { nanoid } from 'nanoid';
 import { native } from '@/shared/platform';
 import { asyncTo } from '@/utils/asyncTo';
@@ -24,6 +30,9 @@ const MIN_TIMEOUT_MS = 1_000;
 /** 最大命令超时时间。 */
 const MAX_TIMEOUT_MS = 120_000;
 
+/** Renderer capability fail-closed 时使用的当前验证版本。 */
+const AUTO_DEFAULT_VERIFICATION_VERSION = 'v1';
+
 /**
  * Shell 命令工具输入。
  */
@@ -38,6 +47,8 @@ export interface RunShellCommandInput {
   cwd?: unknown;
   /** 超时时间，单位毫秒。 */
   timeoutMs?: unknown;
+  /** 交互模式，默认使用普通管道执行。 */
+  interactionMode?: unknown;
   /** Runtime 注入的本地执行中止信号，不进入模型 schema。 */
   abortSignal?: unknown;
 }
@@ -56,6 +67,8 @@ export interface RunShellCommandToolResult extends ElectronShellCommandRunResult
 export interface CreateBuiltinShellCommandToolOptions extends ToolRequiredConfirmationOptions, ToolWorkspaceOptions {
   /** 获取额外允许作为 Shell 安全边界的目录，如已启用 Skill 的目录。 */
   getAdditionalShellWorkspaceRoots?: () => string[];
+  /** 获取版本化 auto-default capability。 */
+  getAutoDefaultCapability?: () => ElectronShellAutoDefaultCapability;
 }
 
 /**
@@ -82,6 +95,66 @@ function normalizeTimeoutMs(timeoutMs: unknown): number {
   }
 
   return Math.min(MAX_TIMEOUT_MS, Math.max(MIN_TIMEOUT_MS, timeoutMs as number));
+}
+
+/**
+ * 归一化 Shell 交互模式。
+ * @param value - 原始交互模式
+ * @returns 受支持的交互模式
+ */
+function normalizeInteractionMode(value: unknown): ElectronShellInteractionMode {
+  if (value === undefined) return 'none';
+  if (value === 'none' || value === 'auto-default') return value;
+  throw new Error('interactionMode 仅支持 none 或 auto-default');
+}
+
+/**
+ * 提取有界的 Shell 失败输出。
+ * @param result - Shell 运行结果
+ * @returns 最多 500 字符的输出说明
+ */
+function formatRunOutput(result: ElectronShellCommandRunResult): string {
+  const output = result.terminalOutput ?? [result.stdout, result.stderr].filter(Boolean).join('\n');
+  if (!output) return '';
+  return `\n${output.slice(Math.max(0, output.length - 500))}${result.truncated ? '\n输出已截断' : ''}`;
+}
+
+/**
+ * 将主进程终止语义映射为 AI 工具结果。
+ * @param runResult - Shell 运行结果
+ * @param safety - Shell 安全报告
+ * @returns 统一工具执行结果
+ */
+function mapRunResult(runResult: ElectronShellCommandRunResult, safety: ElectronShellCommandSafetyReport): AIToolExecutionResult<RunShellCommandToolResult> {
+  const toolResult: RunShellCommandToolResult = { ...runResult, safety };
+  const output = formatRunOutput(runResult);
+
+  switch (runResult.termination.kind) {
+    case 'exit':
+    case 'signal':
+      return createToolSuccessResult(RUN_SHELL_COMMAND_TOOL_NAME, toolResult);
+    case 'cancelled':
+      return createToolCancelledResult(RUN_SHELL_COMMAND_TOOL_NAME);
+    case 'tool_timeout':
+      return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'TOOL_TIMEOUT', `命令在 ${runResult.durationMs}ms 后超时${output}`, toolResult);
+    case 'interaction_timeout':
+      return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'INTERACTION_TIMEOUT', `命令在等待可处理的交互提示时超时${output}`, toolResult);
+    case 'answer_limit':
+      return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'INTERACTION_LIMIT_EXCEEDED', `自动选择默认项次数达到上限${output}`, toolResult);
+    case 'unsupported_prompt':
+      return createToolFailureResult(
+        RUN_SHELL_COMMAND_TOOL_NAME,
+        'UNSUPPORTED_INTERACTION',
+        `命令要求不支持的 ${runResult.termination.reason} 输入，已停止${output}`,
+        toolResult
+      );
+    case 'process_cleanup_failed':
+      return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'PROCESS_CLEANUP_FAILED', `${runResult.termination.message}${output}`, toolResult);
+    case 'spawn_error':
+      return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'EXECUTION_FAILED', `${runResult.termination.message}${output}`, toolResult);
+    default:
+      return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'EXECUTION_FAILED', `未知 Shell 终止状态${output}`);
+  }
 }
 
 /**
@@ -205,10 +278,30 @@ function inferCwdFromLeadingCd(command: string, additionalWorkspaceRoots: string
  * @returns Shell 命令工具执行器
  */
 export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommandToolOptions): AIToolExecutor<RunShellCommandInput, RunShellCommandToolResult> {
+  const readAutoDefaultCapability = options.getAutoDefaultCapability ?? ((): ElectronShellAutoDefaultCapability => native.getShellAutoDefaultCapability());
+
+  /** Electron bridge 不可用或版本不匹配时按 disabled 处理，绝不开放能力。 */
+  function getAutoDefaultCapability(): ElectronShellAutoDefaultCapability {
+    try {
+      return readAutoDefaultCapability();
+    } catch {
+      return {
+        enabled: false,
+        reason: 'FEATURE_DISABLED',
+        verificationVersion: AUTO_DEFAULT_VERIFICATION_VERSION,
+        platform: 'unknown',
+        arch: 'unknown'
+      };
+    }
+  }
+
+  const initialCapability = getAutoDefaultCapability();
   return {
     definition: {
       name: RUN_SHELL_COMMAND_TOOL_NAME,
-      description: '在工作区内执行一条 bash 或 PowerShell 命令。命令会先经过安全检查，再由用户确认后执行；适合运行测试、构建、lint 和短脚本。',
+      description: initialCapability.enabled
+        ? '在工作区内执行一条 bash 或 PowerShell 命令。命令会先经过安全检查；interactionMode=auto-default 仅用于自动按 Enter 选择明确的默认项。'
+        : '在工作区内执行一条 bash 或 PowerShell 命令。命令会先经过安全检查。',
       source: 'builtin',
       riskLevel: 'dangerous',
       requiresActiveDocument: false,
@@ -220,7 +313,16 @@ export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommand
           shell: { type: 'string', enum: ['bash', 'powershell'], description: '命令使用的 shell。' },
           command: { type: 'string', description: '要执行的命令文本。' },
           cwd: { type: 'string', description: '可选执行目录，必须位于 Tibis 工作区内；默认工作区目录。' },
-          timeoutMs: { type: 'number', description: '可选超时时间，默认 30000ms，范围 1000-120000ms。' }
+          timeoutMs: { type: 'number', description: '可选超时时间，默认 30000ms，范围 1000-120000ms。' },
+          ...(initialCapability.enabled
+            ? {
+                interactionMode: {
+                  type: 'string',
+                  enum: ['none', 'auto-default'],
+                  description: '可选交互模式；默认 none，auto-default 仅自动选择明确默认项。'
+                }
+              }
+            : {})
         },
         required: ['shell', 'command'],
         additionalProperties: false
@@ -238,11 +340,17 @@ export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommand
 
       const workspaceRoot = options.getWorkspaceRoot?.() ?? null;
 
+      if (input.interactionMode === 'auto-default' && !getAutoDefaultCapability().enabled) {
+        return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'ACTION_NOT_SUPPORTED', '当前构建尚未通过 Shell auto-default release gate');
+      }
+
       let timeoutMs: number;
+      let interactionMode: ElectronShellInteractionMode;
       try {
         timeoutMs = normalizeTimeoutMs(input.timeoutMs);
+        interactionMode = normalizeInteractionMode(input.interactionMode);
       } catch (error) {
-        return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'INVALID_INPUT', error instanceof Error ? error.message : 'timeoutMs 参数无效');
+        return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'INVALID_INPUT', error instanceof Error ? error.message : 'Shell 参数无效');
       }
 
       const additionalWorkspaceRoots = getAdditionalShellWorkspaceRoots(options);
@@ -293,59 +401,39 @@ export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommand
       };
       abortSignal?.addEventListener('abort', cancelCommand, { once: true });
 
-      try {
-        const runResult = await native.runShellCommand({
+      const [runError, runResult] = await asyncTo(
+        native.runShellCommand({
           commandId,
           shell: input.shell as ElectronShellCommandShell,
           command,
           cwd,
           workspaceRoot: resolvedWorkspaceRoot,
-          timeoutMs
-        });
+          timeoutMs,
+          interactionMode
+        })
+      );
+      abortSignal?.removeEventListener('abort', cancelCommand);
 
-        if (abortSignal?.aborted) {
-          return createToolCancelledResult(RUN_SHELL_COMMAND_TOOL_NAME);
-        }
-
-        const toolResult: RunShellCommandToolResult = {
-          ...runResult,
-          safety
-        };
-
-        if (runResult.timedOut) {
-          const partialOutput = [
-            runResult.stdout && `stdout: ${runResult.stdout.slice(0, 500)}`,
-            runResult.stderr && `stderr: ${runResult.stderr.slice(0, 500)}`,
-            runResult.truncated && '输出已截断'
-          ]
-            .filter(Boolean)
-            .join('\n');
-          if (confirmationRequest) {
-            await options.confirm.onExecutionComplete?.(confirmationRequest, { status: 'failure', errorMessage: `命令执行超时 (${runResult.durationMs}ms)` });
-          }
-          return createToolFailureResult(
-            RUN_SHELL_COMMAND_TOOL_NAME,
-            'TOOL_TIMEOUT',
-            `命令在 ${runResult.durationMs}ms 后超时${partialOutput ? `\n${partialOutput}` : ''}`
-          );
-        }
-
-        if (confirmationRequest) {
-          await options.confirm.onExecutionComplete?.(confirmationRequest, { status: 'success' });
-        }
-        return createToolSuccessResult(RUN_SHELL_COMMAND_TOOL_NAME, toolResult);
-      } catch (error) {
-        if (abortSignal?.aborted) {
-          return createToolCancelledResult(RUN_SHELL_COMMAND_TOOL_NAME);
-        }
-        const message = error instanceof Error ? error.message : '执行 Shell 命令失败';
-        if (confirmationRequest) {
-          await options.confirm.onExecutionComplete?.(confirmationRequest, { status: 'failure', errorMessage: message });
+      if (abortSignal?.aborted) {
+        return createToolCancelledResult(RUN_SHELL_COMMAND_TOOL_NAME);
+      }
+      if (runError || !runResult) {
+        const message = runError?.message ?? '执行 Shell 命令失败';
+        if (confirmationRequest && options.confirm.onExecutionComplete) {
+          await asyncTo(Promise.resolve(options.confirm.onExecutionComplete(confirmationRequest, { status: 'failure', errorMessage: message })));
         }
         return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'EXECUTION_FAILED', message);
-      } finally {
-        abortSignal?.removeEventListener('abort', cancelCommand);
       }
+
+      const result = mapRunResult(runResult, safety);
+      if (confirmationRequest && options.confirm.onExecutionComplete && result.status !== 'cancelled') {
+        const completion =
+          result.status === 'success'
+            ? { status: 'success' as const }
+            : { status: 'failure' as const, errorMessage: result.status === 'failure' ? result.error.message : 'Shell 命令执行未完成' };
+        await asyncTo(Promise.resolve(options.confirm.onExecutionComplete(confirmationRequest, completion)));
+      }
+      return result;
     }
   };
 }

@@ -22,7 +22,7 @@ import { useChatSessionStore } from '@/stores/chat/session';
 import { useToolPermissionStore } from '@/stores/chat/toolPermission';
 import { asyncTo } from '@/utils/asyncTo';
 import { parseUserInput } from '../utils/filePartParser';
-import { create, userChoice } from '../utils/messageHelper';
+import { append, create, userChoice } from '../utils/messageHelper';
 import { appendRuntimeErrorMessage } from '../utils/runtimeError';
 import { useChatRuntime } from './useChatRuntime';
 import { useChatRuntimeLauncher } from './useChatRuntimeLauncher';
@@ -554,6 +554,10 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
 
   /** 处理切回会话时重放的待确认交互。 */
   async function handleSessionUIEvent(event: ChatSessionUIEvent): Promise<void> {
+    if (event.type === 'shellRunEvent') {
+      for (const message of options.messages.value) append.shellRunEventPart(message, event.event);
+      return;
+    }
     if (event.type === 'contextUsageUpdated') {
       options.onContextUsageUpdated(event.event.snapshot);
       return;

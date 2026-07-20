@@ -11,10 +11,12 @@ import type {
   ChatMessageFilePart,
   ChatMessagePart,
   ChatMessageRole,
+  ChatMessageShellRunState,
   ChatMessageShellOutputChunk,
   ChatMessageToolPart,
   ChatMessageWidgetResultPart
 } from 'types/chat';
+import type { ElectronShellRunEventEnvelope } from 'types/electron-api';
 import type { WidgetDisplayPayload } from 'types/widget';
 import dayjs from 'dayjs';
 import { nanoid } from 'nanoid';
@@ -239,6 +241,34 @@ export const append = {
 
     const output = [...(existingPart.shellOutput ?? []), chunk];
     existingPart.shellOutput = output.slice(Math.max(0, output.length - MAX_SHELL_OUTPUT_CHUNK_COUNT));
+  },
+
+  /**
+   * 将有序 Shell PTY 事件应用到对应工具片段。
+   * @param message - 目标 assistant 消息
+   * @param envelope - Shell 运行事件
+   */
+  shellRunEventPart(message: Message, envelope: ElectronShellRunEventEnvelope): void {
+    const part = message.parts.find(
+      (item): item is ChatMessageToolPart => item.type === 'tool' && item.toolCallId === envelope.commandId && item.toolName === 'run_shell_command'
+    );
+    if (!part) return;
+
+    const state: ChatMessageShellRunState = part.shellRunState ?? {
+      terminalContent: '',
+      autoAnswers: [],
+      lastSequence: 0,
+      finished: false
+    };
+    if (state.finished || envelope.sequence <= state.lastSequence) return;
+
+    if (envelope.event.type === 'terminal_update') state.terminalContent = envelope.event.content;
+    if (envelope.event.type === 'auto_answer') {
+      state.autoAnswers = [...state.autoAnswers, envelope.event.count].slice(-20);
+    }
+    state.lastSequence = envelope.sequence;
+    if (envelope.event.type === 'finished') state.finished = true;
+    part.shellRunState = state;
   },
 
   /**

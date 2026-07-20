@@ -4,8 +4,10 @@
  */
 import { spawn } from 'node:child_process';
 import path from 'node:path';
-import type { ShellCommandOutputChunk, ShellCommandRunRequest, ShellCommandRunResult } from './types.mjs';
+import type { ShellCommandOutputChunk, ShellCommandRunRequest, ShellCommandRunResult, ShellCommandTermination } from './types.mjs';
 import type { ChildProcessWithoutNullStreams, SpawnOptionsWithoutStdio } from 'node:child_process';
+import { getAutoDefaultCapability, type ShellAutoDefaultCapability } from './interaction/capability.mjs';
+import { createPtyShellRunner, type PtyShellRunner, type ShellRunEventSink } from './pty-runner.mjs';
 
 /** 默认最终输出截断字符数。 */
 const DEFAULT_MAX_OUTPUT_CHARS = 20_000;
@@ -102,6 +104,10 @@ export type ShellCommandSpawn = (command: string, args: string[], options: Spawn
 export interface CreateShellCommandRunnerOptions {
   /** 子进程创建函数，测试时可注入。 */
   spawnProcess?: ShellCommandSpawn;
+  /** PTY runner，测试时可注入。 */
+  ptyRunner?: PtyShellRunner;
+  /** 获取版本化 auto-default capability。 */
+  getAutoDefaultCapability?: () => ShellAutoDefaultCapability;
 }
 
 /**
@@ -114,7 +120,7 @@ export interface ShellCommandRunner {
    * @param sink - 实时输出接收函数
    * @returns 命令执行结果
    */
-  run: (request: ShellCommandRunRequest, sink?: ShellCommandOutputSink) => Promise<ShellCommandRunResult>;
+  run: (request: ShellCommandRunRequest, sink?: ShellCommandOutputSink, eventSink?: ShellRunEventSink) => Promise<ShellCommandRunResult>;
   /**
    * 按命令 ID 取消运行中的命令。
    * @param commandId - 命令 ID
@@ -133,6 +139,8 @@ interface ActiveCommand {
   timedOut: boolean;
   /** 是否已进入终止流程，防止重复 cancel 重复安排定时器。 */
   terminating: boolean;
+  /** 主动终止原因，用于派生权威 termination。 */
+  terminationReason: 'timeout' | 'cancel' | null;
   /** SIGTERM 后的宽限期定时器。 */
   graceTimer: ReturnType<typeof setTimeout> | null;
   /** 强制终止回调（Promise 闭包内设置，cancel/timeout 共用）。 */
@@ -196,6 +204,8 @@ function appendBoundedOutput(current: string, next: string, maxChars: number): {
  */
 export function createShellCommandRunner(options: CreateShellCommandRunnerOptions = {}): ShellCommandRunner {
   const spawnProcess = options.spawnProcess ?? spawn;
+  const ptyRunner = options.ptyRunner ?? createPtyShellRunner();
+  const resolveAutoDefaultCapability = options.getAutoDefaultCapability ?? getAutoDefaultCapability;
   const activeCommands = new Map<string, ActiveCommand>();
 
   /**
@@ -204,7 +214,14 @@ export function createShellCommandRunner(options: CreateShellCommandRunnerOption
    * @param sink - 实时输出接收函数
    * @returns 命令执行结果
    */
-  function run(request: ShellCommandRunRequest, sink?: ShellCommandOutputSink): Promise<ShellCommandRunResult> {
+  function run(request: ShellCommandRunRequest, sink?: ShellCommandOutputSink, eventSink?: ShellRunEventSink): Promise<ShellCommandRunResult> {
+    if (request.interactionMode === 'auto-default') {
+      const capability = resolveAutoDefaultCapability();
+      if (!capability.enabled) {
+        return Promise.reject(new Error(`Shell auto-default capability 未开放：${capability.reason ?? 'UNKNOWN'}`));
+      }
+      return ptyRunner.run(request, eventSink);
+    }
     if (!isCwdInsideWorkspace(request.cwd, request.workspaceRoot)) {
       return Promise.reject(new Error('命令执行目录必须位于当前工作区内'));
     }
@@ -222,6 +239,7 @@ export function createShellCommandRunner(options: CreateShellCommandRunnerOption
       child,
       timedOut: false,
       terminating: false,
+      terminationReason: null,
       graceTimer: null,
       forceTerminate: null
     };
@@ -289,6 +307,7 @@ export function createShellCommandRunner(options: CreateShellCommandRunnerOption
         if (reason === 'timeout') {
           activeCommand.timedOut = true;
         }
+        activeCommand.terminationReason = reason;
         killProcessTree(child, 'SIGTERM');
 
         // 宽限期后升级为 SIGKILL
@@ -311,7 +330,9 @@ export function createShellCommandRunner(options: CreateShellCommandRunnerOption
               timedOut: activeCommand.timedOut,
               stdout,
               stderr,
-              truncated
+              truncated,
+              outputMode: 'pipes',
+              termination: activeCommand.timedOut ? { kind: 'tool_timeout' } : { kind: 'cancelled' }
             });
           }, GRACE_PERIOD_MS);
         }, GRACE_PERIOD_MS);
@@ -338,6 +359,11 @@ export function createShellCommandRunner(options: CreateShellCommandRunnerOption
         }
         settled = true;
         cleanup();
+        let termination: ShellCommandTermination;
+        if (activeCommand.terminationReason === 'timeout') termination = { kind: 'tool_timeout' };
+        else if (activeCommand.terminationReason === 'cancel') termination = { kind: 'cancelled' };
+        else if (exitCode !== null) termination = { kind: 'exit', exitCode };
+        else termination = { kind: 'signal', signal: signal ?? 'unknown' };
         resolve({
           commandId: request.commandId,
           shell: request.shell,
@@ -349,7 +375,9 @@ export function createShellCommandRunner(options: CreateShellCommandRunnerOption
           timedOut: activeCommand.timedOut,
           stdout,
           stderr,
-          truncated
+          truncated,
+          outputMode: 'pipes',
+          termination
         });
       });
     });
@@ -365,7 +393,7 @@ export function createShellCommandRunner(options: CreateShellCommandRunnerOption
   function cancel(commandId: string): boolean {
     const activeCommand = activeCommands.get(commandId);
     if (!activeCommand) {
-      return false;
+      return ptyRunner.cancel(commandId);
     }
 
     if (activeCommand.forceTerminate) {

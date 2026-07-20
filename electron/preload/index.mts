@@ -25,8 +25,15 @@ import type {
   ChatRuntimeToolCancelledEvent,
   ChatRuntimeToolRequestEvent
 } from 'types/chat-runtime';
-import type { ElectronAPI, ElectronShellCommandOutputChunk, ElectronSpeechInstallProgress, FileChangeEvent } from 'types/electron-api';
+import type {
+  ElectronAPI,
+  ElectronShellCommandOutputChunk,
+  ElectronShellRunEventEnvelope,
+  ElectronSpeechInstallProgress,
+  FileChangeEvent
+} from 'types/electron-api';
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import { getAutoDefaultCapability } from '../main/modules/shell/interaction/capability.mjs';
 import { formatPreloadErrorMessage, shouldIgnorePreloadError } from './error-collector.mjs';
 import webviewAPI from './webview.mjs';
 
@@ -359,6 +366,12 @@ const electronAPI: ElectronAPI = {
   analyzeShellCommand: (request) => ipcRenderer.invoke('shell:analyze', request),
 
   /**
+   * 同步读取与主进程相同环境中的 auto-default capability。
+   * @returns 平台、架构和验证版本绑定的能力结果
+   */
+  getShellAutoDefaultCapability: () => getAutoDefaultCapability(),
+
+  /**
    * 运行 Shell 命令。
    * @param request - 命令运行请求
    * @returns 命令执行结果
@@ -383,6 +396,19 @@ const electronAPI: ElectronAPI = {
     ipcRenderer.on('shell:output', handler);
     return () => {
       ipcRenderer.removeListener('shell:output', handler);
+    };
+  },
+
+  /**
+   * 监听 Shell PTY 有序运行事件。
+   * @param callback - 运行事件回调
+   * @returns 取消监听函数
+   */
+  onShellRunEvent: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, runEvent: ElectronShellRunEventEnvelope) => callback(runEvent);
+    ipcRenderer.on('shell:run-event', handler);
+    return () => {
+      ipcRenderer.removeListener('shell:run-event', handler);
     };
   },
 

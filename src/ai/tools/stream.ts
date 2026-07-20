@@ -6,6 +6,7 @@ import type { JSONValue, ModelMessage } from 'ai';
 import type { AIToolContext, AIToolExecutionResult, AIToolExecutor, AIStreamToolCallChunk, AITransportTool } from 'types/ai';
 import { isFunction } from 'lodash-es';
 import { createToolFailureResult } from './results';
+import { createShellCommandId } from './shellCommandId';
 
 /** Shell 命令工具名称。 */
 const RUN_SHELL_COMMAND_TOOL_NAME = 'run_shell_command';
@@ -101,7 +102,7 @@ function createExecutionInput(toolName: string, input: unknown, toolCallId: stri
 
   return {
     ...input,
-    commandId: toolCallId,
+    commandId: metadata.runtimeId ? createShellCommandId(metadata.runtimeId, toolCallId) : toolCallId,
     ...(metadata.abortSignal ? { abortSignal: metadata.abortSignal } : {})
   };
 }

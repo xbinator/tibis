@@ -207,6 +207,14 @@ export class ElectronNative implements Native {
     return getElectronAPI().analyzeShellCommand(request);
   }
 
+  /**
+   * 同步读取当前 Electron 构建的 Shell auto-default capability。
+   * @returns 版本化能力结果
+   */
+  getShellAutoDefaultCapability(): ReturnType<Native['getShellAutoDefaultCapability']> {
+    return getElectronAPI().getShellAutoDefaultCapability();
+  }
+
   async runShellCommand(request: Parameters<Native['runShellCommand']>[0]): ReturnType<Native['runShellCommand']> {
     return getElectronAPI().runShellCommand(request);
   }
@@ -217,6 +225,15 @@ export class ElectronNative implements Native {
 
   onShellCommandOutput(callback: Parameters<Native['onShellCommandOutput']>[0]): () => void {
     return getElectronAPI().onShellCommandOutput(callback);
+  }
+
+  /**
+   * 监听 Shell PTY 有序运行事件。
+   * @param callback - 运行事件回调
+   * @returns 取消监听函数
+   */
+  onShellRunEvent(callback: Parameters<Native['onShellRunEvent']>[0]): () => void {
+    return getElectronAPI().onShellRunEvent(callback);
   }
 
   updateMenuItem(id: string, properties: { checked?: boolean }): void {

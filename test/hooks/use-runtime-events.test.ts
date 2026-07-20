@@ -3,18 +3,22 @@
  * @description 应用级 ChatRuntime 事件路由 hook 测试。
  * @vitest-environment jsdom
  */
+import type { AIToolExecutor } from 'types/ai';
 import type {
   ChatRuntimeCompleteEvent,
   ChatRuntimeConfirmationRequestEvent,
   ChatRuntimeContextUsageEvent,
   ChatRuntimeErrorEvent,
   ChatRuntimeMessageDeletedEvent,
-  ChatRuntimeMessageEvent
+  ChatRuntimeMessageEvent,
+  ChatRuntimeToolRequestEvent
 } from 'types/chat-runtime';
+import type { ElectronShellRunEventEnvelope } from 'types/electron-api';
 import { effectScope } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createChatActorSystem } from '@/ai/chat/actorSystem';
+import { createShellCommandId } from '@/ai/tools/shellCommandId';
 import { useRuntimeEvents } from '@/hooks/useChat/useRuntimeEvents';
 import { useToolPermissionStore } from '@/stores/chat/toolPermission';
 
@@ -24,12 +28,15 @@ const runtimeListeners = vi.hoisted(() => ({
   messageDeleted: undefined as ((event: ChatRuntimeMessageDeletedEvent) => void) | undefined,
   contextUsage: undefined as ((event: ChatRuntimeContextUsageEvent) => void) | undefined,
   confirmation: undefined as ((event: ChatRuntimeConfirmationRequestEvent) => void) | undefined,
+  toolRequest: undefined as ((event: ChatRuntimeToolRequestEvent) => void) | undefined,
+  shellRunEvent: undefined as ((event: ElectronShellRunEventEnvelope) => void) | undefined,
   complete: undefined as ((event: ChatRuntimeCompleteEvent) => void) | undefined,
   error: undefined as ((event: ChatRuntimeErrorEvent) => void) | undefined
 }));
 
 const runtimeCommands = vi.hoisted(() => ({
-  submitConfirmation: vi.fn()
+  submitConfirmation: vi.fn(),
+  submitToolResult: vi.fn()
 }));
 
 vi.mock('@/shared/platform/electron-api', () => ({
@@ -50,13 +57,21 @@ vi.mock('@/shared/platform/electron-api', () => ({
       runtimeListeners.contextUsage = listener;
       return vi.fn();
     }),
-    chatRuntimeOnToolRequest: vi.fn((): (() => void) => vi.fn()),
+    chatRuntimeOnToolRequest: vi.fn((listener: (event: ChatRuntimeToolRequestEvent) => void): (() => void) => {
+      runtimeListeners.toolRequest = listener;
+      return vi.fn();
+    }),
     chatRuntimeOnToolCancelled: vi.fn((): (() => void) => vi.fn()),
+    onShellRunEvent: vi.fn((listener: (event: ElectronShellRunEventEnvelope) => void): (() => void) => {
+      runtimeListeners.shellRunEvent = listener;
+      return vi.fn();
+    }),
     chatRuntimeOnConfirmationRequested: vi.fn((listener: (event: ChatRuntimeConfirmationRequestEvent) => void): (() => void) => {
       runtimeListeners.confirmation = listener;
       return vi.fn();
     }),
     chatRuntimeSubmitConfirmation: runtimeCommands.submitConfirmation,
+    chatRuntimeSubmitToolResult: runtimeCommands.submitToolResult,
     chatRuntimeOnBridgeRequested: vi.fn((): (() => void) => vi.fn()),
     chatRuntimeOnComplete: vi.fn((listener: (event: ChatRuntimeCompleteEvent) => void): (() => void) => {
       runtimeListeners.complete = listener;
@@ -92,6 +107,8 @@ describe('useRuntimeEvents', (): void => {
     setActivePinia(createPinia());
     runtimeCommands.submitConfirmation.mockReset();
     runtimeCommands.submitConfirmation.mockResolvedValue({ ok: true });
+    runtimeCommands.submitToolResult.mockReset();
+    runtimeCommands.submitToolResult.mockResolvedValue({ ok: true });
     for (const key of Object.keys(runtimeListeners) as Array<keyof typeof runtimeListeners>) {
       runtimeListeners[key] = undefined;
     }
@@ -274,6 +291,142 @@ describe('useRuntimeEvents', (): void => {
     runtimeListeners.messageDeleted?.({ ...createEventBase(), messageId: 'assistant-1' });
 
     expect(visibleEvents).not.toHaveBeenCalled();
+    scope.stop();
+    system.stop();
+  });
+
+  it('isolates identical Shell toolCallIds across concurrent runtimes', async (): Promise<void> => {
+    const pendingResolvers: Array<() => void> = [];
+    const tool: AIToolExecutor = {
+      definition: {
+        name: 'run_shell_command',
+        description: 'test shell',
+        source: 'builtin',
+        parameters: { type: 'object', properties: {} },
+        riskLevel: 'dangerous',
+        requiresActiveDocument: false
+      },
+      execute: vi.fn(
+        (): Promise<{ toolName: string; status: 'success'; data: Record<string, never> }> =>
+          new Promise((resolve) => {
+            pendingResolvers.push((): void => resolve({ toolName: 'run_shell_command', status: 'success', data: {} }));
+          })
+      )
+    };
+    const system = createChatActorSystem();
+    system.start();
+    const visibleA = vi.fn();
+    const visibleB = vi.fn();
+
+    // 两个 Session 同时注册独立 Runtime，并故意使用相同的 toolCallId。
+    for (const route of [
+      { sessionId: 'session-a', runtimeId: 'runtime-a', visible: visibleA },
+      { sessionId: 'session-b', runtimeId: 'runtime-b', visible: visibleB }
+    ]) {
+      const session = system.ensureSession(route.sessionId);
+      session.send({ type: 'session.submit', input: { messageId: `user-${route.runtimeId}`, createdAt: 'now', content: 'hello', parts: [] } });
+      session.send({ type: 'session.prepared' });
+      const turnId = session.getSnapshot().context.turnRef?.getSnapshot().context.turnId;
+      system.registerRuntime(
+        { sessionId: route.sessionId, turnId: turnId as string, agentId: 'primary', runtimeId: route.runtimeId },
+        { tools: [tool], getToolContext: () => undefined, handleBridgeRequest: async (): Promise<unknown> => undefined }
+      );
+      system.send({ type: 'runtime.event', runtimeId: route.runtimeId, event: { type: 'runtime.started', runtimeId: route.runtimeId } });
+      system.subscribeSessionEvents(route.sessionId, route.visible);
+    }
+
+    const scope = effectScope();
+    scope.run((): void => useRuntimeEvents(system));
+    runtimeListeners.toolRequest?.({
+      ...createEventBase(),
+      runtimeId: 'runtime-a',
+      sessionId: 'session-a',
+      toolCallId: 'same-call',
+      toolName: 'run_shell_command',
+      input: { interactionMode: 'auto-default' }
+    });
+    runtimeListeners.toolRequest?.({
+      ...createEventBase(),
+      runtimeId: 'runtime-b',
+      sessionId: 'session-b',
+      toolCallId: 'same-call',
+      toolName: 'run_shell_command',
+      input: { interactionMode: 'auto-default' }
+    });
+    await Promise.resolve();
+
+    runtimeListeners.shellRunEvent?.({
+      commandId: createShellCommandId('runtime-a', 'same-call'),
+      sequence: 1,
+      createdAt: 'now',
+      event: { type: 'terminal_update', content: 'screen-a' }
+    });
+    runtimeListeners.shellRunEvent?.({
+      commandId: createShellCommandId('runtime-b', 'same-call'),
+      sequence: 1,
+      createdAt: 'now',
+      event: { type: 'terminal_update', content: 'screen-b' }
+    });
+
+    expect(visibleA).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'shellRunEvent',
+        event: expect.objectContaining({ commandId: 'same-call', event: { type: 'terminal_update', content: 'screen-a' } })
+      })
+    );
+    expect(visibleA).not.toHaveBeenCalledWith(
+      expect.objectContaining({ event: expect.objectContaining({ event: expect.objectContaining({ content: 'screen-b' }) }) })
+    );
+    expect(visibleB).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'shellRunEvent',
+        event: expect.objectContaining({ commandId: 'same-call', event: { type: 'terminal_update', content: 'screen-b' } })
+      })
+    );
+
+    pendingResolvers.forEach((resolvePending: () => void): void => resolvePending());
+    await Promise.resolve();
+    await Promise.resolve();
+    runtimeListeners.shellRunEvent?.({
+      commandId: createShellCommandId('runtime-a', 'same-call'),
+      sequence: 2,
+      createdAt: 'now',
+      event: { type: 'terminal_update', content: 'late-screen-a' }
+    });
+    expect(visibleA).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'shellRunEvent', event: expect.objectContaining({ event: { type: 'terminal_update', content: 'late-screen-a' } }) })
+    );
+    runtimeListeners.shellRunEvent?.({
+      commandId: createShellCommandId('runtime-a', 'same-call'),
+      sequence: 3,
+      createdAt: 'now',
+      event: {
+        type: 'finished',
+        result: {
+          commandId: createShellCommandId('runtime-a', 'same-call'),
+          shell: 'bash',
+          command: 'echo ok',
+          cwd: '/workspace',
+          exitCode: 0,
+          signal: null,
+          durationMs: 1,
+          timedOut: false,
+          truncated: false,
+          outputMode: 'pty',
+          terminalOutput: 'done',
+          termination: { kind: 'exit', exitCode: 0 }
+        }
+      }
+    });
+    runtimeListeners.shellRunEvent?.({
+      commandId: createShellCommandId('runtime-a', 'same-call'),
+      sequence: 4,
+      createdAt: 'now',
+      event: { type: 'terminal_update', content: 'after-finished' }
+    });
+    expect(visibleA).not.toHaveBeenCalledWith(
+      expect.objectContaining({ event: expect.objectContaining({ event: expect.objectContaining({ content: 'after-finished' }) }) })
+    );
     scope.stop();
     system.stop();
   });

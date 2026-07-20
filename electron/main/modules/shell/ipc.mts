@@ -10,6 +10,8 @@ import { analyzeShellCommandSafety } from './safety.mjs';
 
 /** Shell 命令输出事件名称。 */
 export const SHELL_COMMAND_OUTPUT_EVENT = 'shell:output';
+/** Shell PTY 有序运行事件名称。 */
+export const SHELL_RUN_EVENT = 'shell:run-event';
 
 /**
  * 注册 Shell 命令 IPC handlers。
@@ -20,9 +22,19 @@ export function registerShellCommandHandlers(): void {
   });
 
   ipcMain.handle('shell:run', async (event: IpcMainInvokeEvent, request: ShellCommandRunRequest) => {
-    return shellCommandRunner.run(request, (chunk) => {
-      event.sender.send(SHELL_COMMAND_OUTPUT_EVENT, chunk);
-    });
+    return shellCommandRunner.run(
+      request,
+      (chunk) => {
+        event.sender.send(SHELL_COMMAND_OUTPUT_EVENT, chunk);
+      },
+      (runEvent) => {
+        try {
+          event.sender.send(SHELL_RUN_EVENT, runEvent);
+        } catch {
+          // renderer 断开不能改变命令生命周期或最终工具结果。
+        }
+      }
+    );
   });
 
   ipcMain.handle('shell:cancel', async (_event: IpcMainInvokeEvent, commandId: string) => {

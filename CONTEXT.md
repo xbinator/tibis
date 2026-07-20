@@ -282,7 +282,7 @@ tibis/
 │   │       ├── logger/               # 日志系统（文件 + 控制台 + 维护定时器）
 │   │       ├── mcp/                  # MCP 运行时（session / tools / status / client / transport / discovery + oauth/ 回调服务器）
 │   │       ├── request/              # 平台托管 HTTP 请求代理（core/：body / constants / queue / response / url）
-│   │       ├── shell/                # 系统 Shell（runner / safety / parser / 回收站、外部链接、命令执行、安全策略）
+│   │       ├── shell/                # 系统 Shell（pipe/PTY runner、Screen Snapshot、自动默认交互、安全策略）
 │   │       ├── speech/               # 语音服务（installer / runtime / 录音、whisper.cpp 转写）
 │   │       ├── store/                # 安全加密存储（electron-store）
 │   │       ├── ui/                   # 窗口控制 + 系统菜单（menu）+ 快捷入口（shortcuts）+ 图片预览（image-preview）+ model
@@ -992,7 +992,7 @@ better-sqlite3 在主进程运行，渲染进程通过 `electronAPI.dbExecute/db
 | `logger` | 日志记录与查询（控制台 + 文件） |
 | `mcp` | MCP 运行时管理（session / tools / status / client / transport / discovery + oauth/ 回调服务器） |
 | `request` | 平台托管 HTTP 请求代理（core/：body / constants / queue / response / url，提供 `request:send` IPC） |
-| `shell` | 系统 Shell（runner / safety / parser / 回收站、外部链接、命令执行、安全策略） |
+| `shell` | 系统 Shell（默认 pipe 执行；内部 gated auto-default 使用 PTY 字节静默窗口、Screen Snapshot、checkpoint 状态机、结构化失败和进程树清理） |
 | `speech` | 语音运行时管理（installer / runtime / 录音、whisper.cpp 转写） |
 | `store` | 安全加密存储（electron-store） |
 | `ui` | 窗口控制 + 系统菜单（menu）+ 快捷入口（shortcuts）+ 图片预览（image-preview）+ model |
