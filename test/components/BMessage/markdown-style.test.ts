@@ -44,6 +44,12 @@ describe('BMessage markdown style', () => {
     expect(style).toMatch(/ol\s+ol\s*>\s*li\s*\{[\s\S]*list-style:\s*lower-alpha;/);
   });
 
+  it('uses proportional numerals for generated list markers', (): void => {
+    const style = readMarkdownStyle();
+
+    expect(style).toMatch(/&::marker\s*\{[\s\S]*font-variant-numeric:\s*proportional-nums;/);
+  });
+
   it('keeps task list checkboxes visible after global input reset', (): void => {
     const style = readMarkdownStyle();
 
