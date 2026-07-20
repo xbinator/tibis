@@ -214,8 +214,7 @@ async function syncData() {
 ## 工具库使用规范
 
 ### lodash-es 优先
-- 项目已安装 `lodash-es` 和 `@types/lodash-es`，**优先使用 lodash-es 替代手写工具函数**
-- 必须使用 `lodash-es`（ES Module 版本），**禁止使用 `lodash`**（CommonJS 版本，不利于 tree-shaking）
+项目已安装 `lodash-es` 和 `@types/lodash-es`，**优先使用 lodash-es 替代手写工具函数**，**禁止使用 `lodash`**（CommonJS 版本不利于 tree-shaking）。
 
 **应使用 lodash-es 的场景**：
 
@@ -230,23 +229,12 @@ async function syncData() {
 | 手写扁平化逻辑 | `import { flatten, flattenDeep } from 'lodash-es'` | 数组扁平化 |
 | 手写条件判断 | `import { isEmpty, isNil, isPlainObject } from 'lodash-es'` | 类型判断 |
 
-**错误示例**：
+**示例**：
 ```typescript
-// ❌ 手写 debounce
-function debounce(fn: Function, delay: number) {
-  let timer: ReturnType<typeof setTimeout>
-  return (...args: unknown[]) => {
-    clearTimeout(timer)
-    timer = setTimeout(() => fn(...args), delay)
-  }
-}
-
-// ❌ 使用 lodash（CommonJS，无法 tree-shake）
+// ❌ 手写 debounce 或使用 lodash（CommonJS）
+function debounce(fn: Function, delay: number) { /* ... */ }
 import { debounce } from 'lodash'
-```
 
-**正确示例**：
-```typescript
 // ✅ 使用 lodash-es（ES Module，支持 tree-shake）
 import { debounce } from 'lodash-es'
 ```
@@ -260,14 +248,12 @@ import { debounce } from 'lodash-es'
 ## 样式规范
 
 ### 禁止使用 `&` 省略类名
-- ❌ **禁止**: 用 `&__xxx` 嵌套生成 BEM 子类名（搜索时无法直接命中样式定义）
-- ✅ **推荐**: 写出完整的类名选择器
+- ❌ 禁止用 `&__xxx` 嵌套生成 BEM 子类名（影响搜索命中样式定义）
+- ✅ 写出完整的类名选择器
 
 ```less
 // ❌ 反例
-.excalidraw-page {
-  &__toolbar { display: flex; }
-}
+.excalidraw-page { &__toolbar { display: flex; } }
 
 // ✅ 正例
 .excalidraw-page { display: flex; }
@@ -275,44 +261,12 @@ import { debounce } from 'lodash-es'
 ```
 
 ### 使用 `createNamespace` 生成 BEM 类名
-- ✅ **必须**: B 开头的组件在 `<script setup>` 中通过 `src/utils/namespace.ts` 的 `createNamespace(name)` 拿到类名和 `bem` 函数
-- ✅ **必须**: B 开头组件的 `<style>` 中使用其生成的类名（`b-{name}` / `b-{name}__{element}` / `b-{name}--{modifier}`），保持模板与样式一致
-- ❌ **禁止**: 手写与 `createNamespace` 不一致的类名前缀
+- ✅ B 开头组件在 `<script setup>` 中通过 `src/utils/namespace.ts` 的 `createNamespace(name)` 拿到类名和 `bem` 函数
+- ✅ 模板与样式中必须使用其生成的类名（`b-{name}` / `b-{name}__{element}` / `b-{name}--{modifier}`）
+- ❌ 禁止手写与 `createNamespace` 不一致的类名前缀
 
 ### `&` 允许使用的场景
-以下场景中 `&` 的使用是允许的，因为不涉及类名省略，不影响搜索：
-- 伪类：`&:hover`、`&:focus`、`&:active`、`&:focus-within`
-- 伪元素：`&::before`、`&::after`
-- 修饰符：`&.is-active`、`&.is-disabled`、`&.is-dragging`、`&.is-group`
-- 组合选择器嵌套：`&:not(.is-group).is-active`、`& .child-class`
-- 媒体查询嵌套：`@media` 内部的 `&`
-
-```less
-// ✅ 允许 - 伪类 / 伪元素 / 修饰符 / 组合选择器嵌套
-.excalidraw-page__toolbar {
-  background: #fff;
-
-  &:hover {
-    background: #f5f5f5;
-  }
-
-  &.is-active {
-    border-color: #1890ff;
-  }
-
-  &.is-dragging {
-    opacity: 0.55;
-  }
-
-  &:not(.is-group).is-active {
-    color: var(--color-primary);
-  }
-
-  &:hover .excalidraw-page__toolbar-actions {
-    opacity: 1;
-  }
-}
-```
+不影响类名命名的 `&` 嵌套是被允许的：伪类（`&:hover` / `&:focus` / `&:active`）、伪元素（`&::before` / `&::after`）、修饰符（`&.is-active` / `&.is-dragging`）、组合选择器（`&:not(.is-group).is-active` / `& .child-class`）、媒体查询（`@media` 内部的 `&`）。
 
 ## 代码风格
 
@@ -347,32 +301,20 @@ function isSameParent() {}
 
 ## Changelog 日志规范
 
-### 改动记录要求
-- 每次代码改动必须记录到 changelog 日志中
-- 记录内容包括：改动类型、改动描述
+- 每次代码改动必须记录到 `changelog/YYYY-MM-DD.md`（提交前检查当天文件，不存在则新建）
+- 记录格式：
+  ```markdown
+  # YYYY-MM-DD
 
-### 日志文件格式
-- 日志文件按日期命名：`YYYY-MM-DD.md`
-- 放置在 `changelog/` 目录下
+  ## Added
+  - 新功能描述
 
-### 日志内容格式
-```markdown
-# YYYY-MM-DD
+  ## Changed
+  - 修改内容描述
 
-## Added
-- [新功能或新特性描述]
+  ## Removed
+  - 删除内容描述
 
-## Changed
-- [修改内容描述]
-
-## Removed
-- [删除内容描述]
-
-## Features
-- [特性描述]
-```
-
-### 生成规范
-- 每次提交代码前，检查是否存在当天的 changelog 文件
-- 如果不存在，生成新的 changelog 文件
-- 如果存在，在对应改动类型下添加记录
+  ## Features
+  - 特性描述
+  ```
