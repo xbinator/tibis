@@ -679,7 +679,7 @@ describe('BWidget canvas component', (): void => {
     wrapper.unmount();
   });
 
-  it('measures text node size from resolved render context content', (): void => {
+  it('measures design-mode text node size from static fragments only', (): void => {
     const data = createDefaultWidgetData();
     data.metadata = {
       previewContext: {
@@ -703,7 +703,7 @@ describe('BWidget canvas component', (): void => {
         style: {},
         loop: createDefaultWidgetElementLoopConfig(),
         metadata: {
-          content: '{{ longText }}'
+          content: '前缀{{ longText }}'
         }
       }
     ];
@@ -715,7 +715,8 @@ describe('BWidget canvas component', (): void => {
     });
     const nodeStyle = (findNodeById(wrapper, 'text-measure-node').element as HTMLElement).style;
 
-    expect(Number.parseFloat(nodeStyle.height)).toBeGreaterThan(72);
+    // 设计态隐藏变量绑定，混合文本只按静态片段「前缀」测量，选框不被 6 行解析内容撑高。
+    expect(Number.parseFloat(nodeStyle.height)).toBeLessThanOrEqual(72);
     wrapper.unmount();
   });
 
