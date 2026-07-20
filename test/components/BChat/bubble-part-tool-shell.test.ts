@@ -11,7 +11,7 @@ import BubblePartTool from '@/components/BChat/components/MessageBubble/BubblePa
 vi.mock('@/hooks/useNavigate', () => ({ useNavigate: () => ({ openFile: vi.fn() }) }));
 
 describe('BubblePartTool Shell display', (): void => {
-  it('renders the current screen without exposing internal auto-answer events', (): void => {
+  it('renders command input before output in one terminal region', (): void => {
     const part: ChatMessageToolPart = {
       id: 'part-1',
       type: 'tool',
@@ -36,10 +36,53 @@ describe('BubblePartTool Shell display', (): void => {
       }
     });
 
-    expect(wrapper.find('.bubble-part-tool__shell-terminal').text()).toContain('Continue?');
+    const terminal = wrapper.find('.bubble-part-tool__shell-terminal');
+    const command = terminal.find('.bubble-part-tool__shell-command');
+    const output = terminal.find('.bubble-part-tool__shell-output');
+
+    expect(command.text()).toBe('$ interactive');
+    expect(output.text()).toContain('Continue?');
+    expect(terminal.text().indexOf('$ interactive')).toBeLessThan(terminal.text().indexOf('Installing package...'));
     expect(wrapper.find('.bubble-part-tool__shell-auto-answer').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('Automatically selected default option');
     expect(wrapper.findComponent({ name: 'ConfirmationSheet' }).exists()).toBe(false);
+  });
+
+  it('does not repeat a successful command as a finished summary', (): void => {
+    const part: ChatMessageToolPart = {
+      id: 'part-success',
+      type: 'tool',
+      toolCallId: 'command-success',
+      toolName: 'run_shell_command',
+      status: 'done',
+      input: {},
+      result: {
+        toolName: 'run_shell_command',
+        status: 'success',
+        data: {
+          command: 'printf done',
+          outputMode: 'pty',
+          terminalOutput: 'done',
+          termination: { kind: 'exit', exitCode: 0 },
+          durationMs: 10
+        }
+      }
+    };
+    const wrapper = mount(BubblePartTool, {
+      props: { part },
+      global: {
+        stubs: {
+          BIcon: true,
+          BTruncateText: { props: ['text'], template: '<span>{{ text }}</span>' }
+        }
+      }
+    });
+
+    const terminal = wrapper.find('.bubble-part-tool__shell-terminal');
+    expect(terminal.find('.bubble-part-tool__shell-command').text()).toBe('$ printf done');
+    expect(terminal.find('.bubble-part-tool__shell-output').text()).toBe('done');
+    expect(wrapper.text().match(/printf done/g)).toHaveLength(1);
+    expect(wrapper.find('.bubble-part-tool__shell-finished').exists()).toBe(false);
   });
 
   it('restores terminal metadata from a persisted structured failure', (): void => {
@@ -70,7 +113,40 @@ describe('BubblePartTool Shell display', (): void => {
       }
     });
 
-    expect(wrapper.find('.bubble-part-tool__shell-terminal').text()).toContain('Choose action?');
+    const terminal = wrapper.find('.bubble-part-tool__shell-terminal');
+    expect(terminal.find('.bubble-part-tool__shell-command').text()).toBe('$ interactive');
+    expect(terminal.find('.bubble-part-tool__shell-output').text()).toContain('Choose action?');
+    expect(wrapper.find('.bubble-part-tool__shell-finished').text()).toBe('interaction timeout');
+    expect(wrapper.find('.bubble-part-tool__shell-finished').classes()).toContain('bubble-part-tool__shell-finished--failure');
     expect(wrapper.find('.bubble-part-tool__shell-auto-answer').exists()).toBe(false);
+  });
+
+  it('keeps a cancelled summary visually neutral', (): void => {
+    const part: ChatMessageToolPart = {
+      id: 'part-cancelled',
+      type: 'tool',
+      toolCallId: 'command-cancelled',
+      toolName: 'run_shell_command',
+      status: 'done',
+      input: { command: 'npm install' },
+      result: {
+        toolName: 'run_shell_command',
+        status: 'cancelled',
+        error: { code: 'USER_CANCELLED', message: 'cancelled' }
+      }
+    };
+    const wrapper = mount(BubblePartTool, {
+      props: { part },
+      global: {
+        stubs: {
+          BIcon: true,
+          BTruncateText: { props: ['text'], template: '<span>{{ text }}</span>' }
+        }
+      }
+    });
+
+    const attention = wrapper.find('.bubble-part-tool__shell-finished');
+    expect(attention.text()).toBe('用户已取消');
+    expect(attention.classes()).not.toContain('bubble-part-tool__shell-finished--failure');
   });
 });

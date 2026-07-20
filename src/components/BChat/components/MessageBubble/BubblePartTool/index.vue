@@ -18,10 +18,16 @@
       <span v-if="part.status === 'done' && part.result?.status === 'failure'" :class="bem('status', { failure: true })">失败</span>
     </template>
 
-    <!-- Shell PTY 仅展示当前屏幕，自动交互事件作为内部状态保留 -->
+    <!-- Shell 命令与当前屏幕共享终端区域，命令在前且不重复显示成功摘要 -->
     <template v-if="isShellCommand && shellDisplay">
-      <div v-if="shellTerminalContent" :class="bem('shell-terminal')">{{ shellTerminalContent }}</div>
-      <div v-if="summary?.text" :class="bem('shell-finished')">{{ summary.text }}</div>
+      <div :class="bem('shell-terminal')">
+        <div v-if="shellCommandContent" :class="bem('shell-command')">
+          <span aria-hidden="true">$</span>
+          <span>{{ ` ${shellCommandContent}` }}</span>
+        </div>
+        <div v-if="shellTerminalContent" :class="bem('shell-output')">{{ shellTerminalContent }}</div>
+      </div>
+      <div v-if="shellAttentionText" :class="bem('shell-finished', { failure: summary?.variant === 'failure' })">{{ shellAttentionText }}</div>
     </template>
 
     <!-- todowrite 成功结果使用单层任务卡片，避免通用工具气泡和任务面板重复嵌套 -->
@@ -309,6 +315,17 @@ const shellResultData = computed<Record<string, unknown> | null>(() => {
   return null;
 });
 
+/** Shell 命令输入；优先使用工具输入，持久化输入缺失时回退结果 metadata。 */
+const shellCommandContent = computed<string>(() => {
+  if (isPlainObject(props.part.input)) {
+    const inputCommand = props.part.input.command;
+    if (typeof inputCommand === 'string' && inputCommand.length > 0) return inputCommand;
+  }
+
+  const resultCommand = shellResultData.value?.command;
+  return typeof resultCommand === 'string' ? resultCommand : '';
+});
+
 /** Shell 当前屏幕；实时状态不存在时回退最终 terminalOutput。 */
 const shellTerminalContent = computed<string>(() => {
   if (props.part.shellRunState?.terminalContent) return props.part.shellRunState.terminalContent;
@@ -319,8 +336,15 @@ const shellTerminalContent = computed<string>(() => {
   return [stdout, stderr].filter((value): value is string => typeof value === 'string' && value.length > 0).join('\n');
 });
 
-/** Shell 是否存在专用终端展示内容。 */
-const shellDisplay = computed<boolean>(() => shellTerminalContent.value.length > 0);
+/** Shell 仅在失败或取消时展示需要用户关注的弱提示。 */
+const shellAttentionText = computed<string>(() => {
+  const shellSummary = summary.value;
+  if (!shellSummary?.text || (shellSummary.variant !== 'failure' && shellSummary.variant !== 'cancelled')) return '';
+  return shellSummary.text;
+});
+
+/** Shell 存在命令或输出时使用专用终端展示。 */
+const shellDisplay = computed<boolean>(() => shellCommandContent.value.length > 0 || shellTerminalContent.value.length > 0);
 
 /**
  * 解析提问工具的问答结果，将 value 映射为可读的 label。
@@ -470,20 +494,40 @@ const questionOtherText = computed(() => {
 
 .bubble-part-tool__shell-terminal {
   max-height: 280px;
-  padding: 8px;
+  padding: 6px 8px;
   overflow: auto;
   font-family: Monaco, 'SF Mono', Consolas, monospace;
   font-size: 11px;
   line-height: 1.5;
-  white-space: pre-wrap;
-  background: var(--color-fill-tertiary, rgb(0 0 0 / 6%));
+  background: var(--color-fill-tertiary, rgb(0 0 0 / 3%));
   border-radius: 4px;
 }
 
+.bubble-part-tool__shell-command {
+  display: flex;
+  color: var(--text-tertiary);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.bubble-part-tool__shell-output {
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+}
+
+.bubble-part-tool__shell-command + .bubble-part-tool__shell-output {
+  margin-top: 4px;
+}
+
 .bubble-part-tool__shell-finished {
-  margin-top: 6px;
+  padding: 0 2px;
+  margin-top: 4px;
   font-size: 12px;
   color: var(--text-tertiary);
+}
+
+.bubble-part-tool__shell-finished--failure {
+  color: var(--color-error);
 }
 
 .bubble-part-tool__summary-tag {
