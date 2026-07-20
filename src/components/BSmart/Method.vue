@@ -9,8 +9,8 @@
       :class="bem('actions')"
       :list="actionEntries"
       item-key="key"
-      item-class="b-text-method__action-item"
-      handle-class="b-text-method__action-drag-handle"
+      item-class="b-smart-method__action-item"
+      handle-class="b-smart-method__action-drag-handle"
       @move="handleActionMove"
     >
       <template #default="{ item: entry, handleClass }">
@@ -65,7 +65,7 @@
           <div :class="bem('args')">
             <div v-for="(_argument, index) in editingAction.args" :key="index" :class="bem('arg')">
               <label :class="bem('arg-label')">{{ readArgumentLabel(index) }}</label>
-              <BTextInput v-model:value="editingAction.args[index]" :options="variables" :placeholder="readArgumentPlaceholder(index)" />
+              <BSmartInput v-model:value="editingAction.args[index]" :options="variables" :placeholder="readArgumentPlaceholder(index)" />
               <BButton :class="bem('arg-remove')" type="text" danger square icon="lucide:trash-2" @click="removeArgument(index)" />
             </div>
             <div v-if="editingAction.args.length === 0" :class="bem('empty')">
@@ -85,18 +85,18 @@
 </template>
 
 <script setup lang="ts">
-import type { BTextMethodAction, BTextMethodOption, VariableOptionGroup } from './types';
+import type { BSmartMethodAction, BSmartMethodOption, VariableOptionGroup } from './types';
 import { computed, ref } from 'vue';
 import type { BDraggableMoveEvent } from '@/components/BDraggable/types';
 import { normalizeMethodAction, normalizeMethodActions } from '@/components/BWidget/utils/widgetMethods';
 import { createNamespace } from '@/utils/namespace';
 
 /**
- * BTextMethod 组件属性。
+ * BSmartMethod 组件属性。
  */
 interface Props {
   /** 可选方法列表 */
-  methods?: BTextMethodOption[];
+  methods?: BSmartMethodOption[];
   /** 变量候选 */
   variables?: VariableOptionGroup[];
   /** 未配置动作时的按钮文案 */
@@ -112,23 +112,23 @@ interface MethodActionEntry {
   /** 当前动作下标 */
   index: number;
   /** 方法动作 */
-  action: BTextMethodAction;
+  action: BSmartMethodAction;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  methods: (): BTextMethodOption[] => [],
+  methods: (): BSmartMethodOption[] => [],
   variables: (): VariableOptionGroup[] => [],
   placeholder: '设置动作'
 });
 
-const modelValue = defineModel<BTextMethodAction[]>('value', { default: (): BTextMethodAction[] => [] });
-const [name, bem] = createNamespace('text-method');
+const modelValue = defineModel<BSmartMethodAction[]>('value', { default: (): BSmartMethodAction[] => [] });
+const [name, bem] = createNamespace('smart-method');
 
 /**
  * 创建空方法动作。
  * @returns 空方法动作
  */
-function createEmptyMethodAction(): BTextMethodAction {
+function createEmptyMethodAction(): BSmartMethodAction {
   return {
     args: [],
     method: ''
@@ -140,7 +140,7 @@ function createEmptyMethodAction(): BTextMethodAction {
  * @param action - 方法动作
  * @returns 方法动作副本
  */
-function cloneMethodAction(action: BTextMethodAction): BTextMethodAction {
+function cloneMethodAction(action: BSmartMethodAction): BSmartMethodAction {
   return {
     args: [...action.args],
     method: action.method
@@ -150,20 +150,20 @@ function cloneMethodAction(action: BTextMethodAction): BTextMethodAction {
 /** 弹窗是否打开。 */
 const modalOpen = ref(false);
 /** 弹窗内正在编辑的方法动作副本。 */
-const editingAction = ref<BTextMethodAction>(createEmptyMethodAction());
+const editingAction = ref<BSmartMethodAction>(createEmptyMethodAction());
 /** 当前编辑的已配置动作下标，null 表示新增动作。 */
 const editingActionIndex = ref<number | null>(null);
 /** 当前选中的方法选项。 */
-const selectedMethod = computed<BTextMethodOption | undefined>((): BTextMethodOption | undefined =>
-  props.methods.find((method: BTextMethodOption): boolean => method.value === editingAction.value.method)
+const selectedMethod = computed<BSmartMethodOption | undefined>((): BSmartMethodOption | undefined =>
+  props.methods.find((method: BSmartMethodOption): boolean => method.value === editingAction.value.method)
 );
 
 /** 已配置动作列表。 */
-const actions = computed<BTextMethodAction[]>((): BTextMethodAction[] => normalizeMethodActions(modelValue.value));
+const actions = computed<BSmartMethodAction[]>((): BSmartMethodAction[] => normalizeMethodActions(modelValue.value));
 /** 已配置动作的拖拽展示项。 */
 const actionEntries = computed<MethodActionEntry[]>((): MethodActionEntry[] =>
   actions.value.map(
-    (action: BTextMethodAction, index: number): MethodActionEntry => ({
+    (action: BSmartMethodAction, index: number): MethodActionEntry => ({
       action,
       index,
       key: `action-${index}`
@@ -175,7 +175,7 @@ const actionEntries = computed<MethodActionEntry[]>((): MethodActionEntry[] =>
  * 写入弹窗编辑动作。
  * @param nextAction - 方法动作
  */
-function writeEditingAction(nextAction: BTextMethodAction | null): void {
+function writeEditingAction(nextAction: BSmartMethodAction | null): void {
   editingAction.value = nextAction ? cloneMethodAction(nextAction) : createEmptyMethodAction();
 }
 
@@ -184,7 +184,7 @@ function writeEditingAction(nextAction: BTextMethodAction | null): void {
  * @param event - 拖拽排序事件
  */
 function handleActionMove(event: BDraggableMoveEvent<MethodActionEntry>): void {
-  modelValue.value = event.nextList.map((entry: MethodActionEntry): BTextMethodAction => cloneMethodAction(entry.action));
+  modelValue.value = event.nextList.map((entry: MethodActionEntry): BSmartMethodAction => cloneMethodAction(entry.action));
 }
 
 /**
@@ -192,7 +192,7 @@ function handleActionMove(event: BDraggableMoveEvent<MethodActionEntry>): void {
  * @param method - 方法选项
  * @returns 参数名列表
  */
-function readMethodParameters(method: BTextMethodOption | undefined): string[] {
+function readMethodParameters(method: BSmartMethodOption | undefined): string[] {
   return method?.parameters ?? [];
 }
 
@@ -201,7 +201,7 @@ function readMethodParameters(method: BTextMethodOption | undefined): string[] {
  * @param action - 方法动作
  * @returns 动作标签
  */
-function readActionLabel(action: BTextMethodAction): string {
+function readActionLabel(action: BSmartMethodAction): string {
   return action.method || '未选择函数';
 }
 
@@ -247,7 +247,7 @@ function editAction(index: number): void {
  * @param index - 动作下标
  */
 function deleteAction(index: number): void {
-  modelValue.value = actions.value.filter((_action: BTextMethodAction, currentIndex: number): boolean => currentIndex !== index);
+  modelValue.value = actions.value.filter((_action: BSmartMethodAction, currentIndex: number): boolean => currentIndex !== index);
 }
 
 /**
@@ -261,7 +261,7 @@ function closeModal(): void {
  * 选择方法并按方法参数补足参数行。
  * @param method - 方法选项
  */
-function handleMethodSelect(method: BTextMethodOption): void {
+function handleMethodSelect(method: BSmartMethodOption): void {
   const parameters = readMethodParameters(method);
   const preservedArgs = [...editingAction.value.args];
   const missingParameterCount = parameters.length - preservedArgs.length;
@@ -306,7 +306,7 @@ function confirmAction(): void {
     return;
   }
 
-  modelValue.value = actions.value.flatMap((action: BTextMethodAction, index: number): BTextMethodAction[] => {
+  modelValue.value = actions.value.flatMap((action: BSmartMethodAction, index: number): BSmartMethodAction[] => {
     if (index !== editingActionIndex.value) {
       return [action];
     }
@@ -318,7 +318,7 @@ function confirmAction(): void {
 </script>
 
 <style lang="less" scoped>
-.b-text-method {
+.b-smart-method {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -326,18 +326,18 @@ function confirmAction(): void {
   min-width: 0;
 }
 
-.b-text-method__trigger {
+.b-smart-method__trigger {
   max-width: 100%;
 }
 
-.b-text-method__actions {
+.b-smart-method__actions {
   display: flex;
   flex-direction: column;
   gap: 4px;
   min-width: 0;
 }
 
-.b-text-method__action {
+.b-smart-method__action {
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr) auto;
   gap: 4px;
@@ -350,13 +350,13 @@ function confirmAction(): void {
   border-radius: 6px;
 }
 
-.b-text-method__action:hover .b-text-method__action-controls,
-.b-text-method__action:focus-within .b-text-method__action-controls {
+.b-smart-method__action:hover .b-smart-method__action-controls,
+.b-smart-method__action:focus-within .b-smart-method__action-controls {
   pointer-events: auto;
   opacity: 1;
 }
 
-.b-text-method__action-drag-handle {
+.b-smart-method__action-drag-handle {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -382,7 +382,7 @@ function confirmAction(): void {
   }
 }
 
-.b-text-method__action-content {
+.b-smart-method__action-content {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 6px;
@@ -390,7 +390,7 @@ function confirmAction(): void {
   min-width: 0;
 }
 
-.b-text-method__action-name {
+.b-smart-method__action-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -399,7 +399,7 @@ function confirmAction(): void {
   white-space: nowrap;
 }
 
-.b-text-method__action-controls {
+.b-smart-method__action-controls {
   display: flex;
   flex-shrink: 0;
   gap: 2px;
@@ -409,18 +409,18 @@ function confirmAction(): void {
   transition: opacity 0.16s ease;
 }
 
-.b-text-method__arg-remove {
+.b-smart-method__arg-remove {
   flex-shrink: 0;
 }
 
-.b-text-method__content {
+.b-smart-method__content {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
   gap: 12px;
   align-items: start;
 }
 
-.b-text-method__section {
+.b-smart-method__section {
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -431,7 +431,7 @@ function confirmAction(): void {
   border-radius: 8px;
 }
 
-.b-text-method__section-title {
+.b-smart-method__section-title {
   display: flex;
   gap: 8px;
   align-items: center;
@@ -444,7 +444,7 @@ function confirmAction(): void {
   border-bottom: 1px solid var(--border-primary);
 }
 
-.b-text-method__methods {
+.b-smart-method__methods {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -454,7 +454,7 @@ function confirmAction(): void {
   overflow-y: auto;
 }
 
-.b-text-method__method {
+.b-smart-method__method {
   display: flex;
   gap: 8px;
   align-items: center;
@@ -475,17 +475,17 @@ function confirmAction(): void {
   }
 }
 
-.b-text-method__method-name {
+.b-smart-method__method-name {
   font-size: 13px;
   color: inherit;
 }
 
-.b-text-method__method-meta {
+.b-smart-method__method-meta {
   font-size: 12px;
   color: var(--text-tertiary);
 }
 
-.b-text-method__empty {
+.b-smart-method__empty {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -496,17 +496,17 @@ function confirmAction(): void {
   color: var(--text-tertiary);
 }
 
-.b-text-method__empty-icon {
+.b-smart-method__empty-icon {
   width: 28px;
   height: 28px;
   opacity: 0.4;
 }
 
-.b-text-method__empty-text {
+.b-smart-method__empty-text {
   font-size: 13px;
 }
 
-.b-text-method__args {
+.b-smart-method__args {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -516,7 +516,7 @@ function confirmAction(): void {
   overflow-y: auto;
 }
 
-.b-text-method__arg {
+.b-smart-method__arg {
   display: grid;
   grid-template-columns: 88px minmax(0, 1fr) 28px;
   gap: 8px;
@@ -524,7 +524,7 @@ function confirmAction(): void {
   min-width: 0;
 }
 
-.b-text-method__arg-label {
+.b-smart-method__arg-label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

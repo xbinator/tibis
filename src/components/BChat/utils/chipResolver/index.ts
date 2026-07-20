@@ -2,7 +2,7 @@
  * @file index.ts
  * @description 组合聊天输入框文件引用与技能引用 Chip 解析器。
  */
-import type { ChipResolver } from '@/components/BText/extensions/variableChip';
+import type { ChipResolver } from '@/components/BSmart/extensions/variableChip';
 import { parseFileReferenceToken, type FileReferenceNavigationTarget } from '@/utils/file/reference';
 import { parseSkillReferenceBody } from '../skillReference';
 import { createFileReferenceWidget } from './file/widget';
@@ -11,7 +11,7 @@ import { createSkillReferenceWidget } from './skill/widget';
 /**
  * 创建文件引用 Chip 解析器。
  * @param onOpenFile - 文件打开回调
- * @returns BTextEditor 可用的 Chip 解析器
+ * @returns BSmartEditor 可用的 Chip 解析器
  */
 export function createFileRefChipResolver(onOpenFile: (target: FileReferenceNavigationTarget) => void): ChipResolver {
   return (content: string): ReturnType<ChipResolver> => {

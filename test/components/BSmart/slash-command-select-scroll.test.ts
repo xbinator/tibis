@@ -5,9 +5,9 @@
  */
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
-import SelectDropdown from '@/components/BText/components/_SelectDropdown.vue';
-import SlashCommandSelect from '@/components/BText/components/SlashCommandSelect.vue';
-import type { SlashCommandOption } from '@/components/BText/types';
+import SelectDropdown from '@/components/BSmart/components/_SelectDropdown.vue';
+import SlashCommandSelect from '@/components/BSmart/components/SlashCommandSelect.vue';
+import type { SlashCommandOption } from '@/components/BSmart/types';
 
 /**
  * 通用下拉滚动配置属性。

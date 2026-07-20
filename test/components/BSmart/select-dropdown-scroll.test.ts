@@ -6,7 +6,7 @@
 import { h, nextTick } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import SelectDropdown from '@/components/BText/components/_SelectDropdown.vue';
+import SelectDropdown from '@/components/BSmart/components/_SelectDropdown.vue';
 
 /**
  * 下拉测试项。

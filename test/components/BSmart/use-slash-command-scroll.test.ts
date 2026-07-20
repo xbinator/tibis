@@ -5,8 +5,8 @@
 import type { EditorView } from '@codemirror/view';
 import { computed, shallowRef, type ComputedRef, type Ref, type ShallowRef } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
-import { useSlashCommand, type UseSlashCommandReturn } from '@/components/BText/hooks/useSlashCommand';
-import type { SlashCommandOption } from '@/components/BText/types';
+import { useSlashCommand, type UseSlashCommandReturn } from '@/components/BSmart/hooks/useSlashCommand';
+import type { SlashCommandOption } from '@/components/BSmart/types';
 
 /**
  * 带滚动标记的斜杠命令 Hook 返回值。

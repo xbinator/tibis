@@ -7,7 +7,7 @@ import { defineComponent, ref } from 'vue';
 import type { PropType, Ref } from 'vue';
 import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
-import type { Variable, VariableOptionGroup } from '@/components/BText/types';
+import type { Variable, VariableOptionGroup } from '@/components/BSmart/types';
 import ButtonSetter from '@/components/BWidget/elements/Button/Setter.vue';
 import { provideWidgetContext } from '@/components/BWidget/hooks/useWidgetContext';
 import type { WidgetData, WidgetElement } from '@/components/BWidget/types';
@@ -133,8 +133,8 @@ function mountButtonSetter(element: WidgetElement): VueWrapper {
           },
           template: '<div class="widget-button-setter-stub-item" :data-label="label"><slot></slot></div>'
         }),
-        BTextInput: defineComponent({
-          name: 'BTextInputStub',
+        BSmartInput: defineComponent({
+          name: 'BSmartInputStub',
           props: {
             value: { type: String, default: undefined },
             options: {
@@ -153,15 +153,15 @@ function mountButtonSetter(element: WidgetElement): VueWrapper {
           },
           template: `
             <input
-              class="widget-button-setter-stub-text-input"
+              class="widget-button-setter-stub-smart-input"
               :data-placeholder="placeholder"
               :value="value"
               @input="$emit('update:value', $event.target.value)"
             />
           `
         }),
-        BTextSelect: defineComponent({
-          name: 'BTextSelectStub',
+        BSmartSelect: defineComponent({
+          name: 'BSmartSelectStub',
           props: {
             value: { type: [Boolean, String], default: undefined },
             options: {
@@ -182,11 +182,11 @@ function mountButtonSetter(element: WidgetElement): VueWrapper {
             'update:value': (value: boolean | string): boolean => typeof value === 'boolean' || typeof value === 'string'
           },
           template: `
-            <div class="widget-button-setter-stub-text-select">
+            <div class="widget-button-setter-stub-smart-select">
               <button
                 v-for="item in options"
                 :key="String(item.value)"
-                class="widget-button-setter-stub-text-select-option"
+                class="widget-button-setter-stub-smart-select-option"
                 :data-option-label="item.label"
                 type="button"
                 @click="$emit('update:value', item.value)"
@@ -194,7 +194,7 @@ function mountButtonSetter(element: WidgetElement): VueWrapper {
                 {{ item.label }}
               </button>
               <button
-                class="widget-button-setter-stub-text-select-variable"
+                class="widget-button-setter-stub-smart-select-variable"
                 type="button"
                 @click="$emit('update:value', '{{ loading }}')"
               >
@@ -203,8 +203,8 @@ function mountButtonSetter(element: WidgetElement): VueWrapper {
             </div>
           `
         }),
-        BTextMethod: defineComponent({
-          name: 'BTextMethodStub',
+        BSmartMethod: defineComponent({
+          name: 'BSmartMethodStub',
           props: {
             value: {
               type: Array as PropType<Array<{ args: string[]; method: string }>>,
@@ -269,7 +269,7 @@ function readVariables(options: VariableOptionGroup[]): VariableTreeNode[] {
  * @returns 选项按钮包装器
  */
 function findTextSelectOptionByLabel(wrapper: VueWrapper, label: string, optionLabel: string): DOMWrapper<Element> {
-  return wrapper.find(`[data-label="${label}"] .widget-button-setter-stub-text-select-option[data-option-label="${optionLabel}"]`);
+  return wrapper.find(`[data-label="${label}"] .widget-button-setter-stub-smart-select-option[data-option-label="${optionLabel}"]`);
 }
 
 /**
@@ -279,7 +279,7 @@ function findTextSelectOptionByLabel(wrapper: VueWrapper, label: string, optionL
  * @returns 变量覆盖按钮包装器
  */
 function findTextSelectVariableByLabel(wrapper: VueWrapper, label: string): DOMWrapper<Element> {
-  return wrapper.find(`[data-label="${label}"] .widget-button-setter-stub-text-select-variable`);
+  return wrapper.find(`[data-label="${label}"] .widget-button-setter-stub-smart-select-variable`);
 }
 
 /**
@@ -289,7 +289,7 @@ function findTextSelectVariableByLabel(wrapper: VueWrapper, label: string): DOMW
  * @returns 文本输入框包装器
  */
 function findInputByPlaceholder(wrapper: VueWrapper, placeholder: string): DOMWrapper<Element> {
-  return wrapper.find(`.widget-button-setter-stub-text-input[data-placeholder="${placeholder}"]`);
+  return wrapper.find(`.widget-button-setter-stub-smart-input[data-placeholder="${placeholder}"]`);
 }
 
 describe('Button Setter', (): void => {
@@ -325,7 +325,7 @@ describe('Button Setter', (): void => {
 
     await findTextSelectOptionByLabel(wrapper, '状态', '禁用').trigger('click');
     await findTextSelectVariableByLabel(wrapper, '加载').trigger('click');
-    wrapper.findComponent({ name: 'BTextMethodStub' }).vm.$emit('update:value', [{ method: 'buttonByClick', args: ['{{ $input.orderId }}'] }]);
+    wrapper.findComponent({ name: 'BSmartMethodStub' }).vm.$emit('update:value', [{ method: 'buttonByClick', args: ['{{ $input.orderId }}'] }]);
 
     expect(element.metadata.disabled).toBe(true);
     expect(element.metadata.loading).toBe('{{ loading }}');
@@ -341,7 +341,7 @@ describe('Button Setter', (): void => {
 
   it('passes script public methods to the action modal', (): void => {
     const wrapper = mountButtonSetter(createButtonElement());
-    const method = wrapper.findComponent({ name: 'BTextMethodStub' });
+    const method = wrapper.findComponent({ name: 'BSmartMethodStub' });
     const methods = method.props('methods') as Array<{ parameters?: string[]; value: string }>;
 
     expect(methods).toEqual([
@@ -356,7 +356,7 @@ describe('Button Setter', (): void => {
 
   it('provides widget variables to the text input', (): void => {
     const wrapper = mountButtonSetter(createButtonElement());
-    const input = wrapper.findComponent({ name: 'BTextInputStub' });
+    const input = wrapper.findComponent({ name: 'BSmartInputStub' });
     const options = input.props('options') as VariableOptionGroup[];
     const variables = readVariables(options).map((item: VariableTreeNode): string => item.value);
 

@@ -5,7 +5,7 @@
 <template>
   <div :class="name">
     <template v-if="inputMode">
-      <BTextInput v-model:value="inputValue" :options="variables" :placeholder="placeholder" :disabled="disabled" replace-entire-value />
+      <BSmartInput v-model:value="inputValue" :options="variables" :placeholder="placeholder" :disabled="disabled" replace-entire-value />
       <button :class="bem('select-button')" type="button" :disabled="disabled" @click="switchToSelectMode">
         <BIcon icon="lucide:list" />
       </button>
@@ -27,7 +27,7 @@
 </template>
 
 <script setup lang="ts">
-import type { BTextSelectOption, BTextSelectStaticValue, BTextSelectValue, Variable, VariableOptionGroup } from './types';
+import type { BSmartSelectOption, BSmartSelectStaticValue, BSmartSelectValue, Variable, VariableOptionGroup } from './types';
 import { computed, ref, watch } from 'vue';
 import { createNamespace } from '@/utils/namespace';
 import { flattenVariables } from './utils/variables';
@@ -39,15 +39,15 @@ interface TextSelectOptionEntry {
   /** BSelect 使用的字符串值 */
   key: string;
   /** 原始选项 */
-  option: BTextSelectOption;
+  option: BSmartSelectOption;
 }
 
 /**
- * BTextSelect 组件属性。
+ * BSmartSelect 组件属性。
  */
 interface Props {
   /** 静态选项 */
-  options?: BTextSelectOption[];
+  options?: BSmartSelectOption[];
   /** 变量候选 */
   variables?: VariableOptionGroup[];
   /** 占位符 */
@@ -59,15 +59,15 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  options: (): BTextSelectOption[] => [],
+  options: (): BSmartSelectOption[] => [],
   variables: (): VariableOptionGroup[] => [],
   placeholder: '请选择',
   disabled: false,
   width: '100%'
 });
 
-const modelValue = defineModel<BTextSelectValue>('value', { default: undefined });
-const [name, bem] = createNamespace('text-select');
+const modelValue = defineModel<BSmartSelectValue>('value', { default: undefined });
+const [name, bem] = createNamespace('smart-select');
 
 /** 整体变量模板匹配表达式。 */
 const WHOLE_TEMPLATE_PATTERN = /^\s*\{\{[\s\S]+?\}\}\s*$/;
@@ -78,7 +78,7 @@ const WHOLE_TEMPLATE_PATTERN = /^\s*\{\{[\s\S]+?\}\}\s*$/;
  * @param index - 选项下标
  * @returns 内部 key
  */
-function createOptionKey(value: BTextSelectStaticValue, index: number): string {
+function createOptionKey(value: BSmartSelectStaticValue, index: number): string {
   return `static:${index}:${typeof value}:${JSON.stringify(value)}`;
 }
 
@@ -123,7 +123,7 @@ function formatTemplateValue(value: string): string {
  * @param right - 右侧值
  * @returns 是否相同
  */
-function isSameStaticValue(left: BTextSelectStaticValue, right: BTextSelectValue): boolean {
+function isSameStaticValue(left: BSmartSelectStaticValue, right: BSmartSelectValue): boolean {
   return left === right;
 }
 
@@ -143,7 +143,7 @@ const inputValue = computed<string>({
 /** 静态选项映射。 */
 const optionEntries = computed<TextSelectOptionEntry[]>((): TextSelectOptionEntry[] =>
   props.options.map(
-    (option: BTextSelectOption, index: number): TextSelectOptionEntry => ({
+    (option: BSmartSelectOption, index: number): TextSelectOptionEntry => ({
       key: createOptionKey(option.value, index),
       option
     })
@@ -197,13 +197,13 @@ function switchToSelectMode(): void {
   inputMode.value = false;
 }
 
-watch(modelValue, (value: BTextSelectValue): void => {
+watch(modelValue, (value: BSmartSelectValue): void => {
   inputMode.value = isTemplateValue(value);
 });
 </script>
 
 <style lang="less" scoped>
-.b-text-select {
+.b-smart-select {
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 28px;
@@ -213,8 +213,8 @@ watch(modelValue, (value: BTextSelectValue): void => {
   min-width: 0;
 }
 
-.b-text-select__variable-button,
-.b-text-select__select-button {
+.b-smart-select__variable-button,
+.b-smart-select__select-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -229,14 +229,14 @@ watch(modelValue, (value: BTextSelectValue): void => {
   transition: all 0.2s ease;
 }
 
-.b-text-select__variable-button:hover,
-.b-text-select__select-button:hover {
+.b-smart-select__variable-button:hover,
+.b-smart-select__select-button:hover {
   color: var(--color-primary);
   border-color: var(--color-primary-border);
 }
 
-.b-text-select__variable-button:disabled,
-.b-text-select__select-button:disabled {
+.b-smart-select__variable-button:disabled,
+.b-smart-select__select-button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }

@@ -8,7 +8,7 @@ import { defineComponent, ref } from 'vue';
 import type { PropType, Ref } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
-import type { Variable, VariableOptionGroup } from '@/components/BText/types';
+import type { Variable, VariableOptionGroup } from '@/components/BSmart/types';
 import TextSetter from '@/components/BWidget/elements/Text/Setter.vue';
 import { provideWidgetContext } from '@/components/BWidget/hooks/useWidgetContext';
 import type { WidgetData, WidgetElement } from '@/components/BWidget/types';
@@ -237,8 +237,8 @@ function mountTextSetter(element: WidgetElement, widgetData: WidgetData = create
             />
           `
         }),
-        BTextEditor: defineComponent({
-          name: 'BTextEditorStub',
+        BSmartEditor: defineComponent({
+          name: 'BSmartEditorStub',
           props: {
             value: {
               type: String,
@@ -286,10 +286,10 @@ describe('Text Setter', (): void => {
   it('edits static text and binding expression with one prompt editor', async (): Promise<void> => {
     const element = createTextElement();
     const wrapper = mountTextSetter(element);
-    const editor = wrapper.findComponent({ name: 'BTextEditorStub' });
+    const editor = wrapper.findComponent({ name: 'BSmartEditorStub' });
 
     expect(wrapper.find('.widget-text-setter-stub').attributes('data-title')).toBe('内容');
-    expect(wrapper.findAllComponents({ name: 'BTextEditorStub' })).toHaveLength(1);
+    expect(wrapper.findAllComponents({ name: 'BSmartEditorStub' })).toHaveLength(1);
     expect(editor.props('value')).toBe('原始内容');
 
     await wrapper.find('.text-setter-prompt-editor').setValue('{{ $input.city }} 当前 {{ weather.temperature }}°C');
@@ -303,7 +303,7 @@ describe('Text Setter', (): void => {
     const element = createTextElement();
     element.metadata.helperText = '温度辅助信息';
     const wrapper = mountTextSetter(element);
-    const editor = wrapper.findComponent({ name: 'BTextEditorStub' });
+    const editor = wrapper.findComponent({ name: 'BSmartEditorStub' });
 
     expect(editor.props('value')).toBe('原始内容');
 
@@ -318,7 +318,7 @@ describe('Text Setter', (): void => {
     const element = createTextElement();
     delete element.metadata.content;
     const wrapper = mountTextSetter(element);
-    const editor = wrapper.findComponent({ name: 'BTextEditorStub' });
+    const editor = wrapper.findComponent({ name: 'BSmartEditorStub' });
 
     expect(editor.props('value')).toBe('');
     wrapper.unmount();
@@ -326,7 +326,7 @@ describe('Text Setter', (): void => {
 
   it('provides widget context variables to the prompt editor', (): void => {
     const wrapper = mountTextSetter(createTextElement());
-    const editor = wrapper.findComponent({ name: 'BTextEditorStub' });
+    const editor = wrapper.findComponent({ name: 'BSmartEditorStub' });
     const options = editor.props('options') as VariableOptionGroup[];
     const rootVariables = options.flatMap((group: VariableOptionGroup): string[] => group.options.map((item): string => item.value));
     const variables = readVariables(options).map((item: VariableTreeNode): string => item.value);
@@ -355,7 +355,7 @@ describe('Text Setter', (): void => {
     const widgetData = createWidgetData();
     widgetData.elements = [element];
     const wrapper = mountTextSetter(element, widgetData);
-    const editor = wrapper.findComponent({ name: 'BTextEditorStub' });
+    const editor = wrapper.findComponent({ name: 'BSmartEditorStub' });
     const options = editor.props('options') as VariableOptionGroup[];
     const variables = readVariables(options).map((item: VariableTreeNode): string => item.value);
 

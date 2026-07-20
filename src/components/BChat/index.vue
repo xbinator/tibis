@@ -36,7 +36,7 @@
       <div :class="bem('input-container', { dragover: isContainerDragActive })">
         <ImagePreview :images="inputImages" :supports-vision="supportsVision" :on-remove-image="inputEvents.removeImage" />
 
-        <BTextEditor
+        <BSmartEditor
           ref="promptEditorRef"
           v-model:value="inputContent"
           placeholder="输入消息..."
@@ -83,8 +83,8 @@ import { computed, h, onUnmounted, provide, ref, toRef, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { findPendingInteraction } from '@/ai/chat/policies/pendingInteraction';
 import type { ChatSessionUIEvent } from '@/ai/chat/sessionEvents';
-import BTextEditor from '@/components/BText/Editor.vue';
-import type { BTextEditorExpose, SlashCommandOption } from '@/components/BText/types';
+import type BSmartEditor from '@/components/BSmart/Editor.vue';
+import type { BSmartEditorExpose, SlashCommandOption } from '@/components/BSmart/types';
 import { useActorSystem } from '@/hooks/useChat/useActorSystem';
 import { useNavigate } from '@/hooks/useNavigate';
 import { getElectronAPI } from '@/shared/platform/electron-api';
@@ -118,7 +118,7 @@ import { userChoice } from './utils/messageHelper';
 /**
  * 输入编辑器组件实例与对外公开方法。
  */
-type EditorInstance = InstanceType<typeof BTextEditor> & BTextEditorExpose;
+type EditorInstance = InstanceType<typeof BSmartEditor> & BSmartEditorExpose;
 
 const [, bem] = createNamespace('chat');
 
@@ -567,7 +567,7 @@ defineExpose({ focusInput });
   }
 }
 
-.b-chat__input-container .b-text-editor {
+.b-chat__input-container .b-smart-editor {
   flex: 1;
   min-width: 0;
   padding: 0;
@@ -576,7 +576,7 @@ defineExpose({ focusInput });
   border-radius: 0;
 }
 
-.b-chat__input-container .b-text-editor:focus-within {
+.b-chat__input-container .b-smart-editor:focus-within {
   box-shadow: none;
 }
 </style>

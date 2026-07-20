@@ -22,7 +22,7 @@ import type { ToastItem } from '@/components/BChat/components/InteractionContain
 import BChat from '@/components/BChat/index.vue';
 import { type AdaptedUserMessageInput, type SubmitAction, createUserChoice } from '@/components/BChat/utils/submitAction';
 import type { Message } from '@/components/BChat/utils/types';
-import type { FileMentionOption } from '@/components/BText/types';
+import type { FileMentionOption } from '@/components/BSmart/types';
 import { emitChatFileReferenceInsert } from '@/shared/chat/fileReference';
 import { native } from '@/shared/platform';
 import type { StoredFile } from '@/shared/storage';
@@ -329,8 +329,8 @@ vi.mock('@/utils/modal', () => ({
   Modal: modalMock
 }));
 
-const BTextEditorStub = defineComponent({
-  name: 'BTextEditor',
+const BSmartEditorStub = defineComponent({
+  name: 'BSmartEditor',
   props: {
     value: {
       type: String,
@@ -577,7 +577,7 @@ function mountBChat(sessionId: string | null = null): ReturnType<typeof shallowM
         BPanelSplitter: {
           template: '<div><slot /></div>'
         },
-        BTextEditor: BTextEditorStub,
+        BSmartEditor: BSmartEditorStub,
         ConfirmationSheet: true,
         ConversationView: ConversationViewStub,
         ImagePreview: true,
@@ -598,7 +598,7 @@ function mountBChat(sessionId: string | null = null): ReturnType<typeof shallowM
  * @returns Runtime ID
  */
 async function submitTextAndReadRuntimeId(wrapper: ReturnType<typeof shallowMount>, content: string): Promise<string> {
-  wrapper.findComponent(BTextEditorStub).vm.$emit('update:value', content);
+  wrapper.findComponent(BSmartEditorStub).vm.$emit('update:value', content);
   wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
   await flushPromises();
   const [input] = electronAPIMock.chatRuntimeSend.mock.calls.at(-1) as [ChatRuntimeSendInput];
@@ -725,7 +725,7 @@ describe('BChat sessionId runtime', (): void => {
     const wrapper = mountBChat(null);
     await flushPromises();
 
-    expect(wrapper.findComponent(BTextEditorStub).props('fileMentions')).toEqual([
+    expect(wrapper.findComponent(BSmartEditorStub).props('fileMentions')).toEqual([
       {
         id: 'md-1',
         name: 'note.md',
@@ -768,7 +768,7 @@ describe('BChat sessionId runtime', (): void => {
     const wrapper = mountBChat(null);
     await flushPromises();
 
-    wrapper.findComponent(BTextEditorStub).vm.$emit('update:value', 'hello');
+    wrapper.findComponent(BSmartEditorStub).vm.$emit('update:value', 'hello');
     await flushPromises();
     wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
     await flushPromises();
@@ -785,7 +785,7 @@ describe('BChat sessionId runtime', (): void => {
     const wrapper = mountBChat(null);
     await flushPromises();
 
-    wrapper.findComponent(BTextEditorStub).vm.$emit('update:value', 'hello');
+    wrapper.findComponent(BSmartEditorStub).vm.$emit('update:value', 'hello');
     await flushPromises();
     wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
     await flushPromises();
@@ -866,7 +866,7 @@ describe('BChat sessionId runtime', (): void => {
     const wrapper = mountBChat('session-active');
     await flushPromises();
 
-    wrapper.findComponent(BTextEditorStub).vm.$emit('update:value', 'early event');
+    wrapper.findComponent(BSmartEditorStub).vm.$emit('update:value', 'early event');
     wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
     await flushPromises();
 
@@ -916,7 +916,7 @@ describe('BChat sessionId runtime', (): void => {
     const wrapper = mountBChat(null);
     await flushPromises();
 
-    wrapper.findComponent(BTextEditorStub).vm.$emit('update:value', '查天气 上海');
+    wrapper.findComponent(BSmartEditorStub).vm.$emit('update:value', '查天气 上海');
     await flushPromises();
     wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
     await flushPromises();
@@ -935,7 +935,7 @@ describe('BChat sessionId runtime', (): void => {
     const wrapper = mountBChat(null);
     await flushPromises();
 
-    wrapper.findComponent(BTextEditorStub).vm.$emit('update:value', 'fix {{@src/foo.ts}}');
+    wrapper.findComponent(BSmartEditorStub).vm.$emit('update:value', 'fix {{@src/foo.ts}}');
     await flushPromises();
     wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
     await flushPromises();
@@ -962,7 +962,7 @@ describe('BChat sessionId runtime', (): void => {
     const wrapper = mountBChat(null);
     await flushPromises();
 
-    wrapper.findComponent(BTextEditorStub).vm.$emit('update:value', '查天气');
+    wrapper.findComponent(BSmartEditorStub).vm.$emit('update:value', '查天气');
     await flushPromises();
     wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
     await flushPromises();
@@ -1001,7 +1001,7 @@ describe('BChat sessionId runtime', (): void => {
     const wrapper = mountBChat(null);
     await flushPromises();
 
-    wrapper.findComponent(BTextEditorStub).vm.$emit('update:value', 'fix {{@src/foo.ts}}');
+    wrapper.findComponent(BSmartEditorStub).vm.$emit('update:value', 'fix {{@src/foo.ts}}');
     await flushPromises();
     wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
     await flushPromises();
@@ -1049,7 +1049,7 @@ describe('BChat sessionId runtime', (): void => {
     const wrapper = mountBChat(null);
     await flushPromises();
 
-    wrapper.findComponent(BTextEditorStub).vm.$emit('update:value', '请整理记忆：以后叫我张三');
+    wrapper.findComponent(BSmartEditorStub).vm.$emit('update:value', '请整理记忆：以后叫我张三');
     await flushPromises();
     wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
     await flushPromises();
@@ -1136,7 +1136,7 @@ describe('BChat sessionId runtime', (): void => {
     const wrapper = mountBChat(null);
     await flushPromises();
 
-    wrapper.findComponent(BTextEditorStub).vm.$emit('update:value', `read {{@${missingFilePath}}}`);
+    wrapper.findComponent(BSmartEditorStub).vm.$emit('update:value', `read {{@${missingFilePath}}}`);
     await flushPromises();
     wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
     await flushPromises();
@@ -1246,7 +1246,7 @@ describe('BChat sessionId runtime', (): void => {
     const wrapper = mountBChat('session-active');
     await flushPromises();
 
-    wrapper.findComponent(BTextEditorStub).vm.$emit('update:value', 'stop me');
+    wrapper.findComponent(BSmartEditorStub).vm.$emit('update:value', 'stop me');
     await flushPromises();
     wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
     await flushPromises();
@@ -1270,7 +1270,7 @@ describe('BChat sessionId runtime', (): void => {
     const wrapper = mountBChat('session-active');
     await flushPromises();
 
-    wrapper.findComponent(BTextEditorStub).vm.$emit('update:value', 'stop during start');
+    wrapper.findComponent(BSmartEditorStub).vm.$emit('update:value', 'stop during start');
     wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
     await flushPromises();
 
@@ -1287,7 +1287,7 @@ describe('BChat sessionId runtime', (): void => {
   it('does not abort a main-process runtime when BChat unmounts', async (): Promise<void> => {
     const wrapper = mountBChat('session-active');
     await flushPromises();
-    wrapper.findComponent(BTextEditorStub).vm.$emit('update:value', 'continue in background');
+    wrapper.findComponent(BSmartEditorStub).vm.$emit('update:value', 'continue in background');
     wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
     await flushPromises();
 
@@ -1542,7 +1542,7 @@ describe('BChat sessionId runtime', (): void => {
   it('submits cancelled user choices while the chat task is waiting for the answer', async (): Promise<void> => {
     const wrapper = mountBChat('session-active');
     await flushPromises();
-    wrapper.findComponent(BTextEditorStub).vm.$emit('update:value', '需要选择');
+    wrapper.findComponent(BSmartEditorStub).vm.$emit('update:value', '需要选择');
     await flushPromises();
     wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
     await flushPromises();
@@ -1623,10 +1623,10 @@ describe('BChat sessionId runtime', (): void => {
     conversationView.vm.$emit('branch', assistantMessage);
     conversationView.vm.$emit('rollback', userMessage);
     conversationView.vm.$emit('regenerate', assistantMessage);
-    wrapper.findComponent(BTextEditorStub).vm.$emit('update:value', '压缩期间继续编辑的草稿');
+    wrapper.findComponent(BSmartEditorStub).vm.$emit('update:value', '压缩期间继续编辑的草稿');
     await flushPromises();
 
-    expect(wrapper.findComponent(BTextEditorStub).props('value')).toBe('压缩期间继续编辑的草稿');
+    expect(wrapper.findComponent(BSmartEditorStub).props('value')).toBe('压缩期间继续编辑的草稿');
     expect(chatStoreMock.branchSession).not.toHaveBeenCalled();
     expect(chatStoreMock.setSessionMessages).not.toHaveBeenCalled();
     expect(electronAPIMock.chatRuntimeContinue).not.toHaveBeenCalled();
@@ -1792,7 +1792,7 @@ describe('BChat sessionId runtime', (): void => {
     const wrapper = mountBChat('session-active');
     await flushPromises();
 
-    wrapper.findComponent(BTextEditorStub).vm.$emit('update:value', 'use tools');
+    wrapper.findComponent(BSmartEditorStub).vm.$emit('update:value', 'use tools');
     await flushPromises();
     wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
     await flushPromises();
@@ -1841,7 +1841,7 @@ describe('BChat sessionId runtime', (): void => {
     const wrapper = mountBChat(null);
     await flushPromises();
 
-    wrapper.findComponent(BTextEditorStub).vm.$emit('update:value', 'hello');
+    wrapper.findComponent(BSmartEditorStub).vm.$emit('update:value', 'hello');
     await flushPromises();
     wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
     await flushPromises();

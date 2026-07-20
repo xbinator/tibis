@@ -1,17 +1,17 @@
 /**
  * @file default-variable-chip.test.ts
- * @description 验证 BTextEditor 默认保留变量 token 文本，不渲染为变量 chip。
+ * @description 验证 BSmartEditor 默认保留变量 token 文本，不渲染为变量 chip。
  * @vitest-environment jsdom
  */
 import { readFileSync } from 'node:fs';
 import { nextTick } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
-import BTextEditor from '@/components/BText/Editor.vue';
-import type { Variable, VariableOptionGroup } from '@/components/BText/types';
+import BSmartEditor from '@/components/BSmart/Editor.vue';
+import type { Variable, VariableOptionGroup } from '@/components/BSmart/types';
 
-/** BTextEditor 源码。 */
-const promptEditorSource = readFileSync('src/components/BText/Editor.vue', 'utf8');
+/** BSmartEditor 源码。 */
+const promptEditorSource = readFileSync('src/components/BSmart/Editor.vue', 'utf8');
 
 /**
  * 测试用变量树节点。
@@ -50,8 +50,8 @@ function createVariableOptions(): VariableOptionGroup[] {
  * 挂载提示词编辑器。
  * @returns 编辑器包装器
  */
-async function mountBTextEditor(): Promise<VueWrapper> {
-  const wrapper = mount(BTextEditor, {
+async function mountBSmartEditor(): Promise<VueWrapper> {
+  const wrapper = mount(BSmartEditor, {
     props: {
       value: '{{input.city}} ',
       options: createVariableOptions()
@@ -74,9 +74,9 @@ function readVariableTokenThemeSource(): string {
   return promptEditorSource.slice(start, end);
 }
 
-describe('BTextEditor default variable token', (): void => {
+describe('BSmartEditor default variable token', (): void => {
   it('keeps matched variable token editable by default', async (): Promise<void> => {
-    const wrapper = await mountBTextEditor();
+    const wrapper = await mountBSmartEditor();
 
     expect(wrapper.find('.b-prompt-variable-chip').exists()).toBe(false);
     expect(wrapper.find('.b-prompt-variable-token').exists()).toBe(true);
@@ -86,7 +86,7 @@ describe('BTextEditor default variable token', (): void => {
   });
 
   it('keeps variable token text when variable labels change', async (): Promise<void> => {
-    const wrapper = await mountBTextEditor();
+    const wrapper = await mountBSmartEditor();
 
     await wrapper.setProps({
       options: [
@@ -122,7 +122,7 @@ describe('BTextEditor default variable token', (): void => {
   });
 
   it('still supports explicit custom chip resolver decoration', async (): Promise<void> => {
-    const wrapper = mount(BTextEditor, {
+    const wrapper = mount(BSmartEditor, {
       props: {
         value: '{{input.city}} ',
         options: createVariableOptions(),

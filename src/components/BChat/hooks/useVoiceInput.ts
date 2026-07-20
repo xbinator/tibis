@@ -5,9 +5,9 @@
 import { ref } from 'vue';
 
 /**
- * BTextEditor 语音输入所需的编辑操作。
+ * BSmartEditor 语音输入所需的编辑操作。
  */
-interface BTextEditorVoiceActions {
+interface BSmartEditorVoiceActions {
   /** 保存当前光标位置。 */
   saveCursorPosition: () => void;
   /** 读取当前光标位置。 */
@@ -22,8 +22,8 @@ interface BTextEditorVoiceActions {
  * 语音输入 hook 配置。
  */
 interface UseVoiceInputOptions {
-  /** BTextEditor 语音输入所需的编辑操作。 */
-  editor: BTextEditorVoiceActions;
+  /** BSmartEditor 语音输入所需的编辑操作。 */
+  editor: BSmartEditorVoiceActions;
   /** 显示空转写结果提示。 */
   showEmptyTranscriptionToast: () => void;
 }
@@ -51,7 +51,7 @@ interface VoiceInsertionRange {
 }
 
 /**
- * 管理语音实时转写文本在 BTextEditor 中的插入和替换。
+ * 管理语音实时转写文本在 BSmartEditor 中的插入和替换。
  * @param options - 语音输入 hook 配置
  * @returns 语音输入事件处理器
  */

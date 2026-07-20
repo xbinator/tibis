@@ -428,7 +428,7 @@ describe('PanelSettings', (): void => {
       },
       global: {
         stubs: {
-          BTextEditor: true,
+          BSmartEditor: true,
           BSectionBlock: defineComponent({
             name: 'BSectionBlockStub',
             props: {

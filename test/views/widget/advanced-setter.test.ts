@@ -8,7 +8,7 @@ import { defineComponent, nextTick, ref } from 'vue';
 import type { PropType, Ref } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
-import type { Variable, VariableOptionGroup } from '@/components/BText/types';
+import type { Variable, VariableOptionGroup } from '@/components/BSmart/types';
 import { provideWidgetContext } from '@/components/BWidget/hooks/useWidgetContext';
 import type { WidgetData, WidgetElement, WidgetElementLoopConfig } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
@@ -247,8 +247,8 @@ describe('AdvancedSetter', (): void => {
             },
             template: '<label><span>{{ label }}</span><span class="section-item-label-extra"><slot name="label-extra"></slot></span><slot></slot></label>'
           },
-          BTextInput: defineComponent({
-            name: 'BTextInputStub',
+          BSmartInput: defineComponent({
+            name: 'BSmartInputStub',
             props: {
               value: {
                 type: String,
@@ -270,7 +270,7 @@ describe('AdvancedSetter', (): void => {
             emits: ['update:value'],
             setup(_props, { emit }) {
               /**
-               * 将原生 input 事件转换为 BTextInput 的 value 更新事件。
+               * 将原生 input 事件转换为 BSmartInput 的 value 更新事件。
                * @param event - 原生输入事件
                */
               function handleInput(event: Event): void {
@@ -323,7 +323,7 @@ describe('AdvancedSetter', (): void => {
   it('renders loop source options from element variables', (): void => {
     const element = createWidgetElement();
     const wrapper = mountAdvancedSetter(element);
-    const input = wrapper.findComponent({ name: 'BTextInputStub' });
+    const input = wrapper.findComponent({ name: 'BSmartInputStub' });
     const options = input.props('options') as VariableOptionGroup[];
     const variables = readVariables(options).map((item: VariableTreeNode): string => item.value);
 
@@ -346,7 +346,7 @@ describe('AdvancedSetter', (): void => {
       indexName: 'index'
     });
 
-    wrapper.findComponent({ name: 'BTextInputStub' }).vm.$emit('update:value', '$input.items');
+    wrapper.findComponent({ name: 'BSmartInputStub' }).vm.$emit('update:value', '$input.items');
     await nextTick();
 
     expect(element.loop).toMatchObject({

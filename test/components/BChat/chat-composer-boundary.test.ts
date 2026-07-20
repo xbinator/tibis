@@ -25,7 +25,7 @@ describe('BChat composer boundary', (): void => {
 
     expect(chatSource).toContain('promptEditorRef,');
     expect(chatSource).not.toContain('editor: {');
-    expect(composerSource).toContain('type EditorInstance = InstanceType<typeof BTextEditor> & BTextEditorExpose;');
+    expect(composerSource).toContain('type EditorInstance = InstanceType<typeof BSmartEditor> & BSmartEditorExpose;');
     expect(composerSource).toContain('promptEditorRef: Ref<EditorInstance | undefined>;');
   });
 

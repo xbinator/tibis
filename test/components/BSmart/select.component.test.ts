@@ -1,14 +1,14 @@
 /**
  * @file select.component.test.ts
- * @description 验证 BTextSelect 支持静态选择和切换到变量输入。
+ * @description 验证 BSmartSelect 支持静态选择和切换到变量输入。
  * @vitest-environment jsdom
  */
 import type { PropType, Ref } from 'vue';
 import { defineComponent, nextTick, ref } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
-import BTextSelect from '@/components/BText/Select.vue';
-import type { VariableOptionGroup } from '@/components/BText/types';
+import BSmartSelect from '@/components/BSmart/Select.vue';
+import type { VariableOptionGroup } from '@/components/BSmart/types';
 
 /**
  * 测试宿主组件实例。
@@ -47,7 +47,7 @@ function createVariableOptions(): VariableOptionGroup[] {
 }
 
 /**
- * 挂载 BTextSelect。
+ * 挂载 BSmartSelect。
  * @param initialValue - 初始值
  * @returns 组件包装器
  */
@@ -55,7 +55,7 @@ function mountTextSelect(initialValue: boolean | string): VueWrapper {
   const Host = defineComponent({
     name: 'TextSelectHost',
     components: {
-      BTextSelect
+      BSmartSelect
     },
     setup(): { value: Ref<boolean | string>; variables: VariableOptionGroup[] } {
       const value = ref<boolean | string>(initialValue);
@@ -66,7 +66,7 @@ function mountTextSelect(initialValue: boolean | string): VueWrapper {
       };
     },
     template: `
-      <BTextSelect
+      <BSmartSelect
         v-model:value="value"
         :options="[
           { label: '启用', value: false },
@@ -113,11 +113,11 @@ function mountTextSelect(initialValue: boolean | string): VueWrapper {
             'update:value': (value: string | number): boolean => typeof value === 'string' || typeof value === 'number'
           },
           template: `
-            <div class="b-text-select-test-select">
+            <div class="b-smart-select-test-select">
               <button
                 v-for="item in options"
                 :key="item.value"
-                class="b-text-select-test-option"
+                class="b-smart-select-test-option"
                 type="button"
                 @click="$emit('update:value', item.value)"
               >
@@ -126,8 +126,8 @@ function mountTextSelect(initialValue: boolean | string): VueWrapper {
             </div>
           `
         }),
-        BTextInput: defineComponent({
-          name: 'BTextInputStub',
+        BSmartInput: defineComponent({
+          name: 'BSmartInputStub',
           props: {
             value: { type: String, default: '' },
             options: {
@@ -147,14 +147,14 @@ function mountTextSelect(initialValue: boolean | string): VueWrapper {
             'update:value': (value: string): boolean => typeof value === 'string'
           },
           template: `
-            <div class="b-text-select-test-input">
+            <div class="b-smart-select-test-input">
               <input
-                class="b-text-select-test-input-control"
+                class="b-smart-select-test-input-control"
                 :value="value"
                 @input="$emit('update:value', $event.target.value)"
               />
               <button
-                class="b-text-select-test-input-variable"
+                class="b-smart-select-test-input-variable"
                 type="button"
                 @click="$emit('update:value', '{{ loading }}')"
               >
@@ -169,28 +169,28 @@ function mountTextSelect(initialValue: boolean | string): VueWrapper {
 }
 
 /**
- * 查找 BTextInput stub。
+ * 查找 BSmartInput stub。
  * @param wrapper - 组件包装器
- * @returns BTextInput 包装器
+ * @returns BSmartInput 包装器
  */
 function findTextInput(wrapper: VueWrapper): VueWrapper {
-  return wrapper.findComponent({ name: 'BTextInputStub' });
+  return wrapper.findComponent({ name: 'BSmartInputStub' });
 }
 
-describe('BTextSelect', (): void => {
+describe('BSmartSelect', (): void => {
   it('overwrites the model with a static option value', async (): Promise<void> => {
     const wrapper = mountTextSelect(false);
 
-    await wrapper.findAll('.b-text-select-test-option')[1].trigger('click');
+    await wrapper.findAll('.b-smart-select-test-option')[1].trigger('click');
 
     expect((wrapper.vm as unknown as TextSelectHostVm).value).toBe(true);
     wrapper.unmount();
   });
 
-  it('switches to BTextInput when the variable button is clicked', async (): Promise<void> => {
+  it('switches to BSmartInput when the variable button is clicked', async (): Promise<void> => {
     const wrapper = mountTextSelect(false);
 
-    await wrapper.find('.b-text-select__variable-button').trigger('click');
+    await wrapper.find('.b-smart-select__variable-button').trigger('click');
 
     const input = findTextInput(wrapper);
     const inputProps = input.props() as { options?: VariableOptionGroup[]; replaceEntireValue?: boolean };
@@ -201,17 +201,17 @@ describe('BTextSelect', (): void => {
     wrapper.unmount();
   });
 
-  it('overwrites the model with the value emitted by BTextInput', async (): Promise<void> => {
+  it('overwrites the model with the value emitted by BSmartInput', async (): Promise<void> => {
     const wrapper = mountTextSelect(false);
 
-    await wrapper.find('.b-text-select__variable-button').trigger('click');
-    await wrapper.find('.b-text-select-test-input-variable').trigger('click');
+    await wrapper.find('.b-smart-select__variable-button').trigger('click');
+    await wrapper.find('.b-smart-select-test-input-variable').trigger('click');
 
     expect((wrapper.vm as unknown as TextSelectHostVm).value).toBe('{{ loading }}');
     wrapper.unmount();
   });
 
-  it('renders BTextInput immediately when the current value is a variable template', (): void => {
+  it('renders BSmartInput immediately when the current value is a variable template', (): void => {
     const wrapper = mountTextSelect('{{ $input.field }}');
     const input = findTextInput(wrapper);
     const inputProps = input.props() as { value?: string };
@@ -222,10 +222,10 @@ describe('BTextSelect', (): void => {
     wrapper.unmount();
   });
 
-  it('wraps raw BTextInput values as variable templates in the model', async (): Promise<void> => {
+  it('wraps raw BSmartInput values as variable templates in the model', async (): Promise<void> => {
     const wrapper = mountTextSelect('{{ loading }}');
 
-    await wrapper.find('.b-text-select-test-input-control').setValue('$input.nextField');
+    await wrapper.find('.b-smart-select-test-input-control').setValue('$input.nextField');
 
     expect((wrapper.vm as unknown as TextSelectHostVm).value).toBe('{{ $input.nextField }}');
     wrapper.unmount();
@@ -234,7 +234,7 @@ describe('BTextSelect', (): void => {
   it('switches back to static select mode from variable input mode', async (): Promise<void> => {
     const wrapper = mountTextSelect('{{ loading }}');
 
-    await wrapper.find('.b-text-select__select-button').trigger('click');
+    await wrapper.find('.b-smart-select__select-button').trigger('click');
 
     const select = wrapper.findComponent({ name: 'BSelectStub' });
     const selectProps = select.props() as TextSelectStubProps;

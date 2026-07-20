@@ -2,7 +2,7 @@
  * @file useElementMethods.ts
  * @description BWidget 元素 Setter 动作方法候选 hook。
  */
-import type { BTextMethodOption } from '../../BText/types';
+import type { BSmartMethodOption } from '../../BSmart/types';
 import type { ComputedRef } from 'vue';
 import { computed } from 'vue';
 import ts from 'typescript';
@@ -19,7 +19,7 @@ const WIDGET_RESERVED_METHOD_PREFIX_PATTERN = /^[$_]/;
  */
 export interface UseElementMethodsReturn {
   /** 当前 Widget 脚本里的公开方法候选 */
-  methodOptions: ComputedRef<BTextMethodOption[]>;
+  methodOptions: ComputedRef<BSmartMethodOption[]>;
 }
 
 /**
@@ -119,7 +119,7 @@ function readParameterName(parameter: ts.ParameterDeclaration, index: number): s
  * @param member - 方法声明
  * @returns 方法选项，无法读取时返回 null
  */
-function createMethodOption(member: ts.MethodDeclaration): BTextMethodOption | null {
+function createMethodOption(member: ts.MethodDeclaration): BSmartMethodOption | null {
   const methodName = readClassElementName(member.name);
 
   if (!methodName || !isPublicActionMethod(member, methodName)) {
@@ -138,7 +138,7 @@ function createMethodOption(member: ts.MethodDeclaration): BTextMethodOption | n
  * @param code - Widget 脚本源码
  * @returns 公开方法选项列表
  */
-export function collectWidgetPublicMethodOptions(code: string): BTextMethodOption[] {
+export function collectWidgetPublicMethodOptions(code: string): BSmartMethodOption[] {
   const sourceFile = ts.createSourceFile('widget-method.ts', code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const widgetClass = sourceFile.statements.find(
     (statement: ts.Statement): statement is ts.ClassDeclaration => ts.isClassDeclaration(statement) && isDefaultExportWidgetClassDeclaration(statement)
@@ -148,7 +148,7 @@ export function collectWidgetPublicMethodOptions(code: string): BTextMethodOptio
     return [];
   }
 
-  return widgetClass.members.flatMap((member: ts.ClassElement): BTextMethodOption[] => {
+  return widgetClass.members.flatMap((member: ts.ClassElement): BSmartMethodOption[] => {
     if (!ts.isMethodDeclaration(member)) {
       return [];
     }
@@ -165,7 +165,7 @@ export function collectWidgetPublicMethodOptions(code: string): BTextMethodOptio
  */
 export function useElementMethods(): UseElementMethodsReturn {
   const widgetContext = useWidgetContext();
-  const methodOptions = computed<BTextMethodOption[]>((): BTextMethodOption[] =>
+  const methodOptions = computed<BSmartMethodOption[]>((): BSmartMethodOption[] =>
     collectWidgetPublicMethodOptions(readWidgetExecuteMethod(widgetContext.widgetData.value?.execute).code)
   );
 

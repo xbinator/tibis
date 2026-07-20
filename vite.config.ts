@@ -20,7 +20,7 @@ const COMPONENT_DIRS = [
   'BIcon',
   'BCollapseTransition',
   'BPanelSplitter',
-  'BText',
+  'BSmart',
   'BEditor',
   'BLayout',
   'BToolbar',

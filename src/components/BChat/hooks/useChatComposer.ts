@@ -5,8 +5,8 @@
 import type { InteractionAPI } from '../components/InteractionContainer/types';
 import type { ComputedRef, Ref } from 'vue';
 import { computed, onMounted } from 'vue';
-import type BTextEditor from '@/components/BText/Editor.vue';
-import type { BTextEditorExpose, FileMentionOption } from '@/components/BText/types';
+import type BSmartEditor from '@/components/BSmart/Editor.vue';
+import type { BSmartEditorExpose, FileMentionOption } from '@/components/BSmart/types';
 import { useFileDrop } from '@/hooks/useFileDrop';
 import type { OpenFileOptions } from '@/hooks/useNavigate';
 import { useRecentStore } from '@/stores/workspace/recent';
@@ -21,7 +21,7 @@ import { useVoiceInput } from './useVoiceInput';
 /**
  * 输入编辑器组件实例与对外公开方法。
  */
-type EditorInstance = InstanceType<typeof BTextEditor> & BTextEditorExpose;
+type EditorInstance = InstanceType<typeof BSmartEditor> & BSmartEditorExpose;
 
 /**
  * Chat Composer hook 依赖项。

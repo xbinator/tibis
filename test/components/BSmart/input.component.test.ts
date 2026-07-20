@@ -1,13 +1,13 @@
 /**
  * @file input.component.test.ts
- * @description 验证 BText 单行输入支持变量按钮插入与 {{ 触发补全。
+ * @description 验证 BSmart 单行输入支持变量按钮插入与 {{ 触发补全。
  * @vitest-environment jsdom
  */
 import { defineComponent, nextTick } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, describe, expect, it } from 'vitest';
-import BTextInput from '@/components/BText/Input.vue';
-import type { VariableOptionGroup } from '@/components/BText/types';
+import BSmartInput from '@/components/BSmart/Input.vue';
+import type { VariableOptionGroup } from '@/components/BSmart/types';
 
 /**
  * 创建变量选项。
@@ -55,7 +55,7 @@ function createVariableOptions(): VariableOptionGroup[] {
  * @returns 输入组件包装器
  */
 function mountTextInput(value = 'https://cdn.example.com/', extraProps: Record<string, unknown> = {}, attachTo: Element = document.body): VueWrapper {
-  const wrapper: VueWrapper = mount(BTextInput, {
+  const wrapper: VueWrapper = mount(BSmartInput, {
     props: {
       value,
       options: createVariableOptions(),
@@ -105,19 +105,19 @@ function mountTextInput(value = 'https://cdn.example.com/', extraProps: Record<s
   return wrapper;
 }
 
-describe('BText Input', (): void => {
+describe('BSmart Input', (): void => {
   afterEach((): void => {
     document.body.innerHTML = '';
   });
 
   it('inserts the selected variable at the current cursor from the variable button', async (): Promise<void> => {
     const wrapper = mountTextInput('https://cdn.example.com/');
-    const input = wrapper.find<HTMLInputElement>('.b-text-input__control input');
+    const input = wrapper.find<HTMLInputElement>('.b-smart-input__control input');
 
     input.element.setSelectionRange(8, 8);
     await input.trigger('focus');
     await input.trigger('select');
-    await wrapper.find('.b-text-input__variable').trigger('click');
+    await wrapper.find('.b-smart-input__variable').trigger('click');
     await nextTick();
     document.body.querySelectorAll<HTMLElement>('.select-dropdown__item')[2]?.click();
     await nextTick();
@@ -128,7 +128,7 @@ describe('BText Input', (): void => {
 
   it('opens filtered variables after typing an open template trigger', async (): Promise<void> => {
     const wrapper = mountTextInput('');
-    const input = wrapper.find<HTMLInputElement>('.b-text-input__control input');
+    const input = wrapper.find<HTMLInputElement>('.b-smart-input__control input');
 
     await input.setValue('{{ci');
     await nextTick();
@@ -143,7 +143,7 @@ describe('BText Input', (): void => {
 
   it('renders the mouse-opened variable dropdown inside the input for stable alignment', async (): Promise<void> => {
     const wrapper = mountTextInput('');
-    const root = wrapper.find('.b-text-input').element as HTMLElement;
+    const root = wrapper.find('.b-smart-input').element as HTMLElement;
 
     Object.defineProperty(window, 'innerWidth', {
       configurable: true,
@@ -166,7 +166,7 @@ describe('BText Input', (): void => {
         toJSON: (): Record<string, number> => ({})
       } as DOMRect);
 
-    await wrapper.find('.b-text-input__variable').trigger('click');
+    await wrapper.find('.b-smart-input__variable').trigger('click');
 
     const dropdown = document.body.querySelector<HTMLElement>('.select-dropdown');
 
@@ -182,7 +182,7 @@ describe('BText Input', (): void => {
     document.body.appendChild(scrollContainer);
 
     const wrapper = mountTextInput('', {}, scrollContainer);
-    const root = wrapper.find('.b-text-input').element as HTMLElement;
+    const root = wrapper.find('.b-smart-input').element as HTMLElement;
 
     scrollContainer.getBoundingClientRect = (): DOMRect =>
       ({
@@ -209,7 +209,7 @@ describe('BText Input', (): void => {
         toJSON: (): Record<string, number> => ({})
       } as DOMRect);
 
-    await wrapper.find('.b-text-input__variable').trigger('click');
+    await wrapper.find('.b-smart-input__variable').trigger('click');
 
     const dropdown = root.querySelector<HTMLElement>('.select-dropdown');
 
@@ -221,10 +221,10 @@ describe('BText Input', (): void => {
 
   it('inserts the variable as a plain path when useTemplateSyntax is false', async (): Promise<void> => {
     const wrapper = mountTextInput('', { useTemplateSyntax: false });
-    const input = wrapper.find<HTMLInputElement>('.b-text-input__control input');
+    const input = wrapper.find<HTMLInputElement>('.b-smart-input__control input');
 
     await input.trigger('focus');
-    await wrapper.find('.b-text-input__variable').trigger('click');
+    await wrapper.find('.b-smart-input__variable').trigger('click');
     await nextTick();
     document.body.querySelectorAll<HTMLElement>('.select-dropdown__item')[2]?.click();
     await nextTick();
@@ -235,13 +235,13 @@ describe('BText Input', (): void => {
 
   it('replaces the whole value when replaceEntireValue is true', async (): Promise<void> => {
     const wrapper = mountTextInput('prefix ');
-    const input = wrapper.find<HTMLInputElement>('.b-text-input__control input');
+    const input = wrapper.find<HTMLInputElement>('.b-smart-input__control input');
 
     await wrapper.setProps({ replaceEntireValue: true });
     input.element.setSelectionRange(3, 3);
     await input.trigger('focus');
     await input.trigger('select');
-    await wrapper.find('.b-text-input__variable').trigger('click');
+    await wrapper.find('.b-smart-input__variable').trigger('click');
     await nextTick();
     document.body.querySelectorAll<HTMLElement>('.select-dropdown__item')[2]?.click();
     await nextTick();

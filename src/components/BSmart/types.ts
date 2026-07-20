@@ -1,6 +1,6 @@
 /**
  * @file types.ts
- * @description BTextEditor 共享类型定义
+ * @description BSmartEditor 共享类型定义
  */
 import type { ChipResolver } from './extensions/variableChip';
 import type { MethodAction } from '@/components/BWidget/utils/widgetMethods';
@@ -65,34 +65,34 @@ export interface VariableOptionGroup {
 }
 
 /**
- * BTextSelect 支持的静态选项值。
+ * BSmartSelect 支持的静态选项值。
  */
-export type BTextSelectStaticValue = string | number | boolean | null;
+export type BSmartSelectStaticValue = string | number | boolean | null;
 
 /**
- * BTextSelect 模型值，字符串也可表示完整变量模板。
+ * BSmartSelect 模型值，字符串也可表示完整变量模板。
  */
-export type BTextSelectValue = BTextSelectStaticValue | undefined;
+export type BSmartSelectValue = BSmartSelectStaticValue | undefined;
 
 /**
- * BTextSelect 静态选项。
+ * BSmartSelect 静态选项。
  */
-export interface BTextSelectOption {
+export interface BSmartSelectOption {
   /** 展示文本 */
   label: string;
   /** 实际写入值 */
-  value: BTextSelectStaticValue;
+  value: BSmartSelectStaticValue;
   /** 选项说明 */
   description?: string;
 }
 
 /** 方法动作配置。 */
-export type BTextMethodAction = MethodAction;
+export type BSmartMethodAction = MethodAction;
 
 /**
  * 可选方法。
  */
-export interface BTextMethodOption {
+export interface BSmartMethodOption {
   /** 展示文本 */
   label: string;
   /** 实际方法名 */
@@ -118,9 +118,9 @@ export interface FileMentionOption {
 }
 
 /**
- * BTextEditor 组件属性
+ * BSmartEditor 组件属性
  */
-export interface BTextEditorProps {
+export interface BSmartEditorProps {
   /** 占位符 */
   placeholder?: string;
   /** 变量选项 */
@@ -148,9 +148,9 @@ export interface BTextEditorProps {
 }
 
 /**
- * BTextEditor 对外暴露的方法。
+ * BSmartEditor 对外暴露的方法。
  */
-export interface BTextEditorExpose {
+export interface BSmartEditorExpose {
   /** 聚焦编辑器，可选移动到末尾 */
   focus: (options?: { moveToEnd?: boolean }) => void;
   /** 读取当前光标位置 */

@@ -7,7 +7,7 @@ import { defineComponent, ref } from 'vue';
 import type { PropType, Ref } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
-import type { Variable, VariableOptionGroup } from '@/components/BText/types';
+import type { Variable, VariableOptionGroup } from '@/components/BSmart/types';
 import ImageSetter from '@/components/BWidget/elements/Image/Setter.vue';
 import { provideWidgetContext } from '@/components/BWidget/hooks/useWidgetContext';
 import type { WidgetData, WidgetElement } from '@/components/BWidget/types';
@@ -131,8 +131,8 @@ function mountImageSetter(element: WidgetElement): VueWrapper {
           },
           template: '<div class="widget-image-setter-stub-item" :data-label="label"><slot></slot></div>'
         }),
-        BTextInput: defineComponent({
-          name: 'BTextInputStub',
+        BSmartInput: defineComponent({
+          name: 'BSmartInputStub',
           props: {
             value: { type: String, default: undefined },
             options: {
@@ -150,7 +150,7 @@ function mountImageSetter(element: WidgetElement): VueWrapper {
              */
             'update:value': (value: string): boolean => typeof value === 'string'
           },
-          template: '<input class="widget-image-setter-stub-text-input" :value="value" @input="$emit(\'update:value\', $event.target.value)" />'
+          template: '<input class="widget-image-setter-stub-smart-input" :value="value" @input="$emit(\'update:value\', $event.target.value)" />'
         }),
         BSelect: defineComponent({
           name: 'BSelectStub',
@@ -194,7 +194,7 @@ describe('Image Setter', (): void => {
   it('writes src to metadata when the address input changes', async (): Promise<void> => {
     const element = createImageElement();
     const wrapper = mountImageSetter(element);
-    const input = wrapper.find('.widget-image-setter-stub-item[data-label="地址"] .widget-image-setter-stub-text-input');
+    const input = wrapper.find('.widget-image-setter-stub-item[data-label="地址"] .widget-image-setter-stub-smart-input');
 
     await input.setValue('https://cdn.example.com/b.png');
 
@@ -204,7 +204,7 @@ describe('Image Setter', (): void => {
 
   it('provides widget variables to the src input', (): void => {
     const wrapper = mountImageSetter(createImageElement());
-    const input = wrapper.findComponent({ name: 'BTextInputStub' });
+    const input = wrapper.findComponent({ name: 'BSmartInputStub' });
     const options = input.props('options') as VariableOptionGroup[];
     const variables = readVariables(options).map((item: VariableTreeNode): string => item.value);
 
@@ -216,7 +216,7 @@ describe('Image Setter', (): void => {
   it('writes alt to metadata when the alt input changes', async (): Promise<void> => {
     const element = createImageElement();
     const wrapper = mountImageSetter(element);
-    const input = wrapper.find('.widget-image-setter-stub-item[data-label="替代文本"] .widget-image-setter-stub-text-input');
+    const input = wrapper.find('.widget-image-setter-stub-item[data-label="替代文本"] .widget-image-setter-stub-smart-input');
 
     await input.setValue('一张示意图');
 
@@ -241,8 +241,8 @@ describe('Image Setter', (): void => {
     element.metadata.fit = 'contain';
     element.metadata.alt = '初始替代文本';
     const wrapper = mountImageSetter(element);
-    const srcInput = wrapper.find('.widget-image-setter-stub-text-input');
-    const altInput = wrapper.find('.widget-image-setter-stub-item[data-label="替代文本"] .widget-image-setter-stub-text-input');
+    const srcInput = wrapper.find('.widget-image-setter-stub-smart-input');
+    const altInput = wrapper.find('.widget-image-setter-stub-item[data-label="替代文本"] .widget-image-setter-stub-smart-input');
     const select = wrapper.find('.widget-image-setter-stub-select');
 
     expect((srcInput.element as HTMLInputElement).value).toBe('https://example.com/init.png');
@@ -265,7 +265,7 @@ describe('Image Setter', (): void => {
     const element = createImageElement();
     element.metadata.helperText = '辅助信息';
     const wrapper = mountImageSetter(element);
-    const input = wrapper.find('.widget-image-setter-stub-item[data-label="地址"] .widget-image-setter-stub-text-input');
+    const input = wrapper.find('.widget-image-setter-stub-item[data-label="地址"] .widget-image-setter-stub-smart-input');
 
     await input.setValue('https://example.com/new.png');
 

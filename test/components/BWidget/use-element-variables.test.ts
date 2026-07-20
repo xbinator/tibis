@@ -9,7 +9,7 @@ import type { Ref } from 'vue';
 import { defineComponent, h, ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
-import type { Variable, VariableOptionGroup } from '@/components/BText/types';
+import type { Variable, VariableOptionGroup } from '@/components/BSmart/types';
 import { useElementVariables, type ElementTargetReader, type UseElementVariablesReturn } from '@/components/BWidget/hooks/useElementVariables';
 import { provideWidgetContext } from '@/components/BWidget/hooks/useWidgetContext';
 import type { WidgetData, WidgetElement, WidgetElementLoopConfig } from '@/components/BWidget/types';

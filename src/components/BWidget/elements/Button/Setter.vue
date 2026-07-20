@@ -5,18 +5,18 @@
 <template>
   <BSectionBlock title="按钮" label-min-width="60">
     <BSectionItem label="文字">
-      <BTextInput v-model:value="buttonText" :options="variableOptions" placeholder="按钮文字" />
+      <BSmartInput v-model:value="buttonText" :options="variableOptions" placeholder="按钮文字" />
     </BSectionItem>
     <BSectionItem label="状态">
-      <BTextSelect v-model:value="element.metadata.disabled" :options="WIDGET_BUTTON_DISABLED_OPTIONS" :variables="variableOptions" />
+      <BSmartSelect v-model:value="element.metadata.disabled" :options="WIDGET_BUTTON_DISABLED_OPTIONS" :variables="variableOptions" />
     </BSectionItem>
     <BSectionItem label="加载">
-      <BTextSelect v-model:value="element.metadata.loading" :options="WIDGET_BUTTON_LOADING_OPTIONS" :variables="variableOptions" />
+      <BSmartSelect v-model:value="element.metadata.loading" :options="WIDGET_BUTTON_LOADING_OPTIONS" :variables="variableOptions" />
     </BSectionItem>
   </BSectionBlock>
 
   <BSectionBlock title="动作设置">
-    <BTextMethod v-model:value="element.metadata.actions" :methods="methodOptions" :variables="variableOptions" />
+    <BSmartMethod v-model:value="element.metadata.actions" :methods="methodOptions" :variables="variableOptions" />
   </BSectionBlock>
 </template>
 

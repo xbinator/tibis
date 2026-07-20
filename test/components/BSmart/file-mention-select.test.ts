@@ -6,8 +6,8 @@
 import { defineComponent } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
-import FileMentionSelect from '@/components/BText/components/FileMentionSelect.vue';
-import type { FileMentionOption } from '@/components/BText/types';
+import FileMentionSelect from '@/components/BSmart/components/FileMentionSelect.vue';
+import type { FileMentionOption } from '@/components/BSmart/types';
 
 /** 最近记录图标测试替身，暴露 fileName 便于断言。 */
 const BRecentIconStub = defineComponent({

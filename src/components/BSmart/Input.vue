@@ -37,7 +37,7 @@
 <script setup lang="ts">
 /**
  * @file Input.vue
- * @description BText 单行变量补全输入组件。
+ * @description BSmart 单行变量补全输入组件。
  */
 import type { Variable, VariableOptionGroup } from './types';
 import type { VisibleVariable } from './utils/variables';
@@ -107,7 +107,7 @@ const emit = defineEmits<{
 }>();
 
 const modelValue = defineModel<string>('value', { default: '' });
-const [name, bem] = createNamespace('text-input');
+const [name, bem] = createNamespace('smart-input');
 
 /** 组件根节点。 */
 const rootRef = ref<HTMLDivElement | null>(null);
@@ -360,7 +360,7 @@ function handleInput(event: Event): void {
  */
 function handleSelectionEvent(event?: Event): void {
   const target = event?.target;
-  if (target instanceof Element && target.closest('.b-text-input__variable')) {
+  if (target instanceof Element && target.closest('.b-smart-input__variable')) {
     return;
   }
 
@@ -542,13 +542,13 @@ onBeforeUnmount((): void => {
 </script>
 
 <style lang="less" scoped>
-.b-text-input {
+.b-smart-input {
   position: relative;
   width: 100%;
   min-width: 0;
 }
 
-.b-text-input__variable {
+.b-smart-input__variable {
   color: var(--text-tertiary);
   cursor: pointer;
 
@@ -556,7 +556,7 @@ onBeforeUnmount((): void => {
     color: var(--color-primary);
   }
 
-  &.b-text-input__variable--active {
+  &.b-smart-input__variable--active {
     color: var(--color-primary);
   }
 }

@@ -1,6 +1,6 @@
 /**
  * @file method.component.test.ts
- * @description 验证 BTextMethod 选择函数并配置参数。
+ * @description 验证 BSmartMethod 选择函数并配置参数。
  * @vitest-environment jsdom
  */
 import { readFileSync } from 'node:fs';
@@ -9,18 +9,18 @@ import { defineComponent, nextTick, ref } from 'vue';
 import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import type { BDraggableMoveEvent } from '@/components/BDraggable/types';
-import BTextMethod from '@/components/BText/Method.vue';
-import type { BTextMethodAction, BTextMethodOption, VariableOptionGroup } from '@/components/BText/types';
+import BSmartMethod from '@/components/BSmart/Method.vue';
+import type { BSmartMethodAction, BSmartMethodOption, VariableOptionGroup } from '@/components/BSmart/types';
 
-/** BTextMethod 源码，用于验证关键布局约束。 */
-const methodSource = readFileSync('src/components/BText/Method.vue', 'utf8');
+/** BSmartMethod 源码，用于验证关键布局约束。 */
+const methodSource = readFileSync('src/components/BSmart/Method.vue', 'utf8');
 
 /**
  * 测试宿主组件实例。
  */
 interface MethodHostVm {
   /** 当前方法动作列表 */
-  value: BTextMethodAction[];
+  value: BSmartMethodAction[];
 }
 
 /**
@@ -32,14 +32,14 @@ interface MethodActionEntry {
   /** 当前动作下标 */
   index: number;
   /** 当前方法动作 */
-  action: BTextMethodAction;
+  action: BSmartMethodAction;
 }
 
 /**
  * 创建方法选项。
  * @returns 方法选项列表
  */
-function createMethodOptions(): BTextMethodOption[] {
+function createMethodOptions(): BSmartMethodOption[] {
   return [
     {
       label: 'submitOrder',
@@ -73,18 +73,18 @@ function createVariableOptions(): VariableOptionGroup[] {
 }
 
 /**
- * 挂载 BTextMethod。
+ * 挂载 BSmartMethod。
  * @param initialActions - 初始动作列表
  * @returns 组件包装器
  */
-function mountMethod(initialActions: BTextMethodAction[] = []): VueWrapper {
+function mountMethod(initialActions: BSmartMethodAction[] = []): VueWrapper {
   const Host = defineComponent({
     name: 'MethodHost',
     components: {
-      BTextMethod
+      BSmartMethod
     },
-    setup(): { methods: BTextMethodOption[]; value: Ref<BTextMethodAction[]>; variables: VariableOptionGroup[] } {
-      const value = ref<BTextMethodAction[]>(initialActions);
+    setup(): { methods: BSmartMethodOption[]; value: Ref<BSmartMethodAction[]>; variables: VariableOptionGroup[] } {
+      const value = ref<BSmartMethodAction[]>(initialActions);
 
       return {
         methods: createMethodOptions(),
@@ -92,7 +92,7 @@ function mountMethod(initialActions: BTextMethodAction[] = []): VueWrapper {
         variables: createVariableOptions()
       };
     },
-    template: '<BTextMethod v-model:value="value" :methods="methods" :variables="variables" />'
+    template: '<BSmartMethod v-model:value="value" :methods="methods" :variables="variables" />'
   });
 
   return mount(Host, {
@@ -116,8 +116,8 @@ function mountMethod(initialActions: BTextMethodAction[] = []): VueWrapper {
             move: (event: BDraggableMoveEvent<MethodActionEntry>): boolean => Array.isArray(event.nextList)
           },
           template: `
-            <div v-bind="$attrs" class="b-text-method-test-draggable">
-              <div v-for="(item, index) in list" :key="item.key" class="b-text-method-test-draggable-item">
+            <div v-bind="$attrs" class="b-smart-method-test-draggable">
+              <div v-for="(item, index) in list" :key="item.key" class="b-smart-method-test-draggable-item">
                 <slot
                   :item="item"
                   :index="index"
@@ -158,17 +158,17 @@ function mountMethod(initialActions: BTextMethodAction[] = []): VueWrapper {
              */
             'update:open': (value: boolean): boolean => typeof value === 'boolean'
           },
-          template: '<div v-if="open" class="b-text-method-test-modal"><slot></slot><slot name="footer"></slot></div>'
+          template: '<div v-if="open" class="b-smart-method-test-modal"><slot></slot><slot name="footer"></slot></div>'
         }),
         BIcon: defineComponent({
           name: 'BIconStub',
           props: {
             icon: { type: String, required: true }
           },
-          template: '<span class="b-text-method-test-icon" :data-icon="icon"></span>'
+          template: '<span class="b-smart-method-test-icon" :data-icon="icon"></span>'
         }),
-        BTextInput: defineComponent({
-          name: 'BTextInputStub',
+        BSmartInput: defineComponent({
+          name: 'BSmartInputStub',
           props: {
             value: { type: String, default: '' },
             options: {
@@ -187,7 +187,7 @@ function mountMethod(initialActions: BTextMethodAction[] = []): VueWrapper {
           },
           template: `
             <input
-              class="b-text-method-test-input"
+              class="b-smart-method-test-input"
               :placeholder="placeholder"
               :value="value"
               @input="$emit('update:value', $event.target.value)"
@@ -222,7 +222,7 @@ function findButtonByText(wrapper: VueWrapper, text: string): DOMWrapper<Element
  * @returns 按钮包装器
  */
 function findActionButtonByIcon(wrapper: VueWrapper, icon: string): DOMWrapper<Element> {
-  const button = wrapper.findAll('.b-text-method__action-controls button').find((item: DOMWrapper<Element>): boolean => item.attributes('icon') === icon);
+  const button = wrapper.findAll('.b-smart-method__action-controls button').find((item: DOMWrapper<Element>): boolean => item.attributes('icon') === icon);
 
   if (!button) {
     throw new Error(`未找到动作按钮：${icon}`);
@@ -231,14 +231,14 @@ function findActionButtonByIcon(wrapper: VueWrapper, icon: string): DOMWrapper<E
   return button;
 }
 
-describe('BTextMethod', (): void => {
+describe('BSmartMethod', (): void => {
   it('selects a method and writes argument values after confirmation', async (): Promise<void> => {
     const wrapper = mountMethod();
 
-    await wrapper.find('.b-text-method__trigger').trigger('click');
+    await wrapper.find('.b-smart-method__trigger').trigger('click');
     await wrapper.find('[data-method-value="submitOrder"]').trigger('click');
 
-    const inputs = wrapper.findAll('.b-text-method-test-input');
+    const inputs = wrapper.findAll('.b-smart-method-test-input');
 
     expect(inputs).toHaveLength(2);
 
@@ -263,7 +263,7 @@ describe('BTextMethod', (): void => {
       }
     ]);
 
-    await wrapper.find('.b-text-method__trigger').trigger('click');
+    await wrapper.find('.b-smart-method__trigger').trigger('click');
     await wrapper.find('[data-method-value="refreshList"]').trigger('click');
     await findButtonByText(wrapper, '确定').trigger('click');
 
@@ -283,14 +283,14 @@ describe('BTextMethod', (): void => {
   it('does not render a draft action switcher in the modal', async (): Promise<void> => {
     const wrapper = mountMethod();
 
-    await wrapper.find('.b-text-method__trigger').trigger('click');
+    await wrapper.find('.b-smart-method__trigger').trigger('click');
 
-    expect(wrapper.find('.b-text-method__drafts').exists()).toBe(false);
+    expect(wrapper.find('.b-smart-method__drafts').exists()).toBe(false);
     wrapper.unmount();
   });
 
   it('uses a single editing action instead of draft and active action state', (): void => {
-    expect(methodSource).toContain('const editingAction = ref<BTextMethodAction>');
+    expect(methodSource).toContain('const editingAction = ref<BSmartMethodAction>');
     expect(methodSource).not.toContain('draftAction');
     expect(methodSource).not.toContain('draftActions');
     expect(methodSource).not.toContain('activeAction');
@@ -311,12 +311,12 @@ describe('BTextMethod', (): void => {
       }
     ]);
 
-    expect(wrapper.find('.b-text-method__actions').text()).toContain('submitOrder');
+    expect(wrapper.find('.b-smart-method__actions').text()).toContain('submitOrder');
 
     await findActionButtonByIcon(wrapper, 'lucide:trash-2').trigger('click');
 
     expect((wrapper.vm as unknown as MethodHostVm).value).toEqual([]);
-    expect(wrapper.find('.b-text-method__actions').exists()).toBe(false);
+    expect(wrapper.find('.b-smart-method__actions').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -328,7 +328,7 @@ describe('BTextMethod', (): void => {
       }
     ]);
 
-    expect(wrapper.find('.b-text-method__trigger').text()).toBe('设置动作');
+    expect(wrapper.find('.b-smart-method__trigger').text()).toBe('设置动作');
     wrapper.unmount();
   });
 
@@ -381,27 +381,27 @@ describe('BTextMethod', (): void => {
   it('uses the parameter header action instead of section meta and footer actions', async (): Promise<void> => {
     const wrapper = mountMethod();
 
-    await wrapper.find('.b-text-method__trigger').trigger('click');
+    await wrapper.find('.b-smart-method__trigger').trigger('click');
 
     // 参数头部不再使用 section-meta 与 footer-actions 模式
-    expect(wrapper.find('.b-text-method__section-meta').exists()).toBe(false);
-    expect(wrapper.find('.b-text-method__footer-actions').exists()).toBe(false);
+    expect(wrapper.find('.b-smart-method__section-meta').exists()).toBe(false);
+    expect(wrapper.find('.b-smart-method__footer-actions').exists()).toBe(false);
 
     // 「添加参数」按钮仅在已选中函数时渲染，因此先选择函数
     await wrapper.find('[data-method-value="submitOrder"]').trigger('click');
-    expect(wrapper.findAll('.b-text-method-test-input')).toHaveLength(2);
+    expect(wrapper.findAll('.b-smart-method-test-input')).toHaveLength(2);
 
     // 参数头部 action 新增一行参数
     await findButtonByText(wrapper, '添加参数').trigger('click');
 
-    expect(wrapper.findAll('.b-text-method-test-input')).toHaveLength(3);
+    expect(wrapper.findAll('.b-smart-method-test-input')).toHaveLength(3);
     wrapper.unmount();
   });
 
   it('matches sidebar layer style for inline action controls', (): void => {
     expect(methodSource).toContain('type="text" size="mini" square icon="lucide:pencil"');
     expect(methodSource).toContain('type="text" size="mini" danger square icon="lucide:trash-2"');
-    expect(methodSource).toContain('.b-text-method__action:hover .b-text-method__action-controls');
+    expect(methodSource).toContain('.b-smart-method__action:hover .b-smart-method__action-controls');
     expect(methodSource).toContain('pointer-events: none;');
     expect(methodSource).toContain('opacity: 0;');
     expect(methodSource).not.toContain("bem('action-edit')");
@@ -410,18 +410,18 @@ describe('BTextMethod', (): void => {
   });
 
   it('renders action blocks through BDraggable and reorders actions on move', async (): Promise<void> => {
-    const firstAction: BTextMethodAction = {
+    const firstAction: BSmartMethodAction = {
       args: ['{{ $input.orderId }}'],
       method: 'submitOrder'
     };
-    const secondAction: BTextMethodAction = {
+    const secondAction: BSmartMethodAction = {
       args: [],
       method: 'refreshList'
     };
     const wrapper = mountMethod([firstAction, secondAction]);
 
     expect(methodSource).toContain('<BDraggable');
-    expect(methodSource).toContain('handle-class="b-text-method__action-drag-handle"');
+    expect(methodSource).toContain('handle-class="b-smart-method__action-drag-handle"');
     expect(methodSource).toContain('@move="handleActionMove"');
 
     wrapper.findComponent({ name: 'BDraggable' }).vm.$emit('move', {

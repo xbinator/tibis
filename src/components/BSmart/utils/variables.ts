@@ -1,6 +1,6 @@
 /**
  * @file variables.ts
- * @description BTextEditor 变量树转换工具。
+ * @description BSmartEditor 变量树转换工具。
  */
 import type { Variable } from '../types';
 

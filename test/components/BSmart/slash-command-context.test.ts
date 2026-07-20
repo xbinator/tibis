@@ -1,14 +1,14 @@
 /**
  * @file slash-command-context.test.ts
- * @description BText 斜杠查询范围、过滤与通用选中行为测试。
+ * @description BSmart 斜杠查询范围、过滤与通用选中行为测试。
  * @vitest-environment jsdom
  */
 import { computed, shallowRef } from 'vue';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { describe, expect, it, vi } from 'vitest';
-import { findSlashCommandContext, isSlashCommandMatch, useSlashCommand } from '@/components/BText/hooks/useSlashCommand';
-import type { SlashCommandOption } from '@/components/BText/types';
+import { findSlashCommandContext, isSlashCommandMatch, useSlashCommand } from '@/components/BSmart/hooks/useSlashCommand';
+import type { SlashCommandOption } from '@/components/BSmart/types';
 
 /** 测试命令候选。 */
 const COMMANDS: SlashCommandOption[] = [
@@ -30,7 +30,7 @@ const COMMANDS: SlashCommandOption[] = [
   }
 ];
 
-describe('BText slash command context', (): void => {
+describe('BSmart slash command context', (): void => {
   it('finds a query at input start, line start or after whitespace', (): void => {
     expect(findSlashCommandContext('/tem', 4, COMMANDS)).toEqual({ from: 0, to: 4, query: 'tem' });
     expect(findSlashCommandContext('帮我用 /tem 查询', 8, COMMANDS)).toEqual({ from: 4, to: 8, query: 'tem' });

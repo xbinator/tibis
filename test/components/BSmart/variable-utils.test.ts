@@ -1,10 +1,10 @@
 /**
  * @file variable-utils.test.ts
- * @description 验证 BTextEditor 变量树工具的可见节点计算。
+ * @description 验证 BSmartEditor 变量树工具的可见节点计算。
  */
 import { describe, expect, it } from 'vitest';
-import type { Variable } from '@/components/BText/types';
-import { getVisibleVariables } from '@/components/BText/utils/variables';
+import type { Variable } from '@/components/BSmart/types';
+import { getVisibleVariables } from '@/components/BSmart/utils/variables';
 
 /**
  * 创建测试变量树。
@@ -52,7 +52,7 @@ function createVariableTree(): Variable[] {
   ];
 }
 
-describe('BTextEditor variable utilities', (): void => {
+describe('BSmartEditor variable utilities', (): void => {
   it('hides descendants for collapsed tree nodes', (): void => {
     const variables = getVisibleVariables(createVariableTree(), new Set(['input']), '');
 

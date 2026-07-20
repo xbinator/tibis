@@ -2,7 +2,7 @@
  * @file useElementVariables.ts
  * @description BWidget 元素 Setter 变量候选 hook。
  */
-import type { Variable, VariableOptionGroup } from '../../BText/types';
+import type { Variable, VariableOptionGroup } from '../../BSmart/types';
 import type { WidgetData, WidgetElement, WidgetElementLoopConfig, WidgetSchemaObject, WidgetSchemaProperty } from '../types';
 import type { ComputedRef } from 'vue';
 import { computed } from 'vue';

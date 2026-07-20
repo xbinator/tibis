@@ -1,5 +1,5 @@
 <template>
-  <div ref="editorRootRef" class="b-text-editor-shell" @focusout="handleEditorShellFocusOut">
+  <div ref="editorRootRef" :class="bem('shell')" @focusout="handleEditorShellFocusOut">
     <SlashCommandSelect
       :visible="slashCommand.slashVisible.value"
       :commands="slashCommand.filteredSlashCommands.value"
@@ -16,9 +16,9 @@
       @select="fileMention.handleFileMentionSelect"
       @update:active-index="fileMention.handleMentionActiveIndexChange"
     />
-    <div class="b-text-editor" @click="handleContainerClick">
-      <div class="b-text-editor__container">
-        <div ref="editorHostRef" class="b-text-editor__codemirror"></div>
+    <div :class="name" @click="handleContainerClick">
+      <div :class="bem('container')">
+        <div ref="editorHostRef" :class="bem('codemirror')"></div>
         <VariableSelect
           :visible="triggerVisible"
           :variables="filteredVariables"
@@ -35,17 +35,18 @@
 
 <script setup lang="ts">
 /**
- * @file BText/Editor.vue
+ * @file BSmart/Editor.vue
  * @description Prompt 编辑器主组件，基于 CodeMirror 6 实现
  */
 import type { ChipResolver } from './extensions/variableChip';
-import type { SlashCommandOption, Variable, FileMentionOption, BTextEditorExpose, BTextEditorProps as Props } from './types';
+import type { SlashCommandOption, Variable, FileMentionOption, BSmartEditorExpose, BSmartEditorProps as Props } from './types';
 import type { FlatVariable, VisibleVariable } from './utils/variables';
 import type { Extension } from '@codemirror/state';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { history } from '@codemirror/commands';
 import { Annotation, EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
+import { createNamespace } from '@/utils/namespace';
 import FileMentionSelect from './components/FileMentionSelect.vue';
 import SlashCommandSelect from './components/SlashCommandSelect.vue';
 import VariableSelect from './components/VariableSelect.vue';
@@ -83,6 +84,7 @@ const emit = defineEmits<{
 }>();
 
 const modelValue = defineModel<string>('value', { default: '' });
+const [name, bem] = createNamespace('smart-editor');
 
 // 模板 ref
 const editorRootRef = ref<HTMLDivElement>();
@@ -503,7 +505,7 @@ onBeforeUnmount(() => {
   destroyEditor();
 });
 
-defineExpose<BTextEditorExpose>({
+defineExpose<BSmartEditorExpose>({
   focus: (options?: { moveToEnd?: boolean }): void => {
     if (!instance.value) return;
     instance.value.focus();
@@ -559,12 +561,12 @@ defineExpose<BTextEditorExpose>({
 <style lang="less">
 @import url('@/assets/styles/scrollbar.less');
 
-.b-text-editor-shell {
+.b-smart-editor__shell {
   position: relative;
   width: 100%;
 }
 
-.b-text-editor {
+.b-smart-editor {
   width: 100%;
   min-height: 80px;
   padding: 4px 12px;
@@ -591,13 +593,13 @@ defineExpose<BTextEditorExpose>({
   .scrollbar-style();
 }
 
-.b-text-editor__container {
+.b-smart-editor__container {
   position: relative;
   width: 100%;
   height: 100%;
 }
 
-.b-text-editor__codemirror {
+.b-smart-editor__codemirror {
   width: 100%;
   min-height: 80px;
 

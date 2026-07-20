@@ -121,7 +121,7 @@ tibis/
 │   │   │   ├── renderers/            # 2 个渲染器（WidgetCanvas、WidgetNode）
 │   │   │   ├── elements/             # 14 个元素定义（Button/Image/Rect/Text/group，每个含 index.vue + Setter.vue + schema.ts）
 │   │   │   └── utils/                # 17 个工具 + widgetRuntime/ 子目录（boardTransforms、widgetBindings、widgetData、widgetDataSchema、widgetExecuteMethod、widgetGeometry、widgetLoop、widgetMethods、widgetSchema、widgetStyle、widgetTextMetrics、widgetTree、widgetPreviewContext + widgetRuntime/index/layout/logger/patch）
-│   │   ├── BText/                    # 提示词编辑器（原 BPromptEditor，重构为基于 CodeMirror 6）
+│   │   ├── BSmart/                    # 提示词编辑器（原 BPromptEditor/BText，重构为基于 CodeMirror 6）
 │   │   │   └── Editor.vue / Input.vue / Method.vue / Select.vue + extensions + hooks + utils
 │   │   ├── BCommandPanel/            # 统一命令面板（整合最近记录搜索、跳转语法、模型选择入口，全局单例）
 │   │   ├── BDraggable/               # 公共列表拖拽排序组件（插槽渲染 + 排序事件）
@@ -460,12 +460,12 @@ tibis/
 ### 近期重构变化
 
 - **BDrawing → BWidget**：绘图白板重构为可执行小组件系统
-- **BPromptEditor → BText**：提示词编辑器重构为基于 CodeMirror 6
+- **BPromptEditor → BText → BSmart**：提示词编辑器重构为基于 CodeMirror 6；2026-07-20 由 BText 更名为 BSmart（"Text" 语义过弱，与 BWidget Text 元素混淆，BSmart 体现斜杠命令/变量芯片/@提及等富编辑能力）
 - **BSearchRecent → BRecent**：最近文件搜索重命名
 - **BModelIcon → BModel**：模型图标组件合并
 - **BModelSelect → BSelect**：合并为通用选择器（模型选择能力由 BCommandPanel 接管）
 - **BSettingsPage / BSettingsSection → BSection**：设置布局组件统一为 BSection（Block + Item）
-- **新增 10 个组件**：BCommandPanel / BDraggable / BDrawer / BInputNumber / BPagination / BSection / BSegmented / BSidebarPanel / BText / BWidget
+- **新增 10 个组件**：BCommandPanel / BDraggable / BDrawer / BInputNumber / BPagination / BSection / BSegmented / BSidebarPanel / BSmart（原 BText）/ BWidget
 
 ### 组件清单
 
@@ -474,7 +474,7 @@ tibis/
 | **BEditor** | Markdown 双视图编辑器（TipTap 富文本 + CodeMirror 源码），含 15 个适配器、12 个 hooks、10 个扩展、10 个 UI 组件，支持 AI 行内补全 |
 | **BChat** | AI 聊天侧边栏，流式对话、工具调用、会话历史、文件引用、语音输入、上下文压缩与用量指示、Widget 初始化，含 27 个 hooks |
 | **BWidget** | Widget 小组件编辑器（原 BDrawing），可交互画布、元素系统（Button/Image/Rect/Text/group）、JS 执行脚本、运行时沙箱、Input/Output Schema 契约、循环数据展开、变量绑定，含 6 个子组件、14 个 hooks、2 个渲染器、17 个 utils、14 个元素定义 |
-| **BText** | 提示词编辑器（原 BPromptEditor），基于 CodeMirror 6，含 Editor/Input/Method/Select 四种形态 + 斜杠命令、@mention 文件引用、变量插入 |
+| **BSmart** | 提示词编辑器（原 BPromptEditor/BText），基于 CodeMirror 6，含 Editor/Input/Method/Select 四种形态 + 斜杠命令、@mention 文件引用、变量插入 |
 | **BCommandPanel** | 统一命令面板（整合最近记录搜索、跳转语法、模型选择入口，全局单例） |
 | **BDraggable** | 公共列表拖拽排序组件（插槽渲染 + 排序事件） |
 | **BDrawer** | 抽屉组件（基于 ant-design-vue Drawer） |

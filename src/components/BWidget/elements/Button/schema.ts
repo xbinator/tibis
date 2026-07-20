@@ -5,7 +5,7 @@
 import type { WidgetElementStyle, WidgetMetadata } from '../../types';
 import type { MethodAction } from '../../utils/widgetMethods';
 import type { WidgetElementSchema } from '../types';
-import type { BTextSelectOption } from '@/components/BText/types';
+import type { BSmartSelectOption } from '@/components/BSmart/types';
 
 /** 按钮元素默认文字。 */
 export const WIDGET_BUTTON_DEFAULT_TEXT = '按钮';
@@ -14,13 +14,13 @@ export const WIDGET_BUTTON_DEFAULT_TEXT = '按钮';
 export type WidgetButtonBooleanValue = boolean | string;
 
 /** 按钮状态选项。 */
-export const WIDGET_BUTTON_DISABLED_OPTIONS: BTextSelectOption[] = [
+export const WIDGET_BUTTON_DISABLED_OPTIONS: BSmartSelectOption[] = [
   { label: '启用', value: false },
   { label: '禁用', value: true }
 ];
 
 /** 按钮加载选项。 */
-export const WIDGET_BUTTON_LOADING_OPTIONS: BTextSelectOption[] = [
+export const WIDGET_BUTTON_LOADING_OPTIONS: BSmartSelectOption[] = [
   { label: '关闭', value: false },
   { label: '加载中', value: true }
 ];

@@ -118,9 +118,9 @@ function mountDisplayValue<TField extends keyof DisplayElementMetadata & string>
 }
 
 describe('useElementValue', (): void => {
-  it('uses neutral method action helpers instead of depending on BText', (): void => {
+  it('uses neutral method action helpers instead of depending on BSmart', (): void => {
     expect(USE_ELEMENT_VALUE_SOURCE).toContain("from '../utils/widgetMethods'");
-    expect(USE_ELEMENT_VALUE_SOURCE).not.toContain('@/components/BText');
+    expect(USE_ELEMENT_VALUE_SOURCE).not.toContain('@/components/BSmart');
     expect(USE_ELEMENT_VALUE_SOURCE).not.toContain('methodActions');
   });
 

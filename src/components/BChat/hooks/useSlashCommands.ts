@@ -3,7 +3,7 @@
  * @description 斜杠命令处理 hook，统一管理命令定义和派发逻辑。
  */
 import type { SkillDefinition } from '@/ai/skill/types';
-import type { SlashCommandOption } from '@/components/BText/types';
+import type { SlashCommandOption } from '@/components/BSmart/types';
 import { createSkillReferenceToken } from '../utils/skillReference';
 
 /**
