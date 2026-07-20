@@ -690,6 +690,7 @@ describe('BWidget node click selection', () => {
       color: '#1f2937',
       fontSize: 14,
       fontWeight: 400,
+      lineHeight: 1,
       textAlign: 'center',
       textVerticalAlign: 'middle'
     });

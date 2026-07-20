@@ -42,6 +42,11 @@
 <script setup lang="ts">
 import type { ModelServiceType } from 'types/model';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import BButton from '@/components/BButton/index.vue';
+import BModal from '@/components/BModal/index.vue';
+import BModelIcon from '@/components/BModel/Icon.vue';
+import BSelect from '@/components/BSelect/index.vue';
+import BSmartEditor from '@/components/BSmart/Editor.vue';
 import type { ChipResult } from '@/components/BSmart/extensions/variableChip';
 import type { Variable, VariableOptionGroup } from '@/components/BSmart/types';
 import { flattenVariables } from '@/components/BSmart/utils/variables';

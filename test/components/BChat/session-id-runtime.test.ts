@@ -143,6 +143,8 @@ const skillStoreMock = vi.hoisted(() => ({
   resolveLatestEnabledSkill: vi.fn<(_name: string) => Promise<undefined>>(),
   waitForInit: vi.fn<() => Promise<void>>(() => Promise.resolve()),
   syncFromDisk: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+  // syncDirtyFromDisk 在 useRuntimeTools.syncAIResources 中被调用，需与 syncFromDisk 一并 mock
+  syncDirtyFromDisk: vi.fn<() => Promise<void>>(() => Promise.resolve()),
   initialize: vi.fn<() => Promise<void>>(() => Promise.resolve()),
   handleSkillChange: vi.fn()
 }));
@@ -676,6 +678,7 @@ describe('BChat sessionId runtime', (): void => {
     skillStoreMock.resolveLatestEnabledSkill.mockResolvedValue(undefined);
     skillStoreMock.waitForInit.mockClear();
     skillStoreMock.syncFromDisk.mockClear();
+    skillStoreMock.syncDirtyFromDisk.mockClear();
     recentStoreMock.recentFiles = [];
     recentStoreMock.ensureLoaded.mockReset();
     recentStoreMock.ensureLoaded.mockResolvedValue();
