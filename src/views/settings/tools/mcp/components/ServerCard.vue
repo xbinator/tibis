@@ -3,29 +3,26 @@
   @description MCP Server 卡片组件，展示单个 server 的状态、工具列表与操作入口。
 -->
 <template>
-  <div class="server-card">
-    <div class="server-card__row">
-      <div class="server-card__icon">{{ server.name.charAt(0).toUpperCase() }}</div>
-      <div class="server-card__info">
-        <div class="server-card__name">{{ server.name }}</div>
-        <div class="server-card__command">
+  <div :class="name">
+    <div :class="bem('row')">
+      <div :class="bem('icon')">{{ server.name.charAt(0).toUpperCase() }}</div>
+      <div :class="bem('info')">
+        <div :class="bem('name')">{{ server.name }}</div>
+        <div :class="bem('command')">
           <template v-if="server.transport === 'stdio'">{{ server.command }} {{ server.args.join(' ') }}</template>
           <template v-else>{{ server.transport }}</template>
         </div>
-        <div v-if="status?.runtimeStatus === 'failed' && status?.message" class="server-card__error">
-          {{ status.message }}
-        </div>
-        <div v-if="status" class="server-card__status">
+        <div v-if="status" :class="bem('status')">
           <span>运行时: {{ statusLabel(status.runtimeStatus, 'runtime') }}</span>
           <span>沙箱: {{ statusLabel(status.sandboxStatus, 'sandbox') }}</span>
           <span>扫描: {{ statusLabel(status.discoveryStatus, 'discovery') }}</span>
-          <span v-if="status.message">{{ status.message }}</span>
+          <span v-if="status.message" :class="bem('status-message', { failed: status.runtimeStatus === 'failed' })">{{ status.message }}</span>
         </div>
       </div>
-      <div class="server-card__actions">
+      <div :class="bem('actions')">
         <ASwitch :checked="server.enabled" size="small" @change="(value) => handlePatch({ enabled: Boolean(value) })" />
         <BDropdown placement="bottomRight">
-          <button class="server-card__settings-btn">
+          <button :class="bem('settings-btn')">
             <Icon icon="lucide:settings" :width="16" />
           </button>
           <template #overlay>
@@ -35,18 +32,18 @@
       </div>
     </div>
 
-    <div v-if="discoveredTools.length > 0" class="server-card__tools">
-      <div class="server-card__tools-title" @click="toolsCollapsed = !toolsCollapsed">
-        <Icon icon="lucide:hammer" :width="14" class="server-card__tools-icon" />
-        <div class="server-card__tools-title-text">已发现的工具</div>
+    <div v-if="discoveredTools.length > 0" :class="bem('tools')">
+      <div :class="bem('tools-title')" @click="toolsCollapsed = !toolsCollapsed">
+        <Icon icon="lucide:hammer" :width="14" :class="bem('tools-icon')" />
+        <div :class="bem('tools-title-text')">已发现的工具</div>
 
-        <Icon :icon="toolsCollapsed ? 'lucide:chevron-down' : 'lucide:chevron-right'" :width="14" class="server-card__tools-arrow" />
+        <Icon :icon="toolsCollapsed ? 'lucide:chevron-down' : 'lucide:chevron-right'" :width="14" :class="bem('tools-arrow')" />
       </div>
       <BCollapseTransition>
-        <div v-if="toolsCollapsed" class="server-card__tools-body">
-          <div v-for="tool in discoveredTools" :key="tool.toolName" class="server-card__tool-item">
-            <div class="server-card__tool-name">{{ tool.toolName }}</div>
-            <div v-if="tool.description" class="server-card__tool-desc">{{ tool.description }}</div>
+        <div v-if="toolsCollapsed" :class="bem('tools-body')">
+          <div v-for="tool in discoveredTools" :key="tool.toolName" :class="bem('tool-item')">
+            <div :class="bem('tool-name')">{{ tool.toolName }}</div>
+            <div v-if="tool.description" :class="bem('tool-desc')">{{ tool.description }}</div>
           </div>
         </div>
       </BCollapseTransition>
@@ -66,6 +63,7 @@ import BDropdown from '@/components/BDropdown/index.vue';
 import BDropdownMenu from '@/components/BDropdown/Menu.vue';
 import type { DropdownOption } from '@/components/BDropdown/type';
 import type { MCPServerConfig, MCPDiscoveredToolSnapshot } from '@/shared/storage/tool-settings';
+import { createNamespace } from '@/utils/namespace';
 
 interface Props {
   /** MCP server 配置 */
@@ -98,6 +96,8 @@ const emit = defineEmits<{
   /** 清除 OAuth 凭据 */
   (event: 'oauth-clear', serverId: string): void;
 }>();
+
+const [name, bem] = createNamespace('', 'server-card');
 
 /**
  * 更新 server 配置字段。
@@ -275,12 +275,6 @@ const dropdownOptions = computed<DropdownOption[]>(() => {
   white-space: nowrap;
 }
 
-.server-card__error {
-  margin-top: 4px;
-  font-size: 11px;
-  color: var(--color-error);
-}
-
 .server-card__status {
   display: flex;
   flex-wrap: wrap;
@@ -288,6 +282,14 @@ const dropdownOptions = computed<DropdownOption[]>(() => {
   margin-top: 4px;
   font-size: 11px;
   color: var(--text-tertiary);
+}
+
+.server-card__status-message {
+  color: var(--text-tertiary);
+
+  &.server-card__status-message--failed {
+    color: var(--color-error);
+  }
 }
 
 .server-card__actions {
