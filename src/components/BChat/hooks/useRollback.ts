@@ -46,7 +46,7 @@ export function useRollback(options: UseRollbackOptions): UseRollbackReturns {
 
   /**
    * 判断指定消息是否可回退。
-   * 条件：role === 'user'，且该消息后面还有可删除消息（user/assistant/error/interrupt），
+   * 条件：role === 'user'，且该消息后面存在可删除消息（user/assistant/error/interrupt），
    * 用户主动中止后仅存在 interrupt 消息时仍应允许回退并恢复输入。
    * @param message - 待判断的消息
    * @returns 是否可回退
@@ -57,7 +57,7 @@ export function useRollback(options: UseRollbackOptions): UseRollbackReturns {
     const index = messages.value.findIndex((m) => m.id === message.id);
     if (index === -1) return false;
 
-    return messages.value.slice(index + 1).some((m) => m.role === 'user' || m.role === 'assistant' || m.role === 'error' || m.role === 'interrupt');
+    return messages.value.slice(index + 1).some((m) => ['user', 'assistant', 'error', 'interrupt'].includes(m.role));
   }
 
   /**
