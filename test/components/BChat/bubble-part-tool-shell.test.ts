@@ -1,6 +1,6 @@
 /**
  * @file bubble-part-tool-shell.test.ts
- * @description Shell tool 气泡的实时 Screen Snapshot 和自动回答标记测试。
+ * @description Shell tool 气泡的实时 Screen Snapshot 和结构化失败恢复测试。
  * @vitest-environment jsdom
  */
 import type { ChatMessageToolPart } from 'types/chat';
@@ -11,7 +11,7 @@ import BubblePartTool from '@/components/BChat/components/MessageBubble/BubblePa
 vi.mock('@/hooks/useNavigate', () => ({ useNavigate: () => ({ openFile: vi.fn() }) }));
 
 describe('BubblePartTool Shell display', (): void => {
-  it('renders the current screen and Tibis auto-answer marker separately', (): void => {
+  it('renders the current screen without exposing internal auto-answer events', (): void => {
     const part: ChatMessageToolPart = {
       id: 'part-1',
       type: 'tool',
@@ -37,8 +37,8 @@ describe('BubblePartTool Shell display', (): void => {
     });
 
     expect(wrapper.find('.bubble-part-tool__shell-terminal').text()).toContain('Continue?');
-    expect(wrapper.findAll('.bubble-part-tool__shell-auto-answer')).toHaveLength(3);
-    expect(wrapper.text()).toContain('Automatically selected default option (3)');
+    expect(wrapper.find('.bubble-part-tool__shell-auto-answer').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Automatically selected default option');
     expect(wrapper.findComponent({ name: 'ConfirmationSheet' }).exists()).toBe(false);
   });
 
@@ -71,6 +71,6 @@ describe('BubblePartTool Shell display', (): void => {
     });
 
     expect(wrapper.find('.bubble-part-tool__shell-terminal').text()).toContain('Choose action?');
-    expect(wrapper.find('.bubble-part-tool__shell-auto-answer').text()).toContain('(2)');
+    expect(wrapper.find('.bubble-part-tool__shell-auto-answer').exists()).toBe(false);
   });
 });

@@ -426,7 +426,7 @@ interface ShellRunEventEnvelope {
 事件语义：
 
 - `terminal_update.content` 是最新 Screen Snapshot 的纯文本投影，renderer 原位替换当前终端画面，不把它当作 raw diff 追加。
-- `auto_answer.count` 是累计回答次数。UI 插入系统行为行，不弹出 ConfirmationSheet。
+- `auto_answer.count` 是累计回答次数。renderer 保留该内部状态用于诊断，不插入可见行为行，也不弹出 ConfirmationSheet。
 - `finished.result` 冻结 UI 状态，但不替代正常工具结果通道。
 - `ShellTool.execute()` 仍等待 runner 完成并返回同一个 `ShellCommandRunResult`，ChatRuntime 仍通过正常 tool-result 继续模型循环。
 - 三类事件共享同一 `sequence`，保证显示顺序稳定。
@@ -440,12 +440,10 @@ UI 示例：
 ```text
 Installing package...
 
-✓ Automatically selected default option (3)
-
 Continue?
 ```
 
-自动选择记录是 Tibis 的系统行为，不伪装成命令输出，也不产生确认弹窗。
+自动选择记录只作为 Tibis 的内部状态保留，不伪装成命令输出、不展示次数，也不产生确认弹窗。
 
 ## 结果结构
 
@@ -573,7 +571,7 @@ interface ShellCommandRunResult {
 ## UI 行为
 
 - Shell 工具执行区显示最新终端快照。
-- `auto_answer` 事件显示为 Tibis 系统行为，例如“Automatically selected default option (3)”。
+- `auto_answer` 事件仅更新内部累计状态，不在工具气泡中显示。
 - 系统行为不作为 stdout 内容发送给模型。
 - 自动回答不触发 ConfirmationSheet。
 - `finished` 后冻结终端快照并显示结构化终止摘要。

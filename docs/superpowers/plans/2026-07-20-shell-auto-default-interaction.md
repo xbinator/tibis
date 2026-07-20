@@ -786,13 +786,7 @@ Assert `terminal_update` replaces `terminalContent`, duplicate/out-of-order sequ
 
 - [ ] **Step 3: Add failing component tests**
 
-For an executing Shell part, assert rendered text contains the current snapshot and:
-
-```text
-✓ Automatically selected default option (3)
-```
-
-Assert no `ConfirmationSheet` is mounted. For a finished result, assert the summary distinguishes exit 1, signal, tool timeout, interaction timeout, answer limit, unsupported prompt, and spawn error.
+For an executing Shell part, assert rendered text contains the current snapshot, while internal `auto_answer` events do not produce visible rows. Assert no `ConfirmationSheet` is mounted. For a finished result, assert the summary distinguishes exit 1, signal, tool timeout, interaction timeout, answer limit, unsupported prompt, and spawn error.
 
 - [ ] **Step 4: Run renderer tests and verify RED**
 

@@ -18,10 +18,9 @@
       <span v-if="part.status === 'done' && part.result?.status === 'failure'" :class="bem('status', { failure: true })">失败</span>
     </template>
 
-    <!-- Shell PTY 展示当前屏幕和 Tibis 自动行为，不把行为伪装成命令输出 -->
+    <!-- Shell PTY 仅展示当前屏幕，自动交互事件作为内部状态保留 -->
     <template v-if="isShellCommand && shellDisplay">
       <div v-if="shellTerminalContent" :class="bem('shell-terminal')">{{ shellTerminalContent }}</div>
-      <div v-for="count in shellAutoAnswers" :key="count" :class="bem('shell-auto-answer')">✓ Automatically selected default option ({{ count }})</div>
       <div v-if="summary?.text" :class="bem('shell-finished')">{{ summary.text }}</div>
     </template>
 
@@ -320,18 +319,8 @@ const shellTerminalContent = computed<string>(() => {
   return [stdout, stderr].filter((value): value is string => typeof value === 'string' && value.length > 0).join('\n');
 });
 
-/** Shell 已展示的累计自动回答标记。 */
-const shellAutoAnswers = computed<number[]>(() => {
-  if (props.part.shellRunState?.autoAnswers.length) return props.part.shellRunState.autoAnswers;
-  const metadata = shellResultData.value?.autoInteraction;
-  if (!isPlainObject(metadata)) return [];
-  const { answerCount } = metadata as Record<string, unknown>;
-  if (typeof answerCount !== 'number' || answerCount <= 0) return [];
-  return [answerCount];
-});
-
 /** Shell 是否存在专用终端展示内容。 */
-const shellDisplay = computed<boolean>(() => shellTerminalContent.value.length > 0 || shellAutoAnswers.value.length > 0);
+const shellDisplay = computed<boolean>(() => shellTerminalContent.value.length > 0);
 
 /**
  * 解析提问工具的问答结果，将 value 映射为可读的 label。
@@ -489,12 +478,6 @@ const questionOtherText = computed(() => {
   white-space: pre-wrap;
   background: var(--color-fill-tertiary, rgb(0 0 0 / 6%));
   border-radius: 4px;
-}
-
-.bubble-part-tool__shell-auto-answer {
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--color-success, #52c41a);
 }
 
 .bubble-part-tool__shell-finished {
