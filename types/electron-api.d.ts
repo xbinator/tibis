@@ -18,6 +18,7 @@ import type {
 import type { ChatSession, ChatSessionType, ChatMessageRecord, ChatMessageHistoryCursor, PaginatedSessionsResult, SessionPaginationParams } from './chat';
 import type {
   ChatRuntimeAbortInput,
+  ChatRuntimeAbortResult,
   ChatRuntimeAutoNameInput,
   ChatRuntimeAutoNameResult,
   ChatRuntimeBridgeRequestEvent,
@@ -672,7 +673,7 @@ export interface ElectronAPI {
   chatRuntimeSubmitConfirmation: (input: ChatRuntimeSubmitConfirmationInput) => Promise<ChatRuntimeHandlerResult<void>>;
   chatRuntimeSubmitBridgeResponse: (input: ChatRuntimeBridgeResponseInput) => Promise<ChatRuntimeHandlerResult<void>>;
   chatRuntimeAutoName: (input: ChatRuntimeAutoNameInput) => Promise<ChatRuntimeHandlerResult<ChatRuntimeAutoNameResult>>;
-  chatRuntimeAbort: (input: ChatRuntimeAbortInput) => Promise<ChatRuntimeHandlerResult<void>>;
+  chatRuntimeAbort: (input: ChatRuntimeAbortInput) => Promise<ChatRuntimeHandlerResult<ChatRuntimeAbortResult>>;
   chatRuntimeSubmitToolResult: (input: ChatRuntimeSubmitToolResultInput) => Promise<ChatRuntimeHandlerResult<void>>;
   chatRuntimeSubmitMessagePart: (input: ChatRuntimeSubmitMessagePartInput) => Promise<ChatRuntimeHandlerResult<void>>;
   chatRuntimeOnMessageCreated: (callback: (event: ChatRuntimeMessageEvent) => void) => () => void;

@@ -3,6 +3,7 @@
  * @description BChat ChatRuntime 无状态 IPC 命令适配器测试。
  * @vitest-environment jsdom
  */
+import type { ChatMessageRecord } from 'types/chat';
 import type { ChatRuntimeCompactInput, ChatRuntimeContinueInput, ChatRuntimeSendInput, ChatRuntimeSubmitUserChoiceInput } from 'types/chat-runtime';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useChatRuntime } from '@/components/BChat/hooks/useChatRuntime';
@@ -52,7 +53,7 @@ describe('useChatRuntime', (): void => {
     electronAPIMock.chatRuntimeCompact.mockResolvedValue({ ok: true, data: { runtimeId: 'runtime-compact', sessionId: 'session-1' } });
     electronAPIMock.chatRuntimeSubmitUserChoice.mockResolvedValue({ ok: true, data: { runtimeId: 'runtime-choice', sessionId: 'session-1' } });
     electronAPIMock.chatRuntimeSubmitMessagePart.mockResolvedValue({ ok: true });
-    electronAPIMock.chatRuntimeAbort.mockResolvedValue({ ok: true });
+    electronAPIMock.chatRuntimeAbort.mockResolvedValue({ ok: true, data: {} });
   });
 
   it('sends the renderer-allocated runtime id with stable client and agent ids', async (): Promise<void> => {
@@ -100,12 +101,24 @@ describe('useChatRuntime', (): void => {
   it('submits renderer message parts and aborts an explicitly addressed runtime', async (): Promise<void> => {
     const runtime = useChatRuntime();
     const part = { id: 'part-1', type: 'text' as const, text: 'updated' };
+    const interruptMessage = {
+      id: 'interrupt-message-1',
+      sessionId: 'session-1',
+      role: 'interrupt',
+      content: '已中断',
+      parts: [],
+      createdAt: '2026-07-20T00:00:00.000Z',
+      loading: false,
+      finished: true
+    } satisfies ChatMessageRecord;
+    electronAPIMock.chatRuntimeAbort.mockResolvedValue({ ok: true, data: { interruptMessage } });
 
     await runtime.submitMessagePart({ runtimeId: 'runtime-1', messageId: 'assistant-1', part });
-    await runtime.abort('runtime-1');
+    const abortResult = await runtime.abort('runtime-1');
 
     expect(electronAPIMock.chatRuntimeSubmitMessagePart).toHaveBeenCalledWith({ runtimeId: 'runtime-1', messageId: 'assistant-1', part });
     expect(electronAPIMock.chatRuntimeAbort).toHaveBeenCalledWith({ runtimeId: 'runtime-1' });
+    expect(abortResult).toEqual({ interruptMessage });
   });
 
   it('surfaces Runtime command failures', async (): Promise<void> => {

@@ -17,6 +17,7 @@ import type { AIServiceError, AIToolExecutionResult, AIUsage } from 'types/ai';
 import type { ChatMessageCompactionPart, ChatMessagePart, ChatMessageRecord, ChatPendingInteraction, CompactionModelSnapshot } from 'types/chat';
 import type {
   ChatRuntimeAbortInput,
+  ChatRuntimeAbortResult,
   ChatRuntimeAutoNameInput,
   ChatRuntimeAutoNameResult,
   ChatRuntimeBridgeResponseInput,
@@ -1288,9 +1289,9 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
      * 中止指定 runtime。
      * @param input - 中止参数
      */
-    async abort(input: ChatRuntimeAbortInput): Promise<void> {
+    async abort(input: ChatRuntimeAbortInput): Promise<ChatRuntimeAbortResult> {
       const runtime = activeRuntimes.get(input.runtimeId);
-      if (!runtime) return;
+      if (!runtime) return {};
 
       runtime.abortController.abort();
       const compactionCancellation = runtime.phase === 'compacting' ? compactionExecutor.cancel(runtime.runtimeId) : Promise.resolve();
@@ -1300,19 +1301,22 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       rendererToolRequests.rejectRuntime(runtime.runtimeId, 'Runtime aborted');
       confirmationRequests.rejectRuntime(runtime.runtimeId, 'Runtime aborted');
       bridgeRequests.rejectRuntime(runtime.runtimeId, 'Runtime aborted');
+      const abortResult: ChatRuntimeAbortResult = {};
       try {
         // compaction cancel 只有在 pending 已持久化为终态后才完成；锁必须覆盖整个收敛与中断消息写入过程。
         await Promise.allSettled([compactionCancellation, Promise.resolve().then(() => streamAbort(runtime.runtimeId))]);
 
-        if (!assistantMessage) return;
+        if (!assistantMessage) return abortResult;
 
         if (runtime.phase === 'compacting') cancelCompactionMessage(assistantMessage, runtime.compactionTrigger ?? 'automatic');
 
         if (!hasAssistantResponseContent(assistantMessage)) {
           await deleteAssistantMessage(runtime, assistantMessage);
+          abortResult.deletedMessageId = assistantMessage.id;
         } else {
           finishAssistantMessageInterrupted(assistantMessage);
           await messageWriter.updateMessage(assistantMessage);
+          abortResult.assistantMessage = cloneRuntimeMessage(assistantMessage);
           emit('chat:runtime:message-updated', {
             runtimeId: runtime.runtimeId,
             sessionId: runtime.sessionId,
@@ -1325,6 +1329,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
 
         const interruptMessage = createRuntimeInterruptMessage(runtime, createMessageId('interrupt'), now());
         await messageWriter.addMessage(interruptMessage);
+        abortResult.interruptMessage = cloneRuntimeMessage(interruptMessage);
         emit('chat:runtime:message-created', {
           runtimeId: runtime.runtimeId,
           sessionId: runtime.sessionId,
@@ -1333,6 +1338,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
           parentRuntimeId: runtime.parentRuntimeId,
           message: interruptMessage
         });
+        return abortResult;
       } finally {
         locks.releaseWritingLock({ sessionId: runtime.sessionId, runtimeId: runtime.runtimeId });
       }

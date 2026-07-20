@@ -5,7 +5,14 @@
  */
 /* eslint-disable vue/one-component-per-file */
 import type { AIToolExecutor } from 'types/ai';
-import type { AIUserChoiceAnswerData, ChatMessageFilePartInput, ChatMessageToolPart, ChatMessageWidgetResultPart, ChatSession } from 'types/chat';
+import type {
+  AIUserChoiceAnswerData,
+  ChatMessageFilePartInput,
+  ChatMessageRecord,
+  ChatMessageToolPart,
+  ChatMessageWidgetResultPart,
+  ChatSession
+} from 'types/chat';
 import type {
   ChatRuntimeContinueInput,
   ChatRuntimeHandlerResult,
@@ -701,7 +708,7 @@ describe('BChat sessionId runtime', (): void => {
     electronAPIMock.chatRuntimeSubmitUserChoice.mockImplementation((input: ChatRuntimeSubmitUserChoiceInput) =>
       Promise.resolve({ ok: true, data: { runtimeId: input.runtimeId, sessionId: input.sessionId } })
     );
-    electronAPIMock.chatRuntimeAbort.mockResolvedValue({ ok: true });
+    electronAPIMock.chatRuntimeAbort.mockResolvedValue({ ok: true, data: {} });
     electronAPIMock.chatRuntimeSubmitToolResult.mockResolvedValue({ ok: true });
     electronAPIMock.chatRuntimeSubmitConfirmation.mockResolvedValue({ ok: true });
     electronAPIMock.chatRuntimeSubmitBridgeResponse.mockResolvedValue({ ok: true });
@@ -1263,6 +1270,112 @@ describe('BChat sessionId runtime', (): void => {
     expect(chatStoreMock.addSessionMessage).not.toHaveBeenCalledWith('session-active', expect.objectContaining({ role: 'interrupt' }));
   });
 
+  it('projects an abort result when no Runtime event arrives', async (): Promise<void> => {
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+    const runtimeId = await submitTextAndReadRuntimeId(wrapper, 'stop before output');
+    const emptyAssistantMessage = {
+      ...createAssistantMessage({
+        id: 'assistant-empty',
+        content: '',
+        parts: [],
+        runtimeId,
+        loading: true,
+        finished: false
+      }),
+      sessionId: 'session-active'
+    } satisfies ChatMessageRecord;
+    const interruptMessage = {
+      id: 'interrupt-zero-output',
+      sessionId: 'session-active',
+      runtimeId,
+      role: 'interrupt',
+      content: '已中断',
+      parts: [],
+      createdAt: '2026-07-20T00:00:00.000Z',
+      loading: false,
+      finished: true
+    } satisfies ChatMessageRecord;
+    emitRuntimeEvent(runtimeListeners, 'messageCreated', {
+      runtimeId,
+      sessionId: 'session-active',
+      clientId: 'bchat',
+      agentId: 'primary',
+      message: emptyAssistantMessage
+    });
+    electronAPIMock.chatRuntimeAbort.mockResolvedValueOnce({
+      ok: true,
+      data: { deletedMessageId: emptyAssistantMessage.id, interruptMessage }
+    });
+
+    wrapper.findComponent(InputToolbarStub).vm.$emit('abort');
+    await flushPromises();
+
+    const visibleMessages = wrapper.findComponent(ConversationViewStub).props('messages') as Message[];
+    expect(visibleMessages).not.toContainEqual(expect.objectContaining({ id: emptyAssistantMessage.id }));
+    expect(visibleMessages.filter((message: Message): boolean => message.role === 'interrupt')).toEqual([
+      expect.objectContaining({ id: interruptMessage.id, content: '已中断' })
+    ]);
+  });
+
+  it('keeps partial output and deduplicates the abort result after its Runtime event', async (): Promise<void> => {
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+    const runtimeId = await submitTextAndReadRuntimeId(wrapper, 'stop after partial output');
+    const partialMessage = {
+      ...createAssistantMessage({
+        id: 'assistant-partial',
+        content: 'partial answer',
+        parts: [{ id: 'part-partial', type: 'text', text: 'partial answer' }],
+        runtimeId,
+        loading: true,
+        finished: false
+      }),
+      sessionId: 'session-active'
+    } satisfies ChatMessageRecord;
+    const finishedMessage = { ...partialMessage, loading: false, finished: true } satisfies ChatMessageRecord;
+    const interruptMessage = {
+      id: 'interrupt-partial',
+      sessionId: 'session-active',
+      runtimeId,
+      role: 'interrupt',
+      content: '已中断',
+      parts: [],
+      createdAt: '2026-07-20T00:00:01.000Z',
+      loading: false,
+      finished: true
+    } satisfies ChatMessageRecord;
+    emitRuntimeEvent(runtimeListeners, 'messageUpdated', {
+      runtimeId,
+      sessionId: 'session-active',
+      clientId: 'bchat',
+      agentId: 'primary',
+      message: partialMessage
+    });
+    electronAPIMock.chatRuntimeAbort.mockImplementationOnce(async () => {
+      emitRuntimeEvent(runtimeListeners, 'messageCreated', {
+        runtimeId,
+        sessionId: 'session-active',
+        clientId: 'bchat',
+        agentId: 'primary',
+        message: interruptMessage
+      });
+      return { ok: true, data: { assistantMessage: finishedMessage, interruptMessage } };
+    });
+
+    wrapper.findComponent(InputToolbarStub).vm.$emit('abort');
+    await flushPromises();
+
+    const visibleMessages = wrapper.findComponent(ConversationViewStub).props('messages') as Message[];
+    expect(visibleMessages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: partialMessage.id, content: 'partial answer', loading: false, finished: true }),
+        expect.objectContaining({ id: interruptMessage.id, role: 'interrupt', content: '已中断' })
+      ])
+    );
+    expect(visibleMessages.filter((message: Message): boolean => message.id === interruptMessage.id)).toHaveLength(1);
+  });
+
   it('can abort the renderer-allocated runtime while the start IPC is still pending', async (): Promise<void> => {
     let resolveStart: ((result: ChatRuntimeHandlerResult<ChatRuntimeStartResult>) => void) | undefined;
     let startInput: ChatRuntimeSendInput | undefined;
@@ -1615,7 +1728,7 @@ describe('BChat sessionId runtime', (): void => {
     expect(wrapper.emitted('session-created')?.[0]?.[0]).toEqual(branchedSession);
   });
 
-  it('ignores history-changing actions while the current runtime is busy', async (): Promise<void> => {
+  it('ignores branch and regenerate actions while the current runtime is busy', async (): Promise<void> => {
     const userMessage = createMessage('user-busy-history', '原始任务');
     const assistantMessage = createAssistantMessage({ id: 'assistant-busy-history' });
     chatStoreMock.getSessionMessages.mockResolvedValueOnce([userMessage, assistantMessage]).mockResolvedValueOnce([]);
@@ -1626,7 +1739,6 @@ describe('BChat sessionId runtime', (): void => {
 
     expect(conversationView.props('loading')).toBe(true);
     conversationView.vm.$emit('branch', assistantMessage);
-    conversationView.vm.$emit('rollback', userMessage);
     conversationView.vm.$emit('regenerate', assistantMessage);
     wrapper.findComponent(BSmartEditorStub).vm.$emit('update:value', '压缩期间继续编辑的草稿');
     await flushPromises();
@@ -1636,6 +1748,25 @@ describe('BChat sessionId runtime', (): void => {
     expect(chatStoreMock.setSessionMessages).not.toHaveBeenCalled();
     expect(electronAPIMock.chatRuntimeContinue).not.toHaveBeenCalled();
     expect(electronAPIMock.chatRuntimeAbort).not.toHaveBeenCalled();
+  });
+
+  it('aborts the current runtime before applying rollback while busy', async (): Promise<void> => {
+    const userMessage = { ...createMessage('user-busy-rollback', '原始任务'), finished: true };
+    const assistantMessage = createAssistantMessage({ id: 'assistant-busy-rollback' });
+    chatStoreMock.getSessionMessages.mockResolvedValueOnce([userMessage, assistantMessage]).mockResolvedValueOnce([]);
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+    const runtimeId = await submitTextAndReadRuntimeId(wrapper, '继续执行');
+    const conversationView = wrapper.findComponent(ConversationViewStub);
+
+    expect(conversationView.props('loading')).toBe(true);
+    conversationView.vm.$emit('rollback', userMessage);
+    await flushPromises();
+
+    expect(electronAPIMock.chatRuntimeAbort).toHaveBeenCalledWith({ runtimeId });
+    expect(chatStoreMock.setSessionMessages).toHaveBeenCalledWith('session-active', []);
+    expect(electronAPIMock.chatRuntimeAbort.mock.invocationCallOrder[0]).toBeLessThan(chatStoreMock.setSessionMessages.mock.invocationCallOrder[0]);
+    expect(wrapper.findComponent(BSmartEditorStub).props('value')).toBe('原始任务');
   });
 
   it('ignores duplicate branch events while the request is pending', async (): Promise<void> => {

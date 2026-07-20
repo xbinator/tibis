@@ -2869,9 +2869,17 @@ describe('chat runtime service shell', (): void => {
     });
 
     const result = await service.send(createInput());
-    await service.abort({ runtimeId: result.runtimeId });
+    const abortResult = await service.abort({ runtimeId: result.runtimeId });
 
     expect(abortStream).toHaveBeenCalledWith(result.runtimeId);
+    expect(abortResult).toEqual({
+      deletedMessageId: 'assistant-message-1',
+      interruptMessage: expect.objectContaining({
+        id: 'interrupt-message-1',
+        role: 'interrupt',
+        content: '已中断'
+      })
+    });
     expect(service.getActiveRuntime(result.runtimeId)).toBeUndefined();
     expect(updatedMessages).not.toContainEqual(
       expect.objectContaining({
@@ -2943,8 +2951,21 @@ describe('chat runtime service shell', (): void => {
 
     const result = await service.send(createInput());
     await flushRuntimeTasks();
-    await service.abort({ runtimeId: result.runtimeId });
+    const abortResult = await service.abort({ runtimeId: result.runtimeId });
 
+    expect(abortResult).toEqual({
+      assistantMessage: expect.objectContaining({
+        id: 'assistant-message-1',
+        content: 'partial answer',
+        loading: false,
+        finished: true
+      }),
+      interruptMessage: expect.objectContaining({
+        id: 'interrupt-message-1',
+        role: 'interrupt',
+        content: '已中断'
+      })
+    });
     expect(updatedMessages.at(-1)).toMatchObject({
       id: 'assistant-message-1',
       role: 'assistant',

@@ -332,6 +332,16 @@ export interface ChatRuntimeAbortInput {
   runtimeId: string;
 }
 
+/** Persisted message mutations produced by aborting a Runtime. */
+export interface ChatRuntimeAbortResult {
+  /** Empty assistant draft removed during abort finalization. */
+  deletedMessageId?: string;
+  /** Partial assistant response finalized during abort. */
+  assistantMessage?: ChatMessageRecord;
+  /** Interrupt marker persisted after abort finalization. */
+  interruptMessage?: ChatMessageRecord;
+}
+
 /** Renderer local tool result submission input. */
 export interface ChatRuntimeSubmitToolResultInput {
   /** Runtime id waiting for this result. */

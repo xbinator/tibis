@@ -8,7 +8,7 @@ import type { createChatConfirmationController } from '../utils/confirmationCont
 import type { Message } from '../utils/types';
 import type { AIServiceError, AIToolExecutor } from 'types/ai';
 import type { ChatMessageFile } from 'types/chat';
-import type { ChatRuntimeBridgeRequestEvent, ChatRuntimeContextUsageSnapshot, ChatRuntimeUserInputPart } from 'types/chat-runtime';
+import type { ChatRuntimeAbortResult, ChatRuntimeBridgeRequestEvent, ChatRuntimeContextUsageSnapshot, ChatRuntimeUserInputPart } from 'types/chat-runtime';
 import type { ComputedRef, Ref } from 'vue';
 import { computed, nextTick, ref } from 'vue';
 import { cloneDeep } from 'lodash-es';
@@ -229,6 +229,36 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
   }
 
   const chatRuntime = useChatRuntime();
+
+  /**
+   * 按消息 ID 新增或合并当前可见消息。
+   * @param nextMessage - 待投影的消息
+   */
+  function upsertMessage(nextMessage: Message): void {
+    const normalizedMessage = userChoice.normalizePendingState(nextMessage);
+    const index = options.messages.value.findIndex((message: Message): boolean => message.id === normalizedMessage.id);
+    if (index < 0) options.messages.value.push(normalizedMessage);
+    else options.messages.value.splice(index, 1, { ...options.messages.value[index], ...normalizedMessage });
+  }
+
+  /**
+   * 按消息 ID 删除当前可见消息。
+   * @param messageId - 待删除消息 ID
+   */
+  function removeMessage(messageId: string): void {
+    const index = options.messages.value.findIndex((message: Message): boolean => message.id === messageId);
+    if (index >= 0) options.messages.value.splice(index, 1);
+  }
+
+  /**
+   * 将主进程中止结果投影到当前可见消息。
+   * @param result - 主进程已经持久化的消息变更
+   */
+  function applyAbortResult(result: ChatRuntimeAbortResult): void {
+    if (result.deletedMessageId) removeMessage(result.deletedMessageId);
+    if (result.assistantMessage) upsertMessage(result.assistantMessage);
+    if (result.interruptMessage) upsertMessage(result.interruptMessage);
+  }
 
   /** 持久化重新生成前的消息截断。 */
   async function handleBeforeRegenerate(nextMessages: Message[]): Promise<void> {
@@ -501,13 +531,21 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
     preflightLoading.value = false;
     options.confirmationController.expirePendingConfirmation();
     const runtimeId = options.sessionActor.activeRuntimeId.value;
+    const abortedSessionId = options.activeSessionId.value;
     options.sessionActor.cancel();
     try {
       if (!hasCurrentSessionCommandRuntime() && (await abortPendingUserChoiceIfNeeded())) {
         options.sessionActor.markRuntimeCancelled();
         return;
       }
-      if (runtimeId) await chatRuntime.abort(runtimeId);
+      if (runtimeId) {
+        const result = await chatRuntime.abort(runtimeId);
+        if (options.activeSessionId.value === abortedSessionId) {
+          applyAbortResult(result);
+          await nextTick();
+          options.scrollToBottom();
+        }
+      }
       options.sessionActor.markRuntimeCancelled();
       if (runtimeId) options.actorSystem.unregisterRuntime(runtimeId);
     } catch (error: unknown) {
@@ -527,7 +565,7 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
 
   /** 回退消息并同步 Session machine 结果。 */
   async function rollback(message: Message): Promise<void> {
-    if (loading.value) return;
+    if (loading.value) await abort();
     const index = options.messages.value.findIndex((item: Message): boolean => item.id === message.id);
     if (index === -1) return;
     options.sessionActor.rollback(message.id);
@@ -563,15 +601,11 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
       return;
     }
     if (event.type === 'messageCreated' || event.type === 'messageUpdated') {
-      const nextMessage = userChoice.normalizePendingState(event.event.message as Message);
-      const index = options.messages.value.findIndex((message): boolean => message.id === nextMessage.id);
-      if (index < 0) options.messages.value.push(nextMessage);
-      else options.messages.value.splice(index, 1, { ...options.messages.value[index], ...nextMessage });
+      upsertMessage(event.event.message);
       return;
     }
     if (event.type === 'messageDeleted') {
-      const index = options.messages.value.findIndex((message): boolean => message.id === event.event.messageId);
-      if (index >= 0) options.messages.value.splice(index, 1);
+      removeMessage(event.event.messageId);
       return;
     }
     if (event.type === 'runtimeError') {

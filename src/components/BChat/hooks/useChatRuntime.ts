@@ -5,6 +5,7 @@
 import type { Message } from '../utils/types';
 import type { ChatMessageRecord } from 'types/chat';
 import type {
+  ChatRuntimeAbortResult,
   ChatRuntimeCompactInput,
   ChatRuntimeContinueInput,
   ChatRuntimeHandlerResult,
@@ -190,8 +191,8 @@ export function useChatRuntime(options: UseChatRuntimeOptions = {}) {
   }
 
   /** 中止明确指定的 Runtime。 */
-  async function abort(runtimeId: string): Promise<void> {
-    assertRuntimeResult(await electronAPI.chatRuntimeAbort({ runtimeId }));
+  async function abort(runtimeId: string): Promise<ChatRuntimeAbortResult> {
+    return unwrapRuntimeResult(await electronAPI.chatRuntimeAbort({ runtimeId }));
   }
 
   return { abort, compact, continueTurn, send, submitMessagePart, submitUserChoice };
