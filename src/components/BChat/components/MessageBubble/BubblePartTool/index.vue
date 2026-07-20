@@ -505,7 +505,6 @@ const questionOtherText = computed(() => {
 
 .bubble-part-tool__shell-command {
   display: flex;
-  color: var(--text-tertiary);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }

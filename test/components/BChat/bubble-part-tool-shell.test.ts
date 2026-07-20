@@ -3,6 +3,8 @@
  * @description Shell tool 气泡的实时 Screen Snapshot 和结构化失败恢复测试。
  * @vitest-environment jsdom
  */
+import { readFileSync } from 'node:fs';
+import { resolve as resolvePath } from 'node:path';
 import type { ChatMessageToolPart } from 'types/chat';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
@@ -10,7 +12,23 @@ import BubblePartTool from '@/components/BChat/components/MessageBubble/BubblePa
 
 vi.mock('@/hooks/useNavigate', () => ({ useNavigate: () => ({ openFile: vi.fn() }) }));
 
+/**
+ * 读取 Shell 工具气泡组件源码，用于验证样式回归。
+ * @returns Shell 工具气泡组件源码
+ */
+function readBubbleSource(): string {
+  return readFileSync(resolvePath(process.cwd(), 'src/components/BChat/components/MessageBubble/BubblePartTool/index.vue'), 'utf8');
+}
+
 describe('BubblePartTool Shell display', (): void => {
+  it('keeps the shell command text at the terminal default color', (): void => {
+    const source = readBubbleSource();
+    const commandBlock = source.match(/\.bubble-part-tool__shell-command\s*\{([^}]*)\}/u)?.[1] ?? '';
+
+    expect(commandBlock).toContain('display: flex');
+    expect(commandBlock).not.toContain('color: var(--text-tertiary)');
+  });
+
   it('renders command input before output in one terminal region', (): void => {
     const part: ChatMessageToolPart = {
       id: 'part-1',
