@@ -41,7 +41,7 @@ function mountInputNumber(props: Record<string, unknown> = {}): VueWrapper {
           name: 'AInputNumber',
           props: STUB_PROPS,
           template: STUB_TEMPLATE,
-          emits: ['update:value', 'change']
+          emits: ['update:value', 'change', 'blur']
         }
       }
     }
@@ -74,7 +74,7 @@ function mountWithVModel(options: Record<string, unknown> = {}): VueWrapper {
           name: 'AInputNumber',
           props: STUB_PROPS,
           template: STUB_TEMPLATE,
-          emits: ['update:value', 'change']
+          emits: ['update:value', 'change', 'blur']
         }
       }
     }
@@ -203,6 +203,62 @@ describe('BInputNumber', (): void => {
       await nextTick();
 
       expect(stub.props('value')).toBe(20);
+    });
+  });
+
+  describe('defaultValue 显示兜底', (): void => {
+    it('初始 value 为 undefined 时，展示值兜底为 defaultValue', (): void => {
+      const wrapper = mountInputNumber({ defaultValue: 1 });
+
+      const stub = wrapper.findComponent({ name: 'AInputNumber' });
+      // 初始渲染就应显示 defaultValue，而非 undefined
+      expect(stub.props('value')).toBe(1);
+    });
+
+    it('外部把 value 置为 undefined 时，展示值兜底为 defaultValue', async (): Promise<void> => {
+      const wrapper = mountInputNumber({ value: 10, defaultValue: 1 });
+
+      // 模拟外部把值清空
+      await wrapper.setProps({ value: undefined });
+      await nextTick();
+
+      const stub = wrapper.findComponent({ name: 'AInputNumber' });
+      // 外部置空后展示值应回退到 defaultValue
+      expect(stub.props('value')).toBe(1);
+    });
+  });
+
+  describe('blur 同步展示值', (): void => {
+    it('清空后 blur 时把展示值同步回 modelValue（带 defaultValue 兜底）', async (): Promise<void> => {
+      const wrapper = mountInputNumber({ value: 10, defaultValue: 1 });
+
+      const stub = wrapper.findComponent({ name: 'AInputNumber' });
+
+      // 用户清空输入：此时 inputValue 为 undefined（UI 显示空），modelValue 已写入 1
+      await stub.vm.$emit('update:value', null);
+      expect(stub.props('value')).toBeUndefined();
+
+      // 模拟失焦
+      await stub.vm.$emit('blur');
+
+      // blur 后展示值应同步到 modelValue（即 defaultValue 1）
+      expect(stub.props('value')).toBe(1);
+    });
+
+    it('未配置 defaultValue 时 blur 不改变空展示值', async (): Promise<void> => {
+      const wrapper = mountInputNumber({ value: 10 });
+
+      const stub = wrapper.findComponent({ name: 'AInputNumber' });
+
+      // 用户清空输入
+      await stub.vm.$emit('update:value', null);
+      expect(stub.props('value')).toBeUndefined();
+
+      // 模拟失焦
+      await stub.vm.$emit('blur');
+
+      // 未配置 defaultValue，blur 后展示值仍为 undefined
+      expect(stub.props('value')).toBeUndefined();
     });
   });
 

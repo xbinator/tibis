@@ -27,6 +27,7 @@
     :string-mode="stringMode"
     v-bind="$attrs"
     @update:value="handleInputUpdate"
+    @blur="handleBlur"
   >
     <template v-if="$slots.addonBefore" #addonBefore>
       <slot name="addonBefore"></slot>
@@ -90,8 +91,9 @@ const modelValue = defineModel<ValueType>('value', { default: undefined });
 /**
  * 本地展示值，与 AInputNumber 双向同步。
  * 输入过程中允许自由输入任意内容，不受 modelValue 约束。
+ * modelValue 为 undefined 时回退到 defaultValue 作为显示兜底。
  */
-const inputValue = ref<ValueType | undefined>(modelValue.value);
+const inputValue = ref<ValueType | undefined>(modelValue.value ?? props.defaultValue);
 
 /**
  * 标记当前 modelValue 变化是否由内部 handleInputUpdate 触发。
@@ -99,14 +101,14 @@ const inputValue = ref<ValueType | undefined>(modelValue.value);
  */
 let isInternalUpdate = false;
 
-// 外部 modelValue 变化时同步到本地展示值；内部触发的变化跳过
+// 外部 modelValue 变化时同步到本地展示值；内部触发的变化跳过；undefined 时回退到 defaultValue
 watch(modelValue, (value: ValueType | undefined): void => {
   if (isInternalUpdate) {
     isInternalUpdate = false;
     return;
   }
 
-  inputValue.value = value;
+  inputValue.value = value ?? props.defaultValue;
 });
 
 /**
@@ -128,6 +130,16 @@ function handleInputUpdate(value: ValueType | null): void {
     defaultValue: props.defaultValue,
     decimalPrecision: props.decimalPrecision
   });
+}
+
+/**
+ * 处理 AInputNumber 的 blur 事件。
+ * 用户清空输入时 inputValue 为空但 modelValue 已写入 defaultValue，
+ * 失焦时把展示值同步回 modelValue，让 UI 与对外值一致。
+ * 未配置 defaultValue 且 modelValue 为 undefined 时保持空展示。
+ */
+function handleBlur(): void {
+  inputValue.value = modelValue.value ?? props.defaultValue;
 }
 </script>
 

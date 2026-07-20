@@ -17,7 +17,7 @@
 
       <div :class="$style.fieldGrid">
         <BSectionItem icon="mdi:format-line-height" tips="行高">
-          <BInputNumber v-model:value="dataItem.style.lineHeight" :min="0" :step="0.1" :decimal-precision="2" placeholder="行高" />
+          <BInputNumber v-model:value="dataItem.style.lineHeight" :min="0" :step="0.1" :decimal-precision="2" :default-value="1" placeholder="行高" />
         </BSectionItem>
         <BSectionItem icon="mdi:format-italic" tips="样式">
           <BSelect v-model:value="dataItem.style.fontStyle" default-value="normal" placeholder="斜体" :options="fontStyleOptions" />
