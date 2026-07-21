@@ -8,9 +8,9 @@ import type { ThemeTokens } from '../types/tokens';
  * 主题预设——注册到注册表的基本单元。
  */
 export interface ThemePreset {
-  /** 预设 ID，如 'default'、'matrix' */
+  /** 预设 ID，如 'default'、'velora' */
   id: string;
-  /** 显示名称，如 '默认'、'Matrix' */
+  /** 显示名称，如 '默认'、'Velora' */
   label: string;
   /** 亮色 Token */
   light: ThemeTokens;

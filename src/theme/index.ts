@@ -4,7 +4,6 @@
  */
 import './presets/default';
 import './presets/velora';
-import './presets/matrix';
 import './presets/shonen';
 import './presets/manga-ink';
 
