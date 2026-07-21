@@ -10,7 +10,7 @@ import type {
 import type { ChatModelResolution } from '../../../../../../electron/main/modules/chat/runtime/model/resolver.mjs';
 import type { ChatRuntimeStreamExecutor } from '../../../../../../electron/main/modules/chat/runtime/types.mjs';
 import type { AICreateOptions, AIInvokeResult, AIRequestOptions, AIServiceError } from 'types/ai';
-import type { ChatMessagePart, ChatMessageRecord, StructuredContextSummary } from 'types/chat';
+import type { ChatMessageCompactionPart, ChatMessagePart, ChatMessageRecord, StructuredContextSummary } from 'types/chat';
 import type { ChatRuntimeCompactInput, ChatRuntimeContinueInput, ChatRuntimeEventMap, ChatRuntimeSendInput } from 'types/chat-runtime';
 import { describe, expect, it, vi } from 'vitest';
 import { createChatRuntimeService } from '../../../../../../electron/main/modules/chat/runtime/service.mjs';
@@ -1804,7 +1804,7 @@ describe('chat runtime service shell', (): void => {
     expect(addedMessages).toHaveLength(messageCount);
   });
 
-  it('preserves a cancelled compaction status when aborted before summary generation starts', async (): Promise<void> => {
+  it('settles an early aborted compaction placeholder without creating a synthetic part', async (): Promise<void> => {
     const collector = createEventCollector();
     const sourceReady = createDeferred();
     const messages: ChatMessageRecord[] = [];
@@ -1847,9 +1847,83 @@ describe('chat runtime service shell', (): void => {
 
     const compactionMessage = messages.find((message: ChatMessageRecord): boolean => message.id === 'assistant-early-compact-cancel');
     expect(compactionMessage).toMatchObject({ role: 'assistant', loading: false, finished: true });
-    expect(compactionMessage?.parts).toEqual([expect.objectContaining({ type: 'compaction', status: 'cancelled', errorCode: 'USER_CANCELLED' })]);
+    expect(compactionMessage?.parts).toEqual([]);
     expect(collector.events).not.toContainEqual(
       expect.objectContaining({ name: 'chat:runtime:message-deleted', payload: expect.objectContaining({ messageId: 'assistant-early-compact-cancel' }) })
+    );
+    expect(collector.events).not.toContainEqual(
+      expect.objectContaining({
+        name: 'chat:runtime:message-created',
+        payload: expect.objectContaining({ message: expect.objectContaining({ role: 'interrupt' }) })
+      })
+    );
+  });
+
+  it('updates a cancelled manual compaction without creating an interrupt message', async (): Promise<void> => {
+    const collector = createEventCollector();
+    const executionGate = createDeferred();
+    const executionStarted = createDeferred();
+    const messages: ChatMessageRecord[] = [];
+    const compactionExecutor: CompactionExecutor = {
+      execute: async (input: CompactionExecuteInput): Promise<CompactionExecuteResult> => {
+        const pendingPart: ChatMessageCompactionPart = {
+          id: 'checkpoint-cancel-existing',
+          type: 'compaction',
+          status: 'pending',
+          trigger: input.trigger,
+          createdAt: 1
+        };
+        input.assistantMessage.parts.push(pendingPart);
+        executionStarted.resolve();
+        await executionGate.promise;
+        const cancelledPart: ChatMessageCompactionPart = {
+          ...pendingPart,
+          status: 'cancelled',
+          errorCode: 'USER_CANCELLED',
+          completedAt: 2
+        };
+        input.assistantMessage.parts.splice(input.assistantMessage.parts.indexOf(pendingPart), 1, cancelledPart);
+        return { status: 'cancelled', checkpoint: cancelledPart };
+      },
+      cancel: async (): Promise<void> => {
+        executionGate.resolve();
+      }
+    };
+    const service = createChatRuntimeService({
+      emit: collector.emit,
+      createMessageId: (kind): string => `${kind}-cancel-existing`,
+      messageReader: createNoopMessageReader(),
+      messageWriter: {
+        addMessage: async (message: ChatMessageRecord): Promise<void> => {
+          messages.push(structuredClone(message));
+        },
+        updateMessage: async (message: ChatMessageRecord): Promise<void> => {
+          const index = messages.findIndex((candidate: ChatMessageRecord): boolean => candidate.id === message.id);
+          if (index >= 0) messages[index] = structuredClone(message);
+        }
+      },
+      resolveModel: async () => createModelResolution(),
+      compactionExecutor,
+      streamExecutor: createNoopStreamExecutor()
+    });
+
+    await service.compact({
+      runtimeId: 'runtime-cancel-existing',
+      sessionId: 'session-1',
+      clientId: 'bchat',
+      agentId: 'primary',
+      contextWindow: 12_000
+    });
+    await executionStarted.promise;
+    const result = await service.abort({ runtimeId: 'runtime-cancel-existing' });
+
+    expect(result.interruptMessage).toBeUndefined();
+    expect(result.assistantMessage?.parts).toEqual([expect.objectContaining({ type: 'compaction', status: 'cancelled', errorCode: 'USER_CANCELLED' })]);
+    expect(collector.events).not.toContainEqual(
+      expect.objectContaining({
+        name: 'chat:runtime:message-created',
+        payload: expect.objectContaining({ message: expect.objectContaining({ role: 'interrupt' }) })
+      })
     );
   });
 

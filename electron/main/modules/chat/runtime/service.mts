@@ -803,33 +803,24 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   }
 
   /**
-   * 将正在压缩的 assistant 消息立即收敛为取消状态，覆盖尚未进入 executor 的竞态窗口。
+   * 仅将已存在的 pending 压缩 Part 收敛为取消状态。
    * @param assistantMessage - compaction 承载消息
+   * @returns 是否找到并更新了 pending 压缩 Part
    */
-  function cancelCompactionMessage(assistantMessage: ChatMessageRecord, trigger: 'automatic' | 'manual'): void {
+  function cancelExistingCompactionPart(assistantMessage: ChatMessageRecord): boolean {
     const timestamp = getCompactionNow();
     const pendingIndex = assistantMessage.parts.findIndex((part: ChatMessagePart): boolean => part.type === 'compaction' && part.status === 'pending');
-    if (pendingIndex >= 0) {
-      const pending = assistantMessage.parts[pendingIndex];
-      if (pending.type !== 'compaction') return;
-      assistantMessage.parts[pendingIndex] = {
-        ...structuredClone(pending),
-        status: 'cancelled',
-        errorCode: 'USER_CANCELLED',
-        completedAt: timestamp
-      };
-      return;
-    }
-    if (assistantMessage.parts.some((part: ChatMessagePart): boolean => part.type === 'compaction')) return;
-    assistantMessage.parts.push({
-      id: `checkpoint-${nanoid()}`,
-      type: 'compaction',
+    if (pendingIndex < 0) return false;
+
+    const pending = assistantMessage.parts[pendingIndex];
+    if (pending.type !== 'compaction') return false;
+    assistantMessage.parts[pendingIndex] = {
+      ...structuredClone(pending),
       status: 'cancelled',
-      trigger,
       errorCode: 'USER_CANCELLED',
-      createdAt: timestamp,
       completedAt: timestamp
-    });
+    };
+    return true;
   }
 
   /**
@@ -1308,7 +1299,21 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
 
         if (!assistantMessage) return abortResult;
 
-        if (runtime.phase === 'compacting') cancelCompactionMessage(assistantMessage, runtime.compactionTrigger ?? 'automatic');
+        if (runtime.phase === 'compacting') {
+          cancelExistingCompactionPart(assistantMessage);
+          finishAssistantMessageInterrupted(assistantMessage);
+          await messageWriter.updateMessage(assistantMessage);
+          abortResult.assistantMessage = cloneRuntimeMessage(assistantMessage);
+          emit('chat:runtime:message-updated', {
+            runtimeId: runtime.runtimeId,
+            sessionId: runtime.sessionId,
+            clientId: runtime.clientId,
+            agentId: runtime.agentId,
+            parentRuntimeId: runtime.parentRuntimeId,
+            message: assistantMessage
+          });
+          return abortResult;
+        }
 
         if (!hasAssistantResponseContent(assistantMessage)) {
           await deleteAssistantMessage(runtime, assistantMessage);
