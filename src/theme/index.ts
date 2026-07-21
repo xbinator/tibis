@@ -3,6 +3,7 @@
  * @description 主题模块统一导出。先导入预设文件触发 registerPreset，再导出 API。
  */
 import './presets/default';
+import './presets/velora';
 import './presets/matrix';
 import './presets/shonen';
 import './presets/manga-ink';

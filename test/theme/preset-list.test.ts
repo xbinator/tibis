@@ -2,6 +2,7 @@
  * @file preset-list.test.ts
  * @description 验证主题预设注册表包含新增主题并能解析对应 Token。
  */
+import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { getPresetList, getResolvedTokens, toCssVars } from '@/theme';
 
@@ -31,6 +32,40 @@ const REMOVED_THEME_PRESETS: RemovedThemePreset[] = [
 ];
 
 describe('theme preset registry', (): void => {
+  it('registers the Velora clear sky blue theme preset', (): void => {
+    const presets = getPresetList();
+
+    expect(presets).toContainEqual({ id: 'velora', label: '晴空蓝「Velora」' });
+  });
+
+  it('resolves Velora tokens with only the intended primary accents changed', (): void => {
+    const lightTokens = getResolvedTokens('velora', 'light');
+    const lightCssVars = toCssVars(lightTokens);
+
+    expect(lightTokens.bg.primary).toBe('#ffffff');
+    expect(lightTokens.bg.elevated).toBe('#ffffff');
+    expect(lightTokens.color.primary).toBe('#1890ff');
+    expect(lightTokens.richEditor.link).toBe('#1890ff');
+    expect(lightTokens.color.success).toBe('#10b981');
+    expect(lightTokens.color.warning).toBe('#f59e0b');
+    expect(lightTokens.code.keyword).toBe('#dc3545');
+    expect(lightTokens.sourceEditor.markdownLink).toBe('#0a5a40');
+    expect(lightCssVars['--color-primary']).toBe('#1890ff');
+    expect(lightCssVars['--bg-primary']).toBe('#ffffff');
+  });
+
+  it('defines Velora with explicit tokens like the default preset', (): void => {
+    const sourceUrl = new URL('../../src/theme/presets/velora.ts', import.meta.url);
+
+    expect(existsSync(sourceUrl)).toBe(true);
+
+    const source = readFileSync(sourceUrl, 'utf8');
+
+    expect(source).toContain('import type { ThemeTokens }');
+    expect(source).toContain('const veloraLight: ThemeTokens');
+    expect(source).not.toContain('createThemeTokens');
+  });
+
   it('omits removed color theme presets from the public preset list', (): void => {
     const presets = getPresetList();
 
