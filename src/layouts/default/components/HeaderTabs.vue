@@ -24,6 +24,7 @@
         <div :data-tab-id="item.id" class="header-tab" :class="getTabClassName(item, dragging)" @click="handleClickTab(item.path)">
           <div class="header-tab__title">
             <span v-if="tabsStore.isDirty(item.id)" class="header-tab__dirty-mark">*</span>
+            <ChatTabStatus :status="getChatStatus(item)" />
             <BRecentIcon
               class="header-tab__icon"
               :record="resolveTabIconRecentRecord(item)"
@@ -59,19 +60,28 @@ import { Icon } from '@iconify/vue';
 import { Dropdown } from 'ant-design-vue';
 import type { BDraggableMoveEvent } from '@/components/BDraggable/types';
 import type { DropdownOption } from '@/components/BDropdown/type';
+import ChatTabStatus from '@/layouts/default/components/ChatTabStatus.vue';
+import { useTabCloseGuard } from '@/layouts/default/hooks/useTabCloseGuard';
 import { getHeaderTabsWheelScrollDelta } from '@/layouts/default/utils/headerTabsScroll';
+import { createChatTabId, isChatTab } from '@/router/routes/helpers/chatRouteTab';
 import { isMac } from '@/shared/platform/env';
 import type { RecentRecord } from '@/shared/storage';
+import type { ChatTabRuntimeStatus } from '@/stores/chat/tabRuntime';
+import { useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
+import type { ChatSessionTitlePayload } from '@/stores/helpers/events';
+import { storeEvents } from '@/stores/helpers/events';
 import { useSettingStore } from '@/stores/ui/setting';
 import { useRecentStore } from '@/stores/workspace/recent';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import type { Tab, TabCloseAction, TabClosePlan } from '@/stores/workspace/tabs';
+import { asyncTo } from '@/utils/asyncTo';
 import { WEB_RECORD_ICON } from '@/utils/file/icons';
-import { Modal } from '@/utils/modal';
 
 const tabsStore = useTabsStore();
 const recentStore = useRecentStore();
 const settingStore = useSettingStore();
+const runtimeStore = useChatTabRuntimeStore();
+const { canClose } = useTabCloseGuard();
 const route = useRoute();
 const router = useRouter();
 const CONTEXT_MENU_CLOSE_DELAY_MS = 200;
@@ -94,6 +104,8 @@ const pendingContextTabId = shallowRef<string | null>(null);
 const isContextMenuClosing = shallowRef(false);
 
 let contextMenuCloseTimer: number | null = null;
+/** 全局聊天标题事件取消订阅函数。 */
+let unsubscribeChatTitle: (() => void) | undefined;
 
 /** 当前可见标签；聊天放大态下保持标签栏内容为空。 */
 const visibleTabs = computed<Tab[]>((): Tab[] => (settingStore.chatSidebarExpanded ? [] : tabsStore.tabs));
@@ -138,12 +150,37 @@ function clearContextMenuCloseTimer(): void {
 /** 组件卸载时清理右键菜单计时器 */
 onUnmounted(() => {
   clearContextMenuCloseTimer();
+  unsubscribeChatTitle?.();
+  unsubscribeChatTitle = undefined;
 });
+
+/**
+ * 读取聊天标签的可视运行状态。
+ * @param tab - 当前标签
+ * @returns 聊天状态；普通标签或 idle 返回 null
+ */
+function getChatStatus(tab: Tab): ChatTabRuntimeStatus | null {
+  if (!isChatTab(tab)) return null;
+  const status = runtimeStore.getStatus(tab.id);
+  return status === 'idle' ? null : status;
+}
+
+/**
+ * 将自动命名结果同步到当前会话的真实拥有者标签。
+ * @param payload - 会话标题事件
+ */
+function handleChatTitleUpdated(payload: ChatSessionTitlePayload): void {
+  const owner = runtimeStore.findOwner(payload.sessionId);
+  tabsStore.updateTabTitle({ id: owner?.tabId ?? createChatTabId(payload.sessionId), title: payload.title });
+}
 
 /**
  * 组件挂载后加载最近记录，让标签栏可复用 WebView favicon 和文件记录元数据。
  */
-onMounted(() => recentStore.ensureLoaded());
+onMounted((): void => {
+  asyncTo(recentStore.ensureLoaded());
+  unsubscribeChatTitle = storeEvents.onChatSessionTitleUpdated(handleChatTitleUpdated);
+});
 
 /**
  * 判断标签页是否为当前激活状态。
@@ -324,6 +361,15 @@ watch(
   }
 );
 
+watch(
+  () => route.fullPath,
+  (): void => {
+    const nextActiveTab = tabsStore.tabs.find((tab: Tab): boolean => tab.path === route.fullPath);
+    if (nextActiveTab && isChatTab(nextActiveTab)) runtimeStore.markViewed(nextActiveTab.id);
+  },
+  { immediate: true }
+);
+
 /**
  * 立即关闭当前右键菜单并清空等待状态。
  */
@@ -417,22 +463,10 @@ function getContextClosePlans(tabId: string): Record<TabCloseAction, TabClosePla
  */
 async function executeClosePlan(plan: TabClosePlan): Promise<void> {
   resetContextMenuState();
-
-  if (plan.disabled) {
-    return;
-  }
-
-  if (plan.requiresConfirm) {
-    const [cancelled] = await Modal.confirm(
-      plan.action === 'close' ? '关闭标签' : '批量关闭标签',
-      plan.action === 'close' ? '当前标签有未保存更改，确认关闭吗？' : `即将关闭 ${plan.targetTabIds.length} 个标签，其中包含未保存更改，确认继续吗？`
-    );
-    if (cancelled) {
-      return;
-    }
-  }
+  if (!(await canClose(plan))) return;
 
   tabsStore.applyClosePlan(plan);
+  plan.targetTabIds.filter((tabId: string): boolean => tabId.startsWith('chat:')).forEach((tabId: string): void => runtimeStore.removeTab(tabId));
 
   if (!plan.requiresNavigation) {
     return;
@@ -606,6 +640,32 @@ function handleWheel(event: WheelEvent): void {
   font-weight: 700;
 }
 
+.header-tab__chat-status {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  margin-right: 4px;
+}
+
+.header-tab__chat-status.is-spinning {
+  animation: header-tab-chat-spin 1s linear infinite;
+}
+
+.header-tab__chat-status--waiting {
+  color: var(--warning-color, #fa8c16);
+}
+
+.header-tab__chat-status--error {
+  color: var(--error-color, #ff4d4f);
+}
+
+.header-tab__chat-status--completed {
+  width: 7px;
+  height: 7px;
+  background: var(--color-primary);
+  border-radius: 50%;
+}
+
 .header-tab__icon {
   margin-right: 6px;
 }
@@ -646,5 +706,11 @@ function handleWheel(event: WheelEvent): void {
 
 :deep(.dark) .header-tab__close:hover {
   background: rgb(255 255 255 / 10%);
+}
+
+@keyframes header-tab-chat-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

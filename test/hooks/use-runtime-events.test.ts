@@ -20,6 +20,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createChatActorSystem } from '@/ai/chat/actorSystem';
 import { createShellCommandId } from '@/ai/tools/shellCommandId';
 import { useRuntimeEvents } from '@/hooks/useChat/useRuntimeEvents';
+import { useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
 import { useToolPermissionStore } from '@/stores/chat/toolPermission';
 
 const runtimeListeners = vi.hoisted(() => ({
@@ -174,6 +175,14 @@ describe('useRuntimeEvents', (): void => {
     system.send({ type: 'runtime.event', runtimeId: 'runtime-1', event: { type: 'runtime.started', runtimeId: 'runtime-1' } });
     const visibleEvents = vi.fn();
     system.subscribeSessionEvents('session-1', visibleEvents);
+    const runtimeStore = useChatTabRuntimeStore();
+    runtimeStore.ensureTab('chat:session-1', 'session-1');
+    const completionStatuses: string[] = [];
+    system.subscribeSessionEvents('session-1', (event): void => {
+      if (event.type !== 'runtimeCompleted') return;
+      completionStatuses.push(runtimeStore.getStatus('chat:session-1'));
+      runtimeStore.markCompleted('chat:session-1', true);
+    });
     const scope = effectScope();
     scope.run((): void => {
       useRuntimeEvents(system);
@@ -191,11 +200,14 @@ describe('useRuntimeEvents', (): void => {
       request: { toolName: 'write_file', title: '写入文件', description: '是否写入？', riskLevel: 'write' }
     });
     expect(visibleEvents).toHaveBeenCalledWith(expect.objectContaining({ type: 'confirmationRequested' }));
+    expect(useChatTabRuntimeStore().getStatus('chat:session-1')).toBe('waiting');
     runtimeListeners.complete?.({ ...createEventBase(), reason: 'completed' });
 
     expect(agent?.getSnapshot().matches('completed')).toBe(true);
     expect(session.getSnapshot().matches('idle')).toBe(true);
     expect(system.getRuntimeCapabilities('runtime-1')).toBeUndefined();
+    expect(completionStatuses).toEqual(['completed']);
+    expect(runtimeStore.getStatus('chat:session-1')).toBe('idle');
     scope.stop();
     system.stop();
   });
@@ -274,6 +286,7 @@ describe('useRuntimeEvents', (): void => {
     expect(agent?.getSnapshot().matches('waiting')).toBe(true);
     expect(visibleEvents).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'runtimeCompleted' }));
     expect(system.getRuntimeCapabilities('runtime-1')).toBeUndefined();
+    expect(useChatTabRuntimeStore().getStatus('chat:session-1')).toBe('waiting');
     scope.stop();
     system.stop();
   });

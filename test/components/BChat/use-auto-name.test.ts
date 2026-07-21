@@ -4,6 +4,7 @@
  */
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { useAutoName } from '@/components/BChat/hooks/useAutoName';
+import { storeEvents } from '@/stores/helpers/events';
 
 /** mock ChatRuntime 自动命名命令。 */
 const mockChatRuntimeAutoName = vi.hoisted(() => vi.fn());
@@ -170,6 +171,20 @@ describe('useAutoName', () => {
       await vi.advanceTimersByTimeAsync(300);
 
       expect(onTitlePersisted).toHaveBeenCalledWith('session-1', '持久化测试');
+    });
+
+    it('publishes the persisted title independently of the mounted BChat page', async (): Promise<void> => {
+      mockChatRuntimeAutoName.mockResolvedValue({ ok: true, data: { status: 'success', title: '全局标题' } });
+      const listener = vi.fn();
+      const dispose = storeEvents.onChatSessionTitleUpdated(listener);
+      const { captureSnapshot, scheduleAutoName } = useAutoName(createOptions());
+      const snap = captureSnapshot({ content: 'AI回复' }, 'session-1')!;
+
+      scheduleAutoName(snap, () => false);
+      await vi.advanceTimersByTimeAsync(300);
+
+      expect(listener).toHaveBeenCalledWith({ sessionId: 'session-1', title: '全局标题' });
+      dispose();
     });
 
     it('marks session named even when onTitlePersisted throws', async (): Promise<void> => {

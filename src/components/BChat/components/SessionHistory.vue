@@ -1,5 +1,5 @@
 <template>
-  <BDropdown v-model:open="open" :disabled="isDisabled" :align="{ offset: [-84, 0] }">
+  <BDropdown v-model:open="open" :disabled="isDisabled" :align="{ offset: [-48, 0] }">
     <BButton square size="small" type="text" :disabled="isDisabled">
       <BIcon icon="lucide:history" :size="16" />
     </BButton>
@@ -23,7 +23,7 @@
                   <span class="session-history__item-title">{{ session.title }}</span>
                 </span>
                 <span class="session-history__actions">
-                  <BButton type="text" square danger size="small" @click.stop="handleDeleteSession(session.id)">
+                  <BButton type="text" square danger size="small" :disabled="busySessionIdSet.has(session.id)" @click.stop="handleDeleteSession(session.id)">
                     <BIcon icon="lucide:trash-2" :size="14" />
                   </BButton>
                 </span>
@@ -64,6 +64,9 @@ interface Props {
 
   /** 是否禁用历史会话操作 */
   disabled?: boolean;
+
+  /** 当前禁止删除的忙碌会话 ID。 */
+  busySessionIds?: string[];
 }
 
 /**
@@ -85,7 +88,8 @@ const PAGE_SIZE = 20;
 
 const props = withDefaults(defineProps<Props>(), {
   activeSessionId: null,
-  disabled: false
+  disabled: false,
+  busySessionIds: () => []
 });
 
 const open = ref(false);
@@ -119,6 +123,8 @@ const currentSession = computed<ChatSession | undefined>(() => {
 });
 
 const isDisabled = computed(() => props.disabled);
+/** 忙碌会话 ID 集合，用于常量时间判断删除状态。 */
+const busySessionIdSet = computed<Set<string>>((): Set<string> => new Set(props.busySessionIds));
 
 /**
  * 加载会话数据
@@ -255,6 +261,7 @@ function handleSwitchSession(sessionId: string): void {
 async function handleDeleteSession(sessionId: string): Promise<void> {
   if (props.disabled) return;
   if (loading.value) return;
+  if (busySessionIdSet.value.has(sessionId)) return;
 
   loading.value = true;
   const [error] = await asyncTo(chatStore.deleteSession(sessionId));

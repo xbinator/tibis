@@ -78,3 +78,8 @@ export interface BChatProps {
   /** 当前聊天会话 ID，空值表示新会话草稿态 */
   sessionId?: string | null;
 }
+
+/**
+ * BChat 向页面宿主发布的运行状态。
+ */
+export type BChatRuntimeStatus = 'idle' | 'running' | 'waiting' | 'error';

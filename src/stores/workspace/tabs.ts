@@ -57,6 +57,16 @@ export interface AddTabOptions {
 }
 
 /**
+ * 标签原位替换参数。
+ */
+export interface ReplaceTabOptions {
+  /** 被替换的标签 ID。 */
+  sourceId: string;
+  /** 替换后的完整标签。 */
+  tab: Tab;
+}
+
+/**
  * 标签页状态结构。
  */
 export interface TabsState {
@@ -322,6 +332,39 @@ export const useTabsStore = defineStore('tabs', {
       }
 
       persistState(TABS_STORAGE_KEY, this.$state);
+    },
+
+    /**
+     * 原位替换标签并迁移关联状态。
+     * 如果路由守卫已临时创建目标标签，则折叠重复项并保留源标签位置。
+     * @param options - 源标签与替换后的完整标签
+     * @returns 是否完成替换
+     */
+    replaceTab(options: ReplaceTabOptions): boolean {
+      const sourceIndex = this.tabs.findIndex((tab: Tab): boolean => tab.id === options.sourceId);
+      if (sourceIndex === -1) return false;
+
+      const normalizedTab = normalizeTab(options.tab);
+      const sourceDirty = this.dirtyById[options.sourceId] ?? this.dirtyById[normalizedTab.id];
+      const sourceMissing = this.missingById[options.sourceId] ?? this.missingById[normalizedTab.id];
+      const nextTabs = this.tabs.filter((tab: Tab, index: number): boolean => index === sourceIndex || tab.id !== normalizedTab.id);
+      const nextSourceIndex = nextTabs.findIndex((tab: Tab): boolean => tab.id === options.sourceId);
+
+      nextTabs[nextSourceIndex] = normalizedTab;
+      this.tabs = nextTabs;
+      this.cachedKeys = normalizeCachedKeys(nextTabs.map((tab: Tab): string => tab.cacheKey || tab.id));
+
+      delete this.dirtyById[options.sourceId];
+      delete this.missingById[options.sourceId];
+      if (normalizedTab.id !== options.sourceId) {
+        delete this.dirtyById[normalizedTab.id];
+        delete this.missingById[normalizedTab.id];
+      }
+      if (sourceDirty !== undefined) this.dirtyById[normalizedTab.id] = sourceDirty;
+      if (sourceMissing !== undefined) this.missingById[normalizedTab.id] = sourceMissing;
+
+      persistState(TABS_STORAGE_KEY, this.$state);
+      return true;
     },
 
     /**

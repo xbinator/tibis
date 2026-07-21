@@ -578,9 +578,7 @@ function createStoredFile(overrides: Partial<StoredFile> = {}): StoredFile {
  */
 function mountBChat(sessionId: string | null = null): ReturnType<typeof shallowMount> {
   return shallowMount(BChat, {
-    props: {
-      sessionId
-    },
+    props: { sessionId },
     global: {
       stubs: {
         BIcon: true,
@@ -789,6 +787,119 @@ describe('BChat sessionId runtime', (): void => {
     expect(wrapper.emitted('session-created')?.[0]).toEqual([createdSession]);
     expect(electronAPIMock.chatRuntimeSend).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'session-created', content: 'hello' }));
     expect(wrapper.emitted('loading-change')).toContainEqual([true]);
+  });
+
+  it('publishes runtime status and completion events from the existing workflow', async (): Promise<void> => {
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+    const runtimeId = await submitTextAndReadRuntimeId(wrapper, 'status events');
+
+    expect(wrapper.emitted('runtime-status-change')).toContainEqual(['idle']);
+    expect(wrapper.emitted('runtime-status-change')).toContainEqual(['running']);
+
+    emitRuntimeEvent(runtimeListeners, 'messageCreated', {
+      runtimeId,
+      sessionId: 'session-active',
+      clientId: 'bchat',
+      agentId: 'primary',
+      message: {
+        id: 'assistant-complete',
+        sessionId: 'session-active',
+        role: 'assistant',
+        content: 'done',
+        parts: [{ id: 'part-complete', type: 'text', text: 'done' }],
+        createdAt: '2026-07-21T00:00:00.000Z',
+        runtimeId,
+        loading: false,
+        finished: true
+      }
+    });
+    emitRuntimeEvent(runtimeListeners, 'complete', {
+      runtimeId,
+      sessionId: 'session-active',
+      clientId: 'bchat',
+      agentId: 'primary',
+      reason: 'completed'
+    });
+    await flushPromises();
+
+    expect(wrapper.emitted('runtime-completed')?.at(-1)).toEqual(['session-active']);
+    expect(wrapper.emitted('runtime-status-change')).toContainEqual(['idle']);
+  });
+
+  it('emits waiting and error runtime statuses', async (): Promise<void> => {
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+    const runtimeId = await submitTextAndReadRuntimeId(wrapper, 'wait for user');
+
+    emitRuntimeEvent(runtimeListeners, 'confirmationRequest', {
+      runtimeId,
+      sessionId: 'session-active',
+      clientId: 'bchat',
+      agentId: 'primary',
+      confirmationId: 'confirmation-status',
+      request: {
+        toolName: 'write_file',
+        title: '写入文件',
+        description: '确认写入',
+        riskLevel: 'write'
+      }
+    });
+    await flushPromises();
+    expect(wrapper.emitted('runtime-status-change')).toContainEqual(['waiting']);
+
+    emitRuntimeEvent(runtimeListeners, 'error', {
+      runtimeId,
+      sessionId: 'session-active',
+      clientId: 'bchat',
+      agentId: 'primary',
+      error: { code: 'REQUEST_FAILED', message: 'failed' }
+    });
+    await flushPromises();
+    expect(wrapper.emitted('runtime-status-change')).toContainEqual(['error']);
+  });
+
+  it('exposes abort and reset controls for parent hosts', async (): Promise<void> => {
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+    const runtimeId = await submitTextAndReadRuntimeId(wrapper, 'abort from host');
+    const exposed = wrapper.vm as unknown as {
+      abortRuntime: () => Promise<void>;
+      resetDraft: () => Promise<void>;
+    };
+
+    await exposed.abortRuntime();
+    expect(electronAPIMock.chatRuntimeAbort).toHaveBeenCalledWith({ runtimeId });
+
+    await wrapper.setProps({ sessionId: null });
+    wrapper.findComponent(BSmartEditorStub).vm.$emit('update:value', 'discard me');
+    await flushPromises();
+    await exposed.resetDraft();
+    await flushPromises();
+
+    expect(wrapper.findComponent(BSmartEditorStub).props('value')).toBe('');
+    expect(wrapper.emitted('new-session')).toBeUndefined();
+  });
+
+  it('requests a new session from the host without clearing persisted messages', async (): Promise<void> => {
+    const loadedMessage = createMessage('message-a', 'keep A');
+    chatStoreMock.getSessionMessages.mockResolvedValue([loadedMessage]);
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+
+    wrapper.findComponent(BSmartEditorStub).vm.$emit('slash-command', {
+      id: 'new',
+      trigger: '/new',
+      title: '新建会话',
+      description: '开始一个新的聊天会话',
+      group: 'command',
+      selectAction: { type: 'emit' }
+    });
+    await flushPromises();
+
+    expect(wrapper.emitted('new-session')).toHaveLength(1);
+    expect(wrapper.emitted('draft-session-created')).toBeUndefined();
+    expect(wrapper.findComponent(ConversationViewStub).props('messages')).toEqual([loadedMessage]);
   });
 
   it('sends new user messages through main process ChatRuntime', async (): Promise<void> => {
@@ -1609,6 +1720,7 @@ describe('BChat sessionId runtime', (): void => {
     expect(toastQueue).toContainEqual(expect.objectContaining({ type: 'error', content: errorMessage }));
     expect(wrapper.findComponent(ConversationViewStub).props('disabled')).toBe(false);
     expect(electronAPIMock.chatRuntimeSubmitUserChoice).not.toHaveBeenCalled();
+    expect(wrapper.emitted('runtime-status-change')?.at(-1)).toEqual(['waiting']);
   });
 
   it('sends runtime user message submit actions through main process ChatRuntime', async (): Promise<void> => {

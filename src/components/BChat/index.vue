@@ -73,7 +73,7 @@
 </template>
 
 <script setup lang="ts">
-import type { BChatProps, Message } from './utils/types';
+import type { BChatProps, BChatRuntimeStatus, Message } from './utils/types';
 import type { ChatMessageConfirmationAction, ChatSession } from 'types/chat';
 import type { ChatRuntimeContextUsageSnapshot } from 'types/chat-runtime';
 import { computed, h, onUnmounted, provide, ref, toRef, watch } from 'vue';
@@ -126,8 +126,10 @@ const props = withDefaults(defineProps<BChatProps>(), {
 const emit = defineEmits<{
   (e: 'session-created', session: ChatSession): void;
   (e: 'session-title-persisted', sessionId: string, title: string): void;
-  (e: 'draft-session-created'): void;
+  (e: 'new-session'): void;
   (e: 'loading-change', loading: boolean): void;
+  (e: 'runtime-status-change', status: BChatRuntimeStatus): void;
+  (e: 'runtime-completed', sessionId: string): void;
   (e: 'navigate-to-provider'): void;
 }>();
 
@@ -189,13 +191,11 @@ const workflowLoading = ref<boolean>(false);
 /** 会话 ID、历史消息与自动命名生命周期。 */
 const sessionLifecycle = useChatSessionLifecycle({
   sessionId: toRef(props, 'sessionId'),
-  isLoading: (): boolean => workflowLoading.value,
   disposeConfirmation: confirmationController.dispose,
   focusInput,
   hasPendingUserChoice: (sourceMessages: Message[]): boolean => Boolean(userChoice.findPending(sourceMessages)),
   onSessionCreated: (session: ChatSession): void => emit('session-created', session),
-  onSessionTitlePersisted: (sessionId: string, title: string): void => emit('session-title-persisted', sessionId, title),
-  onDraftSessionCreated: (): void => emit('draft-session-created')
+  onSessionTitlePersisted: (sessionId: string, title: string): void => emit('session-title-persisted', sessionId, title)
 });
 const {
   activeSessionId,
@@ -203,7 +203,7 @@ const {
   fetchAllPriorHistory,
   messages,
   ensureActiveSession,
-  createDraftSession,
+  resetDraftState,
   handleLoadHistory,
   captureAutoNameSnapshot,
   scheduleAutoName
@@ -264,6 +264,9 @@ function handleConfirmationSheetAction(action: ChatMessageConfirmationAction): v
  */
 async function handleRuntimeComplete(nextMessage: Message): Promise<void> {
   const sessionId = activeSessionId.value;
+  if (!sessionId) return;
+
+  emit('runtime-completed', sessionId);
   const snapshot = captureAutoNameSnapshot(nextMessage, sessionId);
 
   if (!snapshot) return;
@@ -405,6 +408,13 @@ const {
   cancel: handleCancel,
   rollback: handleRollback
 } = workflow;
+/** 页面标签使用的稳定运行状态投影。 */
+const runtimeStatus = computed<BChatRuntimeStatus>((): BChatRuntimeStatus => {
+  if (chatSessionActor.waitingForUser.value) return 'waiting';
+  if (loading.value) return 'running';
+  if (chatSessionActor.snapshot.value?.context.error) return 'error';
+  return 'idle';
+});
 /** 消息级交互仅在对应领域状态允许时开放。 */
 const messageInteractionDisabled = computed<boolean>((): boolean => {
   const sessionId = activeSessionId.value;
@@ -420,6 +430,8 @@ watch(
   },
   { immediate: true }
 );
+
+watch(runtimeStatus, (status: BChatRuntimeStatus): void => emit('runtime-status-change', status), { immediate: true });
 
 /** 恢复指定消息到输入编辑器。 */
 function handleChatEdit(nextMessage: Message): void {
@@ -459,6 +471,21 @@ async function handleChatSubmit(): Promise<void> {
   await workflow.submitUserTextMessage(content, inputImages.value);
 }
 
+/** 中止当前页面托管的 Runtime。 */
+async function abortRuntime(): Promise<void> {
+  await handleAbort();
+}
+
+/**
+ * 清空输入与消息并进入新的草稿会话。
+ * 该能力供顶部草稿标签复用时显式调用。
+ */
+async function resetDraft(): Promise<void> {
+  if (loading.value) return;
+  inputEvents.clear();
+  await resetDraftState();
+}
+
 /**
  * 处理模型变更（委托给 modelSelection hook）。
  * @param value - 新选中的模型标识
@@ -470,7 +497,7 @@ function handleModelChange(model: { providerId: string; modelId: string }): void
 /** 斜杠命令处理 hook */
 const { handleSlashCommand } = useSlashCommands({
   openModelSelector: openModelCommandPanel,
-  createNewSession: createDraftSession,
+  createNewSession: (): void => emit('new-session'),
   clearInput: inputEvents.clear,
   compactContext: workflow.compactContext,
   isBusy: (): boolean => loading.value
@@ -482,8 +509,8 @@ onUnmounted((): void => {
   confirmationController.dispose();
 });
 
-/** 暴露聚焦输入框方法供父组件调用 */
-defineExpose({ focusInput });
+/** 暴露页面宿主管理会话所需的最小控制面。 */
+defineExpose({ abortRuntime, focusInput, resetDraft });
 </script>
 
 <style lang="less">

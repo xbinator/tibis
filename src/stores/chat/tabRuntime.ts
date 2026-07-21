@@ -1,0 +1,217 @@
+/**
+ * @file tabRuntime.ts
+ * @description 管理聊天标签的 renderer 运行时归属、可视状态与终止控制器。
+ */
+import { toRaw } from 'vue';
+import { defineStore } from 'pinia';
+
+/** BChat 直接发布的运行状态。 */
+export type ChatTabSourceStatus = 'idle' | 'running' | 'waiting' | 'error';
+/** HeaderTabs 使用的聊天标签状态。 */
+export type ChatTabRuntimeStatus = ChatTabSourceStatus | 'completed';
+
+/**
+ * 判断状态是否仍持有活动 Runtime。
+ * @param status - 当前聊天标签状态
+ * @returns 运行中或等待用户时返回 true
+ */
+export function isActiveRuntimeStatus(status: ChatTabRuntimeStatus): boolean {
+  return status === 'running' || status === 'waiting';
+}
+
+/**
+ * 聊天标签 Runtime 控制器。
+ */
+export interface ChatTabRuntimeController {
+  /** 终止当前标签拥有的 Runtime。 */
+  abort: () => Promise<void>;
+}
+
+/**
+ * 单个聊天标签运行时记录。
+ */
+export interface ChatTabRuntimeRecord {
+  /** 标签 ID。 */
+  tabId: string;
+  /** 当前真实会话 ID。 */
+  sessionId?: string;
+  /** HeaderTabs 展示状态。 */
+  status: ChatTabRuntimeStatus;
+}
+
+/**
+ * 聊天标签运行时 Store 状态。
+ */
+interface ChatTabRuntimeState {
+  /** 按标签 ID 保存的可序列化运行时记录。 */
+  records: Record<string, ChatTabRuntimeRecord>;
+  /** 按标签 ID 保存的内存控制器，不进入持久化。 */
+  controllers: Map<string, ChatTabRuntimeController>;
+}
+
+/**
+ * 创建空闲聊天标签运行时记录。
+ * @param tabId - 标签 ID
+ * @param sessionId - 可选持久化会话 ID
+ * @returns 新运行时记录
+ */
+function createRuntimeRecord(tabId: string, sessionId?: string): ChatTabRuntimeRecord {
+  return {
+    tabId,
+    ...(sessionId ? { sessionId } : {}),
+    status: 'idle'
+  };
+}
+
+/** 聊天标签 renderer 运行时 Store。 */
+export const useChatTabRuntimeStore = defineStore('chat-tab-runtime', {
+  state: (): ChatTabRuntimeState => ({
+    records: {},
+    controllers: new Map<string, ChatTabRuntimeController>()
+  }),
+
+  actions: {
+    /**
+     * 确保标签存在运行时记录。
+     * @param tabId - 标签 ID
+     * @param sessionId - 可选持久化会话 ID
+     * @returns 当前运行时记录
+     */
+    ensureTab(tabId: string, sessionId?: string): ChatTabRuntimeRecord {
+      const current = this.records[tabId];
+      if (current) {
+        if (sessionId) current.sessionId = sessionId;
+        return current;
+      }
+
+      const record = createRuntimeRecord(tabId, sessionId);
+      this.records[tabId] = record;
+      return record;
+    },
+
+    /**
+     * 将真实会话绑定到聊天标签。
+     * @param tabId - 标签 ID
+     * @param sessionId - 持久化会话 ID
+     */
+    bindSession(tabId: string, sessionId: string): void {
+      this.ensureTab(tabId).sessionId = sessionId;
+    },
+
+    /**
+     * 查找持有指定会话的聊天标签。
+     * @param sessionId - 持久化会话 ID
+     * @returns 会话拥有者记录
+     */
+    findOwner(sessionId: string): ChatTabRuntimeRecord | undefined {
+      return Object.values(this.records).find((record: ChatTabRuntimeRecord): boolean => record.sessionId === sessionId);
+    },
+
+    /**
+     * 读取聊天标签展示状态。
+     * @param tabId - 标签 ID
+     * @returns 标签状态，未注册时按 idle 处理
+     */
+    getStatus(tabId: string): ChatTabRuntimeStatus {
+      return this.records[tabId]?.status ?? 'idle';
+    },
+
+    /**
+     * 注册聊天标签终止控制器。
+     * @param tabId - 标签 ID
+     * @param controller - Runtime 控制器
+     */
+    registerController(tabId: string, controller: ChatTabRuntimeController): void {
+      this.ensureTab(tabId);
+      this.controllers.set(tabId, controller);
+    },
+
+    /**
+     * 注销聊天标签终止控制器。
+     * @param tabId - 标签 ID
+     * @param controller - 可选控制器身份，用于避免旧组件删除新控制器
+     */
+    unregisterController(tabId: string, controller?: ChatTabRuntimeController): void {
+      if (controller && toRaw(this.controllers.get(tabId)) !== controller) return;
+      this.controllers.delete(tabId);
+    },
+
+    /**
+     * 同步 BChat 直接运行状态。
+     * @param tabId - 标签 ID
+     * @param status - BChat 状态
+     */
+    setStatus(tabId: string, status: ChatTabSourceStatus): void {
+      const record = this.ensureTab(tabId);
+      if (!(record.status === 'completed' && status === 'idle')) {
+        record.status = status;
+      }
+    },
+
+    /**
+     * 标记一次成功完成；后台完成时产生未读状态。
+     * @param tabId - 标签 ID
+     * @param active - 标签是否处于当前激活状态
+     */
+    markCompleted(tabId: string, active: boolean): void {
+      const record = this.ensureTab(tabId);
+      record.status = active ? 'idle' : 'completed';
+    },
+
+    /**
+     * 标记用户已经查看聊天标签。
+     * @param tabId - 标签 ID
+     */
+    markViewed(tabId: string): void {
+      const record = this.records[tabId];
+      if (record?.status === 'completed') record.status = 'idle';
+    },
+
+    /**
+     * 将草稿标签运行时状态和控制器迁移到持久化标签。
+     * @param sourceTabId - 原草稿标签 ID
+     * @param targetTabId - 新持久化标签 ID
+     * @param sessionId - 新持久化会话 ID
+     */
+    promoteTab(sourceTabId: string, targetTabId: string, sessionId: string): void {
+      const sourceRecord = this.records[sourceTabId] ?? createRuntimeRecord(sourceTabId, sessionId);
+      const sourceController = this.controllers.get(sourceTabId);
+      this.records[targetTabId] = {
+        ...sourceRecord,
+        tabId: targetTabId,
+        sessionId
+      };
+      delete this.records[sourceTabId];
+
+      if (sourceController) this.controllers.set(targetTabId, sourceController);
+      this.controllers.delete(sourceTabId);
+    },
+
+    /**
+     * 清理聊天标签的运行时记录和控制器。
+     * @param tabId - 标签 ID
+     */
+    removeTab(tabId: string): void {
+      delete this.records[tabId];
+      this.controllers.delete(tabId);
+    },
+
+    /**
+     * 终止目标集合中仍在运行或等待用户的聊天。
+     * @param tabIds - 目标聊天标签 ID
+     */
+    async abortTabs(tabIds: string[]): Promise<void> {
+      const controllers = tabIds.reduce<ChatTabRuntimeController[]>((result: ChatTabRuntimeController[], tabId: string): ChatTabRuntimeController[] => {
+        const status = this.getStatus(tabId);
+        if (!isActiveRuntimeStatus(status)) return result;
+
+        const controller = this.controllers.get(tabId);
+        if (!controller) throw new Error(`未找到聊天标签 Runtime 控制器：${tabId}`);
+        result.push(controller);
+        return result;
+      }, []);
+
+      await Promise.all(controllers.map((controller: ChatTabRuntimeController): Promise<void> => controller.abort()));
+    }
+  }
+});

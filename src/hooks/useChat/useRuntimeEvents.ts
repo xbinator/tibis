@@ -22,7 +22,9 @@ import { getRememberedRuntimeConfirmationDecision } from '@/ai/chat/policies/run
 import { normalizeToolConfirmationRequest } from '@/ai/tools/confirmation';
 import { createShellCommandId } from '@/ai/tools/shellCommandId';
 import { executeToolCall } from '@/ai/tools/stream';
+import { createChatTabId } from '@/router/routes/helpers/chatRouteTab';
 import { getElectronAPI } from '@/shared/platform/electron-api';
+import { useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
 import { useToolPermissionStore } from '@/stores/chat/toolPermission';
 import { assertRuntimeResult, createBridgeFailure, createToolFailure, createWorkflowError, isManagedRuntime } from './error';
 
@@ -54,6 +56,16 @@ export function useRuntimeEvents(actorSystem: ChatActorSystem): void {
   const electronAPI = getElectronAPI();
   const toolAbortControllers = new Map<string, AbortController>();
   const shellRoutes = new Map<string, ShellEventRoute>();
+  const runtimeStore = useChatTabRuntimeStore();
+
+  /**
+   * 解析 Runtime 会话当前所属的聊天标签，兼容尚未晋升的 chat:new。
+   * @param sessionId - Runtime 会话 ID
+   * @returns 顶部聊天标签 ID
+   */
+  function resolveRuntimeTabId(sessionId: string): string {
+    return runtimeStore.findOwner(sessionId)?.tabId ?? createChatTabId(sessionId);
+  }
 
   /**
    * 创建 renderer 工具调用的稳定索引。
@@ -101,6 +113,7 @@ export function useRuntimeEvents(actorSystem: ChatActorSystem): void {
   function handleComplete(event: ChatRuntimeCompleteEvent): void {
     if (!shouldHandle(event)) return;
     if (event.reason === 'awaiting_user_input') {
+      runtimeStore.setStatus(resolveRuntimeTabId(event.sessionId), 'waiting');
       actorSystem.send({
         type: 'runtime.event',
         runtimeId: event.runtimeId,
@@ -110,6 +123,8 @@ export function useRuntimeEvents(actorSystem: ChatActorSystem): void {
       actorSystem.unregisterRuntime(event.runtimeId);
       return;
     }
+    // 先写入后台完成标记，让已挂载页面可在同步事件回调中按当前激活态覆盖它。
+    runtimeStore.markCompleted(resolveRuntimeTabId(event.sessionId), false);
     actorSystem.emitSessionEvent(event.sessionId, { type: 'runtimeCompleted', event });
     actorSystem.send({ type: 'runtime.event', runtimeId: event.runtimeId, event: { type: 'runtime.completed', runtimeId: event.runtimeId } });
     actorSystem.sendToSession(event.sessionId, { type: 'session.completed' });
@@ -127,6 +142,7 @@ export function useRuntimeEvents(actorSystem: ChatActorSystem): void {
     actorSystem.sendToSession(event.sessionId, { type: 'session.failed', error: createWorkflowError(event.error) });
     actorSystem.emitSessionEvent(event.sessionId, { type: 'runtimeError', event });
     actorSystem.unregisterRuntime(event.runtimeId);
+    runtimeStore.setStatus(resolveRuntimeTabId(event.sessionId), 'error');
   }
 
   /** 执行已捕获的 renderer 工具。 */
@@ -227,6 +243,7 @@ export function useRuntimeEvents(actorSystem: ChatActorSystem): void {
     });
     actorSystem.sendToSession(event.sessionId, { type: 'session.userChoiceRequired' });
     actorSystem.emitSessionEvent(event.sessionId, { type: 'confirmationRequested', event: normalizedEvent });
+    runtimeStore.setStatus(resolveRuntimeTabId(event.sessionId), 'waiting');
   }
 
   /** 执行已捕获的应用级 Bridge handler。 */

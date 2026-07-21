@@ -33,12 +33,23 @@
           ref="sessionHistoryRef"
           v-model:current-session="currentSession"
           :active-session-id="settingStore.chatSidebarActiveSessionId"
+          :busy-session-ids="busySessionIds"
           :disabled="isSessionActionDisabled"
           @switch-session="handleSwitchSession"
           @delete-session="handleDeletedSession"
         />
-        <BButton square size="small" :type="isSidebarExpanded ? 'secondary' : 'text'" @click="toggleSidebarExpanded">
+        <BButton
+          square
+          size="small"
+          :tooltip="isSidebarExpanded ? '退出展开' : '展开聊天侧栏'"
+          :type="isSidebarExpanded ? 'secondary' : 'text'"
+          @click="toggleSidebarExpanded"
+        >
           <BIcon icon="lucide:maximize" :size="16" />
+        </BButton>
+
+        <BButton square size="small" type="text" tooltip="在聊天页中打开" :disabled="isSessionActionDisabled" @click="openChatPage">
+          <BIcon icon="lucide:panel-top-open" :size="16" />
         </BButton>
 
         <div :class="bem('divider')"></div>
@@ -50,7 +61,7 @@
       <BChat
         ref="bChatRef"
         :session-id="settingStore.chatSidebarActiveSessionId"
-        @draft-session-created="handleCreateDraftSession"
+        @new-session="handleCreateDraftSession"
         @session-created="handleSessionCreated"
         @session-title-persisted="handleSessionTitlePersisted"
         @loading-change="handleChatLoadingChange"
@@ -63,14 +74,21 @@
 <script setup lang="ts">
 import type { ChatSession } from 'types/chat';
 import { computed, defineAsyncComponent, onUnmounted, reactive, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { Input as AInput } from 'ant-design-vue';
 import BButton from '@/components/BButton/index.vue';
 import SessionHistory from '@/components/BChat/components/SessionHistory.vue';
 import { vFocus } from '@/directives/focus';
+import { isBlockingNavigationFailure } from '@/router/navigation';
+import { createChatPath } from '@/router/routes/helpers/chatRouteTab';
 import { useChatSessionStore } from '@/stores/chat/session';
+import type { ChatTabRuntimeRecord } from '@/stores/chat/tabRuntime';
+import { isActiveRuntimeStatus, useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
 import { useSettingStore } from '@/stores/ui/setting';
+import { useTabsStore } from '@/stores/workspace/tabs';
 import { asyncTo } from '@/utils/asyncTo';
 import { createNamespace } from '@/utils/namespace';
+import { useChatOwner } from '../hooks/useChatOwner';
 import { useChatSession } from '../hooks/useChatSession';
 
 const BChat = defineAsyncComponent(() => import('@/components/BChat/index.vue'));
@@ -81,6 +99,16 @@ const [, bem] = createNamespace('chat-sider', '');
 const settingStore = useSettingStore();
 /** 聊天会话持久化存储。 */
 const chatStore = useChatSessionStore();
+/** 顶部标签状态存储。 */
+const tabsStore = useTabsStore();
+/** 聊天标签的 renderer 运行态存储。 */
+const runtimeStore = useChatTabRuntimeStore();
+/** 应用路由。 */
+const router = useRouter();
+/** 当前活动路由。 */
+const route = useRoute();
+/** 标准聊天页会话拥有者查询。 */
+const { findOwner } = useChatOwner();
 /** 聊天运行时是否忙碌。 */
 const chatLoading = ref(false);
 /** 会话标题编辑状态。 */
@@ -91,7 +119,7 @@ const {
   loading: sessionLoading,
   switchSession,
   createDraftSession,
-  handleDeletedSession,
+  handleDeletedSession: syncDeletedSession,
   setCurrentSession
 } = useChatSession({
   isChatLoading: () => chatLoading.value
@@ -107,6 +135,13 @@ const isSidebarExpanded = computed<boolean>(() => settingStore.chatSidebarExpand
 const currentTitle = computed<string>(() => currentSession.value?.title || '新会话');
 /** 是否禁用会话切换、新会话和删除操作。 */
 const isSessionActionDisabled = computed<boolean>(() => chatLoading.value || sessionLoading.value);
+/** 顶部聊天标签中仍在运行或等待用户的会话 ID。 */
+const busySessionIds = computed<string[]>((): string[] =>
+  Object.values(runtimeStore.records).reduce<string[]>((sessionIds: string[], record: ChatTabRuntimeRecord): string[] => {
+    if (record.sessionId && isActiveRuntimeStatus(record.status)) sessionIds.push(record.sessionId);
+    return sessionIds;
+  }, [])
+);
 
 /**
  * 双击当前标题后进入编辑态，聚焦与全选交给 v-focus 统一处理。
@@ -160,9 +195,25 @@ function handleClose(): void {
  * 进入新会话草稿态。
  */
 async function handleCreateDraftSession(): Promise<void> {
+  if (isSessionActionDisabled.value) return;
   await createDraftSession();
-  // 草稿态切换后聚焦输入框（已在草稿态时 watch 不会触发，需显式调用）
+  await asyncTo(bChatRef.value?.resetDraft() ?? Promise.resolve());
+  // 草稿态切换后聚焦输入框（已在草稿态时 watch 不会触发，需显式调用）。
   bChatRef.value?.focusInput();
+}
+
+/**
+ * 将侧栏当前会话打开到顶部聊天标签，成功后侧栏进入空白草稿。
+ */
+async function openChatPage(): Promise<void> {
+  if (isSessionActionDisabled.value) return;
+
+  const sessionId = settingStore.chatSidebarActiveSessionId;
+  const owner = findOwner(sessionId);
+  const [navigationError, navigationResult] = await asyncTo(router.push(owner?.path ?? createChatPath(sessionId)));
+  if (navigationError || isBlockingNavigationFailure(navigationResult)) return;
+
+  await handleCreateDraftSession();
 }
 
 /**
@@ -170,7 +221,32 @@ async function handleCreateDraftSession(): Promise<void> {
  * @param sessionId - 目标会话 ID
  */
 async function handleSwitchSession(sessionId: string): Promise<void> {
+  const owner = findOwner(sessionId);
+  if (owner) {
+    await asyncTo(router.push(owner.path));
+    return;
+  }
+
   await switchSession(sessionId);
+}
+
+/**
+ * 同步成功删除后的侧栏状态，并关闭对应顶部聊天标签。
+ * @param sessionId - 已删除会话 ID
+ */
+function handleDeletedSession(sessionId: string): void {
+  const owner = findOwner(sessionId);
+  syncDeletedSession(sessionId);
+  if (!owner) return;
+
+  const plan = tabsStore.getClosePlan('close', {
+    anchorTabId: owner.tabId,
+    activeTabId: owner.path === route.fullPath ? owner.tabId : null,
+    allowCloseLastTab: true
+  });
+  tabsStore.applyClosePlan(plan);
+  runtimeStore.removeTab(owner.tabId);
+  if (plan.requiresNavigation) asyncTo(router.push(plan.nextActivePath ?? '/welcome'));
 }
 
 /**

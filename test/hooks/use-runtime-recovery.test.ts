@@ -4,12 +4,17 @@
  * @vitest-environment jsdom
  */
 import type { ChatRuntimeRecoverySnapshot } from 'types/chat-runtime';
-import { describe, expect, it, vi } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createChatActorSystem } from '@/ai/chat/actorSystem';
 import { recoverRuntimes } from '@/hooks/useChat/useRuntimeRecovery';
+import { useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
+import { useSettingStore } from '@/stores/ui/setting';
+import { useTabsStore } from '@/stores/workspace/tabs';
 
 const electronAPIMock = vi.hoisted(() => ({
   chatRuntimeListActive: vi.fn(),
+  chatRuntimeAbort: vi.fn(),
   chatRuntimeSubmitToolResult: vi.fn(),
   chatRuntimeSubmitBridgeResponse: vi.fn()
 }));
@@ -42,8 +47,15 @@ function createSnapshot(): ChatRuntimeRecoverySnapshot {
 }
 
 describe('recoverRuntimes', (): void => {
+  beforeEach((): void => {
+    setActivePinia(createPinia());
+    electronAPIMock.chatRuntimeAbort.mockReset();
+    electronAPIMock.chatRuntimeAbort.mockResolvedValue({ ok: true, data: {} });
+  });
+
   it('hydrates actors, replays confirmation, and resolves degraded renderer requests', async (): Promise<void> => {
     const snapshot = createSnapshot();
+    useTabsStore().tabs = [{ id: 'chat:session-1', path: '/chat/session-1', title: '会话 1', cacheKey: 'chat:session-1' }];
     electronAPIMock.chatRuntimeListActive.mockResolvedValue({ ok: true, data: [snapshot] });
     electronAPIMock.chatRuntimeSubmitToolResult.mockResolvedValue({ ok: true });
     electronAPIMock.chatRuntimeSubmitBridgeResponse.mockResolvedValue({ ok: true });
@@ -60,6 +72,14 @@ describe('recoverRuntimes', (): void => {
     expect(electronAPIMock.chatRuntimeSubmitBridgeResponse).toHaveBeenCalledWith(
       expect.objectContaining({ runtimeId: 'runtime-1', result: expect.objectContaining({ status: 'failure' }) })
     );
+    const runtimeStore = useChatTabRuntimeStore();
+    expect(runtimeStore.getStatus('chat:session-1')).toBe('waiting');
+    expect(runtimeStore.controllers.has('chat:session-1')).toBe(true);
+
+    await runtimeStore.abortTabs(['chat:session-1']);
+    expect(electronAPIMock.chatRuntimeAbort).toHaveBeenCalledWith({ runtimeId: 'runtime-1' });
+    expect(system.getSession('session-1')?.getSnapshot().matches('idle')).toBe(true);
+    expect(system.getRuntimeCapabilities('runtime-1')).toBeUndefined();
     const confirmationListener = vi.fn();
     system.subscribeSessionEvents('session-1', confirmationListener);
     expect(confirmationListener).toHaveBeenCalledWith(expect.objectContaining({ type: 'confirmationRequested' }));
@@ -68,6 +88,7 @@ describe('recoverRuntimes', (): void => {
 
   it('removes a runtime that completes between recovery queries', async (): Promise<void> => {
     const snapshot = createSnapshot();
+    useTabsStore().tabs = [{ id: 'chat:session-1', path: '/chat/session-1', title: '会话 1', cacheKey: 'chat:session-1' }];
     electronAPIMock.chatRuntimeListActive.mockResolvedValueOnce({ ok: true, data: [snapshot] }).mockResolvedValueOnce({ ok: true, data: [] });
     electronAPIMock.chatRuntimeSubmitToolResult.mockResolvedValue({ ok: true });
     electronAPIMock.chatRuntimeSubmitBridgeResponse.mockResolvedValue({ ok: true });
@@ -78,6 +99,45 @@ describe('recoverRuntimes', (): void => {
 
     expect(system.actor.getSnapshot().context.runtimeRoutes.has('runtime-1')).toBe(false);
     expect(system.getSession('session-1')?.getSnapshot().matches('idle')).toBe(true);
+    expect(useChatTabRuntimeStore().getStatus('chat:session-1')).toBe('completed');
+    expect(useChatTabRuntimeStore().controllers.has('chat:session-1')).toBe(false);
+    system.stop();
+  });
+
+  it('restores a running draft runtime to the persisted chat:new tab', async (): Promise<void> => {
+    const snapshot = createSnapshot();
+    useTabsStore().tabs = [{ id: 'chat:new', path: '/chat', title: '新会话', cacheKey: 'chat:new' }];
+    electronAPIMock.chatRuntimeListActive.mockResolvedValue({ ok: true, data: [snapshot] });
+    electronAPIMock.chatRuntimeSubmitToolResult.mockResolvedValue({ ok: true });
+    electronAPIMock.chatRuntimeSubmitBridgeResponse.mockResolvedValue({ ok: true });
+    const system = createChatActorSystem();
+    system.start();
+
+    await recoverRuntimes(system);
+
+    const runtimeStore = useChatTabRuntimeStore();
+    expect(runtimeStore.findOwner('session-1')?.tabId).toBe('chat:new');
+    expect(runtimeStore.getStatus('chat:new')).toBe('waiting');
+    expect(runtimeStore.records['chat:session-1']).toBeUndefined();
+    system.stop();
+  });
+
+  it('keeps a recovered ChatSider runtime out of the top-tab registry', async (): Promise<void> => {
+    const snapshot = createSnapshot();
+    useSettingStore().setChatSidebarActiveSessionId('session-1');
+    electronAPIMock.chatRuntimeListActive.mockResolvedValue({ ok: true, data: [snapshot] });
+    electronAPIMock.chatRuntimeSubmitToolResult.mockResolvedValue({ ok: true });
+    electronAPIMock.chatRuntimeSubmitBridgeResponse.mockResolvedValue({ ok: true });
+    const system = createChatActorSystem();
+    system.start();
+
+    await recoverRuntimes(system);
+
+    const runtimeStore = useChatTabRuntimeStore();
+    expect(runtimeStore.findOwner('session-1')).toBeUndefined();
+    expect(runtimeStore.records['chat:session-1']).toBeUndefined();
+    expect(runtimeStore.controllers.has('chat:session-1')).toBe(false);
+    expect(system.getSession('session-1')?.getSnapshot().matches('waitingForUser')).toBe(true);
     system.stop();
   });
 });

@@ -5,6 +5,7 @@
 import { ref } from 'vue';
 import type { Message } from '@/components/BChat/utils/types';
 import { getElectronAPI } from '@/shared/platform/electron-api';
+import { storeEvents } from '@/stores/helpers/events';
 import { asyncTo } from '@/utils/asyncTo';
 
 const DEBOUNCE_MS = 300;
@@ -103,6 +104,8 @@ export function useAutoName(options: AutoNameOptions): {
       currentSession.title = result.data.title;
     }
 
+    // 页面可能已被关闭，使用全局事件同步仍然存活的顶部标签。
+    storeEvents.emitChatSessionTitleUpdated(snapshot.sessionId, result.data.title);
     // 列表刷新失败不影响已完成的持久化。
     await asyncTo(Promise.resolve(options.onTitlePersisted?.(snapshot.sessionId, result.data.title)));
     namedSessionIds.value.add(snapshot.sessionId);

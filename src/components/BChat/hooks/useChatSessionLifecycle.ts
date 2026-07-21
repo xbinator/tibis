@@ -16,8 +16,6 @@ import { useChatHistory } from './useChatHistory';
 interface UseChatSessionLifecycleOptions {
   /** 父级指定的会话 ID */
   sessionId: Ref<string | null>;
-  /** 当前聊天是否忙碌 */
-  isLoading: () => boolean;
   /** 释放当前确认请求 */
   disposeConfirmation: () => void;
   /** 聚焦输入编辑器 */
@@ -28,8 +26,6 @@ interface UseChatSessionLifecycleOptions {
   onSessionCreated: (session: ChatSession) => void;
   /** 通知自动标题已持久化 */
   onSessionTitlePersisted: (sessionId: string, title: string) => void;
-  /** 通知已进入草稿会话 */
-  onDraftSessionCreated: () => void;
 }
 
 /**
@@ -44,8 +40,8 @@ interface UseChatSessionLifecycleReturn extends ReturnType<typeof useChatHistory
   autoNameSession: Ref<{ id: string; title: string } | undefined>;
   /** 确保存在可持久化会话 */
   ensureActiveSession: (title: string) => Promise<string>;
-  /** 创建新的草稿会话 */
-  createDraftSession: () => Promise<void>;
+  /** 重置内部草稿状态，但不触发外部导航事件。 */
+  resetDraftState: () => Promise<void>;
   /** 加载当前会话更多历史 */
   handleLoadHistory: () => Promise<void>;
   /** 捕获自动命名快照 */
@@ -116,13 +112,6 @@ export function useChatSessionLifecycle(options: UseChatSessionLifecycleOptions)
     return session.id;
   }
 
-  /** 进入新的草稿会话。 */
-  async function createDraftSession(): Promise<void> {
-    if (options.isLoading()) return;
-    await resetDraftSessionState();
-    options.onDraftSessionCreated();
-  }
-
   /** 加载当前会话的更早历史。 */
   async function handleLoadHistory(): Promise<void> {
     const sessionId = activeSessionId.value;
@@ -151,7 +140,7 @@ export function useChatSessionLifecycle(options: UseChatSessionLifecycleOptions)
     createdSessionId,
     autoNameSession,
     ensureActiveSession,
-    createDraftSession,
+    resetDraftState: resetDraftSessionState,
     handleLoadHistory,
     captureAutoNameSnapshot: captureSnapshot,
     scheduleAutoName
