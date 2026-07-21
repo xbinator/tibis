@@ -108,7 +108,7 @@ describe('ImageElementView', (): void => {
     });
 
     expect(wrapper.find('img').exists()).toBe(false);
-    expect(wrapper.text()).toContain('未设置图片地址');
+    expect(wrapper.find('.widget-image-element__placeholder').exists()).toBe(true);
     wrapper.unmount();
   });
 
@@ -134,7 +134,7 @@ describe('ImageElementView', (): void => {
     const wrapper = mountImageElementView(element);
 
     expect(wrapper.find('img').exists()).toBe(false);
-    expect(wrapper.text()).toContain('未设置图片地址');
+    expect(wrapper.find('.widget-image-element__placeholder').exists()).toBe(true);
     wrapper.unmount();
   });
 

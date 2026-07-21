@@ -6,8 +6,7 @@
   <div class="widget-image-element">
     <img v-if="imageSrc && !hasError" class="widget-image-element__img" :src="imageSrc" :alt="altText" :style="imageStyle" @error="handleError" />
     <div v-else class="widget-image-element__placeholder">
-      <BIcon class="widget-image-element__placeholder-icon" :icon="placeholderIcon" :size="28" />
-      <span class="widget-image-element__placeholder-text">{{ placeholderText }}</span>
+      <BIcon class="widget-image-element__placeholder-icon" :icon="placeholderIcon" :size="18" />
     </div>
   </div>
 </template>
@@ -50,19 +49,6 @@ const imageStyle = computed<CSSProperties>((): CSSProperties => ({ objectFit: fi
 /** 占位图标：加载失败用 image-off，未设置地址用 image。 */
 const placeholderIcon = computed((): string => (hasError.value ? 'lucide:image-off' : 'lucide:image'));
 
-/** 占位文案：加载失败 / 未设置地址 / 地址为空 分别提示。 */
-const placeholderText = computed((): string => {
-  if (hasError.value) {
-    return '图片加载失败';
-  }
-
-  if (!imageSrc.value) {
-    return '未设置图片地址';
-  }
-
-  return '';
-});
-
 /**
  * 图片加载失败回调，标记错误状态以切换到占位视图。
  */
@@ -98,16 +84,9 @@ function handleError(): void {
   width: 100%;
   height: 100%;
   color: var(--text-tertiary);
-  background: var(--bg-secondary);
 }
 
 .widget-image-element__placeholder-icon {
   opacity: 0.5;
-}
-
-.widget-image-element__placeholder-text {
-  font-size: 11px;
-  line-height: 1.4;
-  text-align: center;
 }
 </style>
