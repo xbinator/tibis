@@ -136,12 +136,12 @@ function handleDropdownVisibleChange(open: boolean): void {
 
   &.is-fill-color {
     :deep(.ant-select-selector) {
-      background-color: var(--bg-disabled);
+      background: var(--bg-disabled);
       border-color: var(--bg-disabled);
     }
 
     &.ant-select-focused :deep(.ant-select-selector) {
-      background-color: transparent;
+      background: transparent;
     }
   }
 
@@ -162,7 +162,7 @@ function handleDropdownVisibleChange(open: boolean): void {
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-secondary);
-  background-color: var(--dropdown-bg);
+  background: var(--dropdown-bg);
   border-top: 1px solid var(--border-primary);
   border-radius: 0 0 8px 8px;
 }

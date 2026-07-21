@@ -258,6 +258,6 @@ describe('createAISelectionDecorationSet', (): void => {
     expect(duplicateStyle).toBe(style);
     expect(injectedStyles).toHaveLength(1);
     expect(style?.textContent).toContain('.b-markdown-rich__content .ProseMirror::highlight(b-markdown-ai-selection-highlight)');
-    expect(style?.textContent).toContain('background-color: var(--selection-bg);');
+    expect(style?.textContent).toContain('background: var(--selection-bg);');
   });
 });

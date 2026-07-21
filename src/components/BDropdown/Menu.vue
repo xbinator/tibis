@@ -179,12 +179,12 @@ export default Menu;
 
 .b-dropdown-menu-item:hover {
   color: var(--text-primary);
-  background-color: var(--dropdown-item-hover-bg);
+  background: var(--dropdown-item-hover-bg);
 }
 
 .b-dropdown-menu-item.disabled {
   cursor: default;
-  background-color: transparent;
+  background: transparent;
   opacity: 0.3;
 }
 

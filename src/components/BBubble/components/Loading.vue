@@ -32,7 +32,7 @@ withDefaults(defineProps<Props>(), { type: 'dot' });
     &-item {
       width: 4px;
       height: 4px;
-      background-color: var(--color-primary);
+      background: var(--color-primary);
       border-radius: 100%;
       animation-name: b-bubble-loading-move;
       animation-duration: 2s;

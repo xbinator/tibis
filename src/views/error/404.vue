@@ -29,7 +29,7 @@ function handleBack() {
   justify-content: center;
   width: 100%;
   height: 100%;
-  background-color: var(--bg-primary);
+  background: var(--bg-primary);
 }
 
 .error-container {

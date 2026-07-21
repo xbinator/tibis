@@ -94,19 +94,19 @@ watch(
   font-size: 14px;
   cursor: pointer;
   user-select: none;
-  background-color: transparent;
+  background: transparent;
   border-radius: 6px;
   transition: all 0.3s;
 }
 
 .b-dropdown-button:hover {
   color: var(--text-primary);
-  background-color: var(--bg-active);
+  background: var(--bg-active);
 }
 
 .b-dropdown-button.is-active {
   color: var(--text-primary);
-  background-color: var(--bg-active);
+  background: var(--bg-active);
 }
 
 .b-dropdown-button.is-small {

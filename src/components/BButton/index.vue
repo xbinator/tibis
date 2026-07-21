@@ -146,17 +146,17 @@ export default defineComponent({
   white-space: nowrap;
   cursor: pointer;
   user-select: none;
-  background-color: var(--color-primary);
+  background: var(--color-primary);
   border: none;
   border-radius: 6px;
   transition: all 0.3s ease;
 
   &:hover:not(.b-button--disabled, .b-button--loading) {
-    background-color: var(--color-primary-hover);
+    background: var(--color-primary-hover);
   }
 
   &:active:not(.b-button--disabled, .b-button--loading) {
-    background-color: var(--color-primary-active);
+    background: var(--color-primary-active);
   }
 
   &--disabled {
@@ -223,72 +223,72 @@ export default defineComponent({
   // 类型
   &--primary {
     color: #fff;
-    background-color: var(--color-primary);
+    background: var(--color-primary);
 
     &:hover:not(.b-button--disabled, .b-button--loading) {
-      background-color: var(--color-primary-hover);
+      background: var(--color-primary-hover);
     }
 
     &:active:not(.b-button--disabled, .b-button--loading) {
-      background-color: var(--color-primary-active);
+      background: var(--color-primary-active);
     }
   }
 
   &--secondary {
     color: var(--text-primary);
-    background-color: var(--bg-secondary);
+    background: var(--bg-secondary);
 
     &:hover:not(.b-button--disabled, .b-button--loading) {
-      background-color: var(--bg-active);
+      background: var(--bg-active);
     }
 
     &:active:not(.b-button--disabled, .b-button--loading) {
-      background-color: var(--bg-selected);
+      background: var(--bg-selected);
     }
   }
 
   &--outline {
     color: var(--color-primary);
-    background-color: transparent;
+    background: transparent;
     border: 1px solid var(--color-primary-border);
 
     &:hover:not(.b-button--disabled, .b-button--loading) {
-      background-color: var(--color-primary-bg);
+      background: var(--color-primary-bg);
     }
 
     &:active:not(.b-button--disabled, .b-button--loading) {
-      background-color: var(--color-primary-bg-hover);
+      background: var(--color-primary-bg-hover);
     }
   }
 
   &--text {
     padding: 0 8px;
     color: var(--color-primary);
-    background-color: transparent;
+    background: transparent;
 
     &:hover:not(.b-button--disabled, .b-button--loading) {
       color: var(--text-primary);
-      background-color: var(--color-primary-bg);
+      background: var(--color-primary-bg);
     }
 
     &:active:not(.b-button--disabled, .b-button--loading) {
       color: var(--text-primary);
-      background-color: var(--color-primary-bg-hover);
+      background: var(--color-primary-bg-hover);
     }
   }
 
   &--ghost {
     color: var(--text-secondary);
-    background-color: transparent;
+    background: transparent;
 
     &:hover:not(.b-button--disabled, .b-button--loading) {
       color: var(--text-primary);
-      background-color: var(--color-primary-bg);
+      background: var(--color-primary-bg);
     }
 
     &:active:not(.b-button--disabled, .b-button--loading) {
       color: var(--text-primary);
-      background-color: var(--color-primary-bg-hover);
+      background: var(--color-primary-bg-hover);
     }
   }
 
@@ -296,74 +296,74 @@ export default defineComponent({
   &--danger {
     &.b-button--primary {
       color: #fff;
-      background-color: var(--color-danger);
+      background: var(--color-danger);
 
       &:hover:not(.b-button--disabled, .b-button--loading) {
-        background-color: var(--color-danger-hover);
+        background: var(--color-danger-hover);
       }
 
       &:active:not(.b-button--disabled, .b-button--loading) {
-        background-color: var(--color-danger-active);
+        background: var(--color-danger-active);
       }
     }
 
     &.b-button--secondary {
       color: var(--color-danger);
-      background-color: var(--bg-secondary);
+      background: var(--bg-secondary);
 
       &:hover:not(.b-button--disabled, .b-button--loading) {
-        background-color: var(--bg-active);
+        background: var(--bg-active);
       }
 
       &:active:not(.b-button--disabled, .b-button--loading) {
-        background-color: var(--bg-selected);
+        background: var(--bg-selected);
       }
     }
 
     &.b-button--outline {
       color: var(--color-danger);
-      background-color: transparent;
+      background: transparent;
       border: 1px solid var(--color-danger-border);
 
       &:hover:not(.b-button--disabled, .b-button--loading) {
-        background-color: var(--color-danger-bg);
+        background: var(--color-danger-bg);
         border-color: var(--color-danger);
       }
 
       &:active:not(.b-button--disabled, .b-button--loading) {
-        background-color: var(--color-danger-bg-hover);
+        background: var(--color-danger-bg-hover);
       }
     }
 
     &.b-button--text {
       padding: 0 8px;
       color: var(--color-danger);
-      background-color: transparent;
+      background: transparent;
 
       &:hover:not(.b-button--disabled, .b-button--loading) {
         color: var(--color-danger-hover);
-        background-color: var(--color-primary-bg);
+        background: var(--color-primary-bg);
       }
 
       &:active:not(.b-button--disabled, .b-button--loading) {
         color: var(--color-danger-hover);
-        background-color: var(--color-primary-bg-hover);
+        background: var(--color-primary-bg-hover);
       }
     }
 
     &.b-button--ghost {
       color: var(--color-danger);
-      background-color: transparent;
+      background: transparent;
       transition: color 0.15s ease;
 
       &:hover:not(.b-button--disabled, .b-button--loading) {
         color: var(--color-danger-hover);
-        background-color: transparent;
+        background: transparent;
       }
 
       &:active:not(.b-button--disabled, .b-button--loading) {
         color: var(--color-danger-active);
-        background-color: transparent;
+        background: transparent;
       }
     }
 
@@ -447,14 +447,14 @@ export default defineComponent({
 
 .b-button--soft {
   color: var(--color-primary);
-  background-color: var(--color-primary-bg);
+  background: var(--color-primary-bg);
 
   &:hover:not(.b-button--disabled, .b-button--loading) {
-    background-color: var(--color-primary-bg-hover);
+    background: var(--color-primary-bg-hover);
   }
 
   &:active:not(.b-button--disabled, .b-button--loading) {
-    background-color: var(--color-primary-bg-hover);
+    background: var(--color-primary-bg-hover);
   }
 }
 
@@ -465,16 +465,16 @@ export default defineComponent({
 
 .b-button--danger.b-button--soft {
   color: var(--color-danger);
-  background-color: var(--color-danger-bg);
+  background: var(--color-danger-bg);
 
   &:hover:not(.b-button--disabled, .b-button--loading) {
     color: var(--color-danger-hover);
-    background-color: var(--color-danger-bg-hover);
+    background: var(--color-danger-bg-hover);
   }
 
   &:active:not(.b-button--disabled, .b-button--loading) {
     color: var(--color-danger-active);
-    background-color: var(--color-danger-bg-hover);
+    background: var(--color-danger-bg-hover);
   }
 }
 

@@ -388,7 +388,7 @@ Replace lines 564-579 with:
   :deep(.b-prompt-editor) {
     flex: 1;
     min-width: 0;
-    background-color: transparent;
+    background: transparent;
     border: none;
     border-radius: 0;
   }

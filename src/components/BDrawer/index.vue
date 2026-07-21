@@ -199,7 +199,7 @@ function handleClose(): void {
 
   &:hover {
     color: var(--text-primary);
-    background-color: var(--bg-hover);
+    background: var(--bg-hover);
   }
 }
 

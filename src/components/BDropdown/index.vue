@@ -31,7 +31,7 @@ withDefaults(defineProps<BDropdownProps>(), {
 .b-dropdown-overlay {
   padding: 4px;
   outline: none;
-  background-color: var(--dropdown-bg);
+  background: var(--dropdown-bg);
   border: 1px solid var(--dropdown-border);
   border-radius: 8px;
 }

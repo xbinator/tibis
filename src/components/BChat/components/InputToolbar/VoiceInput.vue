@@ -232,7 +232,7 @@ onUnmounted(() => {
 .voice-stop-icon {
   width: 11px;
   height: 11px;
-  background-color: var(--color-primary);
+  background: var(--color-primary);
   border-radius: 2px;
 }
 </style>

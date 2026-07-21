@@ -97,7 +97,7 @@ const ELEMENT_PICKER_STYLE_PROPERTIES = [
   'letter-spacing',
   'text-align',
   'color',
-  'background-color',
+  'background',
   'border-top-width',
   'border-right-width',
   'border-bottom-width',

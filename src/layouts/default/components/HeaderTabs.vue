@@ -548,7 +548,7 @@ function handleWheel(event: WheelEvent): void {
 .header-tabs :deep(.b-draggable__indicator--horizontal) {
   top: 4px;
   bottom: 4px;
-  background-color: var(--color-primary);
+  background: var(--color-primary);
 }
 
 .header-tab {
@@ -559,20 +559,20 @@ function handleWheel(event: WheelEvent): void {
   height: 28px;
   padding: 0 4px 0 10px;
   cursor: pointer;
-  background-color: transparent;
+  background: transparent;
   border-radius: 6px;
-  transition: background-color 0.2s, opacity 0.2s;
+  transition: background 0.2s, opacity 0.2s;
 
   /* Ensure tabs themselves are clickable (not draggable) */
   -webkit-app-region: no-drag;
 
   &:hover {
-    background-color: var(--bg-hover);
+    background: var(--bg-hover);
   }
 
   &.is-active {
     font-weight: 500;
-    background-color: var(--bg-active, var(--bg-hover));
+    background: var(--bg-active, var(--bg-hover));
   }
 
   &.is-dragging {
@@ -635,7 +635,7 @@ function handleWheel(event: WheelEvent): void {
 
   &:hover {
     color: var(--text-primary);
-    background-color: var(--bg-hover-secondary, rgb(0 0 0 / 10%));
+    background: var(--bg-hover-secondary, rgb(0 0 0 / 10%));
   }
 }
 
@@ -645,6 +645,6 @@ function handleWheel(event: WheelEvent): void {
 }
 
 :deep(.dark) .header-tab__close:hover {
-  background-color: rgb(255 255 255 / 10%);
+  background: rgb(255 255 255 / 10%);
 }
 </style>

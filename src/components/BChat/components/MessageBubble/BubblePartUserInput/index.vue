@@ -146,7 +146,7 @@ const segments = computed<Segment[]>(() => parseTextSegments(props.part.text ?? 
   white-space: pre-wrap;
 
   .b-skill-reference {
-    background-color: var(--bg-primary);
+    background: var(--bg-primary);
   }
 }
 

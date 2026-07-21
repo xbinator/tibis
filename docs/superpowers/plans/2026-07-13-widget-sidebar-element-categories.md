@@ -408,7 +408,7 @@ const widgetElementCategories = WIDGET_ELEMENT_ROLES.map(createElementCategoryGr
   background: var(--bg-secondary);
   border: 1px solid transparent;
   border-radius: 6px;
-  transition: color 0.16s ease, background-color 0.16s ease, border-color 0.16s ease;
+  transition: color 0.16s ease, background 0.16s ease, border-color 0.16s ease;
 }
 
 .sidebar-tools__tool-item:hover {

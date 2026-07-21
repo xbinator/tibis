@@ -559,7 +559,7 @@ defineExpose(controller);
     padding: 20px 40px 90px;
     font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
     color: var(--source-editor-markdown-foreground);
-    background-color: transparent;
+    background: transparent;
   }
 
   .cm-focused {
@@ -570,7 +570,7 @@ defineExpose(controller);
     overflow: visible;
     font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
     line-height: 1.74;
-    background-color: transparent;
+    background: transparent;
   }
 
   .cm-content {
@@ -585,7 +585,7 @@ defineExpose(controller);
 
   .cm-gutters {
     color: var(--source-editor-markdown-gutter-foreground);
-    background-color: transparent;
+    background: transparent;
     border-right: 0;
   }
 
@@ -594,7 +594,7 @@ defineExpose(controller);
   }
 
   .cm-selectionMatch {
-    background-color: var(--source-editor-markdown-selection-match);
+    background: var(--source-editor-markdown-selection-match);
   }
 
   .search-match {
@@ -607,7 +607,7 @@ defineExpose(controller);
   }
 
   .cm-activeLine {
-    background-color: var(--source-editor-markdown-line-highlight);
+    background: var(--source-editor-markdown-line-highlight);
   }
 
   .b-markdown-source__ai-highlight {

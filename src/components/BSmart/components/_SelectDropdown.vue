@@ -197,7 +197,7 @@ function handleMouseEnter(index: number): void {
   margin: 0 6px;
   cursor: pointer;
   border-radius: 4px;
-  transition: background-color 0.2s;
+  transition: background 0.2s;
 
   &:hover,
   &.active {

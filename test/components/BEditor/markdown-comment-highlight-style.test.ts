@@ -41,7 +41,7 @@ describe('Markdown comment highlight style', (): void => {
     const source = readRichEditorPane();
 
     expect(source).toContain('.editor-comment-highlight code');
-    expect(source).toContain('background-color: color-mix(in srgb, var(--bg-disabled) 72%, transparent)');
+    expect(source).toContain('background: color-mix(in srgb, var(--bg-disabled) 72%, transparent)');
     expect(source).not.toMatch(/\.editor-comment-highlight\s+code\s*\{[^}]*background-image/s);
   });
 });

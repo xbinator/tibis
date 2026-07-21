@@ -432,7 +432,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background-color: rgb(0 0 0 / 90%);
+  background: rgb(0 0 0 / 90%);
   -webkit-app-region: no-drag;
 }
 
@@ -458,12 +458,12 @@ onBeforeUnmount(() => {
   line-height: 32px;
   color: #fff;
   cursor: pointer;
-  background-color: rgb(46 50 56 / 5%);
+  background: rgb(46 50 56 / 5%);
   border-radius: 8px;
 }
 
 .b-image-viewer__button:hover {
-  background-color: rgb(46 50 56 / 20%);
+  background: rgb(46 50 56 / 20%);
 }
 
 .b-image-viewer__close {

@@ -198,8 +198,8 @@ describe('BEditor TableView controls', (): void => {
 
     expect(controlRuleBody).toContain('box-sizing: border-box;');
     expect(cornerRuleBody).toContain('box-sizing: border-box;');
-    expect(controlRuleBody).toContain('background-color: color-mix(in srgb, var(--bg-secondary)');
-    expect(cornerRuleBody).toContain('background-color: color-mix(in srgb, var(--bg-secondary)');
+    expect(controlRuleBody).toContain('background: color-mix(in srgb, var(--bg-secondary)');
+    expect(cornerRuleBody).toContain('background: color-mix(in srgb, var(--bg-secondary)');
     expect(controlRuleBody).toContain('border: none;');
     expect(cornerRuleBody).toContain('border: none;');
     expect(source).not.toContain('border-left-width: 0;');
@@ -214,13 +214,13 @@ describe('BEditor TableView controls', (): void => {
     const iconRuleBody = extractStyleRuleBody(source, '.b-markdown-table__insert-point .b-markdown-table__button-icon');
     const hoverRuleBody = extractStyleRuleBody(source, '.b-markdown-table__insert-point:hover,\n.b-markdown-table__insert-point.is-active');
 
-    expect(pointRuleBody).toContain('background-color: transparent;');
+    expect(pointRuleBody).toContain('background: transparent;');
     expect(pointRuleBody).toContain('background-image: radial-gradient(');
     expect(pointRuleBody).toContain('border: none;');
     expect(pointRuleBody).toContain('transform: translate(-50%, -50%);');
     expect(pointRuleBody).toContain('transition:');
     expect(iconRuleBody).toContain('opacity: 0;');
-    expect(hoverRuleBody).toContain('background-color: var(--color-primary);');
+    expect(hoverRuleBody).toContain('background: var(--color-primary);');
     expect(hoverRuleBody).toContain('background-image: none;');
     expect(hoverRuleBody).toContain('box-shadow:');
     expect(source).not.toContain('.b-markdown-table__insert-point::before');

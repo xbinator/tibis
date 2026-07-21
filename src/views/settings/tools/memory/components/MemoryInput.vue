@@ -109,7 +109,7 @@ defineExpose({ focus, clear });
   color: var(--text-primary);
   resize: vertical;
   outline: none;
-  background-color: transparent;
+  background: transparent;
   transition: border-color 0.2s ease;
 
   &:focus {

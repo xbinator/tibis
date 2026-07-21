@@ -501,7 +501,7 @@ watch(
 
 .b-color-picker__panel {
   padding: 10px;
-  background-color: var(--dropdown-bg);
+  background: var(--dropdown-bg);
   border: 1px solid var(--border-primary);
   border-radius: 4px;
   box-shadow: var(--shadow-md);

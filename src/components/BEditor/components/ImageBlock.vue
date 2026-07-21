@@ -121,7 +121,7 @@ async function handleImageCopyClick(event: MouseEvent): Promise<void> {
   border: none;
   border-radius: 6px;
   opacity: 0;
-  transition: opacity 0.16s ease, color 0.16s ease, background-color 0.16s ease;
+  transition: opacity 0.16s ease, color 0.16s ease, background 0.16s ease;
 
   &:hover,
   &:focus-visible {

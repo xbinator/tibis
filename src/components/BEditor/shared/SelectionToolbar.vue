@@ -106,7 +106,7 @@ checkModelAvailability();
   cursor: pointer;
   border: none;
   border-radius: 6px;
-  transition: background-color 0.15s ease;
+  transition: background 0.15s ease;
 
   &:hover {
     background: var(--color-primary-bg-hover);
@@ -125,7 +125,7 @@ checkModelAvailability();
   background: transparent;
   border: none;
   border-radius: 6px;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
 
   &:hover {
     color: var(--text-primary);

@@ -562,14 +562,14 @@ function handleCommentDelete(): void {
 
 ```less
 span[data-comment] {
-  background-color: rgba(255, 235, 92, 0.3);
+  background: rgba(255, 235, 92, 0.3);
   border-bottom: 2px solid rgba(255, 193, 7, 0.6);
   cursor: pointer;
   border-radius: 2px;
-  transition: background-color 0.2s;
+  transition: background 0.2s;
 
   &:hover {
-    background-color: rgba(255, 235, 92, 0.5);
+    background: rgba(255, 235, 92, 0.5);
   }
 }
 ```

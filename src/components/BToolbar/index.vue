@@ -144,7 +144,7 @@ const shouldShowSelectedCheckColumn = computed<boolean>(
   background: transparent;
   border: none;
   border-radius: 8px;
-  transition: background-color 0.15s ease;
+  transition: background 0.15s ease;
 
   &:hover {
     background: var(--bg-hover);

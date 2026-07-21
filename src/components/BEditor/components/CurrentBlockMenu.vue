@@ -787,7 +787,7 @@ onBeforeUnmount(() => {
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
   border-radius: 8px;
-  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .b-markdown-blockmenu__trigger:hover,

@@ -1474,7 +1474,7 @@ git commit -m "feat: add table node view controls"
       vertical-align: top;
       color: var(--editor-text);
       text-align: left;
-      background-color: var(--editor-table-header-bg);
+      background: var(--editor-table-header-bg);
       border-right: 1px solid var(--editor-table-border);
       border-bottom: 1px solid var(--editor-table-border);
 
@@ -1489,7 +1489,7 @@ git commit -m "feat: add table node view controls"
       vertical-align: top;
       color: var(--editor-text);
       text-align: left;
-      background-color: var(--bg-primary);
+      background: var(--bg-primary);
       border-right: 1px solid var(--editor-table-border);
       border-bottom: 1px solid var(--editor-table-border);
 
@@ -1503,7 +1503,7 @@ git commit -m "feat: add table node view controls"
     }
 
     tr:hover td {
-      background-color: var(--editor-table-even-bg);
+      background: var(--editor-table-even-bg);
     }
 
     th p,
@@ -1524,7 +1524,7 @@ git commit -m "feat: add table node view controls"
   .b-table-node-view__line-highlight {
     position: absolute;
     border-radius: 999px;
-    background-color: color-mix(in srgb, var(--ant-color-primary) 68%, transparent);
+    background: color-mix(in srgb, var(--ant-color-primary) 68%, transparent);
     pointer-events: none;
   }
 

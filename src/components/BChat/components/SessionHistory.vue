@@ -325,7 +325,7 @@ async function handleDeleteSession(sessionId: string): Promise<void> {
   cursor: pointer;
   border: none;
   border-radius: 8px;
-  transition: background-color 0.2s ease;
+  transition: background 0.2s ease;
 
   &:hover,
   &.is-active {

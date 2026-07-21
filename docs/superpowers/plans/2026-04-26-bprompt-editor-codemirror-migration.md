@@ -791,7 +791,7 @@ defineExpose({ focus, captureCursorPosition, insertFileReference });
 
   .cm-selectionBackground,
   .cm-focused .cm-selectionBackground {
-    background-color: var(--color-primary-selection-bg, rgba(64, 128, 255, 0.2)) !important;
+    background: var(--color-primary-selection-bg, rgba(64, 128, 255, 0.2)) !important;
   }
 
   // Chip decorations
@@ -801,13 +801,13 @@ defineExpose({ focus, captureCursorPosition, insertFileReference });
     font-size: 12px;
     line-height: 20px;
     color: var(--color-primary);
-    background-color: rgb(var(--color-primary-value, 64, 128, 255), 0.1);
+    background: rgb(var(--color-primary-value, 64, 128, 255), 0.1);
     border-radius: 4px;
   }
 
   .b-prompt-chip--file {
     color: var(--text-primary);
-    background-color: var(--bg-secondary);
+    background: var(--bg-secondary);
     border: 1px solid var(--border-primary);
   }
 }

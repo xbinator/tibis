@@ -342,7 +342,7 @@ defineExpose<BModelSelectExpose>({
   padding: 12px;
   cursor: pointer;
   border-radius: 8px;
-  transition: background-color 0.2s;
+  transition: background 0.2s;
 }
 
 .model-item:hover {

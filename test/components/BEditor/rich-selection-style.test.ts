@@ -47,8 +47,8 @@ describe('BEditor rich selection styles', (): void => {
     expect(tableRuleBody).toContain('box-shadow: none;');
     expect(tableRuleBody).toContain('background: transparent;');
     expect(tableRuleBody).not.toContain('outline:');
-    expect(tableHeaderRuleBody).toContain('background-color: var(--editor-table-selection-header-bg);');
-    expect(tableCellRuleBody).toContain('background-color: var(--editor-table-selection-cell-bg);');
+    expect(tableHeaderRuleBody).toContain('background: var(--editor-table-selection-header-bg);');
+    expect(tableCellRuleBody).toContain('background: var(--editor-table-selection-cell-bg);');
   });
 
   it('uses the same table selection colors for drag cell selections and container selections', (): void => {
@@ -58,8 +58,8 @@ describe('BEditor rich selection styles', (): void => {
     expect(source).toContain('--editor-table-selection-cell-bg:');
     expect(source).toContain('--editor-table-selection-header-bg: color-mix(in srgb, var(--color-primary-bg-hover) 88%, var(--editor-table-header-bg));');
     expect(source).toContain('--editor-table-selection-cell-bg: color-mix(in srgb, var(--color-primary-bg-hover) 74%, var(--bg-primary));');
-    expect(source).toContain('background-color: var(--editor-table-selection-header-bg);');
-    expect(source).toContain('background-color: var(--editor-table-selection-cell-bg);');
+    expect(source).toContain('background: var(--editor-table-selection-header-bg);');
+    expect(source).toContain('background: var(--editor-table-selection-cell-bg);');
   });
 
   it('keeps table cell paragraphs wrappable', (): void => {

@@ -56,7 +56,7 @@ describe('BButton', (): void => {
   it('定义 soft 类型的主题色文字和浅色背景样式', (): void => {
     const source = readButtonComponentSource();
 
-    expectRuleToContainDeclarations(source, '.b-button--soft', ['color: var(--color-primary);', 'background-color: var(--color-primary-bg);']);
-    expectRuleToContainDeclarations(source, '.b-button--danger.b-button--soft', ['color: var(--color-danger);', 'background-color: var(--color-danger-bg);']);
+    expectRuleToContainDeclarations(source, '.b-button--soft', ['color: var(--color-primary);', 'background: var(--color-primary-bg);']);
+    expectRuleToContainDeclarations(source, '.b-button--danger.b-button--soft', ['color: var(--color-danger);', 'background: var(--color-danger-bg);']);
   });
 });

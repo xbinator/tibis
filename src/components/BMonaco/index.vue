@@ -724,10 +724,10 @@ defineExpose<EditorController & EditorScrollController>({
 }
 
 .b-editor-monaco .monaco-editor .selected-text {
-  background-color: var(--monaco-inactive-selection-bg) !important;
+  background: var(--monaco-inactive-selection-bg) !important;
 }
 
 .b-editor-monaco .monaco-editor .focused .selected-text {
-  background-color: var(--monaco-selection-bg) !important;
+  background: var(--monaco-selection-bg) !important;
 }
 </style>

@@ -1594,10 +1594,10 @@ onBeforeUnmount(() => {
   padding: 0;
   pointer-events: auto;
   cursor: pointer;
-  background-color: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
   border: none;
   border-radius: 0;
-  transition: background-color 0.16s ease;
+  transition: background 0.16s ease;
 }
 
 .b-markdown-table__corner-control {
@@ -1605,7 +1605,7 @@ onBeforeUnmount(() => {
   z-index: 2;
   box-sizing: border-box;
   pointer-events: none;
-  background-color: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
   border: none;
   border-top-left-radius: 6px;
 }
@@ -1622,14 +1622,14 @@ onBeforeUnmount(() => {
 .b-markdown-table__row-control:hover,
 .b-markdown-table__column-control.is-selected,
 .b-markdown-table__row-control.is-selected {
-  background-color: color-mix(in srgb, var(--color-primary) 78%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 78%, transparent);
 }
 
 .b-markdown-table__segment-highlight {
   position: absolute;
   z-index: 1;
   pointer-events: none;
-  background-color: color-mix(in srgb, var(--editor-link) 18%, transparent);
+  background: color-mix(in srgb, var(--editor-link) 18%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--editor-link) 20%, transparent);
 }
 
@@ -1637,7 +1637,7 @@ onBeforeUnmount(() => {
   position: absolute;
   z-index: 3;
   pointer-events: none;
-  background-color: var(--color-primary);
+  background: var(--color-primary);
   border-radius: 999px;
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 18%, transparent);
 }
@@ -1669,7 +1669,7 @@ onBeforeUnmount(() => {
   color: #fff;
   pointer-events: auto;
   cursor: pointer;
-  background-color: transparent;
+  background: transparent;
   background-image: radial-gradient(
     circle at center,
     color-mix(in srgb, var(--text-secondary) 62%, transparent) 0,
@@ -1682,7 +1682,7 @@ onBeforeUnmount(() => {
   border: none;
   border-radius: 999px;
   transform: translate(-50%, -50%);
-  transition: background-color 0.16s ease, background-image 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+  transition: background 0.16s ease, background-image 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
 
 .b-markdown-table__insert-point .b-markdown-table__button-icon {
@@ -1695,7 +1695,7 @@ onBeforeUnmount(() => {
 
 .b-markdown-table__insert-point:hover,
 .b-markdown-table__insert-point.is-active {
-  background-color: var(--color-primary);
+  background: var(--color-primary);
   background-image: none;
   box-shadow: 0 8px 22px color-mix(in srgb, var(--color-primary) 30%, transparent);
   transform: translate(-50%, -50%) scale(1.1);
@@ -1721,7 +1721,7 @@ onBeforeUnmount(() => {
   background: transparent;
   border: none;
   border-radius: 6px;
-  transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
 
   &:hover,
   &.is-active {

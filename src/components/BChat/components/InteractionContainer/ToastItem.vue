@@ -153,7 +153,7 @@ onUnmounted(() => {
   padding: 10px 12px;
   font-size: 13px;
   color: var(--text-primary);
-  background-color: var(--bg-tertiary);
+  background: var(--bg-tertiary);
   border: 1px solid var(--border-secondary);
   border-radius: 6px;
   transition: all 0.3s ease;

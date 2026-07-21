@@ -113,14 +113,14 @@ function buildMenuOptions(items: HeaderToolbarMenuItem[]): DropdownOption[] {
   width: 1px;
   height: 16px;
   margin: 0 2px;
-  background-color: var(--border-secondary);
+  background: var(--border-secondary);
 }
 
 .header-editor-actions__trailing-divider {
   width: 1px;
   height: 16px;
   margin: 0 2px;
-  background-color: var(--border-secondary);
+  background: var(--border-secondary);
 }
 
 .header-editor-actions__button {
@@ -129,7 +129,7 @@ function buildMenuOptions(items: HeaderToolbarMenuItem[]): DropdownOption[] {
 
 .header-editor-actions__button.is-active :deep(.b-button) {
   color: var(--color-primary);
-  background-color: var(--color-primary-bg);
+  background: var(--color-primary-bg);
 }
 
 .header-editor-actions__select-content {

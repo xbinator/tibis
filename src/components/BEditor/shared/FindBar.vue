@@ -315,7 +315,7 @@ registerShortcut({
   background: transparent;
   border: none;
   border-radius: 4px;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .b-markdown-findbar__btn:hover:not(:disabled) {

@@ -759,7 +759,7 @@ defineExpose({
 .editor-comment-highlight {
   padding: 0.25em 0;
   cursor: pointer;
-  background-color: rgb(255 213 79 / 30%);
+  background: rgb(255 213 79 / 30%);
   background-image: linear-gradient(var(--comment-highlight-line), var(--comment-highlight-line));
   background-repeat: no-repeat;
   background-position: 0 calc(100% - 1px);
@@ -767,10 +767,10 @@ defineExpose({
   border-radius: 2px;
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
-  transition: background-color 0.2s ease;
+  transition: background 0.2s ease;
 
   &:hover {
-    background-color: rgb(255 213 79 / 50%);
+    background: rgb(255 213 79 / 50%);
   }
 }
 </style>

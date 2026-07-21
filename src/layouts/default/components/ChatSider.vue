@@ -277,6 +277,6 @@ onUnmounted(() => {
 .chat-sider__divider {
   width: 1px;
   height: 16px;
-  background-color: var(--border-secondary);
+  background: var(--border-secondary);
 }
 </style>

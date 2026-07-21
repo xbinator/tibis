@@ -163,13 +163,13 @@ nextTick(updateButtons);
   font-size: 16px;
   color: #fff;
   cursor: pointer;
-  background-color: rgb(46 50 56 / 30%);
+  background: rgb(46 50 56 / 30%);
   border-radius: 999px;
   backdrop-filter: blur(6px);
 }
 
 .b-image-viewer-carousel__button:hover {
-  background-color: rgb(46 50 56 / 45%);
+  background: rgb(46 50 56 / 45%);
 }
 
 .b-image-viewer-carousel__button--left {

@@ -260,7 +260,7 @@ onBeforeUnmount((): void => {
   background: transparent;
   border: none;
   border-radius: 6px;
-  transition: background-color 0.15s ease;
+  transition: background 0.15s ease;
 
   &:disabled {
     color: var(--text-tertiary);

@@ -90,7 +90,7 @@ const tooltipText = computed<string>(() => {
   background: transparent;
   border: 0;
   border-radius: 50%;
-  transition: color 0.15s ease, background-color 0.15s ease;
+  transition: color 0.15s ease, background 0.15s ease;
 
   &:hover {
     color: var(--text-primary);

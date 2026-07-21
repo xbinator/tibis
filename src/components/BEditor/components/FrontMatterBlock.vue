@@ -429,7 +429,7 @@ function confirmComplexEditInline(): void {
 
 .b-markdown-frontmatter {
   margin-bottom: 25px;
-  background-color: var(--frontmatter-bg);
+  background: var(--frontmatter-bg);
   border: 1px solid var(--frontmatter-border);
   border-radius: 8px;
   transition: all 0.2s ease;
@@ -474,7 +474,7 @@ function confirmComplexEditInline(): void {
 
   &:hover {
     color: var(--tag-text);
-    background-color: var(--tag-hover-bg);
+    background: var(--tag-hover-bg);
   }
 }
 
@@ -503,7 +503,7 @@ function confirmComplexEditInline(): void {
   line-height: 28px;
   color: var(--color-purple);
   cursor: pointer;
-  background-color: var(--color-purple-bg);
+  background: var(--color-purple-bg);
   border: 1px solid transparent;
   border-radius: 4px;
   transition: border-color 0.2s;
@@ -515,7 +515,7 @@ function confirmComplexEditInline(): void {
   &--editing {
     width: 120px;
     outline: none;
-    background-color: var(--bg-primary);
+    background: var(--bg-primary);
     border-color: var(--color-purple);
   }
 }
@@ -534,7 +534,7 @@ function confirmComplexEditInline(): void {
   line-height: 24px;
   color: var(--frontmatter-value-text);
   outline: none;
-  background-color: var(--bg-primary);
+  background: var(--bg-primary);
   border: 1px solid var(--border-primary);
   border-radius: 4px;
   transition: border-color 0.2s;
@@ -549,10 +549,10 @@ function confirmComplexEditInline(): void {
     line-height: 28px;
     color: var(--tag-secondary-text);
     cursor: pointer;
-    background-color: var(--tag-bg);
+    background: var(--tag-bg);
 
     &:hover {
-      background-color: var(--tag-hover-bg);
+      background: var(--tag-hover-bg);
     }
   }
 }
@@ -576,7 +576,7 @@ function confirmComplexEditInline(): void {
 
   &:hover {
     color: var(--color-error);
-    background-color: var(--color-error-bg);
+    background: var(--color-error-bg);
   }
 }
 
@@ -600,12 +600,12 @@ function confirmComplexEditInline(): void {
 }
 
 .b-markdown-frontmatter__new-key {
-  background-color: var(--bg-primary);
+  background: var(--bg-primary);
   border: 1px solid var(--border-primary);
 }
 
 .b-markdown-frontmatter__new-value {
-  background-color: var(--bg-primary);
+  background: var(--bg-primary);
 }
 
 .b-markdown-frontmatter__add-btn {
@@ -613,7 +613,7 @@ function confirmComplexEditInline(): void {
 
   &:not(:disabled):hover {
     color: var(--color-success);
-    background-color: var(--color-success-bg);
+    background: var(--color-success-bg);
     opacity: 1;
   }
 

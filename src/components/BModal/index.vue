@@ -104,7 +104,7 @@ function handleClosable(): void {
   border-radius: 6px;
 
   &:hover {
-    background-color: var(--modal-header-bg);
+    background: var(--modal-header-bg);
   }
 }
 

@@ -420,7 +420,7 @@ watch(
   background: var(--bg-secondary);
   border: 1px dashed var(--border-secondary);
   border-radius: 8px;
-  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+  transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
 }
 
 .widget-creator__dropzone:hover,

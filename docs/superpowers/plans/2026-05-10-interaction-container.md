@@ -243,22 +243,22 @@ onUnmounted(() => {
   }
 
   &--error {
-    background-color: #fee2e2;
+    background: #fee2e2;
     border-left: 3px solid #ef4444;
   }
 
   &--warning {
-    background-color: #fef3c7;
+    background: #fef3c7;
     border-left: 3px solid #f59e0b;
   }
 
   &--info {
-    background-color: #dbeafe;
+    background: #dbeafe;
     border-left: 3px solid #3b82f6;
   }
 
   &--success {
-    background-color: #d1fae5;
+    background: #d1fae5;
     border-left: 3px solid #10b981;
   }
 }
@@ -583,7 +583,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: rgba(0, 0, 0, 0.45);
+  background: rgba(0, 0, 0, 0.45);
 }
 
 .confirm-modal {

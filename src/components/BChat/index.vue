@@ -571,7 +571,7 @@ defineExpose({ focusInput });
   flex: 1;
   min-width: 0;
   padding: 0;
-  background-color: transparent;
+  background: transparent;
   border: none;
   border-radius: 0;
 }

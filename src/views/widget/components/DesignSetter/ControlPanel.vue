@@ -283,7 +283,7 @@ function handleTargetValueUpdate(target: ControlPanelTarget, value: ValueType): 
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
   border-radius: 4px;
-  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
 }
 
 .control-panel__toggle:hover,

@@ -176,7 +176,7 @@ defineExpose({
   padding: 0 8px;
   cursor: pointer;
   border-radius: 6px;
-  transition: background-color 0.15s ease;
+  transition: background 0.15s ease;
 
   &:hover {
     background: var(--bg-hover);

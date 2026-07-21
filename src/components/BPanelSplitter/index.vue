@@ -268,7 +268,7 @@ onBeforeUnmount((): void => {
   left: 50%;
   width: 2px;
   height: 40px;
-  background-color: var(--border-secondary);
+  background: var(--border-secondary);
   border-radius: 2px;
   transform: translate(-50%, -50%);
 }

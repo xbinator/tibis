@@ -31,7 +31,7 @@ const tableInlineHighlightName = 'b-markdown-ai-selection-highlight';
 const tableInlineHighlightStyleId = 'b-markdown-ai-selection-highlight-style';
 const tableInlineHighlightStyleContent = [
   `.b-markdown-rich__content .ProseMirror::highlight(${tableInlineHighlightName}) {`,
-  '  background-color: var(--selection-bg);',
+  '  background: var(--selection-bg);',
   '}'
 ].join('\n');
 

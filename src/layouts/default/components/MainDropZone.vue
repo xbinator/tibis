@@ -87,7 +87,7 @@ const { isDragging } = useFileDrop({
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--bg-primary);
+  background: var(--bg-primary);
   border-radius: 8px;
   opacity: 0.6;
   backdrop-filter: blur(4px);

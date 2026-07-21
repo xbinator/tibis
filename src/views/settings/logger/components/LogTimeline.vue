@@ -218,7 +218,7 @@ function toggleExpanded(): void {
   word-break: break-all;
   white-space: pre-wrap;
   user-select: text;
-  background-color: var(--bg-secondary);
+  background: var(--bg-secondary);
   border-radius: 4px;
 }
 

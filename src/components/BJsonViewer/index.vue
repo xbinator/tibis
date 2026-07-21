@@ -86,7 +86,7 @@ function handleNodeClick(event: NodeMouseEvent): void {
   min-height: 360px;
   overflow: hidden;
   color: var(--json-viewer-value);
-  background-color: var(--bg-primary);
+  background: var(--bg-primary);
 }
 
 .b-json-viewer__flow {

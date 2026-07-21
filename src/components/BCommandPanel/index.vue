@@ -481,7 +481,7 @@ watch([visible, scope], ([nextVisible]): void => {
   background: transparent;
   border: none;
   border-radius: 8px;
-  transition: background-color 0.15s, border-color 0.15s;
+  transition: background 0.15s, border-color 0.15s;
 }
 
 .b-command-panel__item:hover,
@@ -556,7 +556,7 @@ watch([visible, scope], ([nextVisible]): void => {
   background: transparent;
   border: none;
   border-radius: 4px;
-  transition: background-color 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s;
 }
 
 .b-command-panel__item-delete:hover {

@@ -644,11 +644,11 @@ defineExpose({
     }
 
     .b-markdown-table.ai-selection-highlight th {
-      background-color: var(--editor-table-selection-header-bg);
+      background: var(--editor-table-selection-header-bg);
     }
 
     .b-markdown-table.ai-selection-highlight td {
-      background-color: var(--editor-table-selection-cell-bg);
+      background: var(--editor-table-selection-cell-bg);
     }
 
     .is-editor-empty:first-child::before {
@@ -812,7 +812,7 @@ defineExpose({
     padding: 0.5em 1em 0.5em 1.25em;
     margin: 0.75em 0;
     color: var(--editor-blockquote-text);
-    background-color: var(--editor-blockquote-bg);
+    background: var(--editor-blockquote-bg);
     border-left: 4px solid var(--editor-blockquote-border);
     border-radius: 0 4px 4px 0;
   }
@@ -822,17 +822,17 @@ defineExpose({
     font-family: Menlo, Monaco, 'Courier New', monospace;
     font-size: 0.85em;
     color: var(--color-error);
-    background-color: var(--bg-disabled);
+    background: var(--bg-disabled);
     border-radius: 3px;
   }
 
   .editor-comment-highlight code {
-    background-color: color-mix(in srgb, var(--bg-disabled) 72%, transparent);
+    background: color-mix(in srgb, var(--bg-disabled) 72%, transparent);
   }
 
   pre {
     margin: 0.75em 0;
-    background-color: transparent;
+    background: transparent;
     border: 0;
     border-radius: 0;
 
@@ -842,7 +842,7 @@ defineExpose({
       font-size: 0.9em;
       line-height: 1.6;
       color: var(--code-text);
-      background-color: transparent;
+      background: transparent;
       .code-highlight();
     }
   }
@@ -871,13 +871,13 @@ defineExpose({
     vertical-align: top;
     color: var(--editor-text);
     text-align: left;
-    background-color: var(--editor-table-header-bg);
+    background: var(--editor-table-header-bg);
     border-right: 1px solid var(--editor-table-border);
     border-bottom: 1px solid var(--editor-table-border);
 
     &.selectedCell {
       color: var(--editor-text);
-      background-color: var(--editor-table-selection-header-bg);
+      background: var(--editor-table-selection-header-bg);
       -webkit-text-fill-color: var(--editor-text);
     }
   }
@@ -888,13 +888,13 @@ defineExpose({
     vertical-align: top;
     color: var(--editor-text);
     text-align: left;
-    background-color: var(--bg-primary);
+    background: var(--bg-primary);
     border-right: 1px solid var(--editor-table-border);
     border-bottom: 1px solid var(--editor-table-border);
 
     &.selectedCell {
       color: var(--editor-text);
-      background-color: var(--editor-table-selection-cell-bg);
+      background: var(--editor-table-selection-cell-bg);
       -webkit-text-fill-color: var(--editor-text);
     }
 

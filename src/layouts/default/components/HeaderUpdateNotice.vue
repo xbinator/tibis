@@ -132,7 +132,7 @@ onBeforeUnmount(() => {
   outline: none;
   background: transparent;
   border: 0;
-  transition: background-color 0.16s ease;
+  transition: background 0.16s ease;
 }
 
 .header-update-notice__link {
@@ -168,7 +168,7 @@ onBeforeUnmount(() => {
   box-shadow: 0 1px 4px rgb(0 0 0 / 16%);
   opacity: 0;
   transform: scale(0.82) translate(2px, -2px);
-  transition: color 0.16s ease, opacity 0.16s ease, transform 0.16s ease, background-color 0.16s ease;
+  transition: color 0.16s ease, opacity 0.16s ease, transform 0.16s ease, background 0.16s ease;
 }
 
 .header-update-notice:hover .header-update-notice__close {

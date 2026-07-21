@@ -173,7 +173,7 @@ const PDF_EXPORT_DOCUMENT_STYLE = `
     min-inline-size: 0 !important;
     max-inline-size: 100% !important;
     margin: 0 0 24px !important;
-    background-color: var(--frontmatter-bg);
+    background: var(--frontmatter-bg);
     border: 1px solid var(--frontmatter-border);
     break-inside: avoid;
   }
@@ -192,7 +192,7 @@ const PDF_EXPORT_DOCUMENT_STYLE = `
   .b-markdown-export .b-markdown-frontmatter__value,
   .b-markdown-export .b-markdown-frontmatter__new-value {
     color: var(--frontmatter-value-text);
-    background-color: var(--bg-primary);
+    background: var(--bg-primary);
     border-color: var(--border-primary);
   }
 
@@ -264,18 +264,18 @@ const PDF_EXPORT_DOCUMENT_STYLE = `
     color: var(--editor-text);
     overflow-wrap: anywhere;
     word-break: break-word;
-    background-color: var(--bg-primary);
+    background: var(--bg-primary);
     border: 1px solid var(--editor-table-border);
   }
 
   .b-markdown-export th {
-    background-color: var(--editor-table-header-bg);
+    background: var(--editor-table-header-bg);
   }
 
   .b-markdown-export blockquote {
     padding-left: 16px;
     color: var(--editor-blockquote-text);
-    background-color: var(--editor-blockquote-bg);
+    background: var(--editor-blockquote-bg);
     border-left: 4px solid var(--editor-blockquote-border);
   }
 

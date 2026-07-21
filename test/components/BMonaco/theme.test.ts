@@ -33,9 +33,9 @@ describe('BMonaco theme registration', (): void => {
     const source = readFileSync(new URL('../../../src/components/BMonaco/index.vue', import.meta.url), 'utf8');
 
     expect(source).toContain('.b-editor-monaco .monaco-editor .focused .selected-text');
-    expect(source).toContain('background-color: var(--monaco-selection-bg) !important;');
+    expect(source).toContain('background: var(--monaco-selection-bg) !important;');
     expect(source).toContain('.b-editor-monaco .monaco-editor .selected-text');
-    expect(source).toContain('background-color: var(--monaco-inactive-selection-bg) !important;');
+    expect(source).toContain('background: var(--monaco-inactive-selection-bg) !important;');
   });
 
   it('disables Monaco occurrence highlights derived from the current selection', (): void => {

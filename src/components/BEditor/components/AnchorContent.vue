@@ -146,7 +146,7 @@ watch(
   color: var(--text-primary);
   cursor: pointer;
   border-radius: 6px;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
 
   &:hover {
     background: var(--bg-hover);
@@ -170,7 +170,7 @@ watch(
   background: transparent;
   border: 0;
   border-radius: 6px;
-  transition: background-color 0.15s ease;
+  transition: background 0.15s ease;
 
   &:hover {
     background: var(--bg-hover);

@@ -274,7 +274,6 @@ function handleClearAlwaysToolPermissions(): void {
 
 .basic-settings__permission-panel {
   padding: 12px 16px 16px;
-  border-top: 1px solid var(--border-tertiary);
 }
 
 .basic-settings__permission-header {

@@ -113,7 +113,7 @@ function handleShowShortcuts(): void {
   justify-content: center;
   width: 100%;
   height: 100%;
-  background-color: var(--bg-primary);
+  background: var(--bg-primary);
   border: 1px solid var(--border-primary);
   border-radius: 8px;
 }
@@ -141,12 +141,12 @@ function handleShowShortcuts(): void {
   color: var(--text-primary);
   cursor: pointer;
   user-select: none;
-  background-color: var(--bg-secondary);
+  background: var(--bg-secondary);
   border-radius: 6px;
-  transition: background-color 0.2s ease;
+  transition: background 0.2s ease;
 
   &:hover {
-    background-color: var(--bg-active);
+    background: var(--bg-active);
   }
 
   .action-icon {
@@ -194,12 +194,12 @@ function handleShowShortcuts(): void {
   color: var(--text-primary);
   cursor: pointer;
   user-select: none;
-  background-color: var(--bg-secondary);
+  background: var(--bg-secondary);
   border-radius: 6px;
-  transition: background-color 0.2s ease;
+  transition: background 0.2s ease;
 
   &:hover {
-    background-color: var(--bg-active);
+    background: var(--bg-active);
   }
 
   .recent-file-icon {
@@ -245,13 +245,13 @@ function handleShowShortcuts(): void {
   color: var(--text-secondary);
   cursor: pointer;
   user-select: none;
-  background-color: var(--bg-secondary);
+  background: var(--bg-secondary);
   border-radius: 6px;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition: background 0.2s ease, color 0.2s ease;
 
   &:hover {
     color: var(--text-primary);
-    background-color: var(--bg-active);
+    background: var(--bg-active);
   }
 }
 </style>

@@ -287,7 +287,7 @@ useEventListener(window, 'resize', validateWindowState);
   width: 1px;
   height: 16px;
   margin: 0 6px;
-  background-color: var(--border-secondary);
+  background: var(--border-secondary);
 }
 
 .b-layout-header__controls {
@@ -303,11 +303,11 @@ useEventListener(window, 'resize', validateWindowState);
   outline: none;
   background: transparent;
   border: none;
-  transition: background-color 0.2s;
+  transition: background 0.2s;
 }
 
 .b-layout-header__button:hover {
-  background-color: var(--bg-hover);
+  background: var(--bg-hover);
 }
 
 .b-layout-header__left,
@@ -328,6 +328,6 @@ useEventListener(window, 'resize', validateWindowState);
 
 .b-dropdown-menu-item.is-active {
   color: var(--color-primary);
-  background-color: var(--color-primary-bg);
+  background: var(--color-primary-bg);
 }
 </style>
