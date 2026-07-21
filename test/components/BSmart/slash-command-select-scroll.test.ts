@@ -67,8 +67,8 @@ describe('SlashCommandSelect active item scrolling', (): void => {
 
     expect(wrapper.findAll('.slash-command-group-title').map((item) => item.text())).toEqual(['模板']);
     expect(wrapper.findAll('.select-dropdown__item')).toHaveLength(2);
-    expect(wrapper.find('.slash-command-item-trigger').exists()).toBe(false);
+    expect(wrapper.find('.slash-command-item-trigger').exists()).toBe(true);
     expect(wrapper.find('.slash-command-item-icon').exists()).toBe(false);
-    expect(wrapper.findAll('.slash-command-item-content')[1]?.text()).toBe('templateTemplate item');
+    expect(wrapper.findAll('.slash-command-item-content')[1]?.text()).toBe('/templateTemplate item');
   });
 });

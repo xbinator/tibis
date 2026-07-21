@@ -12,7 +12,7 @@
     </template>
     <template #item="{ item }">
       <div class="slash-command-item-content">
-        <span class="slash-command-item-title">{{ item.title }}</span>
+        <span class="slash-command-item-trigger">{{ item.trigger }}</span>
         <span class="slash-command-item-desc">{{ item.description }}</span>
       </div>
     </template>
@@ -91,7 +91,7 @@ function handleMouseEnter(index: number): void {
   min-width: 0;
 }
 
-.slash-command-item-title {
+.slash-command-item-trigger {
   flex-shrink: 0;
   font-size: 13px;
   font-weight: 500;
