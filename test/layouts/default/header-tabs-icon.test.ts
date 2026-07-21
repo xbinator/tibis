@@ -39,15 +39,6 @@ vi.mock('@iconify/vue', () => ({
   }
 }));
 
-vi.mock('ant-design-vue', () => ({
-  Dropdown: {
-    name: 'Dropdown',
-    props: ['open', 'trigger', 'placement'],
-    emits: ['open-change'],
-    template: '<div class="dropdown-stub"><slot /><slot name="overlay" /></div>'
-  }
-}));
-
 vi.mock('@/stores/workspace/recent', () => ({
   useRecentStore: () => ({
     recentRecords: [],
@@ -139,8 +130,7 @@ function mountHeaderTabs(): ReturnType<typeof mount> {
     global: {
       stubs: {
         BDraggable: BDraggableStub,
-        BRecentIcon: BRecentIconStub,
-        BDropdownMenu: true
+        BRecentIcon: BRecentIconStub
       }
     }
   });

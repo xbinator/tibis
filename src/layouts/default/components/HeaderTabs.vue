@@ -14,15 +14,7 @@
     @drag-end="handleDragEnded"
   >
     <template #default="{ item, dragging }">
-      <HeaderTab
-        :tab="item"
-        :dragging="dragging"
-        :context-menu-open="openContextTabId === item.id"
-        @click="handleClickTab(item.path)"
-        @close="handleCloseButton(item)"
-        @context-menu-open-change="handleContextMenuOpenChange"
-        @context-menu-close="resetContextMenuState"
-      />
+      <HeaderTab :tab="item" :dragging="dragging" @click="handleClickTab(item.path)" @close="handleCloseButton(item)" />
     </template>
   </BDraggable>
 </template>
@@ -57,21 +49,10 @@ const runtimeStore = useChatTabRuntimeStore();
 const { canClose } = useTabCloseGuard();
 const route = useRoute();
 const router = useRouter();
-const CONTEXT_MENU_CLOSE_DELAY_MS = 200;
 
 /** 拖拽结束后最近一次的时间戳，用于抑制拖后误点击 */
 const lastDragEndedAt = shallowRef(0);
 
-/** 当前已打开的右键菜单所属标签 ID。 */
-const openContextTabId = shallowRef<string | null>(null);
-
-/** 前一个菜单关闭动画结束后，准备打开的下一个标签 ID。 */
-const pendingContextTabId = shallowRef<string | null>(null);
-
-/** 当前是否处于右键菜单关闭冷却阶段。 */
-const isContextMenuClosing = shallowRef(false);
-
-let contextMenuCloseTimer: number | null = null;
 /** 全局聊天标题事件取消订阅函数。 */
 let unsubscribeChatTitle: (() => void) | undefined;
 
@@ -93,19 +74,8 @@ function handleDragEnded(): void {
   lastDragEndedAt.value = Date.now();
 }
 
-/**
- * 清理右键菜单关闭冷却计时器。
- */
-function clearContextMenuCloseTimer(): void {
-  if (contextMenuCloseTimer !== null) {
-    window.clearTimeout(contextMenuCloseTimer);
-    contextMenuCloseTimer = null;
-  }
-}
-
-/** 组件卸载时清理右键菜单计时器 */
+/** 组件卸载时清理事件订阅 */
 onUnmounted(() => {
-  clearContextMenuCloseTimer();
   unsubscribeChatTitle?.();
   unsubscribeChatTitle = undefined;
 });
@@ -151,68 +121,6 @@ watch(
   },
   { immediate: true }
 );
-
-/**
- * 立即关闭当前右键菜单并清空等待状态。
- */
-function resetContextMenuState(): void {
-  clearContextMenuCloseTimer();
-  openContextTabId.value = null;
-  pendingContextTabId.value = null;
-  isContextMenuClosing.value = false;
-}
-
-/**
- * 启动“关闭动画完成后再打开下一个菜单”的冷却流程。
- */
-function schedulePendingContextMenuOpen(): void {
-  clearContextMenuCloseTimer();
-  isContextMenuClosing.value = true;
-  contextMenuCloseTimer = window.setTimeout(() => {
-    openContextTabId.value = pendingContextTabId.value;
-    pendingContextTabId.value = null;
-    isContextMenuClosing.value = false;
-    contextMenuCloseTimer = null;
-  }, CONTEXT_MENU_CLOSE_DELAY_MS);
-}
-
-/**
- * 处理单个标签右键菜单的受控打开状态。
- * @param tabId - 对应标签 ID
- * @param nextOpen - 下一个打开状态
- */
-function handleContextMenuOpenChange(tabId: string, nextOpen: boolean): void {
-  if (!nextOpen) {
-    if (openContextTabId.value === tabId) {
-      openContextTabId.value = null;
-    }
-
-    if (!pendingContextTabId.value) {
-      clearContextMenuCloseTimer();
-      isContextMenuClosing.value = false;
-    }
-    return;
-  }
-
-  if (openContextTabId.value === tabId && !isContextMenuClosing.value) {
-    return;
-  }
-
-  if (isContextMenuClosing.value) {
-    pendingContextTabId.value = tabId;
-    return;
-  }
-
-  if (openContextTabId.value && openContextTabId.value !== tabId) {
-    pendingContextTabId.value = tabId;
-    openContextTabId.value = null;
-    schedulePendingContextMenuOpen();
-    return;
-  }
-
-  pendingContextTabId.value = null;
-  openContextTabId.value = tabId;
-}
 
 /**
  * 点击标签页时切换路由。

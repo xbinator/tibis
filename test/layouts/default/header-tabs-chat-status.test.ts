@@ -34,12 +34,6 @@ vi.mock('@iconify/vue', () => ({
 }));
 
 vi.mock('ant-design-vue', () => ({
-  Dropdown: {
-    name: 'Dropdown',
-    props: ['open', 'trigger', 'placement'],
-    emits: ['open-change'],
-    template: '<div><slot /><slot name="overlay" /></div>'
-  },
   message: {
     error: messageErrorMock
   }
@@ -80,15 +74,6 @@ const BRecentIconStub = defineComponent({
   template: '<span class="recent-icon-stub"></span>'
 });
 
-/** 右键菜单测试替身。 */
-const BDropdownMenuStub = defineComponent({
-  name: 'BDropdownMenu',
-  props: {
-    options: { type: Array as PropType<Array<{ value: string; onClick?: () => Promise<void> | void }>>, required: true }
-  },
-  template: '<div class="menu-stub"></div>'
-});
-
 /**
  * 创建测试标签。
  * @param id - 标签 ID
@@ -105,24 +90,10 @@ function mountTabs(): ReturnType<typeof mount> {
     global: {
       stubs: {
         BDraggable: BDraggableStub,
-        BRecentIcon: BRecentIconStub,
-        BDropdownMenu: BDropdownMenuStub
+        BRecentIcon: BRecentIconStub
       }
     }
   });
-}
-
-/**
- * 调用指定标签右键菜单动作。
- * @param wrapper - HeaderTabs 包装器
- * @param tabIndex - 标签索引
- * @param action - 菜单动作值
- */
-async function invokeMenu(wrapper: ReturnType<typeof mount>, tabIndex: number, action: string): Promise<void> {
-  const menu = wrapper.findAllComponents(BDropdownMenuStub)[tabIndex];
-  const options = menu.props('options') as Array<{ value: string; onClick?: () => Promise<void> | void }>;
-  await options.find((option) => option.value === action)?.onClick?.();
-  await flushPromises();
 }
 
 describe('HeaderTabs chat status', (): void => {
@@ -224,48 +195,6 @@ describe('HeaderTabs chat status', (): void => {
     expect(abort).toHaveBeenCalledTimes(1);
     expect(tabsStore.tabs).toHaveLength(1);
     expect(messageErrorMock).toHaveBeenCalledWith('终止聊天失败：abort failed');
-  });
-
-  it('confirms once and aborts every active chat before a batch close', async (): Promise<void> => {
-    const tabsStore = useTabsStore();
-    tabsStore.tabs = [createTab('chat:session-a', '/chat/session-a'), createTab('chat:session-b', '/chat/session-b')];
-    const abortA = vi.fn<() => Promise<void>>().mockResolvedValue();
-    const abortB = vi.fn<() => Promise<void>>().mockResolvedValue();
-    const runtimeStore = useChatTabRuntimeStore();
-    runtimeStore.registerController('chat:session-a', { abort: abortA });
-    runtimeStore.registerController('chat:session-b', { abort: abortB });
-    runtimeStore.setStatus('chat:session-a', 'running');
-    runtimeStore.setStatus('chat:session-b', 'waiting');
-    const wrapper = mountTabs();
-
-    await invokeMenu(wrapper, 0, 'closeAll');
-
-    expect(modalConfirmMock).toHaveBeenCalledTimes(1);
-    expect(abortA).toHaveBeenCalledTimes(1);
-    expect(abortB).toHaveBeenCalledTimes(1);
-    expect(tabsStore.tabs).toEqual([]);
-  });
-
-  it('keeps the entire batch plan when one runtime abort fails', async (): Promise<void> => {
-    const tabsStore = useTabsStore();
-    tabsStore.tabs = [createTab('chat:session-a', '/chat/session-a'), createTab('chat:session-b', '/chat/session-b')];
-    const runtimeStore = useChatTabRuntimeStore();
-    const abortA = vi.fn<() => Promise<void>>().mockImplementation(async (): Promise<void> => runtimeStore.setStatus('chat:session-a', 'idle'));
-    const abortB = vi.fn<() => Promise<void>>().mockRejectedValue(new Error('abort B failed'));
-    runtimeStore.registerController('chat:session-a', { abort: abortA });
-    runtimeStore.registerController('chat:session-b', { abort: abortB });
-    runtimeStore.setStatus('chat:session-a', 'running');
-    runtimeStore.setStatus('chat:session-b', 'waiting');
-    const wrapper = mountTabs();
-
-    await invokeMenu(wrapper, 0, 'closeAll');
-
-    expect(abortA).toHaveBeenCalledOnce();
-    expect(abortB).toHaveBeenCalledOnce();
-    expect(tabsStore.tabs).toHaveLength(2);
-    expect(runtimeStore.getStatus('chat:session-a')).toBe('idle');
-    expect(runtimeStore.getStatus('chat:session-b')).toBe('waiting');
-    expect(messageErrorMock).toHaveBeenCalledWith('终止聊天失败：abort B failed');
   });
 
   it('retains the existing dirty confirmation for ordinary tabs', async (): Promise<void> => {

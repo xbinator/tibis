@@ -1,42 +1,30 @@
 <!--
   @file HeaderTab.vue
-  @description 单个标签页渲染组件，包含图标、聊天状态指示、关闭按钮和右键菜单。
+  @description 单个标签页渲染组件，包含图标、运行状态指示和关闭按钮。
 -->
 <template>
-  <Dropdown
-    :key="tab.id"
-    :open="contextMenuOpen"
-    :trigger="['contextmenu']"
-    placement="bottomLeft"
-    @open-change="(open: boolean) => emit('context-menu-open-change', props.tab.id, open)"
-  >
-    <div :data-tab-id="tab.id" class="header-tab" :class="tabClass" @click="emit('click')">
-      <div class="header-tab__title">
-        <span v-if="tabsStore.isDirty(tab.id)" class="header-tab__dirty-mark">*</span>
-        <!-- 运行状态与最近记录图标互斥展示 -->
-        <span v-if="statusVisual" :class="['header-tab__status', statusVisual.className]">
-          <Icon v-if="statusVisual.icon" :icon="statusVisual.icon" width="13" height="13" />
-        </span>
-        <BRecentIcon
-          v-else
-          class="header-tab__icon"
-          :record="resolveTabIconRecentRecord(tab)"
-          :file-name="resolveTabIconFileName(tab)"
-          :icon="resolveTabIcon(tab)"
-          :size="14"
-        />
-        <span class="header-tab__title-text">{{ tab.title }}</span>
-      </div>
-
-      <button class="header-tab__close" @pointerdown.stop @click.stop="emit('close')">
-        <Icon icon="ic:round-close" width="12" height="12" />
-      </button>
+  <div :data-tab-id="tab.id" class="header-tab" :class="tabClass" @click="emit('click')">
+    <div class="header-tab__title">
+      <span v-if="tabsStore.isDirty(tab.id)" class="header-tab__dirty-mark">*</span>
+      <!-- 运行状态与最近记录图标互斥展示 -->
+      <span v-if="statusVisual" :class="['header-tab__status', statusVisual.className]">
+        <Icon v-if="statusVisual.icon" :icon="statusVisual.icon" width="13" height="13" />
+      </span>
+      <BRecentIcon
+        v-else
+        class="header-tab__icon"
+        :record="resolveTabIconRecentRecord(tab)"
+        :file-name="resolveTabIconFileName(tab)"
+        :icon="resolveTabIcon(tab)"
+        :size="14"
+      />
+      <span class="header-tab__title-text">{{ tab.title }}</span>
     </div>
 
-    <template #overlay>
-      <BDropdownMenu :value="''" :width="200" :options="contextMenuOptions" row-class="header-tab__menu-item" />
-    </template>
-  </Dropdown>
+    <button class="header-tab__close" @pointerdown.stop @click.stop="emit('close')">
+      <Icon icon="ic:round-close" width="12" height="12" />
+    </button>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -45,16 +33,13 @@
  * @description 单标签页渲染逻辑：class 状态、图标优先级解析与聊天运行态指示。
  */
 import { computed } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import { Icon } from '@iconify/vue';
-import { Dropdown } from 'ant-design-vue';
-import type { DropdownOption } from '@/components/BDropdown/type';
-import { useTabCloseGuard } from '@/layouts/default/hooks/useTabCloseGuard';
 import type { RecentRecord, WebviewRecord } from '@/shared/storage';
 import type { ChatTabRuntimeStatus } from '@/stores/chat/tabRuntime';
 import { useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
 import { useRecentStore } from '@/stores/workspace/recent';
-import type { Tab, TabCloseAction, TabClosePlan } from '@/stores/workspace/tabs';
+import type { Tab } from '@/stores/workspace/tabs';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import { WEB_RECORD_ICON } from '@/utils/file/icons';
 
@@ -84,29 +69,21 @@ interface Props {
   tab: Tab;
   /** 是否处于拖拽中 */
   dragging?: boolean;
-  /** 右键菜单是否打开 */
-  contextMenuOpen?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  dragging: false,
-  contextMenuOpen: false
+  dragging: false
 });
 
 const emit = defineEmits<{
   (e: 'click'): void;
   (e: 'close'): void;
-  (e: 'context-menu-open-change', tabId: string, open: boolean): void;
-  /** 右键菜单执行关闭操作后通知父组件重置菜单状态 */
-  (e: 'context-menu-close'): void;
 }>();
 
 const route = useRoute();
-const router = useRouter();
 const tabsStore = useTabsStore();
 const recentStore = useRecentStore();
 const runtimeStore = useChatTabRuntimeStore();
-const { canClose } = useTabCloseGuard();
 
 /** 标签页样式状态映射。 */
 const tabClass = computed<Record<string, boolean>>(() => ({
@@ -236,68 +213,6 @@ function resolveTabIcon(tab: Tab): string {
   if (configuredIcon) return configuredIcon;
   return resolveTabFallbackIcon(tab);
 }
-
-// --------------- 右键菜单 ---------------
-
-/**
- * 根据当前路由推导激活标签 ID。
- * @returns 当前激活标签 ID，不存在时返回 null
- */
-function getActiveTabId(): string | null {
-  return tabsStore.tabs.find((tab) => tab.path === route.fullPath)?.id ?? null;
-}
-
-/**
- * 为某个锚点标签批量生成右键菜单所需的关闭计划。
- * @param tabId - 锚点标签 ID
- * @returns 各动作对应的关闭计划
- */
-function getContextClosePlans(tabId: string): Record<TabCloseAction, TabClosePlan> {
-  const activeTabId = getActiveTabId();
-
-  return {
-    close: tabsStore.getClosePlan('close', { anchorTabId: tabId, activeTabId }),
-    closeOthers: tabsStore.getClosePlan('closeOthers', { anchorTabId: tabId, activeTabId }),
-    closeRight: tabsStore.getClosePlan('closeRight', { anchorTabId: tabId, activeTabId }),
-    closeSaved: tabsStore.getClosePlan('closeSaved', { activeTabId }),
-    closeAll: tabsStore.getClosePlan('closeAll', { activeTabId })
-  };
-}
-
-/**
- * 执行关闭计划，按需确认并处理导航。
- * @param plan - 待执行的关闭计划
- */
-async function executeClosePlan(plan: TabClosePlan): Promise<void> {
-  emit('context-menu-close');
-  if (!(await canClose(plan))) return;
-
-  tabsStore.applyClosePlan(plan);
-  plan.targetTabIds.filter((tabId: string): boolean => tabId.startsWith('chat:')).forEach((tabId: string): void => runtimeStore.removeTab(tabId));
-
-  if (!plan.requiresNavigation) return;
-  await router.push(plan.nextActivePath ?? '/welcome');
-}
-
-/**
- * 构建某个标签的右键菜单项。
- * @param tab - 当前标签页
- * @returns 下拉菜单选项
- */
-function getContextMenuOptions(tab: Tab): DropdownOption[] {
-  const plans = getContextClosePlans(tab.id);
-
-  return [
-    { value: 'close', label: '关闭', disabled: plans.close.disabled, onClick: () => executeClosePlan(plans.close) },
-    { value: 'closeOthers', label: '关闭其他', disabled: plans.closeOthers.disabled, onClick: () => executeClosePlan(plans.closeOthers) },
-    { value: 'closeRight', label: '关闭右侧', disabled: plans.closeRight.disabled, onClick: () => executeClosePlan(plans.closeRight) },
-    { value: 'closeSaved', label: '关闭已保存', disabled: plans.closeSaved.disabled, onClick: () => executeClosePlan(plans.closeSaved) },
-    { value: 'closeAll', label: '全部关闭', disabled: plans.closeAll.disabled, onClick: () => executeClosePlan(plans.closeAll) }
-  ];
-}
-
-/** 右键菜单选项，由内部函数自计算。 */
-const contextMenuOptions = computed<DropdownOption[]>(() => getContextMenuOptions(props.tab));
 </script>
 
 <style lang="less" scoped>
