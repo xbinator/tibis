@@ -25,7 +25,7 @@ interface PersistedSettingState {
   providerSidebarCollapsed: boolean;
   settingsSidebarCollapsed: boolean;
   theme: ThemeMode;
-  /** 主题预设 ID，如 'default'、'everforest' */
+  /** 主题预设 ID，如 'default'、'matrix' */
   themePreset: string;
   sidebarVisible: boolean;
   sidebarWidth: number;
@@ -196,7 +196,7 @@ export const useSettingStore = defineStore('setting', {
 
     /**
      * 设置主题预设
-     * @param presetId - 预设 ID，如 'default'、'everforest'
+     * @param presetId - 预设 ID，如 'default'、'matrix'
      */
     setThemePreset(presetId: string): void {
       this.themePreset = presetId;
