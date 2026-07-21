@@ -353,7 +353,7 @@ describe('ChatSider', (): void => {
     expect(wrapper.find('.session-history-stub').attributes('disabled')).toBeDefined();
     const openButton = wrapper
       .findAllComponents({ name: 'BButton' })
-      .find((button) => button.findComponent({ name: 'BIcon' }).attributes('icon') === 'lucide:maximize');
+      .find((button) => button.findComponent({ name: 'BIcon' }).attributes('icon') === 'lucide:square-arrow-out-up-right');
     expect(openButton?.attributes('disabled')).toBeDefined();
   });
 
@@ -368,8 +368,8 @@ describe('ChatSider', (): void => {
 
     const openButton = wrapper
       .findAllComponents({ name: 'BButton' })
-      .find((button) => button.findComponent({ name: 'BIcon' }).attributes('icon') === 'lucide:maximize');
-    expect(openButton?.findComponent({ name: 'BIcon' }).attributes('icon')).toBe('lucide:maximize');
+      .find((button) => button.findComponent({ name: 'BIcon' }).attributes('icon') === 'lucide:square-arrow-out-up-right');
+    expect(openButton?.findComponent({ name: 'BIcon' }).attributes('icon')).toBe('lucide:square-arrow-out-up-right');
     await openButton?.trigger('click');
     await flushPromises();
 
@@ -388,7 +388,7 @@ describe('ChatSider', (): void => {
 
     const openButton = wrapper
       .findAllComponents({ name: 'BButton' })
-      .find((button) => button.findComponent({ name: 'BIcon' }).attributes('icon') === 'lucide:maximize');
+      .find((button) => button.findComponent({ name: 'BIcon' }).attributes('icon') === 'lucide:square-arrow-out-up-right');
     await openButton?.trigger('click');
     await flushPromises();
 
@@ -409,7 +409,7 @@ describe('ChatSider', (): void => {
 
     const openButton = wrapper
       .findAllComponents({ name: 'BButton' })
-      .find((button) => button.findComponent({ name: 'BIcon' }).attributes('icon') === 'lucide:maximize');
+      .find((button) => button.findComponent({ name: 'BIcon' }).attributes('icon') === 'lucide:square-arrow-out-up-right');
     await openButton?.trigger('click');
     await flushPromises();
 
@@ -429,7 +429,7 @@ describe('ChatSider', (): void => {
 
     const openButton = wrapper
       .findAllComponents({ name: 'BButton' })
-      .find((button) => button.findComponent({ name: 'BIcon' }).attributes('icon') === 'lucide:maximize');
+      .find((button) => button.findComponent({ name: 'BIcon' }).attributes('icon') === 'lucide:square-arrow-out-up-right');
     await openButton?.trigger('click');
     await flushPromises();
 

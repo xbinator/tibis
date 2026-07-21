@@ -36,7 +36,7 @@
           @delete-session="handleDeletedSession"
         />
         <BButton square size="small" type="text" :disabled="isSessionActionDisabled" @click="openChatPage">
-          <BIcon icon="lucide:maximize" :size="16" />
+          <BIcon icon="lucide:square-arrow-out-up-right" :size="16" />
         </BButton>
 
         <div :class="bem('divider')"></div>
