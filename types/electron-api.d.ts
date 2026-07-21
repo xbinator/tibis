@@ -449,70 +449,6 @@ export interface ElectronImagePreviewResult {
 }
 
 /**
- * 语音转写请求参数。
- */
-export interface ElectronAudioTranscribeRequest {
-  /** 音频二进制数据。 */
-  buffer: ArrayBuffer;
-  /** 音频 MIME 类型。 */
-  mimeType: string;
-  /** 段落唯一标识。 */
-  segmentId: string;
-  /** 指定语言。 */
-  language?: string;
-  /** 可选提示词。 */
-  prompt?: string;
-}
-
-/**
- * 语音转写结果。
- */
-export interface ElectronAudioTranscribeResult {
-  /** 段落唯一标识。 */
-  segmentId: string;
-  /** 转写文本。 */
-  text: string;
-  /** 识别语言。 */
-  language?: string;
-  /** 转写耗时，单位毫秒。 */
-  durationMs: number;
-}
-
-/**
- * 语音运行时状态。
- */
-export interface ElectronSpeechRuntimeStatus {
-  /** 当前状态。 */
-  state: 'ready' | 'missing' | 'installing' | 'failed';
-  /** 平台标识。 */
-  platform: 'darwin' | 'win32';
-  /** 架构标识。 */
-  arch: 'arm64' | 'x64';
-  /** 默认模型名。 */
-  modelName?: string;
-  /** 当前安装目录。 */
-  installDir?: string;
-  /** 当前运行时版本。 */
-  version?: string;
-  /** 失败时的错误信息。 */
-  errorMessage?: string;
-}
-
-/**
- * 语音运行时安装进度。
- */
-export interface ElectronSpeechInstallProgress {
-  /** 当前阶段。 */
-  phase: 'downloading' | 'extracting' | 'verifying' | 'completed';
-  /** 当前完成数量。 */
-  current: number;
-  /** 总数。 */
-  total: number;
-  /** 当前说明。 */
-  message: string;
-}
-
-/**
  * Tibis 工作区根目录信息。
  */
 export interface ElectronTibisWorkspaceRoot {
@@ -649,14 +585,6 @@ export interface ElectronAPI {
   cancelShellCommand: (commandId: string) => Promise<boolean>;
   onShellCommandOutput: (callback: (chunk: ElectronShellCommandOutputChunk) => void) => () => void;
   onShellRunEvent: (callback: (event: ElectronShellRunEventEnvelope) => void) => () => void;
-
-  // 语音转写
-  transcribeAudio: (request: ElectronAudioTranscribeRequest) => Promise<ElectronAudioTranscribeResult>;
-  getSpeechRuntimeStatus: () => Promise<ElectronSpeechRuntimeStatus>;
-  installSpeechRuntime: () => Promise<ElectronSpeechRuntimeStatus>;
-  removeSpeechRuntime: () => Promise<ElectronSpeechRuntimeStatus>;
-  requestMicrophonePermission: () => Promise<boolean>;
-  onSpeechInstallProgress: (listener: (progress: ElectronSpeechInstallProgress) => void) => () => void;
 
   // AI 服务操作
   aiInvoke: (createOptions: AICreateOptions, request: AIRequestOptions) => Promise<AsyncResult<AIInvokeResult, AIServiceError>>;

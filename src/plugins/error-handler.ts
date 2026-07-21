@@ -27,11 +27,7 @@ export function setupErrorHandler(app: App): void {
     const error = err instanceof Error ? err : new Error(String(err));
     const componentName = getComponentName(instance);
 
-    captureError(error, {
-      type: 'vue-error',
-      component: componentName,
-      info
-    });
+    captureError(error, { type: 'vue-error', component: componentName, info });
 
     // 继续输出到控制台
     console.error(err);
@@ -41,10 +37,8 @@ export function setupErrorHandler(app: App): void {
   if (import.meta.env.DEV) {
     app.config.warnHandler = (msg, instance) => {
       const componentName = getComponentName(instance);
-      captureError(new Error(msg), {
-        type: 'vue-warning',
-        component: componentName
-      });
+      //
+      captureError(new Error(msg), { type: 'vue-warning', component: componentName });
     };
   }
 }

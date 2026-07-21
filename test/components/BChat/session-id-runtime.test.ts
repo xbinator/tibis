@@ -382,7 +382,7 @@ const InputToolbarStub = defineComponent({
       default: 0
     }
   },
-  emits: ['submit', 'abort', 'image-select', 'model-change', 'voice-start', 'voice-partial', 'voice-complete'],
+  emits: ['submit', 'abort', 'image-select', 'model-change'],
   setup(_props, { emit }) {
     return () =>
       h(

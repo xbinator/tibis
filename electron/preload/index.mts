@@ -29,7 +29,6 @@ import type {
   ElectronAPI,
   ElectronShellCommandOutputChunk,
   ElectronShellRunEventEnvelope,
-  ElectronSpeechInstallProgress,
   FileChangeEvent
 } from 'types/electron-api';
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
@@ -409,54 +408,6 @@ const electronAPI: ElectronAPI = {
     ipcRenderer.on('shell:run-event', handler);
     return () => {
       ipcRenderer.removeListener('shell:run-event', handler);
-    };
-  },
-
-  // ==================== 语音转写 ====================
-
-  /**
-   * 转写单段音频。
-   * @param request - 音频转写请求
-   * @returns 转写结果
-   */
-  transcribeAudio: (request) => ipcRenderer.invoke('speech:transcribe', request),
-
-  /**
-   * 获取语音运行时状态。
-   * @returns 语音运行时状态
-   */
-  getSpeechRuntimeStatus: () => ipcRenderer.invoke('speech:getRuntimeStatus'),
-
-  /**
-   * 下载并安装语音运行时。
-   * @returns 安装完成后的运行时状态
-   */
-  installSpeechRuntime: () => ipcRenderer.invoke('speech:installRuntime'),
-
-  /**
-   * 删除已安装的语音运行时。
-   * @returns 删除后的运行时状态
-   */
-  removeSpeechRuntime: () => ipcRenderer.invoke('speech:removeRuntime'),
-
-  /**
-   * 请求系统麦克风权限。
-   * macOS 需要主动请求，Windows/浏览器端 getUserMedia 会自动触发权限提示。
-   * @returns 是否已授权
-   */
-  requestMicrophonePermission: () => ipcRenderer.invoke('speech:requestMicrophonePermission'),
-
-  /**
-   * 监听语音运行时安装进度。
-   * @param callback - 进度回调
-   * @returns 取消监听函数
-   */
-  onSpeechInstallProgress: (callback) => {
-    const handler = (_event: Electron.IpcRendererEvent, payload: unknown) => callback(payload as ElectronSpeechInstallProgress);
-
-    ipcRenderer.on('speech:install-progress', handler);
-    return () => {
-      ipcRenderer.removeListener('speech:install-progress', handler);
     };
   },
 

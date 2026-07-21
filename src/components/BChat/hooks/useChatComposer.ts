@@ -1,6 +1,6 @@
 /**
  * @file useChatComposer.ts
- * @description 聚合 BChat 输入编辑器、附件、文件引用、模型与语音输入能力。
+ * @description 聚合 BChat 输入编辑器、附件、文件引用与模型选择能力。
  */
 import type { InteractionAPI } from '../components/InteractionContainer/types';
 import type { ComputedRef, Ref } from 'vue';
@@ -16,7 +16,6 @@ import { useChatInput } from './useChatInput';
 import { useFileReference } from './useFileReference';
 import { useImageUpload } from './useImageUpload';
 import { useModelSelection } from './useModelSelection';
-import { useVoiceInput } from './useVoiceInput';
 
 /**
  * 输入编辑器组件实例与对外公开方法。
@@ -63,12 +62,6 @@ interface UseChatComposerReturn {
   promptChipResolver: ReturnType<typeof createChatChipResolver>;
   /** 处理文件提及选择 */
   handleFileMentionSelect: (file: FileMentionOption) => void;
-  /** 开始语音输入 */
-  handleVoiceStart: ReturnType<typeof useVoiceInput>['handleVoiceStart'];
-  /** 更新语音输入临时结果 */
-  handleVoicePartial: ReturnType<typeof useVoiceInput>['handleVoicePartial'];
-  /** 完成语音输入 */
-  handleVoiceComplete: ReturnType<typeof useVoiceInput>['handleVoiceComplete'];
 }
 
 /**
@@ -87,21 +80,6 @@ export function useChatComposer(options: UseChatComposerOptions): UseChatCompose
   /** 保存输入编辑器光标位置。 */
   function saveCursorPosition(): void {
     options.promptEditorRef.value?.saveCursorPosition();
-  }
-
-  /** 读取输入编辑器光标位置。 */
-  function getCursorPosition(): number {
-    return options.promptEditorRef.value?.getCursorPosition() ?? 0;
-  }
-
-  /**
-   * 替换输入编辑器文本范围。
-   * @param from - 起始偏移
-   * @param to - 结束偏移
-   * @param text - 替换文本
-   */
-  function replaceTextRange(from: number, to: number, text: string): void {
-    options.promptEditorRef.value?.replaceTextRange(from, to, text);
   }
 
   /**
@@ -135,18 +113,6 @@ export function useChatComposer(options: UseChatComposerOptions): UseChatCompose
     focusInput
   });
   const canSubmit = computed<boolean>((): boolean => !input.isEmpty() || input.hasImages());
-
-  const { handleVoiceStart, handleVoicePartial, handleVoiceComplete } = useVoiceInput({
-    editor: {
-      saveCursorPosition,
-      getCursorPosition,
-      replaceTextRange,
-      insertTextAtCursor
-    },
-    showEmptyTranscriptionToast: (): void => {
-      options.interactionAPI.showToast({ content: '语音转写结果为空，请重试', type: 'error' });
-    }
-  });
 
   /** 将拖入文件分发到图片附件或文本文件引用。 */
   async function handleInputDropFiles(files: File[]): Promise<void> {
@@ -191,9 +157,6 @@ export function useChatComposer(options: UseChatComposerOptions): UseChatCompose
     isContainerDragActive,
     fileMentionOptions,
     promptChipResolver,
-    handleFileMentionSelect,
-    handleVoiceStart,
-    handleVoicePartial,
-    handleVoiceComplete
+    handleFileMentionSelect
   };
 }

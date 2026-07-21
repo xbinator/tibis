@@ -4,28 +4,19 @@
 -->
 <template>
   <div class="chat-input-toolbar">
-    <template v-if="isVoiceRecording">
-      <VoiceWaveform :samples="voiceWaveformSamples" :text="voicePartialText" />
+    <BUpload v-if="supportsVision" accept="image/*" @change="handleImageInputChange">
+      <BButton size="small" type="text" square>
+        <BIcon icon="lucide:image-plus" :size="16" />
+      </BButton>
+    </BUpload>
 
-      <div class="toolbar-space"></div>
-    </template>
-    <template v-else>
-      <BUpload v-if="supportsVision" accept="image/*" @change="handleImageInputChange">
-        <BButton size="small" type="text" square>
-          <BIcon icon="lucide:image-plus" :size="16" />
-        </BButton>
-      </BUpload>
+    <div class="toolbar-space"></div>
 
-      <div class="toolbar-space"></div>
+    <ContextUsage v-if="selectedModel && contextUsedTokens" :used-tokens="contextUsedTokens" :context-window="contextWindow" />
 
-      <ContextUsage v-if="selectedModel && contextUsedTokens" :used-tokens="contextUsedTokens" :context-window="contextWindow" />
-
-      <ModelSelector ref="modelSelectorRef" :model="selectedModel" @update:model="handleModelChange" />
-    </template>
+    <ModelSelector ref="modelSelectorRef" :model="selectedModel" @update:model="handleModelChange" />
 
     <div class="action-buttons">
-      <VoiceInput v-if="false" ref="voiceInputRef" @start="emit('voice-start')" @partial-text="handleVoicePartial" @complete="handleVoiceComplete" />
-
       <BButton v-if="loading" size="small" tooltip="停止" square @click="$emit('abort')">
         <svg class="loading-icon" color="currentColor" viewBox="0 0 1000 1000" xmlns="http://www.w3.org/2000/svg">
           <title>Stop Loading</title>
@@ -42,13 +33,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 import BButton from '@/components/BButton/index.vue';
 import type { SelectedModel } from '@/stores/ai/serviceModel';
 import ContextUsage from './InputToolbar/ContextUsage.vue';
 import ModelSelector from './InputToolbar/ModelSelector.vue';
-import VoiceInput from './InputToolbar/VoiceInput.vue';
-import VoiceWaveform from './InputToolbar/VoiceWaveform.vue';
 
 /**
  * 输入工具栏属性。
@@ -83,44 +72,12 @@ const emit = defineEmits<{
   (e: 'abort'): void;
   (e: 'model-change', model: { providerId: string; modelId: string }): void;
   (e: 'image-select', files: File[]): void;
-  (e: 'voice-start'): void;
-  (e: 'voice-partial', payload: { text: string }): void;
-  (e: 'voice-complete', payload: { text: string }): void;
 }>();
 
 /**
  * 模型选择器实例引用。
  */
 const modelSelectorRef = ref<InstanceType<typeof ModelSelector>>();
-
-/**
- * 语音输入组件实例引用。
- */
-const voiceInputRef = ref<InstanceType<typeof VoiceInput>>();
-
-/**
- * 当前是否正在录音。
- */
-const isVoiceRecording = computed<boolean>(() => {
-  const input = voiceInputRef.value;
-  return input?.isRecording ?? false;
-});
-
-/**
- * 当前录音波形采样数据。
- */
-const voiceWaveformSamples = computed<number[]>(() => {
-  const input = voiceInputRef.value;
-  return input?.waveformSamples ?? [];
-});
-
-/**
- * 当前录音时的实时转写文本。
- */
-const voicePartialText = computed<string>(() => {
-  const input = voiceInputRef.value;
-  return input?.partialText ?? '';
-});
 
 /**
  * 将打开请求转发到内部模型选择器。
@@ -143,22 +100,6 @@ function handleModelChange(model: { providerId: string; modelId: string }): void
  */
 function handleImageInputChange(files: FileList): void {
   emit('image-select', Array.from(files));
-}
-
-/**
- * 处理语音输入完成事件。
- * @param payload - 语音转写结果
- */
-function handleVoiceComplete(payload: { text: string }): void {
-  emit('voice-complete', payload);
-}
-
-/**
- * 处理语音输入增量文本事件。
- * @param payload - 增量转写文本
- */
-function handleVoicePartial(payload: { text: string }): void {
-  emit('voice-partial', payload);
 }
 
 /**

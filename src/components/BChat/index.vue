@@ -66,9 +66,6 @@
           @abort="handleAbort"
           @image-select="imageUpload.appendImages"
           @model-change="handleModelChange"
-          @voice-start="handleVoiceStart"
-          @voice-partial="handleVoicePartial"
-          @voice-complete="handleVoiceComplete"
         />
       </div>
     </div>
@@ -159,19 +156,7 @@ const composer = useChatComposer({
   openFile,
   openSkill
 });
-const {
-  focusInput,
-  imageUpload,
-  fileReference,
-  canSubmit,
-  isContainerDragActive,
-  fileMentionOptions,
-  promptChipResolver,
-  handleFileMentionSelect,
-  handleVoiceStart,
-  handleVoicePartial,
-  handleVoiceComplete
-} = composer;
+const { focusInput, imageUpload, fileReference, canSubmit, isContainerDragActive, fileMentionOptions, promptChipResolver, handleFileMentionSelect } = composer;
 /** 草稿输入状态与操作。 */
 const { inputContent, inputImages, ...inputEvents } = composer.input;
 /** 模型选择状态与操作。 */

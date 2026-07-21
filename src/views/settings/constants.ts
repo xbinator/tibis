@@ -1,6 +1,6 @@
 import type { AIProviderType } from 'types/ai';
 
-export type SettingsMenuKey = 'provider' | 'service-model' | 'search' | 'mcp' | 'widget' | 'skill' | 'memory' | 'basic' | 'speech' | 'logger';
+export type SettingsMenuKey = 'provider' | 'service-model' | 'search' | 'mcp' | 'widget' | 'skill' | 'memory' | 'basic' | 'logger';
 
 /**
  * 侧边栏菜单项定义
@@ -24,7 +24,6 @@ export const MENU_ITEMS: Record<SettingsMenuKey, MenuItem> = {
   skill: { key: 'skill', label: '技能', icon: 'lucide:hammer', path: '/settings/tools/skill' },
   memory: { key: 'memory', label: '全局记忆', icon: 'lucide:brain', path: '/settings/tools/memory' },
   basic: { key: 'basic', label: '基础设置', icon: 'lucide:settings-2', path: '/settings/basic' },
-  speech: { key: 'speech', label: '语音服务', icon: 'lucide:mic', path: '/settings/speech' },
   logger: { key: 'logger', label: '运行日志', icon: 'lucide:file-text', path: '/settings/logger' }
 };
 

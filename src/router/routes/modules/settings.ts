@@ -98,12 +98,6 @@ const routes: AppRouteRecordRaw[] = [
         meta: { title: '基础设置' }
       },
       {
-        path: 'speech',
-        name: 'speech',
-        component: () => import('@/views/settings/speech/index.vue'),
-        meta: { title: '语音组件' }
-      },
-      {
         path: 'logger',
         name: 'logger',
         component: () => import('@/views/settings/logger/index.vue'),

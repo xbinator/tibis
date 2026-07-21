@@ -24,13 +24,6 @@
     "shell:pty:packaged-smoke": "node ./scripts/shell/pty-packaged-smoke.mjs",
     "postinstall": "electron-rebuild --only better-sqlite3,node-pty",
     "test": "cross-env HOST=127.0.0.1 vitest run",
-    "speech:dev:prepare": "node ./scripts/speech/dev-runtime.mjs prepare",
-    "speech:dev:serve": "node ./scripts/speech/dev-runtime.mjs serve",
-    "speech:dev:start": "concurrently -k \"pnpm run speech:dev:serve\" \"cross-env TIBIS_SPEECH_RUNTIME_MANIFEST_URL=http://127.0.0.1:8787/manifest.json pnpm dev\"",
-    "speech:manifest:fill": "node ./scripts/speech/manifest-tool.mjs fill",
-    "speech:manifest:hash": "node ./scripts/speech/manifest-tool.mjs hash",
-    "speech:manifest:localize": "node ./scripts/speech/manifest-tool.mjs localize",
-    "speech:manifest:validate": "node ./scripts/speech/manifest-tool.mjs validate",
     "lint": "eslint src --ext .vue,.ts,.tsx,.js,.jsx,.mts --fix",
     "lint:style": "stylelint 'src/**/*.{vue,less,css}' --fix"
   },
