@@ -256,7 +256,7 @@ registerShortcut({
   max-width: 100%;
   height: 32px;
   padding: 0 6px 0 8px;
-  background: var(--bg-tertiary);
+  background: var(--bg-primary);
   border: 1px solid var(--border-secondary);
   border-radius: 8px;
   box-shadow: var(--shadow-sm);
