@@ -29,7 +29,7 @@ const veloraLight: ThemeTokens = {
     tertiary: '#f3f6fa',
     elevated: '#ffffff',
     hover: 'rgb(31 41 55 / 8%)',
-    active: 'rgb(31 41 55 / 12%)',
+    active: 'rgb(31 41 55 / 8%)',
     selected: 'rgb(24 144 255 / 12%)',
     input: '#ffffff',
     disabled: '#f1f5f9'
