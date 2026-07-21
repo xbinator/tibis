@@ -69,7 +69,7 @@ vi.mock('@/components/BChat/index.vue', () => ({
 vi.mock('@/components/BChat/components/SessionHistory.vue', () => ({
   default: {
     name: 'SessionHistory',
-    props: ['activeSessionId', 'busySessionIds', 'disabled', 'currentSession'],
+    props: ['activeSessionId', 'disabled', 'currentSession'],
     emits: ['switch-session', 'delete-session', 'update:currentSession'],
     setup(_props: unknown, { expose }: { expose: (exposed: { refreshSessions: () => Promise<void> }) => void }) {
       expose({
@@ -209,26 +209,10 @@ describe('ChatSider', (): void => {
     expect(wrapper.text()).toContain('最近会话');
   });
 
-  it('toggles expanded state from the header button', async (): Promise<void> => {
+  it('closes the sidebar from the close button', async (): Promise<void> => {
     chatStoreMock.getSessions.mockResolvedValue(createSessionPage([]));
     const settingStore = useSettingStore();
     settingStore.setSidebarVisible(true);
-    const wrapper = mountChatSider();
-    await flushPromises();
-    await nextTick();
-
-    const expandButton = wrapper.findAllComponents({ name: 'BButton' }).find((button) => button.props('tooltip') === '展开聊天侧栏');
-    await expandButton?.trigger('click');
-
-    expect(settingStore.chatSidebarExpanded).toBe(true);
-    expect(wrapper.find('.b-panel-splitter').classes()).toContain('chat-sider--expanded');
-  });
-
-  it('closes sidebar and clears expanded state', async (): Promise<void> => {
-    chatStoreMock.getSessions.mockResolvedValue(createSessionPage([]));
-    const settingStore = useSettingStore();
-    settingStore.setSidebarVisible(true);
-    settingStore.setChatSidebarExpanded(true);
     const wrapper = mountChatSider();
     await flushPromises();
     await nextTick();
@@ -240,7 +224,6 @@ describe('ChatSider', (): void => {
     await closeButton?.trigger('click');
 
     expect(settingStore.sidebarVisible).toBe(false);
-    expect(settingStore.chatSidebarExpanded).toBe(false);
   });
 
   it('syncs internally created sessions and refreshes session history', async (): Promise<void> => {
@@ -368,7 +351,9 @@ describe('ChatSider', (): void => {
     expect(wrapper.findAllComponents({ name: 'BButton' })[0].attributes('disabled')).toBeDefined();
     expect(wrapper.findAllComponents({ name: 'BButton' })[0].props('tooltip')).toBeUndefined();
     expect(wrapper.find('.session-history-stub').attributes('disabled')).toBeDefined();
-    const openButton = wrapper.findAllComponents({ name: 'BButton' }).find((button) => button.props('tooltip') === '在聊天页中打开');
+    const openButton = wrapper
+      .findAllComponents({ name: 'BButton' })
+      .find((button) => button.findComponent({ name: 'BIcon' }).attributes('icon') === 'lucide:maximize');
     expect(openButton?.attributes('disabled')).toBeDefined();
   });
 
@@ -381,8 +366,10 @@ describe('ChatSider', (): void => {
     const wrapper = mountChatSider();
     await flushPromises();
 
-    const openButton = wrapper.findAllComponents({ name: 'BButton' }).find((button) => button.props('tooltip') === '在聊天页中打开');
-    expect(openButton?.findComponent({ name: 'BIcon' }).attributes('icon')).toBe('lucide:panel-top-open');
+    const openButton = wrapper
+      .findAllComponents({ name: 'BButton' })
+      .find((button) => button.findComponent({ name: 'BIcon' }).attributes('icon') === 'lucide:maximize');
+    expect(openButton?.findComponent({ name: 'BIcon' }).attributes('icon')).toBe('lucide:maximize');
     await openButton?.trigger('click');
     await flushPromises();
 
@@ -399,7 +386,9 @@ describe('ChatSider', (): void => {
     const wrapper = mountChatSider();
     await flushPromises();
 
-    const openButton = wrapper.findAllComponents({ name: 'BButton' }).find((button) => button.props('tooltip') === '在聊天页中打开');
+    const openButton = wrapper
+      .findAllComponents({ name: 'BButton' })
+      .find((button) => button.findComponent({ name: 'BIcon' }).attributes('icon') === 'lucide:maximize');
     await openButton?.trigger('click');
     await flushPromises();
 
@@ -418,7 +407,9 @@ describe('ChatSider', (): void => {
     const wrapper = mountChatSider();
     await flushPromises();
 
-    const openButton = wrapper.findAllComponents({ name: 'BButton' }).find((button) => button.props('tooltip') === '在聊天页中打开');
+    const openButton = wrapper
+      .findAllComponents({ name: 'BButton' })
+      .find((button) => button.findComponent({ name: 'BIcon' }).attributes('icon') === 'lucide:maximize');
     await openButton?.trigger('click');
     await flushPromises();
 
@@ -436,7 +427,9 @@ describe('ChatSider', (): void => {
     const wrapper = mountChatSider();
     await flushPromises();
 
-    const openButton = wrapper.findAllComponents({ name: 'BButton' }).find((button) => button.props('tooltip') === '在聊天页中打开');
+    const openButton = wrapper
+      .findAllComponents({ name: 'BButton' })
+      .find((button) => button.findComponent({ name: 'BIcon' }).attributes('icon') === 'lucide:maximize');
     await openButton?.trigger('click');
     await flushPromises();
 
@@ -541,20 +534,5 @@ describe('ChatSider', (): void => {
 
     expect(tabsStore.tabs.map((tab) => tab.id)).toEqual(['welcome']);
     expect(routerPushMock).toHaveBeenCalledWith('/welcome');
-  });
-
-  it('passes running and waiting owner sessions to the history delete policy', async (): Promise<void> => {
-    chatStoreMock.getSessions.mockResolvedValue(createSessionPage([]));
-    const runtimeStore = useChatTabRuntimeStore();
-    runtimeStore.ensureTab('chat:session-a', 'session-a');
-    runtimeStore.ensureTab('chat:session-b', 'session-b');
-    runtimeStore.ensureTab('chat:session-c', 'session-c');
-    runtimeStore.setStatus('chat:session-a', 'running');
-    runtimeStore.setStatus('chat:session-b', 'waiting');
-    runtimeStore.setStatus('chat:session-c', 'error');
-    const wrapper = mountChatSider();
-    await flushPromises();
-
-    expect(wrapper.findComponent({ name: 'SessionHistory' }).props('busySessionIds')).toEqual(['session-a', 'session-b']);
   });
 });

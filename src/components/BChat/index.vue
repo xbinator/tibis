@@ -100,7 +100,7 @@ import TodoPanel from './components/TodoPanel.vue';
 import { useChatComposer } from './hooks/useChatComposer';
 import { useChatServiceConfig } from './hooks/useChatServiceConfig';
 import { useChatSessionActor } from './hooks/useChatSessionActor';
-import { useChatSessionLifecycle } from './hooks/useChatSessionLifecycle';
+import { useChatSessionRuntime } from './hooks/useChatSessionRuntime';
 import { useChatWorkflow } from './hooks/useChatWorkflow';
 import { useInteractionState } from './hooks/useInteractionState';
 import { useRuntimeBridgeHandler } from './hooks/useRuntimeBridgeHandler';
@@ -188,8 +188,8 @@ const branchingMessageId = ref<string>();
 const confirmationController = createChatConfirmationController();
 /** 提供给早期初始化回调的工作流忙碌镜像。 */
 const workflowLoading = ref<boolean>(false);
-/** 会话 ID、历史消息与自动命名生命周期。 */
-const sessionLifecycle = useChatSessionLifecycle({
+/** 会话 ID、历史消息与自动命名运行时态。 */
+const sessionRuntime = useChatSessionRuntime({
   sessionId: toRef(props, 'sessionId'),
   disposeConfirmation: confirmationController.dispose,
   focusInput,
@@ -207,7 +207,7 @@ const {
   handleLoadHistory,
   captureAutoNameSnapshot,
   scheduleAutoName
-} = sessionLifecycle;
+} = sessionRuntime;
 /** 应用级 Chat Actor system。 */
 const chatActorSystem = useActorSystem();
 /** Workflow 创建前收到的待重放 Session UI 事件。 */

@@ -6,8 +6,6 @@
   <BPanelSplitter
     v-show="settingStore.sidebarVisible"
     v-model:size="settingStore.sidebarWidth"
-    :class="bem({ expanded: isSidebarExpanded })"
-    :disabled="isSidebarExpanded"
     position="left"
     :min-width="340"
     max-width="40%"
@@ -33,23 +31,12 @@
           ref="sessionHistoryRef"
           v-model:current-session="currentSession"
           :active-session-id="settingStore.chatSidebarActiveSessionId"
-          :busy-session-ids="busySessionIds"
           :disabled="isSessionActionDisabled"
           @switch-session="handleSwitchSession"
           @delete-session="handleDeletedSession"
         />
-        <BButton
-          square
-          size="small"
-          :tooltip="isSidebarExpanded ? '退出展开' : '展开聊天侧栏'"
-          :type="isSidebarExpanded ? 'secondary' : 'text'"
-          @click="toggleSidebarExpanded"
-        >
+        <BButton square size="small" type="text" :disabled="isSessionActionDisabled" @click="openChatPage">
           <BIcon icon="lucide:maximize" :size="16" />
-        </BButton>
-
-        <BButton square size="small" type="text" tooltip="在聊天页中打开" :disabled="isSessionActionDisabled" @click="openChatPage">
-          <BIcon icon="lucide:panel-top-open" :size="16" />
         </BButton>
 
         <div :class="bem('divider')"></div>
@@ -65,7 +52,6 @@
         @session-created="handleSessionCreated"
         @session-title-persisted="handleSessionTitlePersisted"
         @loading-change="handleChatLoadingChange"
-        @navigate-to-provider="handleNavigateToProvider"
       />
     </div>
   </BPanelSplitter>
@@ -73,7 +59,7 @@
 
 <script setup lang="ts">
 import type { ChatSession } from 'types/chat';
-import { computed, defineAsyncComponent, onUnmounted, reactive, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Input as AInput } from 'ant-design-vue';
 import BButton from '@/components/BButton/index.vue';
@@ -82,8 +68,7 @@ import { vFocus } from '@/directives/focus';
 import { isBlockingNavigationFailure } from '@/router/navigation';
 import { createChatPath } from '@/router/routes/helpers/chatRouteTab';
 import { useChatSessionStore } from '@/stores/chat/session';
-import type { ChatTabRuntimeRecord } from '@/stores/chat/tabRuntime';
-import { isActiveRuntimeStatus, useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
+import { useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
 import { useSettingStore } from '@/stores/ui/setting';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import { asyncTo } from '@/utils/asyncTo';
@@ -129,19 +114,10 @@ const {
 const sessionHistoryRef = ref<InstanceType<typeof SessionHistory>>();
 /** BChat 组件实例引用，用于调用聚焦输入框等方法。 */
 const bChatRef = ref<InstanceType<typeof BChat>>();
-/** 聊天侧栏是否处于放大覆盖状态。 */
-const isSidebarExpanded = computed<boolean>(() => settingStore.chatSidebarExpanded);
 /** 当前标题。 */
 const currentTitle = computed<string>(() => currentSession.value?.title || '新会话');
 /** 是否禁用会话切换、新会话和删除操作。 */
 const isSessionActionDisabled = computed<boolean>(() => chatLoading.value || sessionLoading.value);
-/** 顶部聊天标签中仍在运行或等待用户的会话 ID。 */
-const busySessionIds = computed<string[]>((): string[] =>
-  Object.values(runtimeStore.records).reduce<string[]>((sessionIds: string[], record: ChatTabRuntimeRecord): string[] => {
-    if (record.sessionId && isActiveRuntimeStatus(record.status)) sessionIds.push(record.sessionId);
-    return sessionIds;
-  }, [])
-);
 
 /**
  * 双击当前标题后进入编辑态，聚焦与全选交给 v-focus 统一处理。
@@ -177,18 +153,10 @@ async function finishTitleEdit(): Promise<void> {
 }
 
 /**
- * 切换聊天侧栏放大状态。
- */
-function toggleSidebarExpanded(): void {
-  settingStore.toggleChatSidebarExpanded();
-}
-
-/**
  * 关闭聊天侧栏。
  */
 function handleClose(): void {
   settingStore.setSidebarVisible(false);
-  settingStore.setChatSidebarExpanded(false);
 }
 
 /**
@@ -279,43 +247,9 @@ async function handleSessionTitlePersisted(sessionId: string, title: string): Pr
 function handleChatLoadingChange(loading: boolean): void {
   chatLoading.value = loading;
 }
-
-/**
- * 处理导航到配置页事件，展开状态下先关闭侧栏。
- */
-function handleNavigateToProvider(): void {
-  if (isSidebarExpanded.value) {
-    settingStore.setChatSidebarExpanded(false);
-  }
-}
-
-watch(
-  () => settingStore.sidebarVisible,
-  (visible) => {
-    if (!visible) {
-      settingStore.setChatSidebarExpanded(false);
-    }
-  }
-);
-
-onUnmounted(() => {
-  settingStore.setChatSidebarExpanded(false);
-});
 </script>
 
 <style lang="less">
-.chat-sider--expanded {
-  position: absolute;
-  inset: 0;
-  z-index: 10;
-  width: 100%;
-  height: 100%;
-}
-
-.chat-sider--expanded .b-panel-splitter__section {
-  width: 100% !important;
-}
-
 .chat-sider__content {
   display: flex;
   flex-shrink: 0;

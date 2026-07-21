@@ -23,7 +23,7 @@
                   <span class="session-history__item-title">{{ session.title }}</span>
                 </span>
                 <span class="session-history__actions">
-                  <BButton type="text" square danger size="small" :disabled="busySessionIdSet.has(session.id)" @click.stop="handleDeleteSession(session.id)">
+                  <BButton type="text" square danger size="small" :disabled="activeRuntimeIds.has(session.id)" @click.stop="handleDeleteSession(session.id)">
                     <BIcon icon="lucide:trash-2" :size="14" />
                   </BButton>
                 </span>
@@ -49,10 +49,11 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useInfiniteScroll } from '@vueuse/core';
 import { message } from 'ant-design-vue';
 import dayjs from 'dayjs';
-import { groupBy, map } from 'lodash-es';
+import { filter, groupBy, map } from 'lodash-es';
 import BButton from '@/components/BButton/index.vue';
 import BDropdown from '@/components/BDropdown/index.vue';
 import { useChatSessionStore } from '@/stores/chat/session';
+import { isActiveRuntimeStatus, useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
 import { asyncTo } from '@/utils/asyncTo';
 
 /**
@@ -64,9 +65,6 @@ interface Props {
 
   /** 是否禁用历史会话操作 */
   disabled?: boolean;
-
-  /** 当前禁止删除的忙碌会话 ID。 */
-  busySessionIds?: string[];
 }
 
 /**
@@ -88,12 +86,13 @@ const PAGE_SIZE = 20;
 
 const props = withDefaults(defineProps<Props>(), {
   activeSessionId: null,
-  disabled: false,
-  busySessionIds: () => []
+  disabled: false
 });
 
 const open = ref(false);
 const chatStore = useChatSessionStore();
+/** 聊天标签运行时态存储，用于判断每个会话是否处于运行/等待等忙碌状态。 */
+const runtimeStore = useChatTabRuntimeStore();
 
 /** 已加载的会话列表（增量累加） */
 const displayedSessions = ref<ChatSession[]>([]);
@@ -123,8 +122,14 @@ const currentSession = computed<ChatSession | undefined>(() => {
 });
 
 const isDisabled = computed(() => props.disabled);
-/** 忙碌会话 ID 集合，用于常量时间判断删除状态。 */
-const busySessionIdSet = computed<Set<string>>((): Set<string> => new Set(props.busySessionIds));
+/** 忙碌会话 ID 集合：从聊天标签运行时态直接推导，供删除按钮判断是否禁用。 */
+const activeRuntimeIds = computed<Set<string>>((): Set<string> => {
+  const busyRecords = filter(Object.values(runtimeStore.records), (record) => record.sessionId && isActiveRuntimeStatus(record.status));
+
+  const busyIds = map(busyRecords, 'sessionId');
+
+  return new Set(busyIds);
+});
 
 /**
  * 加载会话数据
@@ -261,7 +266,7 @@ function handleSwitchSession(sessionId: string): void {
 async function handleDeleteSession(sessionId: string): Promise<void> {
   if (props.disabled) return;
   if (loading.value) return;
-  if (busySessionIdSet.value.has(sessionId)) return;
+  if (activeRuntimeIds.value.has(sessionId)) return;
 
   loading.value = true;
   const [error] = await asyncTo(chatStore.deleteSession(sessionId));

@@ -154,13 +154,13 @@ describe('HeaderTabs chat status', (): void => {
 
     const wrapper = mountTabs();
 
-    const runningStatus = wrapper.find('[data-tab-id="chat:running"] [data-chat-status="running"]');
+    const runningStatus = wrapper.find('[data-tab-id="chat:running"] .header-tab__status');
     expect(runningStatus.find('[data-icon]').attributes('data-icon')).toBe('lucide:loader-circle');
     expect(runningStatus.classes()).toContain('is-spinning');
-    expect(wrapper.find('[data-tab-id="chat:waiting"] [data-chat-status="waiting"] [data-icon]').attributes('data-icon')).toBe('lucide:circle-alert');
-    expect(wrapper.find('[data-tab-id="chat:error"] [data-chat-status="error"] [data-icon]').attributes('data-icon')).toBe('lucide:circle-x');
-    expect(wrapper.find('[data-tab-id="chat:completed"] [data-chat-status="completed"]').exists()).toBe(true);
-    expect(wrapper.find('[data-tab-id="welcome"] [data-chat-status]').exists()).toBe(false);
+    expect(wrapper.find('[data-tab-id="chat:waiting"] .header-tab__status [data-icon]').attributes('data-icon')).toBe('lucide:circle-alert');
+    expect(wrapper.find('[data-tab-id="chat:error"] .header-tab__status [data-icon]').attributes('data-icon')).toBe('lucide:circle-x');
+    expect(wrapper.find('[data-tab-id="chat:completed"] .header-tab__status').exists()).toBe(true);
+    expect(wrapper.find('[data-tab-id="welcome"] .header-tab__status').exists()).toBe(false);
   });
 
   it('clears a completed marker when its chat tab is active', (): void => {

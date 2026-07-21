@@ -1,6 +1,6 @@
 /**
- * @file useChatSessionLifecycle.ts
- * @description 管理 BChat 草稿会话、历史加载、会话切换与自动命名生命周期。
+ * @file useChatSessionRuntime.ts
+ * @description 管理 BChat 草稿会话、历史加载、会话切换与自动命名运行时态。
  */
 import type { Message } from '../utils/types';
 import type { ChatSession } from 'types/chat';
@@ -11,9 +11,9 @@ import { useAutoName } from './useAutoName';
 import { useChatHistory } from './useChatHistory';
 
 /**
- * Chat Session 生命周期依赖项。
+ * Chat Session 运行时态依赖项。
  */
-interface UseChatSessionLifecycleOptions {
+interface UseChatSessionRuntimeOptions {
   /** 父级指定的会话 ID */
   sessionId: Ref<string | null>;
   /** 释放当前确认请求 */
@@ -29,9 +29,9 @@ interface UseChatSessionLifecycleOptions {
 }
 
 /**
- * Chat Session 生命周期返回值。
+ * Chat Session 运行时态返回值。
  */
-interface UseChatSessionLifecycleReturn extends ReturnType<typeof useChatHistory> {
+interface UseChatSessionRuntimeReturn extends ReturnType<typeof useChatHistory> {
   /** 当前实际运行会话 ID */
   activeSessionId: ComputedRef<string | null>;
   /** BChat 为草稿创建的会话 ID */
@@ -51,11 +51,11 @@ interface UseChatSessionLifecycleReturn extends ReturnType<typeof useChatHistory
 }
 
 /**
- * 管理当前 BChat 的会话生命周期。
+ * 管理当前 BChat 的会话运行时态。
  * @param options - 会话切换与 UI 回调
  * @returns 会话 ID、历史消息和自动命名能力
  */
-export function useChatSessionLifecycle(options: UseChatSessionLifecycleOptions): UseChatSessionLifecycleReturn {
+export function useChatSessionRuntime(options: UseChatSessionRuntimeOptions): UseChatSessionRuntimeReturn {
   const chatStore = useChatSessionStore();
   const createdSessionId = ref<string | null>(null);
   const autoNameSession = ref<{ id: string; title: string }>();

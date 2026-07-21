@@ -14,36 +14,15 @@
     @drag-end="handleDragEnded"
   >
     <template #default="{ item, dragging }">
-      <Dropdown
-        :key="item.id"
-        :open="openContextTabId === item.id"
-        :trigger="['contextmenu']"
-        placement="bottomLeft"
-        @open-change="handleContextMenuOpenChange(item.id, $event)"
-      >
-        <div :data-tab-id="item.id" class="header-tab" :class="getTabClassName(item, dragging)" @click="handleClickTab(item.path)">
-          <div class="header-tab__title">
-            <span v-if="tabsStore.isDirty(item.id)" class="header-tab__dirty-mark">*</span>
-            <ChatTabStatus :status="getChatStatus(item)" />
-            <BRecentIcon
-              class="header-tab__icon"
-              :record="resolveTabIconRecentRecord(item)"
-              :file-name="resolveTabIconFileName(item)"
-              :icon="resolveTabIcon(item)"
-              :size="14"
-            />
-            <span class="header-tab__title-text">{{ item.title }}</span>
-          </div>
-
-          <button class="header-tab__close" @pointerdown.stop @click.stop="handleCloseButton(item)">
-            <Icon icon="ic:round-close" width="12" height="12" />
-          </button>
-        </div>
-
-        <template #overlay>
-          <BDropdownMenu :value="''" :width="200" :options="getContextMenuOptions(item)" row-class="header-tab__menu-item" />
-        </template>
-      </Dropdown>
+      <HeaderTab
+        :tab="item"
+        :dragging="dragging"
+        :context-menu-open="openContextTabId === item.id"
+        @click="handleClickTab(item.path)"
+        @close="handleCloseButton(item)"
+        @context-menu-open-change="handleContextMenuOpenChange"
+        @context-menu-close="resetContextMenuState"
+      />
     </template>
   </BDraggable>
 </template>
@@ -56,26 +35,20 @@
 
 import { computed, onMounted, onUnmounted, shallowRef, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Icon } from '@iconify/vue';
-import { Dropdown } from 'ant-design-vue';
 import type { BDraggableMoveEvent } from '@/components/BDraggable/types';
-import type { DropdownOption } from '@/components/BDropdown/type';
-import ChatTabStatus from '@/layouts/default/components/ChatTabStatus.vue';
+import HeaderTab from '@/layouts/default/components/HeaderTab.vue';
 import { useTabCloseGuard } from '@/layouts/default/hooks/useTabCloseGuard';
 import { getHeaderTabsWheelScrollDelta } from '@/layouts/default/utils/headerTabsScroll';
 import { createChatTabId, isChatTab } from '@/router/routes/helpers/chatRouteTab';
 import { isMac } from '@/shared/platform/env';
-import type { RecentRecord } from '@/shared/storage';
-import type { ChatTabRuntimeStatus } from '@/stores/chat/tabRuntime';
 import { useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
 import type { ChatSessionTitlePayload } from '@/stores/helpers/events';
 import { storeEvents } from '@/stores/helpers/events';
 import { useSettingStore } from '@/stores/ui/setting';
 import { useRecentStore } from '@/stores/workspace/recent';
 import { useTabsStore } from '@/stores/workspace/tabs';
-import type { Tab, TabCloseAction, TabClosePlan } from '@/stores/workspace/tabs';
+import type { Tab } from '@/stores/workspace/tabs';
 import { asyncTo } from '@/utils/asyncTo';
-import { WEB_RECORD_ICON } from '@/utils/file/icons';
 
 const tabsStore = useTabsStore();
 const recentStore = useRecentStore();
@@ -85,11 +58,6 @@ const { canClose } = useTabCloseGuard();
 const route = useRoute();
 const router = useRouter();
 const CONTEXT_MENU_CLOSE_DELAY_MS = 200;
-
-/**
- * WebView 最近记录。
- */
-type WebviewRecentRecord = Extract<RecentRecord, { type: 'webview' }>;
 
 /** 拖拽结束后最近一次的时间戳，用于抑制拖后误点击 */
 const lastDragEndedAt = shallowRef(0);
@@ -107,8 +75,8 @@ let contextMenuCloseTimer: number | null = null;
 /** 全局聊天标题事件取消订阅函数。 */
 let unsubscribeChatTitle: (() => void) | undefined;
 
-/** 当前可见标签；聊天放大态下保持标签栏内容为空。 */
-const visibleTabs = computed<Tab[]>((): Tab[] => (settingStore.chatSidebarExpanded ? [] : tabsStore.tabs));
+/** 当前可见标签，直接消费 store 列表。 */
+const visibleTabs = computed<Tab[]>(() => tabsStore.tabs);
 
 /**
  * 拖拽排序回调：将 BDraggable 的排序结果传递给 store。
@@ -124,18 +92,6 @@ function handleDraggableMove(event: BDraggableMoveEvent<Tab>): void {
 function handleDragEnded(): void {
   lastDragEndedAt.value = Date.now();
 }
-
-/** 最近记录 ID 到记录的索引，用于文件标签直接按 tab id 命中。 */
-const recentRecordsById = computed<Map<string, RecentRecord>>(() => new Map((recentStore.recentRecords ?? []).map((record) => [record.id, record])));
-
-/** WebView URL 到记录的索引，用于从路由路径恢复 favicon。 */
-const webviewRecordsByUrl = computed<Map<string, WebviewRecentRecord>>(() => {
-  const entries = (recentStore.recentRecords ?? [])
-    .filter((record): record is WebviewRecentRecord => record.type === 'webview')
-    .map((record) => [record.url, record] as const);
-
-  return new Map(entries);
-});
 
 /**
  * 清理右键菜单关闭冷却计时器。
@@ -155,17 +111,6 @@ onUnmounted(() => {
 });
 
 /**
- * 读取聊天标签的可视运行状态。
- * @param tab - 当前标签
- * @returns 聊天状态；普通标签或 idle 返回 null
- */
-function getChatStatus(tab: Tab): ChatTabRuntimeStatus | null {
-  if (!isChatTab(tab)) return null;
-  const status = runtimeStore.getStatus(tab.id);
-  return status === 'idle' ? null : status;
-}
-
-/**
  * 将自动命名结果同步到当前会话的真实拥有者标签。
  * @param payload - 会话标题事件
  */
@@ -175,163 +120,12 @@ function handleChatTitleUpdated(payload: ChatSessionTitlePayload): void {
 }
 
 /**
- * 组件挂载后加载最近记录，让标签栏可复用 WebView favicon 和文件记录元数据。
+ * 组件挂载后加载最近记录，并订阅聊天标题更新事件。
  */
 onMounted((): void => {
   asyncTo(recentStore.ensureLoaded());
   unsubscribeChatTitle = storeEvents.onChatSessionTitleUpdated(handleChatTitleUpdated);
 });
-
-/**
- * 判断标签页是否为当前激活状态。
- * @param tab - 待判断的标签页
- * @returns 是否与当前路由匹配
- */
-function isActiveTab(tab: Pick<Tab, 'path'>): boolean {
-  return tab.path === route.fullPath;
-}
-
-/**
- * 生成标签页样式状态。
- * @param tab - 当前渲染的标签页
- * @param dragging - 当前标签是否正在被 BDraggable 拖拽
- * @returns 标签页样式映射
- */
-function getTabClassName(tab: Tab, dragging = false): Record<string, boolean> {
-  return {
-    'is-active': isActiveTab(tab),
-    'is-missing': tabsStore.isMissing(tab.id),
-    'is-dragging': dragging
-  };
-}
-
-/**
- * 判断标签页路径是否来自 WebView 路由。
- * @param path - 标签页路由路径
- * @returns 是否为 WebView 标签页
- */
-function isWebviewTabPath(path: string): boolean {
-  return path.startsWith('/webview/');
-}
-
-/**
- * 安全解码路由 query 字段，保留无法解码的原始值。
- * @param value - query 字段值
- * @returns 解码后的字段值
- */
-function decodeRouteQueryValue(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
-
-/**
- * 从 WebView 标签页路径中解析原始 URL。
- * @param path - 标签页路由路径
- * @returns WebView URL，非 WebView 标签或缺失 URL 时返回空字符串
- */
-function resolveWebviewUrlFromTabPath(path: string): string {
-  if (!isWebviewTabPath(path)) {
-    return '';
-  }
-
-  const queryStartIndex = path.indexOf('?');
-  if (queryStartIndex === -1) {
-    return '';
-  }
-
-  const query = path.slice(queryStartIndex + 1);
-  const url = new URLSearchParams(query).get('url') ?? '';
-
-  return url ? decodeRouteQueryValue(url).trim() : '';
-}
-
-/**
- * 解析标签页对应的最近记录。
- * @param tab - 标签页
- * @returns 匹配的最近记录，未命中时返回 undefined
- */
-function resolveTabRecentRecord(tab: Tab): RecentRecord | undefined {
-  const record = recentRecordsById.value.get(tab.id);
-  if (record) {
-    return record;
-  }
-
-  const webviewUrl = resolveWebviewUrlFromTabPath(tab.path);
-  if (!webviewUrl) {
-    return undefined;
-  }
-
-  return webviewRecordsByUrl.value.get(webviewUrl);
-}
-
-/**
- * 解析标签页配置的显式图标。
- * @param tab - 标签页
- * @returns Iconify 图标名，未配置时返回空字符串
- */
-function resolveConfiguredTabIcon(tab: Tab): string {
-  return tab.icon?.trim() ?? '';
-}
-
-/**
- * 解析图标组件可使用的最近记录；显式配置图标时不再传入记录，避免 favicon 覆盖配置图标。
- * @param tab - 标签页
- * @returns 匹配的最近记录，未命中或已有配置图标时返回 undefined
- */
-function resolveTabIconRecentRecord(tab: Tab): RecentRecord | undefined {
-  if (resolveConfiguredTabIcon(tab)) {
-    return undefined;
-  }
-
-  return resolveTabRecentRecord(tab);
-}
-
-/**
- * 解析标签页图标组件的文件名入参。
- * @param tab - 标签页
- * @returns 用于文件图标推断的文件名
- */
-function resolveTabIconFileName(tab: Tab): string {
-  if (resolveConfiguredTabIcon(tab)) {
-    return '';
-  }
-
-  if (resolveTabRecentRecord(tab) || isWebviewTabPath(tab.path)) {
-    return '';
-  }
-
-  return tab.title;
-}
-
-/**
- * 解析标签页图标组件的显式回退图标。
- * @param tab - 标签页
- * @returns Iconify 图标名，无需显式回退时返回空字符串
- */
-function resolveTabFallbackIcon(tab: Tab): string {
-  if (isWebviewTabPath(tab.path) && !resolveTabRecentRecord(tab)) {
-    return WEB_RECORD_ICON;
-  }
-
-  return '';
-}
-
-/**
- * 解析传给图标组件的显式图标，配置图标优先于默认回退图标。
- * @param tab - 标签页
- * @returns Iconify 图标名，未命中时返回空字符串
- */
-function resolveTabIcon(tab: Tab): string {
-  const configuredIcon = resolveConfiguredTabIcon(tab);
-  if (configuredIcon) {
-    return configuredIcon;
-  }
-
-  return resolveTabFallbackIcon(tab);
-}
 
 /** 当前激活的标签页 */
 const activeTab = computed(() => tabsStore.tabs.find((tab) => tab.path === route.fullPath));
@@ -347,18 +141,6 @@ watch(
     }
   },
   { immediate: true }
-);
-
-/**
- * 监听路由变化，离开当前路由上下文时退出聊天放大态。
- */
-watch(
-  () => route.fullPath,
-  () => {
-    if (settingStore.chatSidebarExpanded) {
-      settingStore.setChatSidebarExpanded(false);
-    }
-  }
 );
 
 watch(
@@ -433,66 +215,6 @@ function handleContextMenuOpenChange(tabId: string, nextOpen: boolean): void {
 }
 
 /**
- * 根据当前路由推导激活标签 ID。
- * @returns 当前激活标签 ID，不存在时返回 null
- */
-function getActiveTabId(): string | null {
-  return tabsStore.tabs.find((tab) => tab.path === route.fullPath)?.id ?? null;
-}
-
-/**
- * 为某个锚点标签批量生成右键菜单所需的关闭计划。
- * @param tabId - 锚点标签 ID
- * @returns 各动作对应的关闭计划
- */
-function getContextClosePlans(tabId: string): Record<TabCloseAction, TabClosePlan> {
-  const activeTabId = getActiveTabId();
-
-  return {
-    close: tabsStore.getClosePlan('close', { anchorTabId: tabId, activeTabId }),
-    closeOthers: tabsStore.getClosePlan('closeOthers', { anchorTabId: tabId, activeTabId }),
-    closeRight: tabsStore.getClosePlan('closeRight', { anchorTabId: tabId, activeTabId }),
-    closeSaved: tabsStore.getClosePlan('closeSaved', { activeTabId }),
-    closeAll: tabsStore.getClosePlan('closeAll', { activeTabId })
-  };
-}
-
-/**
- * 执行关闭计划，按需确认并处理导航。
- * @param plan - 待执行的关闭计划
- */
-async function executeClosePlan(plan: TabClosePlan): Promise<void> {
-  resetContextMenuState();
-  if (!(await canClose(plan))) return;
-
-  tabsStore.applyClosePlan(plan);
-  plan.targetTabIds.filter((tabId: string): boolean => tabId.startsWith('chat:')).forEach((tabId: string): void => runtimeStore.removeTab(tabId));
-
-  if (!plan.requiresNavigation) {
-    return;
-  }
-
-  await router.push(plan.nextActivePath ?? '/welcome');
-}
-
-/**
- * 构建某个标签的右键菜单项。
- * @param tab - 当前标签页
- * @returns 下拉菜单选项
- */
-function getContextMenuOptions(tab: Tab): DropdownOption[] {
-  const plans = getContextClosePlans(tab.id);
-
-  return [
-    { value: 'close', label: '关闭', disabled: plans.close.disabled, onClick: () => executeClosePlan(plans.close) },
-    { value: 'closeOthers', label: '关闭其他', disabled: plans.closeOthers.disabled, onClick: () => executeClosePlan(plans.closeOthers) },
-    { value: 'closeRight', label: '关闭右侧', disabled: plans.closeRight.disabled, onClick: () => executeClosePlan(plans.closeRight) },
-    { value: 'closeSaved', label: '关闭已保存', disabled: plans.closeSaved.disabled, onClick: () => executeClosePlan(plans.closeSaved) },
-    { value: 'closeAll', label: '全部关闭', disabled: plans.closeAll.disabled, onClick: () => executeClosePlan(plans.closeAll) }
-  ];
-}
-
-/**
  * 点击标签页时切换路由。
  * @param path - 目标路由路径
  */
@@ -512,13 +234,20 @@ async function handleClickTab(path: string): Promise<void> {
  * @param tab - 待关闭的标签页
  */
 async function handleCloseButton(tab: Tab): Promise<void> {
+  const activeTabId = tabsStore.tabs.find((t) => t.path === route.fullPath)?.id ?? null;
   const plan = tabsStore.getClosePlan('close', {
     anchorTabId: tab.id,
-    activeTabId: getActiveTabId(),
+    activeTabId,
     allowCloseLastTab: true
   });
 
-  await executeClosePlan(plan);
+  if (!(await canClose(plan))) return;
+
+  tabsStore.applyClosePlan(plan);
+  plan.targetTabIds.filter((tabId: string): boolean => tabId.startsWith('chat:')).forEach((tabId: string): void => runtimeStore.removeTab(tabId));
+
+  if (!plan.requiresNavigation) return;
+  await router.push(plan.nextActivePath ?? '/welcome');
 }
 
 /**
@@ -583,134 +312,5 @@ function handleWheel(event: WheelEvent): void {
   top: 4px;
   bottom: 4px;
   background: var(--color-primary);
-}
-
-.header-tab {
-  position: relative;
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  height: 28px;
-  padding: 0 4px 0 10px;
-  cursor: pointer;
-  background: transparent;
-  border-radius: 6px;
-  transition: background 0.2s, opacity 0.2s;
-
-  /* Ensure tabs themselves are clickable (not draggable) */
-  -webkit-app-region: no-drag;
-
-  &:hover {
-    background: var(--bg-hover);
-  }
-
-  &.is-active {
-    font-weight: 500;
-    background: var(--bg-active, var(--bg-hover));
-  }
-
-  &.is-dragging {
-    opacity: 0.55;
-  }
-
-  &.is-missing .header-tab__title {
-    color: var(--error-color, #ff4d4f);
-  }
-
-  &.is-missing .header-tab__title-text {
-    text-decoration-line: line-through;
-    text-decoration-thickness: 1px;
-  }
-}
-
-.header-tab__title {
-  display: flex;
-  flex-shrink: 1;
-  align-items: center;
-  min-width: 0;
-  max-width: 150px;
-  font-size: 13px;
-  color: var(--text-primary);
-  user-select: none;
-}
-
-.header-tab__dirty-mark {
-  flex-shrink: 0;
-  margin-right: 2px;
-  font-weight: 700;
-}
-
-.header-tab__chat-status {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  margin-right: 4px;
-}
-
-.header-tab__chat-status.is-spinning {
-  animation: header-tab-chat-spin 1s linear infinite;
-}
-
-.header-tab__chat-status--waiting {
-  color: var(--warning-color, #fa8c16);
-}
-
-.header-tab__chat-status--error {
-  color: var(--error-color, #ff4d4f);
-}
-
-.header-tab__chat-status--completed {
-  width: 7px;
-  height: 7px;
-  background: var(--color-primary);
-  border-radius: 50%;
-}
-
-.header-tab__icon {
-  margin-right: 6px;
-}
-
-.header-tab__title-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.header-tab__close {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  margin-left: 4px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
-  opacity: 0;
-  transition: all 0.2s;
-
-  &:hover {
-    color: var(--text-primary);
-    background: var(--bg-hover-secondary, rgb(0 0 0 / 10%));
-  }
-}
-
-.header-tab:hover .header-tab__close,
-.header-tab.is-active .header-tab__close {
-  opacity: 1;
-}
-
-:deep(.dark) .header-tab__close:hover {
-  background: rgb(255 255 255 / 10%);
-}
-
-@keyframes header-tab-chat-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 </style>

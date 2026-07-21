@@ -4,9 +4,11 @@
  * @vitest-environment jsdom
  */
 import type { ChatSession, PaginatedSessionsResult } from 'types/chat';
+import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import SessionHistory from '@/components/BChat/components/SessionHistory.vue';
+import { useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
 
 const chatStoreMock = vi.hoisted(() => ({
   getSessions: vi.fn<() => Promise<PaginatedSessionsResult>>(),
@@ -46,12 +48,10 @@ function createSession(id: string): ChatSession {
 
 /**
  * 挂载会话历史。
- * @param busySessionIds - 禁止删除的忙碌会话 ID
  * @returns 组件包装器
  */
-function mountHistory(busySessionIds: string[] = []): ReturnType<typeof mount> {
+function mountHistory(): ReturnType<typeof mount> {
   return mount(SessionHistory, {
-    props: { busySessionIds },
     global: {
       stubs: {
         BDropdown: {
@@ -70,6 +70,7 @@ function mountHistory(busySessionIds: string[] = []): ReturnType<typeof mount> {
 
 describe('SessionHistory busy deletion', (): void => {
   beforeEach((): void => {
+    setActivePinia(createPinia());
     chatStoreMock.getSessions.mockReset();
     chatStoreMock.deleteSession.mockReset();
     chatStoreMock.getSessions.mockResolvedValue({ items: [createSession('session-a')], hasMore: false });
@@ -78,7 +79,10 @@ describe('SessionHistory busy deletion', (): void => {
   });
 
   it('disables deletion while the session is busy', async (): Promise<void> => {
-    const wrapper = mountHistory(['session-a']);
+    const runtimeStore = useChatTabRuntimeStore();
+    runtimeStore.ensureTab('chat:session-a', 'session-a');
+    runtimeStore.setStatus('chat:session-a', 'running');
+    const wrapper = mountHistory();
     await flushPromises();
 
     const deleteButton = wrapper.find('.session-history__actions button');
@@ -87,6 +91,35 @@ describe('SessionHistory busy deletion', (): void => {
     await flushPromises();
 
     expect(chatStoreMock.deleteSession).not.toHaveBeenCalled();
+  });
+
+  it('enables deletion when the runtime record is removed', async (): Promise<void> => {
+    const runtimeStore = useChatTabRuntimeStore();
+    runtimeStore.ensureTab('chat:session-a', 'session-a');
+    runtimeStore.setStatus('chat:session-a', 'running');
+    const wrapper = mountHistory();
+    await flushPromises();
+    runtimeStore.removeTab('chat:session-a');
+    await flushPromises();
+
+    const deleteButton = wrapper.find('.session-history__actions button');
+    expect(deleteButton.attributes('disabled')).toBeUndefined();
+    await deleteButton.trigger('click');
+    await flushPromises();
+
+    expect(chatStoreMock.deleteSession).toHaveBeenCalledWith('session-a');
+    expect(wrapper.emitted('delete-session')).toEqual([['session-a']]);
+  });
+
+  it('treats waiting status as busy', async (): Promise<void> => {
+    const runtimeStore = useChatTabRuntimeStore();
+    runtimeStore.ensureTab('chat:session-a', 'session-a');
+    runtimeStore.setStatus('chat:session-a', 'waiting');
+    const wrapper = mountHistory();
+    await flushPromises();
+
+    const deleteButton = wrapper.find('.session-history__actions button');
+    expect(deleteButton.attributes('disabled')).toBeDefined();
   });
 
   it('deletes and emits when the session is idle', async (): Promise<void> => {
