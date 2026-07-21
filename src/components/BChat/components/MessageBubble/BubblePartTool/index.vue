@@ -318,7 +318,7 @@ const shellResultData = computed<Record<string, unknown> | null>(() => {
 /** Shell 命令输入；优先使用工具输入，持久化输入缺失时回退结果 metadata。 */
 const shellCommandContent = computed<string>(() => {
   if (isPlainObject(props.part.input)) {
-    const inputCommand = props.part.input.command;
+    const inputCommand = (props.part.input as Record<string, unknown>).command;
     if (typeof inputCommand === 'string' && inputCommand.length > 0) return inputCommand;
   }
 
@@ -501,12 +501,6 @@ const questionOtherText = computed(() => {
   line-height: 1.5;
   background: var(--color-fill-tertiary, rgb(0 0 0 / 3%));
   border-radius: 4px;
-}
-
-.bubble-part-tool__shell-command {
-  display: flex;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
 }
 
 .bubble-part-tool__shell-output {
