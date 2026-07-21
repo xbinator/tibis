@@ -1,4 +1,4 @@
 interface:
-  display_name: "Developing Widget"
-  short_description: "Create complete, validated Tibis Widget packages"
-  default_prompt: "Use $developing-widget to create a complete Tibis Widget directory from my requirements."
+  display_name: "Tibis Widget 开发"
+  short_description: "创建、校验并安装完整的 Tibis Widget 包目录"
+  default_prompt: "使用 $developing-widget 根据我的需求创建完整的 Tibis Widget 目录。"

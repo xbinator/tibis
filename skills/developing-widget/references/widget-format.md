@@ -1,20 +1,20 @@
-# Widget Format Reference
+# Widget 格式参考
 
-Use this reference for package layout, `widget.json`, schemas, import limits, and validation.
+使用本参考确认包目录结构、`widget.json`、schema、导入限制和校验规则。
 
-## Contents
+## 目录
 
-- [Package Layout](#package-layout)
-- [Install Location](#install-location)
-- [Top-Level WidgetData](#top-level-widgetdata)
+- [包目录结构](#包目录结构)
+- [安装位置](#安装位置)
+- [顶层 WidgetData](#顶层-widgetdata)
 - [Schemas](#schemas)
 - [Execute](#execute)
 - [Metadata](#metadata)
-- [Validation](#validation)
+- [校验](#校验)
 
-## Package Layout
+## 包目录结构
 
-A generated Widget package should be a directory:
+生成的 Widget 包应该是一个目录：
 
 ```text
 my-widget/
@@ -23,28 +23,32 @@ my-widget/
     optional-file.png
 ```
 
-The local scanner discovers Widgets under `~/.tibis/widgets/<directory>/widget.json`; the directory name acts as the stable local Widget ID. Do not install there unless the user asks.
+本地扫描器只会发现 `~/.tibis/widgets/<widget-id>/widget.json` 下的 Widget；目录名会作为稳定的本地 Widget ID。除非用户明确要求安装，否则不要写入该扫描目录。
 
-The importer accepts either a single JSON file or a ZIP package whose root contains `widget.json`. ZIP packages are limited to 50 non-directory files and each resource outside `widget.json` is limited to 5 MiB. Paths must stay inside the package.
+导入器接受单个 JSON 文件，或根目录包含 `widget.json` 的 ZIP 包。ZIP 包最多包含 50 个非目录文件，`widget.json` 之外的每个资源文件最大 5 MiB。所有路径都必须留在包目录内部。
 
-## Install Location
+## 安装位置
 
-When the user asks the agent to install or persist a widget, the runtime install path is the parent of the package, **not** the package itself. The plural `widgets/` segment is mandatory — the scanner only watches that subdirectory of `.tibis/`.
+当用户要求安装或持久化 Widget 时，运行时扫描根目录是 `~/.tibis/widgets/`。路径中的复数目录段 `widgets/` 是强制要求，扫描器只监听 `.tibis/` 下的这个子目录。
 
-- Correct: `~/.tibis/widgets/<id>/widget.json`
-- Wrong: `~/.tibis/<id>/widget.json` (missing the `widgets/` segment)
-- Wrong: `~/.tibis/widget/<id>/widget.json` (singular `widget`)
+唯一正确的安装文件路径：
 
-Rules:
+```text
+~/.tibis/widgets/<widget-id>/widget.json
+```
 
-- `<id>` is the stable local Widget ID and must match the directory name. Allowed characters are `[a-z0-9_-]`; mixed case, spaces and slashes will be rejected by the installer's path safety check.
-- The agent should write `widget.json` and any imported resources into `<id>/`, not directly into `.tibis/`.
-- Writing the file to any path that is not under `.tibis/widgets/` means the widget will not be picked up by the scanner and will not appear in the Widget settings page.
-- When the user has not explicitly asked to install, generate a package directory somewhere else (for example the current workspace) and let the user import it as JSON or ZIP. The Settings → Widgets page provides a “创建小组件” button that calls the official installer with `reject` conflict strategy.
+规则：
 
-This rule exists because the scanner root is hard-coded; any widget stored outside that root is invisible to the app.
+- `<widget-id>` 是创建弹窗里的“小组件标识”，也是 `WidgetDefinition.id`，必须与目录名一致。它不是 `widget.json.name` 显示名；只有当 `name` 本身已符合 `[a-z0-9_-]` 时，才可以让标识与名称相同。
+- `<widget-id>` 允许字符为 `[a-z0-9_-]`；大小写混用、空格和斜杠会被安装器的路径安全检查拒绝。
+- 必须把 `widget.json` 和导入资源写入 `<widget-id>/` 目录中，不要直接写入 `.tibis/`。
+- 写入前检查最终路径：它必须位于 `.tibis/widgets/` 扫描根目录下，并且文件名必须是 `widget.json`。
+- 不要在计划、输出或脚本中复述错误完整路径；只使用上面的唯一正确路径。
+- 如果用户没有明确要求安装，应在其他位置生成 Widget 包目录（例如当前 workspace），让用户以 JSON 或 ZIP 方式导入。设置页的 Widgets 区域提供“创建小组件”按钮，会使用 `reject` 冲突策略调用官方安装器。
 
-## Top-Level WidgetData
+这条规则存在是因为扫描根目录是硬编码的；任何不在该根目录下的 Widget 都对应用不可见。
+
+## 顶层 WidgetData
 
 `widget.json` must contain one JSON object with this shape:
 
