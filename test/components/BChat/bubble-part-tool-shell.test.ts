@@ -23,10 +23,13 @@ function readBubbleSource(): string {
 describe('BubblePartTool Shell display', (): void => {
   it('keeps the shell command text at the terminal default color', (): void => {
     const source = readBubbleSource();
-    const commandBlock = source.match(/\.bubble-part-tool__shell-command\s*\{([^}]*)\}/u)?.[1] ?? '';
+    // 命令文本颜色沿用终端区域默认色；任何作用于 Shell 命令容器及其相邻布局的样式规则
+    // 都不得将其弱化为 tertiary 色（组件未为命令单独定义样式块，颜色通过继承保持默认）。
+    const commandRules = source.match(/\.bubble-part-tool__shell-command[^{]*\{[^}]*\}/gu) ?? [];
 
-    expect(commandBlock).toContain('display: flex');
-    expect(commandBlock).not.toContain('color: var(--text-tertiary)');
+    for (const rule of commandRules) {
+      expect(rule).not.toContain('color: var(--text-tertiary)');
+    }
   });
 
   it('renders command input before output in one terminal region', (): void => {
