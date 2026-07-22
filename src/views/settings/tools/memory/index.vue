@@ -18,7 +18,7 @@
 
     <SettingsSection title="记忆内容">
       <template #extra>
-        <BButton size="small" icon="lucide:pencil" @click="startEdit">编辑</BButton>
+        <BButton size="small" @click="startEdit">编辑</BButton>
       </template>
 
       <div v-if="loading" class="memory-settings__loading">正在加载记忆...</div>

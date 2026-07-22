@@ -18,7 +18,9 @@
     />
     <div :class="name" @click="handleContainerClick">
       <div :class="bem('container')">
-        <div ref="editorHostRef" :class="bem('codemirror')"></div>
+        <BScrollbar :class="bem('scrollbar')" :max-height="resolvedMaxHeight">
+          <div ref="editorHostRef" :class="bem('codemirror')"></div>
+        </BScrollbar>
         <VariableSelect
           :visible="triggerVisible"
           :variables="filteredVariables"
@@ -224,12 +226,13 @@ const keymapExtension = useEditorKeymap({
 
 /**
  * 创建 CodeMirror 主题扩展
+ * @param isEmpty - 编辑器内容是否为空
+ * @returns CodeMirror 主题扩展
  */
-function createThemeExtension(height: string | undefined, isEmpty: boolean): Extension {
+function createThemeExtension(isEmpty: boolean): Extension {
   return EditorView.theme({
     '.cm-scroller': {
-      maxHeight: height ?? 'none',
-      overflow: 'auto',
+      overflow: 'visible',
       fontFamily: 'inherit',
       fontSize: '14px',
       lineHeight: '1.6'
@@ -341,7 +344,7 @@ function createExtensions(): Extension[] {
     EditorView.atomicRanges.of((editorView) => getChipAtomicDecorations(editorView.state)),
     editableCompartment.of(EditorView.editable.of(!props.disabled)),
     readOnlyCompartment.of(EditorState.readOnly.of(props.disabled)),
-    themeCompartment.of(createThemeExtension(resolvedMaxHeight.value, editorIsEmpty.value)),
+    themeCompartment.of(createThemeExtension(editorIsEmpty.value)),
     keymapExtension
   ];
 
@@ -466,21 +469,12 @@ watch(
   }
 );
 
-// 监听 maxHeight 变化
-watch(resolvedMaxHeight, (h) => {
-  if (!instance.value) return;
-
-  instance.value.dispatch({
-    effects: themeCompartment.reconfigure(createThemeExtension(h, editorIsEmpty.value))
-  });
-});
-
 // 监听 editorIsEmpty 变化
 watch(editorIsEmpty, (isEmpty) => {
   if (!instance.value) return;
 
   instance.value.dispatch({
-    effects: themeCompartment.reconfigure(createThemeExtension(resolvedMaxHeight.value, isEmpty))
+    effects: themeCompartment.reconfigure(createThemeExtension(isEmpty))
   });
 });
 
@@ -597,6 +591,10 @@ defineExpose<BSmartEditorExpose>({
   position: relative;
   width: 100%;
   height: 100%;
+}
+
+.b-smart-editor__scrollbar {
+  min-height: 80px;
 }
 
 .b-smart-editor__codemirror {
