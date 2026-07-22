@@ -27,6 +27,7 @@ const routeFailureMock = vi.hoisted(() => ({ type: 'aborted' }));
 const abortRuntimeMock = vi.hoisted(() => vi.fn<() => Promise<void>>());
 const resetDraftMock = vi.hoisted(() => vi.fn<() => Promise<void>>());
 const ensureSessionsMock = vi.hoisted(() => vi.fn<() => Promise<void>>());
+const findSessionMock = vi.hoisted(() => vi.fn<(sessionId: string | null | undefined) => ChatSession | undefined>());
 const messageErrorMock = vi.hoisted(() => vi.fn());
 
 vi.mock('ant-design-vue', () => ({
@@ -45,8 +46,9 @@ vi.mock('@/router/navigation', () => ({
 }));
 
 vi.mock('@/stores/chat/session', () => ({
-  useChatSessionStore: (): { ensureSessions: typeof ensureSessionsMock } => ({
-    ensureSessions: ensureSessionsMock
+  useChatSessionStore: (): { ensureSessions: typeof ensureSessionsMock; findSession: typeof findSessionMock } => ({
+    ensureSessions: ensureSessionsMock,
+    findSession: findSessionMock
   })
 }));
 
@@ -117,6 +119,7 @@ describe('chat page', (): void => {
     resetDraftMock.mockResolvedValue();
     ensureSessionsMock.mockReset();
     ensureSessionsMock.mockResolvedValue();
+    findSessionMock.mockReset();
     messageErrorMock.mockReset();
   });
 
@@ -164,6 +167,17 @@ describe('chat page', (): void => {
     mountPage('session-a');
 
     expect(tabsStore.tabs[0]?.status).toBe('loading');
+  });
+
+  it('syncs the persisted session title to the owning chat tab', async (): Promise<void> => {
+    const tabsStore = useTabsStore();
+    tabsStore.tabs = [{ id: 'chat:session-a', path: '/chat/session-a', title: '聊天', cacheKey: 'chat:session-a' }];
+    findSessionMock.mockReturnValue(createSession('session-a', '会话 A'));
+
+    mountPage('session-a');
+    await flushPromises();
+
+    expect(tabsStore.tabs[0]?.title).toBe('会话 A');
   });
 
   it('binds a draft session immediately but promotes only after runtime becomes idle', async (): Promise<void> => {

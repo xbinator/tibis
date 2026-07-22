@@ -77,10 +77,36 @@ function isTabActive(tabId: string): boolean {
 }
 /** 当前组件拥有的聊天标签是否处于活动路由。 */
 const ownerActive = computed<boolean>((): boolean => isTabActive(ownerTabId.value));
+/** 当前持久化会话标题。 */
+const initialSessionTitle = computed<string>((): string => {
+  if (!initialSessionId) return '';
+
+  return chatStore.findSession(initialSessionId)?.title.trim() ?? '';
+});
 
 /** 标记当前活动聊天已被用户查看。 */
 function markCurrentViewed(): void {
   if (ownerActive.value) runtimeStore.markViewed(ownerTabId.value);
+}
+
+/**
+ * 同步当前持久化会话标题到聊天页标签。
+ */
+function syncInitialSessionTitle(): void {
+  if (!initialSessionId) return;
+
+  const title = initialSessionTitle.value;
+  if (!title) return;
+
+  tabsStore.updateTabTitle({ id: ownerTabId.value, title });
+}
+
+/**
+ * 确保共享会话集合完成加载，并在加载后补齐当前标签标题。
+ */
+async function ensureSharedSessions(): Promise<void> {
+  const [error] = await asyncTo(chatStore.ensureSessions());
+  if (!error) syncInitialSessionTitle();
 }
 
 /**
@@ -183,11 +209,15 @@ function handleProviderNavigate(): void {
 }
 
 watch(() => route.fullPath, markCurrentViewed, { immediate: true });
-onActivated(markCurrentViewed);
+watch(initialSessionTitle, syncInitialSessionTitle, { immediate: true });
+onActivated((): void => {
+  markCurrentViewed();
+  syncInitialSessionTitle();
+});
 
 onMounted((): void => {
   runtimeStore.registerController(ownerTabId.value, runtimeController);
-  asyncTo(chatStore.ensureSessions());
+  asyncTo(ensureSharedSessions());
 });
 
 onUnmounted((): void => {

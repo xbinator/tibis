@@ -23,6 +23,7 @@
           @keydown.enter.prevent="finishTitleEdit"
         />
         <div v-else :class="[bem('title'), 'truncate']" title="双击修改标题" @dblclick="startTitleEdit">{{ currentTitle }}</div>
+        <!--  -->
         <BButton square size="small" type="text" :disabled="isSessionActionDisabled" @click="handleCreateDraftSession">
           <BIcon icon="lucide:message-circle-plus" :size="16" />
         </BButton>
@@ -34,6 +35,7 @@
           @delete-session="handleDeletedSession"
           @load-more="loadMoreSessions"
         />
+        <!--  -->
         <BButton square size="small" type="text" :disabled="isSessionActionDisabled" @click="openChatPage">
           <BIcon icon="lucide:square-arrow-out-up-right" :size="16" />
         </BButton>
