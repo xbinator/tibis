@@ -191,6 +191,27 @@ const conversationViewMockState = vi.hoisted(() => ({
   scrollToBottom: vi.fn<() => void>()
 }));
 
+/** 可手动完成的测试 Promise。 */
+interface DeferredPromise<T> {
+  /** 被测试代码等待的 Promise。 */
+  promise: Promise<T>;
+  /** 手动完成 Promise 的回调。 */
+  resolve: (value: T | PromiseLike<T>) => void;
+}
+
+/**
+ * 创建可手动完成的测试 Promise。
+ * @returns Deferred Promise 控制器
+ */
+function createDeferred<T>(): DeferredPromise<T> {
+  let resolveDeferred: DeferredPromise<T>['resolve'] = (): void => undefined;
+  const promise = new Promise<T>((resolve): void => {
+    resolveDeferred = resolve;
+  });
+
+  return { promise, resolve: resolveDeferred };
+}
+
 vi.mock('vue-router', () => ({
   useRouter: vi.fn(() => ({
     push: vi.fn()
@@ -1880,6 +1901,30 @@ describe('BChat sessionId runtime', (): void => {
     expect(chatStoreMock.setSessionMessages).toHaveBeenCalledWith('session-active', []);
     expect(electronAPIMock.chatRuntimeAbort.mock.invocationCallOrder[0]).toBeLessThan(chatStoreMock.setSessionMessages.mock.invocationCallOrder[0]);
     expect(wrapper.findComponent(BSmartEditorStub).props('value')).toBe('原始任务');
+  });
+
+  it('keeps local rollback out of published Runtime running status', async (): Promise<void> => {
+    const userMessage = { ...createMessage('user-idle-rollback', '原始任务'), finished: true };
+    const assistantMessage = createAssistantMessage({ id: 'assistant-idle-rollback' });
+    const persistDeferred = createDeferred<void>();
+    chatStoreMock.getSessionMessages.mockResolvedValueOnce([userMessage, assistantMessage]).mockResolvedValueOnce([]);
+    chatStoreMock.setSessionMessages.mockReturnValueOnce(persistDeferred.promise);
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+    const emittedBeforeRollback = wrapper.emitted('runtime-status-change')?.length ?? 0;
+    const conversationView = wrapper.findComponent(ConversationViewStub);
+
+    conversationView.vm.$emit('rollback', userMessage);
+    await wrapper.vm.$nextTick();
+
+    const emittedDuringRollback = wrapper.emitted('runtime-status-change')?.slice(emittedBeforeRollback) ?? [];
+    expect(conversationView.props('loading')).toBe(true);
+    expect(emittedDuringRollback).not.toContainEqual([{ status: 'running' }]);
+
+    persistDeferred.resolve(undefined);
+    await flushPromises();
+
+    expect(conversationView.props('loading')).toBe(false);
   });
 
   it('ignores duplicate branch events while the request is pending', async (): Promise<void> => {

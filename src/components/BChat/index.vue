@@ -407,8 +407,11 @@ const {
   cancel: handleCancel,
   rollback: handleRollback
 } = workflow;
+/** 本地消息回退只用于锁住当前交互，不应映射为顶部标签的 Runtime 加载态。 */
+const rollbackBusy = computed<boolean>((): boolean => chatSessionActor.snapshot.value?.matches('rollingBack') === true);
 /** 页面标签使用的稳定运行状态投影。 */
 const runtimeStatus = computed<BChatRuntimeSourceStatus>((): BChatRuntimeSourceStatus => {
+  if (rollbackBusy.value) return 'idle';
   if (chatSessionActor.waitingForUser.value) return 'waiting';
   if (loading.value) return 'running';
   if (chatSessionActor.snapshot.value?.context.error) return 'error';
