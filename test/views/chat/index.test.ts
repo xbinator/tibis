@@ -153,6 +153,19 @@ describe('chat page', (): void => {
     expect(wrapper.findComponent({ name: 'BChat' }).props('sessionId')).toBe('session-a');
   });
 
+  it('restores an existing runtime status when a background page is created', (): void => {
+    routerMocks.route.path = '/welcome';
+    routerMocks.route.fullPath = '/welcome';
+    const runtimeStore = useChatTabRuntimeStore();
+    const tabsStore = useTabsStore();
+    runtimeStore.setStatus('chat:session-a', 'running');
+    tabsStore.tabs = [{ id: 'chat:session-a', path: '/chat/session-a', title: '会话 A', cacheKey: 'chat:session-a' }];
+
+    mountPage('session-a');
+
+    expect(tabsStore.tabs[0]?.status).toBe('loading');
+  });
+
   it('binds a draft session immediately but promotes only after runtime becomes idle', async (): Promise<void> => {
     const tabsStore = useTabsStore();
     const runtimeStore = useChatTabRuntimeStore();

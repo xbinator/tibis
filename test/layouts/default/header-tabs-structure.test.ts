@@ -46,4 +46,10 @@ describe('HeaderTabs drag region structure', (): void => {
     expect(getStyleBlock(headerTabsSource, '.header-tabs :deep(.header-tabs__item)')).toContain('margin-right: 4px;');
     expect(getStyleBlock(headerTabSource, '.header-tab')).not.toContain('margin-right: 4px;');
   });
+
+  it('does not access the chat runtime store', (): void => {
+    expect(headerTabsSource).not.toContain('useChatTabRuntimeStore');
+    expect(headerTabsSource).not.toContain('ChatTabRuntimeStatus');
+    expect(headerTabsSource).not.toContain('resolveTabStatus');
+  });
 });

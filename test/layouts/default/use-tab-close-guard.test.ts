@@ -1,6 +1,7 @@
 /**
  * @file use-tab-close-guard.test.ts
  * @description 顶部标签关闭前置确认与聊天 Runtime 终止测试。
+ * @vitest-environment jsdom
  */
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -46,6 +47,7 @@ function createPlan(overrides: Partial<TabClosePlan> = {}): TabClosePlan {
 
 describe('useTabCloseGuard', (): void => {
   beforeEach((): void => {
+    localStorage.clear();
     setActivePinia(createPinia());
     modalConfirmMock.mockReset();
     modalConfirmMock.mockResolvedValue([false, true]);
@@ -77,9 +79,7 @@ describe('useTabCloseGuard', (): void => {
     runtimeStore.setStatus('chat:session-a', 'running');
     runtimeStore.setStatus('chat:session-b', 'waiting');
 
-    await expect(
-      useTabCloseGuard().canClose(createPlan({ action: 'closeAll', targetTabIds: ['chat:session-a', 'chat:session-b'] }))
-    ).resolves.toBe(true);
+    await expect(useTabCloseGuard().canClose(createPlan({ action: 'closeAll', targetTabIds: ['chat:session-a', 'chat:session-b'] }))).resolves.toBe(true);
     expect(modalConfirmMock).toHaveBeenCalledTimes(1);
     expect(abortA).toHaveBeenCalledOnce();
     expect(abortB).toHaveBeenCalledOnce();
@@ -110,5 +110,16 @@ describe('useTabCloseGuard', (): void => {
 
     await expect(useTabCloseGuard().canClose(createPlan({ requiresConfirm: true, dirtyTabIds: ['editor-a'] }))).resolves.toBe(false);
     expect(modalConfirmMock).toHaveBeenCalledWith('关闭标签', '当前标签有未保存更改，确认关闭吗？');
+  });
+
+  it('cleans runtime records after tabs have closed', (): void => {
+    const runtimeStore = useChatTabRuntimeStore();
+    runtimeStore.ensureTab('chat:session-a', 'session-a');
+    runtimeStore.registerController('chat:session-a', { abort: vi.fn<() => Promise<void>>().mockResolvedValue() });
+
+    useTabCloseGuard().cleanupClosedTabs(['chat:session-a', 'editor-a']);
+
+    expect(runtimeStore.records['chat:session-a']).toBeUndefined();
+    expect(runtimeStore.controllers.has('chat:session-a')).toBe(false);
   });
 });

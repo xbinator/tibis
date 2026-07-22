@@ -111,44 +111,30 @@ describe('HeaderTabs chat status', (): void => {
   it('renders running, waiting, error and completed chat states', (): void => {
     const tabsStore = useTabsStore();
     tabsStore.tabs = [
-      createTab('chat:running', '/chat/running'),
-      createTab('chat:waiting', '/chat/waiting'),
-      createTab('chat:error', '/chat/error'),
-      createTab('chat:completed', '/chat/completed'),
+      { ...createTab('chat:running', '/chat/running'), status: 'loading' },
+      { ...createTab('chat:waiting', '/chat/waiting'), status: 'attention' },
+      { ...createTab('chat:error', '/chat/error'), status: 'error' },
+      { ...createTab('chat:completed', '/chat/completed'), status: 'completed' },
       createTab('welcome', '/welcome')
     ];
-    const runtimeStore = useChatTabRuntimeStore();
-    runtimeStore.setStatus('chat:running', 'running');
-    runtimeStore.setStatus('chat:waiting', 'waiting');
-    runtimeStore.setStatus('chat:error', 'error');
-    runtimeStore.markCompleted('chat:completed', false);
 
     const wrapper = mountTabs();
 
     const runningStatus = wrapper.find('[data-tab-id="chat:running"] .header-tab__status');
     expect(runningStatus.find('[data-icon]').attributes('data-icon')).toBe('lucide:loader-circle');
     expect(runningStatus.classes()).toContain('is-spinning');
-    expect(wrapper.find('[data-tab-id="chat:waiting"] .header-tab__status [data-icon]').attributes('data-icon')).toBe('lucide:circle-alert');
+    const waitingStatus = wrapper.find('[data-tab-id="chat:waiting"] .header-tab__status');
+    expect(waitingStatus.find('[data-icon]').attributes('data-icon')).toBe('lucide:circle-alert');
+    expect(waitingStatus.classes()).toContain('header-tab__status--attention');
+    expect(waitingStatus.classes()).not.toContain('header-tab__status--waiting');
     expect(wrapper.find('[data-tab-id="chat:error"] .header-tab__status [data-icon]').attributes('data-icon')).toBe('lucide:circle-x');
     expect(wrapper.find('[data-tab-id="chat:completed"] .header-tab__status').exists()).toBe(true);
     expect(wrapper.find('[data-tab-id="welcome"] .header-tab__status').exists()).toBe(false);
   });
 
-  it('clears a completed marker when its chat tab is active', (): void => {
-    routeMock.fullPath = '/chat/session-a';
-    useTabsStore().tabs = [createTab('chat:session-a', '/chat/session-a')];
-    const runtimeStore = useChatTabRuntimeStore();
-    runtimeStore.markCompleted('chat:session-a', false);
-
-    mountTabs();
-
-    expect(runtimeStore.getStatus('chat:session-a')).toBe('idle');
-  });
-
-  it('updates the persisted or draft owner title from the global title event', async (): Promise<void> => {
+  it('updates a persisted chat title from the global title event', async (): Promise<void> => {
     const tabsStore = useTabsStore();
-    tabsStore.tabs = [createTab('chat:new', '/chat')];
-    useChatTabRuntimeStore().ensureTab('chat:new', 'session-a');
+    tabsStore.tabs = [createTab('chat:session-a', '/chat/session-a')];
     const wrapper = mountTabs();
 
     storeEvents.emitChatSessionTitleUpdated('session-a', '新的标题');
@@ -173,6 +159,8 @@ describe('HeaderTabs chat status', (): void => {
     expect(modalConfirmMock).toHaveBeenCalledTimes(1);
     expect(abort).toHaveBeenCalledTimes(1);
     expect(tabsStore.tabs).toEqual([]);
+    expect(runtimeStore.records['chat:session-a']).toBeUndefined();
+    expect(runtimeStore.controllers.has('chat:session-a')).toBe(false);
   });
 
   it('keeps a running chat when close is cancelled or abort fails', async (): Promise<void> => {

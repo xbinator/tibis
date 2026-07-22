@@ -14,6 +14,8 @@ import { Modal } from '@/utils/modal';
 interface TabCloseGuardApi {
   /** 检查并完成关闭前置确认。 */
   canClose: (plan: TabClosePlan) => Promise<boolean>;
+  /** 清理已关闭聊天标签的 Runtime。 */
+  cleanupClosedTabs: (tabIds: string[]) => void;
 }
 
 /**
@@ -79,5 +81,13 @@ export function useTabCloseGuard(): TabCloseGuardApi {
     return confirmDirtyClose(plan);
   }
 
-  return { canClose };
+  /**
+   * 清理已关闭聊天标签的 Runtime 记录和控制器。
+   * @param tabIds - 已关闭的标签 ID
+   */
+  function cleanupClosedTabs(tabIds: string[]): void {
+    tabIds.filter((tabId: string): boolean => tabId.startsWith('chat:')).forEach((tabId: string): void => runtimeStore.removeTab(tabId));
+  }
+
+  return { canClose, cleanupClosedTabs };
 }

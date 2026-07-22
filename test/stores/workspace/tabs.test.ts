@@ -1,11 +1,12 @@
 /**
  * @file tabs.test.ts
- * @description 工作区标签原位替换行为测试。
+ * @description 工作区标签原位替换与瞬时视觉状态测试。
  * @vitest-environment jsdom
  */
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { Tab } from '@/stores/workspace/tabs';
+import { local } from '@/shared/storage/base';
+import type { Tab, TabsState } from '@/stores/workspace/tabs';
 import { useTabsStore } from '@/stores/workspace/tabs';
 
 /**
@@ -74,5 +75,61 @@ describe('tabs store replacement', (): void => {
 
     expect(store.replaceTab({ sourceId: 'chat:new', tab: createTab('chat:session-a', '/chat/session-a') })).toBe(false);
     expect(store.tabs.map((tab) => tab.id)).toEqual(['other']);
+  });
+
+  it('creates isolated default state for each store instance', (): void => {
+    const firstStore = useTabsStore();
+    firstStore.tabs.push(createTab('first'));
+    firstStore.dirtyById.first = true;
+    localStorage.clear();
+    setActivePinia(createPinia());
+
+    const secondStore = useTabsStore();
+
+    expect(secondStore.tabs).toEqual([]);
+    expect(secondStore.dirtyById).toEqual({});
+  });
+
+  it('keeps transient status in memory without persisting it', (): void => {
+    const store = useTabsStore();
+    store.addTab(createTab('chat:session-a', '/chat/session-a'));
+
+    store.setTabStatus('chat:session-a', 'loading');
+    store.addTab(createTab('chat:session-a', '/chat/session-a'));
+
+    expect(store.tabs[0]?.status).toBe('loading');
+    store.updateTabTitle({ id: 'chat:session-a', title: 'A' });
+    expect(local.getItem<TabsState>('app_tabs')?.tabs[0]).not.toHaveProperty('status');
+  });
+
+  it('keeps an explicitly supplied status when adding a new tab', (): void => {
+    const store = useTabsStore();
+
+    store.addTab({ ...createTab('chat:session-a', '/chat/session-a'), status: 'loading' });
+
+    expect(store.tabs[0]?.status).toBe('loading');
+    expect(local.getItem<TabsState>('app_tabs')?.tabs[0]).not.toHaveProperty('status');
+  });
+
+  it('migrates transient status when replacing a tab', (): void => {
+    const store = useTabsStore();
+    store.tabs = [createTab('chat:new', '/chat')];
+    store.setTabStatus('chat:new', 'attention');
+
+    store.replaceTab({ sourceId: 'chat:new', tab: createTab('chat:session-a', '/chat/session-a') });
+
+    expect(store.tabs[0]?.status).toBe('attention');
+  });
+
+  it('prefers an explicitly supplied status when replacing a tab', (): void => {
+    const store = useTabsStore();
+    store.tabs = [{ ...createTab('chat:new', '/chat'), status: 'attention' }];
+
+    store.replaceTab({
+      sourceId: 'chat:new',
+      tab: { ...createTab('chat:session-a', '/chat/session-a'), status: 'error' }
+    });
+
+    expect(store.tabs[0]?.status).toBe('error');
   });
 });

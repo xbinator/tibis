@@ -1,6 +1,6 @@
 <!--
   @file HeaderTab.vue
-  @description 单个标签页渲染组件，包含图标、运行状态指示和关闭按钮。
+  @description 单个标签页渲染组件，包含图标、通用状态指示和关闭按钮。
 -->
 <template>
   <div :data-tab-id="tab.id" class="header-tab" :class="tabClass" @click="emit('click')">
@@ -30,16 +30,14 @@
 <script setup lang="ts">
 /**
  * @file HeaderTab.vue
- * @description 单标签页渲染逻辑：class 状态、图标优先级解析与聊天运行态指示。
+ * @description 单标签页渲染逻辑：class 状态、图标优先级解析与通用状态指示。
  */
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import type { RecentRecord, WebviewRecord } from '@/shared/storage';
-import type { ChatTabRuntimeStatus } from '@/stores/chat/tabRuntime';
-import { useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
 import { useRecentStore } from '@/stores/workspace/recent';
-import type { Tab } from '@/stores/workspace/tabs';
+import type { Tab, TabStatus } from '@/stores/workspace/tabs';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import { WEB_RECORD_ICON } from '@/utils/file/icons';
 
@@ -53,10 +51,10 @@ interface StatusVisual {
   className?: string;
 }
 
-/** 非空闲运行状态的声明式视觉映射。 */
-const STATUS_VISUALS: Partial<Record<ChatTabRuntimeStatus, StatusVisual>> = {
-  running: { icon: 'lucide:loader-circle', className: 'is-spinning' },
-  waiting: { icon: 'lucide:circle-alert', className: 'header-tab__status--waiting' },
+/** 通用标签状态的声明式视觉映射。 */
+const STATUS_VISUALS: Record<TabStatus, StatusVisual> = {
+  loading: { icon: 'lucide:loader-circle', className: 'is-spinning' },
+  attention: { icon: 'lucide:circle-alert', className: 'header-tab__status--attention' },
   error: { icon: 'lucide:circle-x', className: 'header-tab__status--error' },
   completed: { className: 'header-tab__status--completed' }
 };
@@ -69,10 +67,13 @@ interface Props {
   tab: Tab;
   /** 是否处于拖拽中 */
   dragging?: boolean;
+  /** 通用标签视觉状态。 */
+  status?: TabStatus;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  dragging: false
+  dragging: false,
+  status: undefined
 });
 
 const emit = defineEmits<{
@@ -83,7 +84,6 @@ const emit = defineEmits<{
 const route = useRoute();
 const tabsStore = useTabsStore();
 const recentStore = useRecentStore();
-const runtimeStore = useChatTabRuntimeStore();
 
 /** 标签页样式状态映射。 */
 const tabClass = computed<Record<string, boolean>>(() => ({
@@ -92,14 +92,8 @@ const tabClass = computed<Record<string, boolean>>(() => ({
   'is-dragging': props.dragging ?? false
 }));
 
-/** 当前标签非空闲运行状态。 */
-const chatStatus = computed<ChatTabRuntimeStatus | null>(() => {
-  const status = runtimeStore.getStatus(props.tab.id);
-  return status === 'idle' ? null : status;
-});
-
 /** 运行状态对应的视觉配置。 */
-const statusVisual = computed<StatusVisual | undefined>(() => (chatStatus.value ? STATUS_VISUALS[chatStatus.value] : undefined));
+const statusVisual = computed<StatusVisual | undefined>(() => (props.status ? STATUS_VISUALS[props.status] : undefined));
 
 // --------------- 图标解析 ---------------
 
@@ -282,7 +276,7 @@ function resolveTabIcon(tab: Tab): string {
   animation: header-tab-status-spin 1s linear infinite;
 }
 
-.header-tab__status--waiting {
+.header-tab__status--attention {
   color: var(--warning-color, #fa8c16);
 }
 

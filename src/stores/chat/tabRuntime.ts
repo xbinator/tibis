@@ -4,11 +4,31 @@
  */
 import { toRaw } from 'vue';
 import { defineStore } from 'pinia';
+import type { TabStatus } from '@/stores/workspace/tabs';
+import { useTabsStore } from '@/stores/workspace/tabs';
 
 /** BChat 直接发布的运行状态。 */
 export type ChatTabSourceStatus = 'idle' | 'running' | 'waiting' | 'error';
-/** HeaderTabs 使用的聊天标签状态。 */
+/** 聊天 Runtime 的完整状态。 */
 export type ChatTabRuntimeStatus = ChatTabSourceStatus | 'completed';
+
+/** 聊天运行状态到通用标签视觉状态的完整映射。 */
+const TAB_STATUS_MAP: Record<ChatTabRuntimeStatus, TabStatus | undefined> = {
+  idle: undefined,
+  running: 'loading',
+  waiting: 'attention',
+  error: 'error',
+  completed: 'completed'
+};
+
+/**
+ * 将聊天运行状态写入通用标签状态。
+ * @param tabId - 标签 ID
+ * @param status - 聊天运行状态
+ */
+function syncTabStatus(tabId: string, status: ChatTabRuntimeStatus): void {
+  useTabsStore().setTabStatus(tabId, TAB_STATUS_MAP[status]);
+}
 
 /**
  * 判断状态是否仍持有活动 Runtime。
@@ -35,7 +55,7 @@ export interface ChatTabRuntimeRecord {
   tabId: string;
   /** 当前真实会话 ID。 */
   sessionId?: string;
-  /** HeaderTabs 展示状态。 */
+  /** 当前聊天 Runtime 状态。 */
   status: ChatTabRuntimeStatus;
 }
 
@@ -87,6 +107,16 @@ export const useChatTabRuntimeStore = defineStore('chat-tab-runtime', {
       const record = createRuntimeRecord(tabId, sessionId);
       this.records[tabId] = record;
       return record;
+    },
+
+    /**
+     * 将已有 Runtime 状态显式恢复到对应的通用标签。
+     * @param tabId - 标签 ID
+     */
+    syncStatus(tabId: string): void {
+      const record = this.records[tabId];
+      if (!record) return;
+      syncTabStatus(tabId, record.status);
     },
 
     /**
@@ -146,6 +176,7 @@ export const useChatTabRuntimeStore = defineStore('chat-tab-runtime', {
       if (!(record.status === 'completed' && status === 'idle')) {
         record.status = status;
       }
+      syncTabStatus(tabId, record.status);
     },
 
     /**
@@ -156,6 +187,7 @@ export const useChatTabRuntimeStore = defineStore('chat-tab-runtime', {
     markCompleted(tabId: string, active: boolean): void {
       const record = this.ensureTab(tabId);
       record.status = active ? 'idle' : 'completed';
+      syncTabStatus(tabId, record.status);
     },
 
     /**
@@ -164,7 +196,9 @@ export const useChatTabRuntimeStore = defineStore('chat-tab-runtime', {
      */
     markViewed(tabId: string): void {
       const record = this.records[tabId];
-      if (record?.status === 'completed') record.status = 'idle';
+      if (!record) return;
+      if (record.status === 'completed') record.status = 'idle';
+      syncTabStatus(tabId, record.status);
     },
 
     /**
@@ -185,6 +219,8 @@ export const useChatTabRuntimeStore = defineStore('chat-tab-runtime', {
 
       if (sourceController) this.controllers.set(targetTabId, sourceController);
       this.controllers.delete(sourceTabId);
+      useTabsStore().setTabStatus(sourceTabId, undefined);
+      syncTabStatus(targetTabId, sourceRecord.status);
     },
 
     /**
@@ -192,6 +228,7 @@ export const useChatTabRuntimeStore = defineStore('chat-tab-runtime', {
      * @param tabId - 标签 ID
      */
     removeTab(tabId: string): void {
+      useTabsStore().setTabStatus(tabId, undefined);
       delete this.records[tabId];
       this.controllers.delete(tabId);
     },

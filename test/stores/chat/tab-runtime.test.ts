@@ -1,52 +1,127 @@
 /**
  * @file tab-runtime.test.ts
  * @description 聊天标签运行时归属、状态与控制器测试。
+ * @vitest-environment jsdom
  */
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { isActiveRuntimeStatus, useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
+import type { Tab } from '@/stores/workspace/tabs';
+import { useTabsStore } from '@/stores/workspace/tabs';
+
+/**
+ * 创建聊天标签测试数据。
+ * @param id - 标签 ID
+ * @returns 标签数据
+ */
+function createTab(id: string): Tab {
+  return {
+    id,
+    path: id === 'chat:new' ? '/chat' : `/chat/${id.slice('chat:'.length)}`,
+    title: id,
+    cacheKey: id
+  };
+}
 
 describe('chat tab runtime store', (): void => {
   beforeEach((): void => {
+    localStorage.clear();
     setActivePinia(createPinia());
   });
 
   it('promotes draft ownership and controller to the persisted tab', async (): Promise<void> => {
     const store = useChatTabRuntimeStore();
+    const tabsStore = useTabsStore();
     const abort = vi.fn<() => Promise<void>>().mockResolvedValue();
+    tabsStore.tabs = [createTab('chat:new')];
     store.ensureTab('chat:new');
     store.bindSession('chat:new', 'session-a');
     store.setStatus('chat:new', 'running');
     store.registerController('chat:new', { abort });
+    tabsStore.tabs = [createTab('chat:session-a')];
 
     store.promoteTab('chat:new', 'chat:session-a', 'session-a');
 
     expect(store.findOwner('session-a')?.tabId).toBe('chat:session-a');
     expect(store.records['chat:new']).toBeUndefined();
+    expect(tabsStore.tabs[0]?.status).toBe('loading');
     await store.abortTabs(['chat:session-a']);
     expect(abort).toHaveBeenCalledOnce();
   });
 
   it('keeps completed unread until the tab is viewed', (): void => {
     const store = useChatTabRuntimeStore();
+    const tabsStore = useTabsStore();
+    tabsStore.tabs = [createTab('chat:session-a')];
     store.ensureTab('chat:session-a', 'session-a');
     store.setStatus('chat:session-a', 'running');
     store.markCompleted('chat:session-a', false);
     store.setStatus('chat:session-a', 'idle');
 
     expect(store.getStatus('chat:session-a')).toBe('completed');
+    expect(tabsStore.tabs[0]?.status).toBe('completed');
     store.markViewed('chat:session-a');
     expect(store.getStatus('chat:session-a')).toBe('idle');
+    expect(tabsStore.tabs[0]?.status).toBeUndefined();
   });
 
   it('does not mark an active completed tab as unread', (): void => {
     const store = useChatTabRuntimeStore();
+    const tabsStore = useTabsStore();
+    tabsStore.tabs = [createTab('chat:session-a')];
     store.ensureTab('chat:session-a', 'session-a');
     store.setStatus('chat:session-a', 'running');
 
     store.markCompleted('chat:session-a', true);
 
     expect(store.getStatus('chat:session-a')).toBe('idle');
+    expect(tabsStore.tabs[0]?.status).toBeUndefined();
+  });
+
+  it('writes chat runtime states through to generic tab status', (): void => {
+    const tabsStore = useTabsStore();
+    tabsStore.tabs = [createTab('chat:running'), createTab('chat:waiting'), createTab('chat:error'), createTab('chat:completed')];
+    const store = useChatTabRuntimeStore();
+
+    store.setStatus('chat:running', 'running');
+    store.setStatus('chat:waiting', 'waiting');
+    store.setStatus('chat:error', 'error');
+    store.markCompleted('chat:completed', false);
+
+    expect(tabsStore.tabs.map((tab: Tab): Tab['status'] => tab.status)).toEqual(['loading', 'attention', 'error', 'completed']);
+  });
+
+  it('clears generic status when removing a runtime record', (): void => {
+    const tabsStore = useTabsStore();
+    tabsStore.tabs = [createTab('chat:session-a')];
+    const store = useChatTabRuntimeStore();
+    store.setStatus('chat:session-a', 'running');
+
+    store.removeTab('chat:session-a');
+
+    expect(tabsStore.tabs[0]?.status).toBeUndefined();
+  });
+
+  it('keeps runtime record setup free of generic tab status side effects', (): void => {
+    const tabsStore = useTabsStore();
+    tabsStore.tabs = [{ ...createTab('chat:session-a'), status: 'attention' }];
+    const store = useChatTabRuntimeStore();
+
+    store.ensureTab('chat:session-a');
+    store.bindSession('chat:session-a', 'session-a');
+    store.registerController('chat:session-a', { abort: vi.fn<() => Promise<void>>().mockResolvedValue() });
+
+    expect(tabsStore.tabs[0]?.status).toBe('attention');
+  });
+
+  it('restores an existing runtime status through an explicit action', (): void => {
+    const store = useChatTabRuntimeStore();
+    const tabsStore = useTabsStore();
+    store.setStatus('chat:session-a', 'running');
+    tabsStore.tabs = [createTab('chat:session-a')];
+
+    store.syncStatus('chat:session-a');
+    expect(tabsStore.tabs[0]?.status).toBe('loading');
   });
 
   it('stores only runtime ownership and status for a waiting tab', (): void => {

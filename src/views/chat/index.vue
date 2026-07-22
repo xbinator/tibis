@@ -58,6 +58,7 @@ const runtimeController: ChatTabRuntimeController = {
 };
 
 runtimeStore.ensureTab(ownerTabId.value, initialSessionId ?? undefined);
+runtimeStore.syncStatus(ownerTabId.value);
 
 /**
  * 判断当前聊天标签是否处于活动路由。

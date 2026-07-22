@@ -4,6 +4,7 @@
  */
 
 import { defineStore } from 'pinia';
+import { omit } from 'lodash-es';
 import { resolveRouteCacheName } from '@/router/cache';
 import { storeEvents } from '@/stores/helpers/events';
 import type { FileMissingPayload, FileRecoveredPayload } from '@/stores/helpers/events';
@@ -33,6 +34,11 @@ export interface TabClosePlanOptions {
 }
 
 /**
+ * 标签页通用视觉状态。
+ */
+export type TabStatus = 'loading' | 'attention' | 'error' | 'completed';
+
+/**
  * 单个标签页数据。
  */
 export interface Tab {
@@ -46,6 +52,8 @@ export interface Tab {
   cacheKey?: string;
   /** 标签页显示图标，使用 Iconify 图标名 */
   icon?: string;
+  /** 标签页瞬时视觉状态，不进入持久化。 */
+  status?: TabStatus;
 }
 
 /**
@@ -116,9 +124,9 @@ const DEFAULT_TABS_STATE: TabsState = {
 };
 
 /**
- * 规范化标签页数据，兼容历史缓存中缺少 cacheKey 的记录。
+ * 规范化运行时标签页数据，兼容缺少 cacheKey 的记录并保留瞬时状态。
  * @param tab - 待规范化的标签页
- * @returns 带有缓存 key 的标签页
+ * @returns 带有缓存 key 的运行时标签页
  */
 function normalizeTab(tab: Tab): Tab {
   const icon = typeof tab.icon === 'string' ? tab.icon.trim() : '';
@@ -128,8 +136,18 @@ function normalizeTab(tab: Tab): Tab {
     path: tab.path,
     title: tab.title,
     cacheKey: tab.cacheKey || tab.id,
-    ...(icon ? { icon } : {})
+    ...(icon ? { icon } : {}),
+    ...(tab.status ? { status: tab.status } : {})
   };
+}
+
+/**
+ * 规范化持久化标签页并移除历史瞬时状态。
+ * @param tab - 从持久化数据读取的标签页
+ * @returns 不含瞬时状态的标签页
+ */
+function normalizePersistedTab(tab: Tab): Tab {
+  return omit(normalizeTab(tab), ['status']);
 }
 
 /**
@@ -154,7 +172,7 @@ function normalizeTabsState(value: unknown): TabsState {
   const saved = value as Partial<TabsState>;
   if (!Array.isArray(saved.tabs)) return { ...DEFAULT_TABS_STATE };
 
-  const tabs = saved.tabs.map(normalizeTab);
+  const tabs = saved.tabs.map(normalizePersistedTab);
   const savedCachedKeys = Array.isArray(saved.cachedKeys) ? saved.cachedKeys : [];
 
   return {
@@ -170,6 +188,41 @@ const TABS_CONFIG: PersistConfig<TabsState> = {
   defaults: DEFAULT_TABS_STATE,
   normalize: normalizeTabsState
 };
+
+/**
+ * 加载彼此隔离的标签状态，避免默认集合在 Store 实例间共享引用。
+ * @returns 当前标签状态的独立副本
+ */
+function loadTabsState(): TabsState {
+  const state = loadPersistedState(TABS_CONFIG);
+
+  return {
+    tabs: state.tabs.map(normalizeTab),
+    dirtyById: { ...state.dirtyById },
+    missingById: { ...state.missingById },
+    cachedKeys: [...state.cachedKeys]
+  };
+}
+
+/**
+ * 创建不含瞬时标签状态的持久化快照。
+ * @param state - 当前标签状态
+ * @returns 可安全持久化的标签状态
+ */
+function createPersistedState(state: TabsState): TabsState {
+  return {
+    ...state,
+    tabs: state.tabs.map((tab: Tab): Tab => omit(tab, ['status']))
+  };
+}
+
+/**
+ * 持久化标签状态并排除瞬时字段。
+ * @param state - 当前标签状态
+ */
+function persistTabsState(state: TabsState): void {
+  persistState(TABS_STORAGE_KEY, createPersistedState(state));
+}
 
 /**
  * 在标签页列表中查找指定标签的索引。
@@ -286,7 +339,7 @@ function createDisabledClosePlan(action: TabCloseAction, anchorTabId: string | n
 
 // 标签页状态管理 Store
 export const useTabsStore = defineStore('tabs', {
-  state: (): TabsState => loadPersistedState(TABS_CONFIG),
+  state: (): TabsState => loadTabsState(),
 
   getters: {
     /**
@@ -319,10 +372,12 @@ export const useTabsStore = defineStore('tabs', {
         this.tabs.push(normalizedTab);
       } else {
         const existingTab = this.tabs[index];
+        const nextStatus = normalizedTab.status ?? existingTab?.status;
 
         this.tabs[index] = {
           ...normalizedTab,
-          title: options.preserveTitle && existingTab ? existingTab.title : normalizedTab.title
+          title: options.preserveTitle && existingTab ? existingTab.title : normalizedTab.title,
+          ...(nextStatus ? { status: nextStatus } : {})
         };
       }
 
@@ -331,7 +386,7 @@ export const useTabsStore = defineStore('tabs', {
         this.cachedKeys.push(cacheKey);
       }
 
-      persistState(TABS_STORAGE_KEY, this.$state);
+      persistTabsState(this.$state);
     },
 
     /**
@@ -347,10 +402,11 @@ export const useTabsStore = defineStore('tabs', {
       const normalizedTab = normalizeTab(options.tab);
       const sourceDirty = this.dirtyById[options.sourceId] ?? this.dirtyById[normalizedTab.id];
       const sourceMissing = this.missingById[options.sourceId] ?? this.missingById[normalizedTab.id];
+      const nextStatus = normalizedTab.status ?? this.tabs[sourceIndex]?.status ?? this.tabs.find((tab: Tab): boolean => tab.id === normalizedTab.id)?.status;
       const nextTabs = this.tabs.filter((tab: Tab, index: number): boolean => index === sourceIndex || tab.id !== normalizedTab.id);
       const nextSourceIndex = nextTabs.findIndex((tab: Tab): boolean => tab.id === options.sourceId);
 
-      nextTabs[nextSourceIndex] = normalizedTab;
+      nextTabs[nextSourceIndex] = nextStatus ? { ...normalizedTab, status: nextStatus } : normalizedTab;
       this.tabs = nextTabs;
       this.cachedKeys = normalizeCachedKeys(nextTabs.map((tab: Tab): string => tab.cacheKey || tab.id));
 
@@ -363,7 +419,7 @@ export const useTabsStore = defineStore('tabs', {
       if (sourceDirty !== undefined) this.dirtyById[normalizedTab.id] = sourceDirty;
       if (sourceMissing !== undefined) this.missingById[normalizedTab.id] = sourceMissing;
 
-      persistState(TABS_STORAGE_KEY, this.$state);
+      persistTabsState(this.$state);
       return true;
     },
 
@@ -397,7 +453,7 @@ export const useTabsStore = defineStore('tabs', {
 
       const insertIndex = position === 'after' ? nextTargetIndex + 1 : nextTargetIndex;
       this.tabs.splice(insertIndex, 0, movedTab);
-      persistState(TABS_STORAGE_KEY, this.$state);
+      persistTabsState(this.$state);
     },
 
     /**
@@ -490,7 +546,7 @@ export const useTabsStore = defineStore('tabs', {
         delete this.missingById[id];
       });
 
-      persistState(TABS_STORAGE_KEY, this.$state);
+      persistTabsState(this.$state);
     },
 
     /**
@@ -502,12 +558,26 @@ export const useTabsStore = defineStore('tabs', {
     },
 
     /**
+     * 更新标签页瞬时视觉状态。
+     * @param tabId - 标签 ID
+     * @param status - 通用视觉状态；空值表示清除
+     */
+    setTabStatus(tabId: string, status?: TabStatus): void {
+      const index = this.tabs.findIndex((tab: Tab): boolean => tab.id === tabId);
+      if (index === -1) return;
+
+      const current = this.tabs[index];
+      if (!current) return;
+      this.tabs[index] = status ? { ...current, status } : omit(current, ['status']);
+    },
+
+    /**
      * 标记标签页存在未保存修改。
      * @param id - 标签页 ID
      */
     setDirty(id: string): void {
       this.dirtyById[id] = true;
-      persistState(TABS_STORAGE_KEY, this.$state);
+      persistTabsState(this.$state);
     },
 
     /**
@@ -516,7 +586,7 @@ export const useTabsStore = defineStore('tabs', {
      */
     clearDirty(id: string): void {
       this.dirtyById[id] = false;
-      persistState(TABS_STORAGE_KEY, this.$state);
+      persistTabsState(this.$state);
     },
 
     /**
@@ -534,7 +604,7 @@ export const useTabsStore = defineStore('tabs', {
      */
     markMissing(id: string): void {
       this.missingById[id] = true;
-      persistState(TABS_STORAGE_KEY, this.$state);
+      persistTabsState(this.$state);
     },
 
     /**
@@ -543,7 +613,7 @@ export const useTabsStore = defineStore('tabs', {
      */
     clearMissing(id: string): void {
       this.missingById[id] = false;
-      persistState(TABS_STORAGE_KEY, this.$state);
+      persistTabsState(this.$state);
     },
 
     /**
@@ -564,7 +634,7 @@ export const useTabsStore = defineStore('tabs', {
       if (index === -1) return;
 
       this.tabs[index] = { ...this.tabs[index], title: params.title };
-      persistState(TABS_STORAGE_KEY, this.$state);
+      persistTabsState(this.$state);
     },
 
     /** 事件取消订阅函数列表 */

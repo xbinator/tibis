@@ -14,7 +14,7 @@
     @drag-end="handleDragEnded"
   >
     <template #default="{ item, dragging }">
-      <HeaderTab :tab="item" :dragging="dragging" @click="handleClickTab(item.path)" @close="handleCloseButton(item)" />
+      <HeaderTab :tab="item" :dragging="dragging" :status="item.status" @click="handleClickTab(item.path)" @close="handleCloseButton(item)" />
     </template>
   </BDraggable>
 </template>
@@ -31,9 +31,8 @@ import type { BDraggableMoveEvent } from '@/components/BDraggable/types';
 import HeaderTab from '@/layouts/default/components/HeaderTab.vue';
 import { useTabCloseGuard } from '@/layouts/default/hooks/useTabCloseGuard';
 import { getHeaderTabsWheelScrollDelta } from '@/layouts/default/utils/headerTabsScroll';
-import { createChatTabId, isChatTab } from '@/router/routes/helpers/chatRouteTab';
+import { createChatTabId } from '@/router/routes/helpers/chatRouteTab';
 import { isMac } from '@/shared/platform/env';
-import { useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
 import type { ChatSessionTitlePayload } from '@/stores/helpers/events';
 import { storeEvents } from '@/stores/helpers/events';
 import { useSettingStore } from '@/stores/ui/setting';
@@ -45,8 +44,7 @@ import { asyncTo } from '@/utils/asyncTo';
 const tabsStore = useTabsStore();
 const recentStore = useRecentStore();
 const settingStore = useSettingStore();
-const runtimeStore = useChatTabRuntimeStore();
-const { canClose } = useTabCloseGuard();
+const { canClose, cleanupClosedTabs } = useTabCloseGuard();
 const route = useRoute();
 const router = useRouter();
 
@@ -81,12 +79,11 @@ onUnmounted(() => {
 });
 
 /**
- * 将自动命名结果同步到当前会话的真实拥有者标签。
+ * 将自动命名结果同步到持久化会话标签。
  * @param payload - 会话标题事件
  */
 function handleChatTitleUpdated(payload: ChatSessionTitlePayload): void {
-  const owner = runtimeStore.findOwner(payload.sessionId);
-  tabsStore.updateTabTitle({ id: owner?.tabId ?? createChatTabId(payload.sessionId), title: payload.title });
+  tabsStore.updateTabTitle({ id: createChatTabId(payload.sessionId), title: payload.title });
 }
 
 /**
@@ -109,15 +106,6 @@ watch(
     if (title) {
       settingStore.setWindowTitle(title);
     }
-  },
-  { immediate: true }
-);
-
-watch(
-  () => route.fullPath,
-  (): void => {
-    const nextActiveTab = tabsStore.tabs.find((tab: Tab): boolean => tab.path === route.fullPath);
-    if (nextActiveTab && isChatTab(nextActiveTab)) runtimeStore.markViewed(nextActiveTab.id);
   },
   { immediate: true }
 );
@@ -152,7 +140,7 @@ async function handleCloseButton(tab: Tab): Promise<void> {
   if (!(await canClose(plan))) return;
 
   tabsStore.applyClosePlan(plan);
-  plan.targetTabIds.filter((tabId: string): boolean => tabId.startsWith('chat:')).forEach((tabId: string): void => runtimeStore.removeTab(tabId));
+  cleanupClosedTabs(plan.targetTabIds);
 
   if (!plan.requiresNavigation) return;
   await router.push(plan.nextActivePath ?? '/welcome');
