@@ -1,0 +1,161 @@
+/**
+ * @file use-chat-route.test.ts
+ * @description ChatSider 会话路由协调测试。
+ * @vitest-environment jsdom
+ */
+import { createPinia, setActivePinia } from 'pinia';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useChatRoute } from '@/layouts/default/hooks/useChatRoute';
+import { useChatTabStore } from '@/stores/chat/tab';
+import { useSettingStore } from '@/stores/ui/setting';
+import type { Tab } from '@/stores/workspace/tabs';
+import { useTabsStore } from '@/stores/workspace/tabs';
+
+const routerPushMock = vi.hoisted(() => vi.fn<(path: string) => Promise<unknown>>());
+const routeMock = vi.hoisted(() => ({ fullPath: '/welcome' }));
+const routeFailureMock = vi.hoisted(() => ({ type: 'aborted' }));
+
+vi.mock('vue-router', () => ({
+  useRoute: (): typeof routeMock => routeMock,
+  useRouter: (): { push: typeof routerPushMock } => ({ push: routerPushMock })
+}));
+
+vi.mock('@/router/navigation', () => ({
+  isBlockingNavigationFailure: (result: unknown): boolean => result === routeFailureMock
+}));
+
+/**
+ * 创建测试标签。
+ * @param id - 标签 ID
+ * @param path - 标签路径
+ * @returns 标签数据
+ */
+function createTab(id: string, path: string): Tab {
+  return { id, path, title: id, cacheKey: id };
+}
+
+const switchSessionMock = vi.fn<(sessionId: string) => Promise<void>>();
+const openDraftSessionMock = vi.fn<() => Promise<void>>();
+const syncDeletedSessionMock = vi.fn<(sessionId: string) => void>();
+const disabledMock = vi.fn<() => boolean>();
+
+/**
+ * 创建测试用聊天路由 API。
+ * @returns 聊天路由 API
+ */
+function createRouteApi(): ReturnType<typeof useChatRoute> {
+  return useChatRoute({
+    isSessionActionDisabled: disabledMock,
+    openDraftSession: openDraftSessionMock,
+    switchSession: switchSessionMock,
+    syncDeletedSession: syncDeletedSessionMock
+  });
+}
+
+describe('useChatRoute', (): void => {
+  beforeEach((): void => {
+    setActivePinia(createPinia());
+    routerPushMock.mockReset();
+    routerPushMock.mockResolvedValue(undefined);
+    switchSessionMock.mockReset();
+    switchSessionMock.mockResolvedValue();
+    openDraftSessionMock.mockReset();
+    openDraftSessionMock.mockResolvedValue();
+    syncDeletedSessionMock.mockReset();
+    disabledMock.mockReset();
+    disabledMock.mockReturnValue(false);
+    routeMock.fullPath = '/welcome';
+  });
+
+  it('normalizes a persisted chat tab', (): void => {
+    useTabsStore().tabs = [createTab('chat:session-a', '/chat/session-a')];
+
+    expect(createRouteApi().resolveRoute('session-a')).toEqual({
+      tabId: 'chat:session-a',
+      path: '/chat/session-a',
+      sessionId: 'session-a'
+    });
+  });
+
+  it('normalizes a runtime-owned draft session', (): void => {
+    useTabsStore().tabs = [createTab('chat:new', '/chat')];
+    useChatTabStore().ensureTab('chat:new', 'session-a');
+
+    expect(createRouteApi().resolveRoute('session-a')).toEqual({
+      tabId: 'chat:new',
+      path: '/chat',
+      sessionId: 'session-a'
+    });
+  });
+
+  it('provides a fallback path when a runtime owner has no visible tab', (): void => {
+    useChatTabStore().ensureTab('chat:session-a', 'session-a');
+
+    expect(createRouteApi().resolveRoute('session-a')).toEqual({
+      tabId: 'chat:session-a',
+      path: '/chat/session-a',
+      sessionId: 'session-a'
+    });
+  });
+
+  it('finds the unique blank draft without inventing a session id', (): void => {
+    useTabsStore().tabs = [createTab('chat:new', '/chat')];
+
+    expect(createRouteApi().resolveRoute()).toEqual({
+      tabId: 'chat:new',
+      path: '/chat'
+    });
+  });
+
+  it('returns undefined when no chat owner exists', (): void => {
+    expect(createRouteApi().resolveRoute('missing')).toBeUndefined();
+  });
+
+  it('opens the current side session in a chat page and resets the side draft', async (): Promise<void> => {
+    useSettingStore().setChatSidebarActiveSessionId('session-a');
+
+    await createRouteApi().openChatPage();
+
+    expect(routerPushMock).toHaveBeenCalledWith('/chat/session-a');
+    expect(openDraftSessionMock).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the side session when opening a chat page fails', async (): Promise<void> => {
+    useSettingStore().setChatSidebarActiveSessionId('session-a');
+    routerPushMock.mockResolvedValue(routeFailureMock);
+
+    await createRouteApi().openChatPage();
+
+    expect(openDraftSessionMock).not.toHaveBeenCalled();
+  });
+
+  it('navigates to an already-owned session instead of switching the side chat', async (): Promise<void> => {
+    useTabsStore().tabs = [createTab('chat:session-a', '/chat/session-a')];
+
+    await createRouteApi().switchSession('session-a');
+
+    expect(routerPushMock).toHaveBeenCalledWith('/chat/session-a');
+    expect(switchSessionMock).not.toHaveBeenCalled();
+  });
+
+  it('delegates to the side session switch when no chat page owns the session', async (): Promise<void> => {
+    await createRouteApi().switchSession('session-a');
+
+    expect(routerPushMock).not.toHaveBeenCalled();
+    expect(switchSessionMock).toHaveBeenCalledWith('session-a');
+  });
+
+  it('syncs deleted side state and closes the owning chat tab', (): void => {
+    routeMock.fullPath = '/chat/session-a';
+    const tabsStore = useTabsStore();
+    tabsStore.tabs = [createTab('chat:session-a', '/chat/session-a'), createTab('welcome', '/welcome')];
+    useChatTabStore().ensureTab('chat:session-a', 'session-a');
+
+    createRouteApi().handleDeletedSession('session-a');
+
+    expect(syncDeletedSessionMock).toHaveBeenCalledWith('session-a');
+    expect(tabsStore.tabs.map((tab: Tab): string => tab.id)).toEqual(['welcome']);
+    expect(useChatTabStore().records['chat:session-a']).toBeUndefined();
+    expect(routerPushMock).toHaveBeenCalledWith('/welcome');
+  });
+});

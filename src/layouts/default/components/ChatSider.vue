@@ -58,20 +58,15 @@
 <script setup lang="ts">
 import type { ChatSession } from 'types/chat';
 import { computed, defineAsyncComponent, onMounted, reactive, ref } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
 import { Input as AInput, message } from 'ant-design-vue';
 import BButton from '@/components/BButton/index.vue';
 import SessionHistory from '@/components/BChat/components/SessionHistory.vue';
 import { vFocus } from '@/directives/focus';
-import { isBlockingNavigationFailure } from '@/router/navigation';
-import { createChatPath } from '@/router/routes/helpers/chatRouteTab';
 import { useChatSessionStore } from '@/stores/chat/session';
-import { useChatTabStore } from '@/stores/chat/tab';
 import { useSettingStore } from '@/stores/ui/setting';
-import { useTabsStore } from '@/stores/workspace/tabs';
 import { asyncTo } from '@/utils/asyncTo';
 import { createNamespace } from '@/utils/namespace';
-import { useChatOwner } from '../hooks/useChatOwner';
+import { useChatRoute } from '../hooks/useChatRoute';
 import { useChatSession } from '../hooks/useChatSession';
 
 const BChat = defineAsyncComponent(() => import('@/components/BChat/index.vue'));
@@ -82,16 +77,6 @@ const [, bem] = createNamespace('chat-sider', '');
 const settingStore = useSettingStore();
 /** 聊天会话持久化存储。 */
 const chatStore = useChatSessionStore();
-/** 顶部标签状态存储。 */
-const tabsStore = useTabsStore();
-/** 聊天标签的 renderer 运行态存储。 */
-const runtimeStore = useChatTabStore();
-/** 应用路由。 */
-const router = useRouter();
-/** 当前活动路由。 */
-const route = useRoute();
-/** 标准聊天页会话拥有者查询。 */
-const { findOwner } = useChatOwner();
 /** 聊天运行时是否忙碌。 */
 const chatLoading = ref(false);
 /** 会话标题编辑状态。 */
@@ -99,7 +84,7 @@ const titleEditor = reactive({ editing: false, draft: '', saving: false });
 
 const {
   currentSession,
-  switchSession,
+  switchSession: switchSideSession,
   createDraftSession,
   handleDeletedSession: syncDeletedSession
 } = useChatSession({
@@ -178,52 +163,17 @@ async function handleCreateDraftSession(): Promise<void> {
   bChatRef.value?.focusInput();
 }
 
-/**
- * 将侧栏当前会话打开到顶部聊天标签，成功后侧栏进入空白草稿。
- */
-async function openChatPage(): Promise<void> {
-  if (isSessionActionDisabled.value) return;
-
-  const sessionId = settingStore.chatSidebarActiveSessionId;
-  const owner = findOwner(sessionId);
-  const [navigationError, navigationResult] = await asyncTo(router.push(owner?.path ?? createChatPath(sessionId)));
-  if (navigationError || isBlockingNavigationFailure(navigationResult)) return;
-
-  await handleCreateDraftSession();
-}
-
-/**
- * 切换当前会话。
- * @param sessionId - 目标会话 ID
- */
-async function handleSwitchSession(sessionId: string): Promise<void> {
-  const owner = findOwner(sessionId);
-  if (owner) {
-    await asyncTo(router.push(owner.path));
-    return;
-  }
-
-  await switchSession(sessionId);
-}
-
-/**
- * 同步成功删除后的侧栏状态，并关闭对应顶部聊天标签。
- * @param sessionId - 已删除会话 ID
- */
-function handleDeletedSession(sessionId: string): void {
-  const owner = findOwner(sessionId);
-  syncDeletedSession(sessionId);
-  if (!owner) return;
-
-  const plan = tabsStore.getClosePlan('close', {
-    anchorTabId: owner.tabId,
-    activeTabId: owner.path === route.fullPath ? owner.tabId : null,
-    allowCloseLastTab: true
-  });
-  tabsStore.applyClosePlan(plan);
-  runtimeStore.removeTab(owner.tabId);
-  if (plan.requiresNavigation) asyncTo(router.push(plan.nextActivePath ?? '/welcome'));
-}
+/** 聊天页路由与已打开标签同步能力。 */
+const {
+  openChatPage,
+  switchSession: handleSwitchSession,
+  handleDeletedSession
+} = useChatRoute({
+  isSessionActionDisabled: (): boolean => isSessionActionDisabled.value,
+  openDraftSession: handleCreateDraftSession,
+  switchSession: switchSideSession,
+  syncDeletedSession
+});
 
 /**
  * 同步 BChat 内部创建的新会话。
