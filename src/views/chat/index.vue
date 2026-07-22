@@ -12,7 +12,6 @@
       @session-title-persisted="handleTitlePersisted"
       @new-session="openDraftSession"
       @runtime-status-change="handleRuntimeStatus"
-      @runtime-completed="handleRuntimeCompleted"
       @navigate-to-provider="handleProviderNavigate"
     />
   </div>
@@ -20,14 +19,15 @@
 
 <script setup lang="ts">
 import type { ChatSession } from 'types/chat';
-import { onActivated, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onActivated, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import BChat from '@/components/BChat/index.vue';
+import type { BChatRuntimeStatusChange } from '@/components/BChat/utils/types';
 import { isBlockingNavigationFailure } from '@/router/navigation';
 import { CHAT_DRAFT_TAB_ID, createChatPath, createChatTabId, findChatTab } from '@/router/routes/helpers/chatRouteTab';
 import { normalizeRouteParam } from '@/router/routes/helpers/fileRouteTab';
 import { useChatSessionStore } from '@/stores/chat/session';
-import type { ChatTabRuntimeController, ChatTabSourceStatus } from '@/stores/chat/tabRuntime';
+import type { ChatTabRuntimeController } from '@/stores/chat/tabRuntime';
 import { useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
 import type { Tab } from '@/stores/workspace/tabs';
 import { useTabsStore } from '@/stores/workspace/tabs';
@@ -61,20 +61,26 @@ runtimeStore.ensureTab(ownerTabId.value, initialSessionId ?? undefined);
 runtimeStore.syncStatus(ownerTabId.value);
 
 /**
- * 判断当前聊天标签是否处于活动路由。
+ * 判断指定聊天标签是否处于活动路由。
  * @param tabId - 聊天标签 ID
  * @returns 是否为当前活动标签
  */
-function isOwnerActive(tabId: string = ownerTabId.value): boolean {
+function isTabActive(tabId: string): boolean {
   const owner = tabsStore.tabs.find((tab: Tab): boolean => tab.id === tabId);
-  const ownerPath = owner?.path ?? (tabId === CHAT_DRAFT_TAB_ID ? createChatPath() : createChatPath(runtimeStore.records[tabId]?.sessionId));
+  if (owner) return route.path === owner.path;
 
-  return route.path === ownerPath;
+  const sessionId = runtimeStore.records[tabId]?.sessionId;
+
+  const fallbackPath = tabId === CHAT_DRAFT_TAB_ID ? createChatPath() : createChatPath(sessionId);
+
+  return route.path === fallbackPath;
 }
+/** 当前组件拥有的聊天标签是否处于活动路由。 */
+const ownerActive = computed<boolean>((): boolean => isTabActive(ownerTabId.value));
 
 /** 标记当前活动聊天已被用户查看。 */
 function markCurrentViewed(): void {
-  if (isOwnerActive()) runtimeStore.markViewed(ownerTabId.value);
+  if (ownerActive.value) runtimeStore.markViewed(ownerTabId.value);
 }
 
 /**
@@ -97,7 +103,7 @@ async function promoteDraft(): Promise<void> {
     cacheKey: targetTabId,
     icon: sourceTab.icon ?? 'lucide:message-circle'
   };
-  const wasActive = isOwnerActive(CHAT_DRAFT_TAB_ID);
+  const wasActive = isTabActive(CHAT_DRAFT_TAB_ID);
   if (!tabsStore.replaceTab({ sourceId: CHAT_DRAFT_TAB_ID, tab: targetTab })) return;
 
   runtimeStore.promoteTab(CHAT_DRAFT_TAB_ID, targetTabId, session.id);
@@ -145,7 +151,7 @@ function handleTitlePersisted(sessionId: string, title: string): void {
 
 /** 打开或复用唯一空白聊天标签。 */
 async function openDraftSession(): Promise<void> {
-  if (ownerTabId.value === CHAT_DRAFT_TAB_ID && isOwnerActive()) {
+  if (ownerTabId.value === CHAT_DRAFT_TAB_ID && ownerActive.value) {
     await asyncTo(bChatRef.value?.resetDraft() ?? Promise.resolve());
     return;
   }
@@ -156,22 +162,19 @@ async function openDraftSession(): Promise<void> {
 
 /**
  * 同步 BChat 运行状态。
- * @param status - BChat 运行状态
+ * @param event - BChat 运行状态变化事件
  */
-function handleRuntimeStatus(status: ChatTabSourceStatus): void {
-  const tabId = ownerTabId.value;
-  runtimeStore.setStatus(tabId, status);
-  if (status === 'idle') asyncTo(promoteDraft());
-}
+function handleRuntimeStatus(event: BChatRuntimeStatusChange): void {
+  if (event.status === 'completed') {
+    const owner = runtimeStore.findOwner(event.sessionId);
+    const tabId = owner?.tabId ?? ownerTabId.value;
+    runtimeStore.markCompleted(tabId, isTabActive(tabId));
+    return;
+  }
 
-/**
- * 标记一次 Runtime 成功完成。
- * @param sessionId - 完成的会话 ID
- */
-function handleRuntimeCompleted(sessionId: string): void {
-  const owner = runtimeStore.findOwner(sessionId);
-  const tabId = owner?.tabId ?? ownerTabId.value;
-  runtimeStore.markCompleted(tabId, isOwnerActive(tabId));
+  const tabId = ownerTabId.value;
+  runtimeStore.setStatus(tabId, event.status);
+  if (event.status === 'idle') asyncTo(promoteDraft());
 }
 
 /** 导航到模型 Provider 设置页。 */

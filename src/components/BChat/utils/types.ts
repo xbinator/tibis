@@ -80,6 +80,26 @@ export interface BChatProps {
 }
 
 /**
- * BChat 向页面宿主发布的运行状态。
+ * BChat 向页面宿主发布的持续运行状态。
  */
-export type BChatRuntimeStatus = 'idle' | 'running' | 'waiting' | 'error';
+export type BChatRuntimeSourceStatus = 'idle' | 'running' | 'waiting' | 'error';
+
+/**
+ * BChat 向页面宿主发布的完整运行状态。
+ */
+export type BChatRuntimeStatus = BChatRuntimeSourceStatus | 'completed';
+
+/**
+ * BChat 运行状态变化事件。
+ */
+export type BChatRuntimeStatusChange =
+  | {
+      /** 当前持续运行状态。 */
+      status: BChatRuntimeSourceStatus;
+    }
+  | {
+      /** 成功完成状态。 */
+      status: 'completed';
+      /** 完成时所属的会话 ID。 */
+      sessionId: string;
+    };

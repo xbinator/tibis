@@ -73,7 +73,7 @@
 </template>
 
 <script setup lang="ts">
-import type { BChatProps, BChatRuntimeStatus, Message } from './utils/types';
+import type { BChatProps, BChatRuntimeSourceStatus, BChatRuntimeStatusChange, Message } from './utils/types';
 import type { ChatMessageConfirmationAction, ChatSession } from 'types/chat';
 import type { ChatRuntimeContextUsageSnapshot } from 'types/chat-runtime';
 import { computed, h, onUnmounted, provide, ref, toRef, watch } from 'vue';
@@ -128,8 +128,7 @@ const emit = defineEmits<{
   (e: 'session-title-persisted', sessionId: string, title: string): void;
   (e: 'new-session'): void;
   (e: 'loading-change', loading: boolean): void;
-  (e: 'runtime-status-change', status: BChatRuntimeStatus): void;
-  (e: 'runtime-completed', sessionId: string): void;
+  (e: 'runtime-status-change', status: BChatRuntimeStatusChange): void;
   (e: 'navigate-to-provider'): void;
 }>();
 
@@ -266,7 +265,7 @@ async function handleRuntimeComplete(nextMessage: Message): Promise<void> {
   const sessionId = activeSessionId.value;
   if (!sessionId) return;
 
-  emit('runtime-completed', sessionId);
+  emit('runtime-status-change', { status: 'completed', sessionId });
   const snapshot = captureAutoNameSnapshot(nextMessage, sessionId);
 
   if (!snapshot) return;
@@ -409,7 +408,7 @@ const {
   rollback: handleRollback
 } = workflow;
 /** 页面标签使用的稳定运行状态投影。 */
-const runtimeStatus = computed<BChatRuntimeStatus>((): BChatRuntimeStatus => {
+const runtimeStatus = computed<BChatRuntimeSourceStatus>((): BChatRuntimeSourceStatus => {
   if (chatSessionActor.waitingForUser.value) return 'waiting';
   if (loading.value) return 'running';
   if (chatSessionActor.snapshot.value?.context.error) return 'error';
@@ -431,7 +430,7 @@ watch(
   { immediate: true }
 );
 
-watch(runtimeStatus, (status: BChatRuntimeStatus): void => emit('runtime-status-change', status), { immediate: true });
+watch(runtimeStatus, (status: BChatRuntimeSourceStatus): void => emit('runtime-status-change', { status }), { immediate: true });
 
 /** 恢复指定消息到输入编辑器。 */
 function handleChatEdit(nextMessage: Message): void {

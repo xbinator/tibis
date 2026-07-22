@@ -59,7 +59,7 @@ vi.mock('@/components/BChat/index.vue', () => ({
         default: null
       }
     },
-    emits: ['session-created', 'session-title-persisted', 'new-session', 'runtime-status-change', 'runtime-completed', 'navigate-to-provider'],
+    emits: ['session-created', 'session-title-persisted', 'new-session', 'runtime-status-change', 'navigate-to-provider'],
     setup(_props: unknown, { expose }: { expose: (value: { abortRuntime: () => Promise<void>; resetDraft: () => Promise<void> }) => void }) {
       expose({ abortRuntime: abortRuntimeMock, resetDraft: resetDraftMock });
       return {};
@@ -172,7 +172,7 @@ describe('chat page', (): void => {
     tabsStore.tabs = [{ id: 'chat:new', path: '/chat', title: '新会话', cacheKey: 'chat:new' }];
     const wrapper = mountPage(null);
 
-    findBChat(wrapper).$emit('runtime-status-change', 'running');
+    findBChat(wrapper).$emit('runtime-status-change', { status: 'running' });
     findBChat(wrapper).$emit('session-created', createSession('session-a', '会话 A'));
     await flushPromises();
 
@@ -180,7 +180,7 @@ describe('chat page', (): void => {
     expect(tabsStore.tabs[0]?.id).toBe('chat:new');
     expect(routerMocks.replace).not.toHaveBeenCalled();
 
-    findBChat(wrapper).$emit('runtime-status-change', 'idle');
+    findBChat(wrapper).$emit('runtime-status-change', { status: 'idle' });
     await flushPromises();
 
     expect(tabsStore.tabs[0]).toMatchObject({ id: 'chat:session-a', path: '/chat/session-a', title: '会话 A' });
@@ -199,7 +199,7 @@ describe('chat page', (): void => {
     const wrapper = mountPage(null);
 
     findBChat(wrapper).$emit('session-created', createSession('session-a', '会话 A'));
-    findBChat(wrapper).$emit('runtime-status-change', 'idle');
+    findBChat(wrapper).$emit('runtime-status-change', { status: 'idle' });
     await flushPromises();
 
     expect(tabsStore.tabs[0]).toMatchObject({ id: 'chat:session-a', path: '/chat/session-a' });
@@ -214,7 +214,7 @@ describe('chat page', (): void => {
     const wrapper = mountPage(null);
 
     findBChat(wrapper).$emit('session-created', createSession('session-a', '会话 A'));
-    findBChat(wrapper).$emit('runtime-status-change', 'idle');
+    findBChat(wrapper).$emit('runtime-status-change', { status: 'idle' });
     await flushPromises();
 
     expect(tabsStore.tabs[0]).toMatchObject({ id: 'chat:new', path: '/chat' });
@@ -261,7 +261,7 @@ describe('chat page', (): void => {
     const runtimeStore = useChatTabRuntimeStore();
     const wrapper = mountPage('session-a');
 
-    findBChat(wrapper).$emit('runtime-status-change', 'waiting');
+    findBChat(wrapper).$emit('runtime-status-change', { status: 'waiting' });
     await flushPromises();
 
     expect(runtimeStore.getStatus('chat:session-a')).toBe('waiting');
@@ -274,7 +274,7 @@ describe('chat page', (): void => {
     const runtimeStore = useChatTabRuntimeStore();
     const wrapper = mountPage('session-a');
 
-    findBChat(wrapper).$emit('runtime-completed', 'session-a');
+    findBChat(wrapper).$emit('runtime-status-change', { status: 'completed', sessionId: 'session-a' });
     await flushPromises();
     expect(runtimeStore.getStatus('chat:session-a')).toBe('completed');
     wrapper.unmount();

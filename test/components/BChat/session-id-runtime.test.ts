@@ -789,13 +789,13 @@ describe('BChat sessionId runtime', (): void => {
     expect(wrapper.emitted('loading-change')).toContainEqual([true]);
   });
 
-  it('publishes runtime status and completion events from the existing workflow', async (): Promise<void> => {
+  it('publishes runtime status and completion through one event from the existing workflow', async (): Promise<void> => {
     const wrapper = mountBChat('session-active');
     await flushPromises();
     const runtimeId = await submitTextAndReadRuntimeId(wrapper, 'status events');
 
-    expect(wrapper.emitted('runtime-status-change')).toContainEqual(['idle']);
-    expect(wrapper.emitted('runtime-status-change')).toContainEqual(['running']);
+    expect(wrapper.emitted('runtime-status-change')).toContainEqual([{ status: 'idle' }]);
+    expect(wrapper.emitted('runtime-status-change')).toContainEqual([{ status: 'running' }]);
 
     emitRuntimeEvent(runtimeListeners, 'messageCreated', {
       runtimeId,
@@ -823,8 +823,9 @@ describe('BChat sessionId runtime', (): void => {
     });
     await flushPromises();
 
-    expect(wrapper.emitted('runtime-completed')?.at(-1)).toEqual(['session-active']);
-    expect(wrapper.emitted('runtime-status-change')).toContainEqual(['idle']);
+    expect(wrapper.emitted('runtime-completed')).toBeUndefined();
+    expect(wrapper.emitted('runtime-status-change')).toContainEqual([{ status: 'completed', sessionId: 'session-active' }]);
+    expect(wrapper.emitted('runtime-status-change')).toContainEqual([{ status: 'idle' }]);
   });
 
   it('emits waiting and error runtime statuses', async (): Promise<void> => {
@@ -846,7 +847,7 @@ describe('BChat sessionId runtime', (): void => {
       }
     });
     await flushPromises();
-    expect(wrapper.emitted('runtime-status-change')).toContainEqual(['waiting']);
+    expect(wrapper.emitted('runtime-status-change')).toContainEqual([{ status: 'waiting' }]);
 
     emitRuntimeEvent(runtimeListeners, 'error', {
       runtimeId,
@@ -856,7 +857,7 @@ describe('BChat sessionId runtime', (): void => {
       error: { code: 'REQUEST_FAILED', message: 'failed' }
     });
     await flushPromises();
-    expect(wrapper.emitted('runtime-status-change')).toContainEqual(['error']);
+    expect(wrapper.emitted('runtime-status-change')).toContainEqual([{ status: 'error' }]);
   });
 
   it('exposes abort and reset controls for parent hosts', async (): Promise<void> => {
@@ -1720,7 +1721,7 @@ describe('BChat sessionId runtime', (): void => {
     expect(toastQueue).toContainEqual(expect.objectContaining({ type: 'error', content: errorMessage }));
     expect(wrapper.findComponent(ConversationViewStub).props('disabled')).toBe(false);
     expect(electronAPIMock.chatRuntimeSubmitUserChoice).not.toHaveBeenCalled();
-    expect(wrapper.emitted('runtime-status-change')?.at(-1)).toEqual(['waiting']);
+    expect(wrapper.emitted('runtime-status-change')?.at(-1)).toEqual([{ status: 'waiting' }]);
   });
 
   it('sends runtime user message submit actions through main process ChatRuntime', async (): Promise<void> => {
