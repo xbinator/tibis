@@ -52,6 +52,57 @@ describe('parseMessageNodes', () => {
     expect(code.text).toBe('code');
   });
 
+  it('parses quoted strong text when adjacent to CJK content', (): void => {
+    const result = parseMessageNodes({
+      content: '所以**无法真正"感受"**情绪、疼痛。',
+      mode: 'markdown',
+      loading: false
+    });
+
+    const paragraph = expectBlockNode(result.blocks[0], 'paragraph');
+    const strong = expectInlineNode(paragraph.children[1], 'strong');
+
+    expect(paragraph.children[0]).toMatchObject({ type: 'text', text: '所以' });
+    expect(strong.children).toMatchObject([{ type: 'text', text: '无法真正"感受"' }]);
+    expect(paragraph.children[2]).toMatchObject({ type: 'text', text: '情绪、疼痛。' });
+  });
+
+  it('parses asterisk italic text when adjacent to CJK content', (): void => {
+    const result = parseMessageNodes({
+      content: '所以*无法真正"感受"*情绪，也*无法真正。*体验。',
+      mode: 'markdown',
+      loading: false
+    });
+
+    const paragraph = expectBlockNode(result.blocks[0], 'paragraph');
+    const quotedEm = expectInlineNode(paragraph.children[1], 'em');
+    const punctuationEm = expectInlineNode(paragraph.children[3], 'em');
+
+    expect(paragraph.children[0]).toMatchObject({ type: 'text', text: '所以' });
+    expect(quotedEm.children).toMatchObject([{ type: 'text', text: '无法真正"感受"' }]);
+    expect(paragraph.children[2]).toMatchObject({ type: 'text', text: '情绪，也' });
+    expect(punctuationEm.children).toMatchObject([{ type: 'text', text: '无法真正。' }]);
+    expect(paragraph.children[4]).toMatchObject({ type: 'text', text: '体验。' });
+  });
+
+  it('parses underscore emphasis adjacent to CJK content without splitting identifiers', (): void => {
+    const result = parseMessageNodes({
+      content: '所以__无法真正"感受"__情绪，也_无法真正。_体验，保留 foo_bar_baz 和 foo__bar__baz。',
+      mode: 'markdown',
+      loading: false
+    });
+
+    const paragraph = expectBlockNode(result.blocks[0], 'paragraph');
+    const strong = expectInlineNode(paragraph.children[1], 'strong');
+    const em = expectInlineNode(paragraph.children[3], 'em');
+
+    expect(paragraph.children[0]).toMatchObject({ type: 'text', text: '所以' });
+    expect(strong.children).toMatchObject([{ type: 'text', text: '无法真正"感受"' }]);
+    expect(paragraph.children[2]).toMatchObject({ type: 'text', text: '情绪，也' });
+    expect(em.children).toMatchObject([{ type: 'text', text: '无法真正。' }]);
+    expect(paragraph.children[4]).toMatchObject({ type: 'text', text: '体验，保留 foo_bar_baz 和 foo__bar__baz。' });
+  });
+
   it('converts extended inline markdown into semantic nodes', (): void => {
     const result = parseMessageNodes({
       content: 'Use ==highlight==, X^2^ and H~2~O.',

@@ -80,6 +80,26 @@ interface ParsedSafeHtmlInlineTag {
 }
 
 /**
+ * 未被 Marked 原生规则识别的备用强调定界符。
+ */
+interface FallbackEmphasisDelimiter {
+  /** Markdown 定界符。 */
+  marker: '**' | '*' | '__' | '_';
+  /** 对应行内节点类型。 */
+  nodeType: 'strong' | 'em';
+}
+
+/**
+ * 备用强调定界符匹配顺序，先匹配长定界符避免被单字符定界符截断。
+ */
+const FALLBACK_EMPHASIS_DELIMITERS: FallbackEmphasisDelimiter[] = [
+  { marker: '**', nodeType: 'strong' },
+  { marker: '__', nodeType: 'strong' },
+  { marker: '*', nodeType: 'em' },
+  { marker: '_', nodeType: 'em' }
+];
+
+/**
  * 创建行内 Markdown 扩展 tokenizer。
  * @param name - token 名称
  * @param pattern - 匹配源码的正则
@@ -129,6 +149,58 @@ function createInlineMathExtension(): TokenizerExtension {
         raw: match[0],
         text: match[1],
         tokens: []
+      };
+    }
+  };
+}
+
+/**
+ * 创建更宽松的星号加粗 tokenizer，兼容中文正文中加粗内容以引号等标点结尾的场景。
+ * @returns Marked tokenizer 扩展
+ */
+function createRelaxedStrongExtension(): TokenizerExtension {
+  return {
+    name: 'relaxedStrong',
+    level: 'inline',
+    start(src: string): number | void {
+      const index = src.indexOf('**');
+      return index >= 0 ? index : undefined;
+    },
+    tokenizer(src: string): Tokens.Strong | undefined {
+      const match = /^\*\*(?!\*)(?=\S)([\s\S]*?\S)\*\*(?!\*)/.exec(src);
+      if (!match) return undefined;
+
+      return {
+        type: 'strong',
+        raw: match[0],
+        text: match[1],
+        tokens: this.lexer.inlineTokens(match[1])
+      };
+    }
+  };
+}
+
+/**
+ * 创建更宽松的星号斜体 tokenizer，避免中文正文中相邻星号段被 Marked 错配。
+ * @returns Marked tokenizer 扩展
+ */
+function createRelaxedEmExtension(): TokenizerExtension {
+  return {
+    name: 'relaxedEm',
+    level: 'inline',
+    start(src: string): number | void {
+      const index = src.indexOf('*');
+      return index >= 0 ? index : undefined;
+    },
+    tokenizer(src: string): Tokens.Em | undefined {
+      const match = /^\*(?!\*)(?=\S)([\s\S]*?\S)\*(?!\*)/.exec(src);
+      if (!match) return undefined;
+
+      return {
+        type: 'em',
+        raw: match[0],
+        text: match[1],
+        tokens: this.lexer.inlineTokens(match[1])
       };
     }
   };
@@ -219,6 +291,8 @@ messageMarked.use({
     createPendingBlockMathExtension(),
     createInlineMathExtension(),
     createPendingInlineMathExtension(),
+    createRelaxedStrongExtension(),
+    createRelaxedEmExtension(),
     createInlineMarkdownExtension('mark', /^==(?=\S)([\s\S]*?\S)==(?!=)/, '=='),
     createInlineMarkdownExtension('sup', /^\^(?!\^)(?=\S)([\s\S]*?\S)\^(?!\^)/, '^'),
     createInlineMarkdownExtension('sub', /^~(?!~)(?=\S)([\s\S]*?\S)~(?!~)/, '~')
@@ -395,14 +469,163 @@ function normalizeHeadingDepth(depth: number): HeadingBlockNode['depth'] {
 }
 
 /**
- * 将文本转为单个文本行内节点。
+ * 判断字符是否为 ASCII 标识符字符。
+ * @param char - 待检查字符
+ * @returns 是否为 ASCII 字母、数字或下划线
+ */
+function isAsciiWordChar(char: string | undefined): boolean {
+  return typeof char === 'string' && /^[A-Za-z0-9_]$/.test(char);
+}
+
+/**
+ * 判断指定位置的 Markdown 定界符是否被反斜杠转义。
+ * @param text - 原始文本
+ * @param index - 定界符起始位置
+ * @returns 是否被转义
+ */
+function isEscapedDelimiter(text: string, index: number): boolean {
+  let slashCount = 0;
+
+  for (let cursor = index - 1; cursor >= 0 && text[cursor] === '\\'; cursor -= 1) {
+    slashCount += 1;
+  }
+
+  return slashCount % 2 === 1;
+}
+
+/**
+ * 判断定界符是否贴着同类字符，避免把 `***` 或 `___` 拆成错误的单个标记。
+ * @param text - 原始文本
+ * @param index - 定界符起始位置
+ * @param marker - 定界符文本
+ * @returns 是否贴着重复定界符字符
+ */
+function hasRepeatedMarker(text: string, index: number, marker: FallbackEmphasisDelimiter['marker']): boolean {
+  const markerChar = marker[0];
+  return text[index - 1] === markerChar || text[index + marker.length] === markerChar;
+}
+
+/**
+ * 判断下划线定界符是否处于 ASCII 标识符内部。
+ * @param text - 原始文本
+ * @param index - 定界符起始位置
+ * @param marker - 定界符文本
+ * @returns 是否位于 ASCII 标识符内部
+ */
+function isIdentifierMarker(text: string, index: number, marker: FallbackEmphasisDelimiter['marker']): boolean {
+  if (!marker.includes('_')) return false;
+  return isAsciiWordChar(text[index - 1]) && isAsciiWordChar(text[index + marker.length]);
+}
+
+/**
+ * 判断备用强调定界符在指定位置是否可用。
+ * @param text - 原始文本
+ * @param index - 定界符起始位置
+ * @param delimiter - 备用强调定界符
+ * @returns 是否可作为强调定界符
+ */
+function canUseDelimiter(text: string, index: number, delimiter: FallbackEmphasisDelimiter): boolean {
+  if (isEscapedDelimiter(text, index)) return false;
+  if (hasRepeatedMarker(text, index, delimiter.marker)) return false;
+  return !isIdentifierMarker(text, index, delimiter.marker);
+}
+
+/**
+ * 获取当前位置可用的备用强调定界符。
+ * @param text - 原始文本
+ * @param index - 当前扫描位置
+ * @returns 匹配的定界符，未匹配时返回 null
+ */
+function getFallbackDelimiter(text: string, index: number): FallbackEmphasisDelimiter | null {
+  return (
+    FALLBACK_EMPHASIS_DELIMITERS.find((delimiter) => {
+      const contentChar = text[index + delimiter.marker.length];
+      if (!text.startsWith(delimiter.marker, index) || !contentChar || /\s/.test(contentChar)) return false;
+      return canUseDelimiter(text, index, delimiter);
+    }) ?? null
+  );
+}
+
+/**
+ * 查找与开头定界符配对的结束定界符。
+ * @param text - 原始文本
+ * @param searchStart - 搜索起始位置
+ * @param delimiter - 开头定界符
+ * @returns 结束定界符位置，未找到时返回 -1
+ */
+function findClosingDelimiter(text: string, searchStart: number, delimiter: FallbackEmphasisDelimiter): number {
+  let closeIndex = text.indexOf(delimiter.marker, searchStart);
+
+  while (closeIndex >= 0) {
+    const content = text.slice(searchStart, closeIndex);
+    if (/\S$/.test(content) && canUseDelimiter(text, closeIndex, delimiter)) return closeIndex;
+
+    closeIndex = text.indexOf(delimiter.marker, closeIndex + delimiter.marker.length);
+  }
+
+  return -1;
+}
+
+/**
+ * 将纯文本转为单个文本行内节点，不做 Markdown 兜底解析。
  * @param text - 文本内容
  * @param decodeEntities - 是否解码 HTML 实体
  * @returns 行内节点列表
  */
-function textToInlineNodes(text: string, decodeEntities = false): InlineNode[] {
+function rawTextToInlineNodes(text: string, decodeEntities = false): InlineNode[] {
   const normalizedText = decodeEntities ? decodeMarkdownText(text) : text;
   return normalizedText ? [{ type: 'text', text: normalizedText }] : [];
+}
+
+/**
+ * 将 Marked 未识别的强调源码兜底转为行内节点。
+ * @param text - 文本内容
+ * @param decodeEntities - 是否解码 HTML 实体
+ * @returns 行内节点列表
+ */
+function parseFallbackEmphasis(text: string, decodeEntities: boolean): InlineNode[] {
+  const nodes: InlineNode[] = [];
+  let segmentStart = 0;
+  let index = 0;
+
+  while (index < text.length) {
+    const delimiter = getFallbackDelimiter(text, index);
+    if (!delimiter) {
+      index += 1;
+      continue;
+    }
+
+    const contentStart = index + delimiter.marker.length;
+    const closeIndex = findClosingDelimiter(text, contentStart, delimiter);
+    if (closeIndex < 0) {
+      index += delimiter.marker.length;
+      continue;
+    }
+
+    nodes.push(...rawTextToInlineNodes(text.slice(segmentStart, index), decodeEntities));
+
+    const children = parseFallbackEmphasis(text.slice(contentStart, closeIndex), decodeEntities);
+    nodes.push(delimiter.nodeType === 'strong' ? { type: 'strong', children } : { type: 'em', children });
+
+    index = closeIndex + delimiter.marker.length;
+    segmentStart = index;
+  }
+
+  if (segmentStart === 0) return rawTextToInlineNodes(text, decodeEntities);
+
+  nodes.push(...rawTextToInlineNodes(text.slice(segmentStart), decodeEntities));
+  return nodes;
+}
+
+/**
+ * 将文本转为行内节点。
+ * @param text - 文本内容
+ * @param decodeEntities - 是否解码 HTML 实体
+ * @param parseFallback - 是否兜底解析 Marked 未识别的强调源码
+ * @returns 行内节点列表
+ */
+function textToInlineNodes(text: string, decodeEntities = false, parseFallback = false): InlineNode[] {
+  return parseFallback ? parseFallbackEmphasis(text, decodeEntities) : rawTextToInlineNodes(text, decodeEntities);
 }
 
 /**
@@ -437,7 +660,7 @@ function tokenToInlineNodes(token: Token, path: number[]): InlineNode[] {
   switch (token.type) {
     case 'text': {
       const textToken = token as Tokens.Text;
-      return textToken.tokens?.length ? tokensToInlineNodes(textToken.tokens, path) : textToInlineNodes(textToken.text, true);
+      return textToken.tokens?.length ? tokensToInlineNodes(textToken.tokens, path) : textToInlineNodes(textToken.text, true, true);
     }
 
     case 'escape': {
