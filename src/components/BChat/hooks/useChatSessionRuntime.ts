@@ -3,7 +3,7 @@
  * @description 管理 BChat 草稿会话、历史加载、会话切换与自动命名运行时态。
  */
 import type { Message } from '../utils/types';
-import type { ChatSession } from 'types/chat';
+import type { ChatSession, ChatSessionModelMetadata } from 'types/chat';
 import type { ComputedRef, Ref } from 'vue';
 import { computed, nextTick, ref, watch } from 'vue';
 import { useChatSessionStore } from '@/stores/chat/session';
@@ -39,7 +39,7 @@ interface UseChatSessionRuntimeReturn extends ReturnType<typeof useChatHistory> 
   /** 用于自动命名的会话镜像 */
   autoNameSession: Ref<{ id: string; title: string } | undefined>;
   /** 确保存在可持久化会话 */
-  ensureActiveSession: (title: string) => Promise<string>;
+  ensureActiveSession: (title: string, model: ChatSessionModelMetadata) => Promise<string>;
   /** 重置内部草稿状态，但不触发外部导航事件。 */
   resetDraftState: () => Promise<void>;
   /** 加载当前会话更多历史 */
@@ -77,7 +77,8 @@ export function useChatSessionRuntime(options: UseChatSessionRuntimeOptions): Us
   async function loadSessionMessages(sessionId: string): Promise<void> {
     options.disposeConfirmation();
     history.hasMoreHistory.value = false;
-    history.setLoadedMessages(await chatStore.getSessionMessages(sessionId));
+    const [, messages] = await Promise.all([chatStore.loadSessionById(sessionId), chatStore.getSessionMessages(sessionId)]);
+    history.setLoadedMessages(messages);
   }
 
   watch(
@@ -100,12 +101,14 @@ export function useChatSessionRuntime(options: UseChatSessionRuntimeOptions): Us
   );
 
   /** 确保当前发送动作存在可持久化会话。 */
-  async function ensureActiveSession(title: string): Promise<string> {
-    if (activeSessionId.value) {
-      return activeSessionId.value;
+  async function ensureActiveSession(title: string, model: ChatSessionModelMetadata): Promise<string> {
+    const sessionId = activeSessionId.value;
+    if (sessionId) {
+      await chatStore.ensureSessionModel(sessionId, model);
+      return sessionId;
     }
 
-    const session = await chatStore.createSession('assistant', { title });
+    const session = await chatStore.createSession('assistant', { title, model });
     createdSessionId.value = session.id;
     autoNameSession.value = session;
     options.onSessionCreated(session);

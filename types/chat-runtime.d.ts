@@ -119,6 +119,14 @@ export interface ChatRuntimeContext {
 /** Renderer-created user input parts accepted by runtime send commands. */
 export type ChatRuntimeUserInputPart = ChatMessageTextPart | ChatMessageFilePartInput | ChatMessageSkillReferencePart | ChatMessageWidgetResultPart;
 
+/** Renderer-selected model identity frozen for one Runtime. */
+export interface ChatRuntimeModelSelection {
+  /** Provider stable identifier. */
+  readonly providerId: string;
+  /** Model identifier within the provider. */
+  readonly modelId: string;
+}
+
 /** Send command input. */
 export interface ChatRuntimeSendInput {
   /** Runtime id allocated by renderer before the command starts. */
@@ -131,6 +139,8 @@ export interface ChatRuntimeSendInput {
   agentId: string;
   /** Parent runtime id for future multi-agent flows. */
   parentRuntimeId?: string;
+  /** Model selected for this Runtime; falls back to the global chat model when omitted. */
+  model?: ChatRuntimeModelSelection;
   /** User message text. */
   content: string;
   /** Ordered user input parts parsed by renderer before file snapshots are materialized. */
@@ -175,6 +185,8 @@ export interface ChatRuntimeContinueInput {
   agentId: string;
   /** Parent runtime id for future multi-agent flows. */
   parentRuntimeId?: string;
+  /** Model selected for this Runtime; falls back to the global chat model when omitted. */
+  model?: ChatRuntimeModelSelection;
   /** Current model context window for usage estimation. */
   contextWindow?: number;
   /** System prompt context owned by renderer state until main process owns memory. */
@@ -207,6 +219,8 @@ export interface ChatRuntimeCompactInput {
   clientId: string;
   /** Agent id for this operation. */
   agentId: string;
+  /** Model selected for this Runtime; falls back to the global chat model when omitted. */
+  model?: ChatRuntimeModelSelection;
   /** Current model context window used for budgeting. */
   contextWindow?: number;
   /** Current system prompt context. */
@@ -235,6 +249,8 @@ export interface ChatRuntimeSubmitUserChoiceInput {
   agentId: string;
   /** Parent runtime id for future multi-agent flows. */
   parentRuntimeId?: string;
+  /** Model selected for this Runtime; falls back to the global chat model when omitted. */
+  model?: ChatRuntimeModelSelection;
   /** Current model context window for usage estimation. */
   contextWindow?: number;
   /** System prompt context owned by renderer state until main process owns memory. */

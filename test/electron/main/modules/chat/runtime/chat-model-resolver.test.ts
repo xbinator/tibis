@@ -50,4 +50,33 @@ describe('createChatModelResolver', (): void => {
 
     await expect(resolver.resolve()).resolves.toBeNull();
   });
+
+  it('prefers an explicit runtime model without reading the global chat model', async (): Promise<void> => {
+    const getChatModelConfig = vi.fn().mockResolvedValue({ providerId: 'global', modelId: 'global-model' });
+    const getProvider = vi.fn().mockResolvedValue({
+      id: 'session-provider',
+      name: 'Session Provider',
+      description: 'Session provider',
+      type: 'anthropic',
+      isEnabled: true,
+      apiKey: 'session-key',
+      models: [{ id: 'session-model', name: 'Session Model', type: 'chat', isEnabled: true }]
+    } satisfies AIProvider);
+    const resolver = createChatModelResolver({ getChatModelConfig, getProvider });
+
+    const result = await resolver.resolve({ providerId: 'session-provider', modelId: 'session-model' });
+
+    expect(getChatModelConfig).not.toHaveBeenCalled();
+    expect(getProvider).toHaveBeenCalledWith('session-provider');
+    expect(result?.modelId).toBe('session-model');
+    expect(result?.createOptions.providerId).toBe('session-provider');
+  });
+
+  it('does not fall back when an explicit runtime model is invalid', async (): Promise<void> => {
+    const getChatModelConfig = vi.fn().mockResolvedValue({ providerId: 'global', modelId: 'global-model' });
+    const resolver = createChatModelResolver({ getChatModelConfig, getProvider: vi.fn().mockResolvedValue(null) });
+
+    await expect(resolver.resolve({ providerId: 'missing', modelId: 'missing-model' })).resolves.toBeNull();
+    expect(getChatModelConfig).not.toHaveBeenCalled();
+  });
 });

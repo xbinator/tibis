@@ -3,7 +3,8 @@
  * @description 全局命令面板 Store，统一管理面板打开状态、输入内容与运行时关闭回调。
  */
 import { defineStore } from 'pinia';
-import type { CommandPanelScope, OpenCommandPanelOptions } from '@/components/BCommandPanel/types';
+import type { CommandPanelModelContext, CommandPanelScope, OpenCommandPanelOptions, OpenModelCommandPanelOptions } from '@/components/BCommandPanel/types';
+import type { SelectedModel } from '@/stores/ai/serviceModel';
 
 /**
  * 命令面板 Store 状态。
@@ -19,6 +20,8 @@ interface CommandPanelState {
 
 /** 命令面板关闭后需要执行的一次性运行时回调。 */
 let closeCallback: (() => void) | undefined;
+/** 命令面板本次打开使用的模型上下文，不进入 Pinia state。 */
+let modelContext: CommandPanelModelContext | undefined;
 
 /**
  * 更新关闭回调；回调保存在模块闭包中，避免把函数放入 Pinia state。
@@ -35,6 +38,14 @@ function runCloseCallback(): void {
   const callback = closeCallback;
   closeCallback = undefined;
   callback?.();
+}
+
+/**
+ * 更新本次模型 scope 的调用方上下文。
+ * @param context - 调用方模型上下文
+ */
+function setModelContext(context?: CommandPanelModelContext): void {
+  modelContext = context;
 }
 
 /**
@@ -57,6 +68,7 @@ export const useCommandPanelStore = defineStore('commandPanel', {
       this.keyword = '';
       this.visible = true;
       setCloseCallback(options.onClose);
+      setModelContext(undefined);
     },
 
     /**
@@ -71,8 +83,28 @@ export const useCommandPanelStore = defineStore('commandPanel', {
      * 打开模型选择命令面板。
      * @param options - 打开配置
      */
-    openModel(options: OpenCommandPanelOptions = {}): void {
+    openModel(options: OpenModelCommandPanelOptions = {}): void {
       this.open('model', options);
+      setModelContext(options.modelContext);
+    },
+
+    /**
+     * 读取本次打开的调用方当前模型。
+     * @returns 调用方当前模型；无上下文时返回 undefined
+     */
+    getContextModel(): SelectedModel | undefined {
+      return modelContext?.getCurrentModel();
+    },
+
+    /**
+     * 使用本次打开的调用方规则切换模型。
+     * @param model - 新模型标识
+     * @returns 是否由调用方上下文处理
+     */
+    async changeContextModel(model: SelectedModel): Promise<boolean> {
+      if (!modelContext) return false;
+      await modelContext.onModelChange(model);
+      return true;
     },
 
     /**
@@ -94,6 +126,7 @@ export const useCommandPanelStore = defineStore('commandPanel', {
       this.visible = false;
       this.keyword = '';
       runCloseCallback();
+      setModelContext(undefined);
     }
   }
 });

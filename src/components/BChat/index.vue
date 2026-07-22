@@ -86,6 +86,7 @@ import { useActorSystem } from '@/hooks/useChat/useActorSystem';
 import { useNavigate } from '@/hooks/useNavigate';
 import { getElectronAPI } from '@/shared/platform/electron-api';
 import { useProviderStore } from '@/stores/ai/provider';
+import type { SelectedModel } from '@/stores/ai/serviceModel';
 import { useSkillStore } from '@/stores/ai/skill';
 import { useChatSessionStore } from '@/stores/chat/session';
 import { useCommandPanelStore } from '@/stores/ui/commandPanel';
@@ -149,8 +150,11 @@ const { openFile, openSkill, openWebview } = useNavigate();
 const promptEditorRef = ref<EditorInstance>();
 /** 文件拖拽容器引用。 */
 const containerRef = ref<HTMLElement | null>(null);
+/** 模型选择使用的活动会话 ID，包含首轮发送后创建但尚未由宿主回写的会话。 */
+const modelSessionId = ref<string | null>(props.sessionId);
 /** 输入区域状态与交互能力。 */
 const composer = useChatComposer({
+  activeSessionId: modelSessionId,
   containerRef,
   promptEditorRef,
   interactionAPI,
@@ -207,6 +211,13 @@ const {
   captureAutoNameSnapshot,
   scheduleAutoName
 } = sessionRuntime;
+watch(
+  activeSessionId,
+  (sessionId: string | null): void => {
+    modelSessionId.value = sessionId;
+  },
+  { immediate: true }
+);
 /** 应用级 Chat Actor system。 */
 const chatActorSystem = useActorSystem();
 /** Workflow 创建前收到的待重放 Session UI 事件。 */
@@ -278,6 +289,10 @@ async function handleRuntimeComplete(nextMessage: Message): Promise<void> {
  */
 function openModelCommandPanel(): void {
   commandPanelStore.openModel({
+    modelContext: {
+      getCurrentModel: (): SelectedModel | undefined => selectedModel.value,
+      onModelChange: modelSelectionEvents.onModelChange
+    },
     onClose: (): void => promptEditorRef.value?.focus()
   });
 }
@@ -316,7 +331,7 @@ function showNoModelToast(): void {
 }
 
 /** Chat 服务配置解析 hook。 */
-const chatServiceConfig = useChatServiceConfig();
+const chatServiceConfig = useChatServiceConfig(modelSelectionEvents.resolveSelectedModel);
 /** Runtime 请求配置解析 hook。 */
 const { resolveRuntimeSystemPrompt, resolveRuntimeTavilyConfig, resolveRuntimeMcpRequestConfig } = useRuntimeConfig();
 /** Runtime 请求准备与纯策略适配 hook。 */
@@ -492,8 +507,9 @@ async function resetDraft(): Promise<void> {
  * 处理模型变更（委托给 modelSelection hook）。
  * @param value - 新选中的模型标识
  */
-function handleModelChange(model: { providerId: string; modelId: string }): void {
-  modelSelectionEvents.onModelChange(model);
+async function handleModelChange(model: { providerId: string; modelId: string }): Promise<void> {
+  const [error] = await asyncTo(modelSelectionEvents.onModelChange(model));
+  if (error) interactionAPI.showToast({ type: 'error', content: error.message || '保存会话模型失败' });
 }
 
 /** 斜杠命令处理 hook */

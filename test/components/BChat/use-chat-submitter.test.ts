@@ -54,12 +54,22 @@ function createMessagePartUpdateAction(input: MessagePartUpdateInput): SubmitAct
 
 describe('useChatSubmitter', (): void => {
   it('shares one in-flight user-choice submission across duplicate actions', async (): Promise<void> => {
+    const order: string[] = [];
     let resolveSubmission: ((result: { runtimeId: string; sessionId: string }) => void) | undefined;
     const submission = new Promise<{ runtimeId: string; sessionId: string }>((resolve) => {
       resolveSubmission = resolve;
     });
-    const submitUserChoice = vi.fn(() => submission);
-    const startRuntime = vi.fn((): string => 'runtime-choice');
+    const submitUserChoice = vi.fn(() => {
+      order.push('runtime-choice');
+      return submission;
+    });
+    const startRuntime = vi.fn((): string => {
+      order.push('start-runtime');
+      return 'runtime-choice';
+    });
+    const ensureSessionModel = vi.fn(async (): Promise<void> => {
+      order.push('persist-model');
+    });
     const submitter = useChatSubmitter({
       isWorkflowBusy: () => true,
       messages: ref<Message[]>([]),
@@ -67,10 +77,14 @@ describe('useChatSubmitter', (): void => {
       getActiveRuntimeId: () => 'runtime-question',
       resolveRuntimeRequestConfig: vi.fn(),
       prepareRuntimeRequest: vi.fn().mockResolvedValue({
-        config: { contextWindow: 12_000 },
+        config: {
+          model: { providerId: 'provider-1', modelId: 'model-2' },
+          contextWindow: 12_000
+        },
         rendererTools: [],
         editMemoryExposed: false
       }),
+      ensureSessionModel,
       startRuntime,
       submitUserChoice,
       sendRuntimeUserMessage: vi.fn(),
@@ -85,10 +99,51 @@ describe('useChatSubmitter', (): void => {
     await Promise.resolve();
 
     expect(startRuntime).toHaveBeenCalledTimes(1);
+    expect(ensureSessionModel).toHaveBeenCalledWith('session-1', { providerId: 'provider-1', modelId: 'model-2' });
+    expect(order).toEqual(['persist-model', 'start-runtime', 'runtime-choice']);
     expect(submitUserChoice).toHaveBeenCalledTimes(1);
+    expect(submitUserChoice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtimeId: 'runtime-choice',
+        sessionId: 'session-1',
+        model: { providerId: 'provider-1', modelId: 'model-2' }
+      })
+    );
 
     resolveSubmission?.({ runtimeId: 'runtime-choice', sessionId: 'session-1' });
     await Promise.all([firstSubmission, duplicateSubmission]);
+  });
+
+  it('does not start a user-choice runtime when model persistence fails', async (): Promise<void> => {
+    const startRuntime = vi.fn((): string => 'runtime-choice');
+    const submitUserChoice = vi.fn();
+    const submitter = useChatSubmitter({
+      isWorkflowBusy: () => true,
+      messages: ref<Message[]>([]),
+      getSessionId: () => 'session-1',
+      getActiveRuntimeId: () => 'runtime-question',
+      resolveRuntimeRequestConfig: vi.fn(),
+      prepareRuntimeRequest: vi.fn().mockResolvedValue({
+        config: {
+          model: { providerId: 'provider-1', modelId: 'model-2' },
+          contextWindow: 12_000
+        },
+        rendererTools: [],
+        editMemoryExposed: false
+      }),
+      ensureSessionModel: vi.fn().mockRejectedValue(new Error('metadata failed')),
+      startRuntime,
+      submitUserChoice,
+      sendRuntimeUserMessage: vi.fn(),
+      submitRuntimeMessagePart: vi.fn(),
+      updateSessionMessage: vi.fn()
+    });
+    const action = createUserChoice({ questionId: 'question-1', toolCallId: 'tool-call-question', answers: ['yes'] });
+
+    await expect(submitter.submit(action)).rejects.toThrow('metadata failed');
+
+    expect(startRuntime).not.toHaveBeenCalled();
+    expect(submitUserChoice).not.toHaveBeenCalled();
   });
 
   it('sends adapted user messages while the Session workflow accepts input', async (): Promise<void> => {
@@ -100,6 +155,7 @@ describe('useChatSubmitter', (): void => {
       getSessionId: () => 'session-1',
       getActiveRuntimeId: () => undefined,
       resolveRuntimeRequestConfig: vi.fn(),
+      ensureSessionModel: vi.fn(),
       submitUserChoice: vi.fn(),
       sendRuntimeUserMessage,
       submitRuntimeMessagePart: vi.fn(),
@@ -120,6 +176,7 @@ describe('useChatSubmitter', (): void => {
       getSessionId: () => 'session-1',
       getActiveRuntimeId: () => undefined,
       resolveRuntimeRequestConfig: vi.fn(),
+      ensureSessionModel: vi.fn(),
       submitUserChoice: vi.fn(),
       sendRuntimeUserMessage,
       submitRuntimeMessagePart: vi.fn(),
@@ -158,6 +215,7 @@ describe('useChatSubmitter', (): void => {
       getSessionId: () => 'session-1',
       getActiveRuntimeId: () => 'runtime-1',
       resolveRuntimeRequestConfig: vi.fn(),
+      ensureSessionModel: vi.fn(),
       submitUserChoice: vi.fn(),
       sendRuntimeUserMessage: vi.fn(),
       submitRuntimeMessagePart,

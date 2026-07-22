@@ -3,6 +3,7 @@
  * @description BCommandPanel 的 scope、source、结果项与打开配置类型定义。
  */
 import type { VNodeChild } from 'vue';
+import type { SelectedModel } from '@/stores/ai/serviceModel';
 
 /**
  * 命令面板打开入口的业务范围。
@@ -124,4 +125,22 @@ export interface CommandPanelSource {
 export interface OpenCommandPanelOptions {
   /** 面板关闭后的运行时回调。 */
   onClose?: () => void;
+}
+
+/**
+ * 模型 scope 的调用方运行时上下文。
+ */
+export interface CommandPanelModelContext {
+  /** 读取调用方当前模型。 */
+  getCurrentModel: () => SelectedModel | undefined;
+  /** 使用调用方规则切换模型。 */
+  onModelChange: (model: SelectedModel) => Promise<void>;
+}
+
+/**
+ * 模型命令面板打开参数。
+ */
+export interface OpenModelCommandPanelOptions extends OpenCommandPanelOptions {
+  /** 可选的调用方模型上下文；缺失时使用全局默认模型。 */
+  modelContext?: CommandPanelModelContext;
 }

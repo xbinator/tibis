@@ -5,6 +5,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { AICreateOptions, AIProvider, AIProviderType } from 'types/ai';
+import type { ChatRuntimeModelSelection } from 'types/chat-runtime';
 import { dbSelect } from '../../../database/service.mjs';
 import { ensureTibisWorkspaceRoot } from '../../../workspace/root.mjs';
 
@@ -117,10 +118,11 @@ async function readChatSettingsFile(): Promise<ChatSettingsFile> {
 /** chat 模型解析器。 */
 export interface ChatModelResolver {
   /**
-   * 解析当前 chat 模型调用配置。
+   * 解析 chat 模型调用配置。
+   * @param model - 可选的 Runtime 显式模型；缺失时读取全局默认模型
    * @returns chat 模型配置，不可用时返回 null
    */
-  resolve(): Promise<ChatModelResolution | null>;
+  resolve(model?: ChatRuntimeModelSelection): Promise<ChatModelResolution | null>;
 }
 
 /**
@@ -155,8 +157,8 @@ async function getDefaultProvider(providerId: string): Promise<AIProvider | null
  */
 export function createChatModelResolver(dependencies: ChatModelResolverDependencies): ChatModelResolver {
   return {
-    async resolve(): Promise<ChatModelResolution | null> {
-      const config = await dependencies.getChatModelConfig();
+    async resolve(model?: ChatRuntimeModelSelection): Promise<ChatModelResolution | null> {
+      const config = model ?? (await dependencies.getChatModelConfig());
       if (!config?.providerId || !config.modelId) return null;
 
       const provider = await dependencies.getProvider(config.providerId);

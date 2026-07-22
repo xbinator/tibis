@@ -1,7 +1,28 @@
+/**
+ * @file provider.ts
+ * @description AI Provider 配置状态、持久化加载与可用模型派生。
+ */
 import type { AIProvider, AIProviderModel, AICustomProvider } from 'types/ai';
 import { defineStore } from 'pinia';
 import { cloneDeep } from 'lodash-es';
 import { DEFAULT_PROVIDERS, providerStorage } from '@/shared/storage';
+import { asyncTo } from '@/utils/asyncTo';
+
+/** 当前 Provider 持久化读取任务，用于合并并发加载。 */
+let providerLoadPromise: Promise<AIProvider[]> | undefined;
+
+/**
+ * 读取持久化 Provider，并让并发调用共享同一个在途请求。
+ * @returns Provider 列表
+ */
+async function loadStoredProviders(): Promise<AIProvider[]> {
+  const request = providerLoadPromise ?? providerStorage.listProviders();
+  providerLoadPromise = request;
+  const [error, providers] = await asyncTo(request);
+  if (providerLoadPromise === request) providerLoadPromise = undefined;
+  if (error) throw error;
+  return providers;
+}
 
 /** Provider 状态 */
 interface ProviderState {
@@ -70,7 +91,7 @@ export const useProviderStore = defineStore('provider', {
     async loadProviders(): Promise<void> {
       this.loading = true;
       try {
-        this.providers = await providerStorage.listProviders();
+        this.providers = await loadStoredProviders();
       } finally {
         this.loading = false;
       }

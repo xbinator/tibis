@@ -3,6 +3,7 @@
  * @description BChat Runtime 请求准备 IO hook 测试。
  */
 import type { AIToolExecutor } from 'types/ai';
+import type { ChatRuntimeModelSelection } from 'types/chat-runtime';
 import { ref } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
 import { useRuntimeRequestConfig } from '@/components/BChat/hooks/useRuntimeRequestConfig';
@@ -80,6 +81,9 @@ describe('useRuntimeRequestConfig', (): void => {
     ]);
 
     expect(order).toEqual(['service', 'sync']);
+    const preparedModel: ChatRuntimeModelSelection | undefined = prepared?.config.model;
+    expect(preparedModel).toBeDefined();
+    expect(prepared?.config.model).toEqual({ providerId: 'provider', modelId: 'model' });
     expect(prepared?.config.skillContentHashes).toEqual({ weather: 'hash-1' });
     expect(prepared?.memorySelection).toMatchObject({ mode: 'full', references: ['/notes/a.md', '/notes/b.md'] });
   });

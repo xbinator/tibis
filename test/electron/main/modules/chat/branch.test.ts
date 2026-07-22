@@ -39,7 +39,8 @@ function createSourceSession(): ChatSession {
     title: '原始标题',
     createdAt: '2026-07-14T08:00:00.000Z',
     updatedAt: '2026-07-14T08:00:00.000Z',
-    lastMessageAt: '2026-07-14T08:04:00.000Z'
+    lastMessageAt: '2026-07-14T08:04:00.000Z',
+    metadata: { model: { providerId: 'provider-branch', modelId: 'model-branch' } }
   };
 }
 
@@ -207,6 +208,8 @@ describe('createSessionBranchData', (): void => {
       lastMessageAt: '2026-07-14T12:00:00.000Z',
       usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 }
     });
+    expect(result.session.metadata).toEqual({ model: { providerId: 'provider-branch', modelId: 'model-branch' } });
+    expect(result.session.metadata).not.toBe(sourceSession.metadata);
     expect(result.messages.map((message: ChatMessageRecord): string => message.content)).toEqual(['问题一', '回答一']);
     expect(result.messages.every((message: ChatMessageRecord): boolean => message.sessionId === result.session.id)).toBe(true);
     expect(result.messages.map((message: ChatMessageRecord): string => message.id)).not.toContain('user-1');

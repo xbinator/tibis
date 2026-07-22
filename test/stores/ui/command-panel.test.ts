@@ -36,4 +36,25 @@ describe('useCommandPanelStore', (): void => {
     expect(store.keyword).toBe('');
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('uses and clears the caller model context', async (): Promise<void> => {
+    const store = useCommandPanelStore();
+    const onModelChange = vi.fn<(_model: { providerId: string; modelId: string }) => Promise<void>>().mockResolvedValue(undefined);
+    const currentModel = { providerId: 'provider-1', modelId: 'model-2' };
+
+    store.openModel({
+      modelContext: {
+        getCurrentModel: (): typeof currentModel => currentModel,
+        onModelChange
+      }
+    });
+
+    expect(store.getContextModel()).toEqual(currentModel);
+    await expect(store.changeContextModel({ providerId: 'provider-1', modelId: 'model-3' })).resolves.toBe(true);
+    expect(onModelChange).toHaveBeenCalledWith({ providerId: 'provider-1', modelId: 'model-3' });
+
+    store.close();
+    expect(store.getContextModel()).toBeUndefined();
+    await expect(store.changeContextModel(currentModel)).resolves.toBe(false);
+  });
 });

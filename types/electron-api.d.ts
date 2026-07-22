@@ -15,7 +15,15 @@ import type {
   MCPServerDiscoveryCache,
   MCPStatusResponse
 } from './ai';
-import type { ChatSession, ChatSessionType, ChatMessageRecord, ChatMessageHistoryCursor, PaginatedSessionsResult, SessionPaginationParams } from './chat';
+import type {
+  ChatMessageHistoryCursor,
+  ChatMessageRecord,
+  ChatSession,
+  ChatSessionModelMetadata,
+  ChatSessionType,
+  PaginatedSessionsResult,
+  SessionPaginationParams
+} from './chat';
 import type {
   ChatRuntimeAbortInput,
   ChatRuntimeAbortResult,
@@ -552,8 +560,10 @@ export interface ElectronAPI {
   // 聊天会话操作
   chatSessionList: (type: ChatSessionType, pagination?: SessionPaginationParams) => Promise<ChatHandlerResult<PaginatedSessionsResult>>;
   chatSessionCreate: (session: ChatSession) => Promise<ChatHandlerResult<void>>;
+  chatSessionGet: (sessionId: string) => Promise<ChatHandlerResult<ChatSession | undefined>>;
   chatSessionBranch: (sourceSessionId: string, targetMessageId: string) => Promise<ChatHandlerResult<ChatSession>>;
   chatSessionUpdateTitle: (sessionId: string, title: string) => Promise<ChatHandlerResult<void>>;
+  chatSessionUpdateModel: (sessionId: string, model: ChatSessionModelMetadata) => Promise<ChatHandlerResult<ChatSession>>;
   chatSessionDelete: (sessionId: string) => Promise<ChatHandlerResult<void>>;
   chatSessionUsageGet: (sessionId: string) => Promise<ChatHandlerResult<AIUsage | undefined>>;
 

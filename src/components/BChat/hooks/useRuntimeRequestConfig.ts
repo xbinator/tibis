@@ -119,6 +119,7 @@ export function useRuntimeRequestConfig(options: UseRuntimeRequestConfigOptions)
       memorySelectionDebugInfo = debugInfo;
     });
     const result = buildRuntimeRequestConfig({
+      model: { providerId: serviceConfig.providerId, modelId: serviceConfig.modelId },
       contextWindow: options.contextWindow.value,
       system,
       workspaceRoot: options.workspaceRoot.value || undefined,
@@ -135,7 +136,10 @@ export function useRuntimeRequestConfig(options: UseRuntimeRequestConfigOptions)
       logger.info(`[memory-selection] ${JSON.stringify({ ...memorySelectionDebugInfo, editMemoryExposed: result.editMemoryExposed })}`);
     }
 
-    return { ...result, memorySelection };
+    return {
+      ...result,
+      memorySelection
+    };
   }
 
   /**

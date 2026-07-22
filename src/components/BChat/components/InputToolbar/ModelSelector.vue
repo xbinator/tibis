@@ -34,7 +34,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import BButton from '@/components/BButton/index.vue';
 import BDropdown from '@/components/BDropdown/index.vue';
 import BModelIcon from '@/components/BModel/Icon.vue';
@@ -123,10 +123,6 @@ watch(
   },
   { immediate: true }
 );
-
-onMounted(async () => {
-  await store.loadProviders();
-});
 
 /**
  * 暴露给父组件的程序化打开入口。

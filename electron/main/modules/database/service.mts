@@ -48,6 +48,7 @@ function ensureColumn(tableName: DatabaseTableName, columnName: string, definiti
  */
 function migrateDatabase(): void {
   ensureColumn('chat_sessions', 'usage_json', 'usage_json TEXT');
+  ensureColumn('chat_sessions', 'metadata_json', 'metadata_json TEXT');
   ensureColumn('chat_messages', 'thinking', 'thinking TEXT');
   ensureColumn('chat_messages', 'parts_json', 'parts_json TEXT');
   ensureColumn('chat_messages', 'loading', 'loading INTEGER');
@@ -89,7 +90,8 @@ export async function initDatabase(): Promise<void> {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       last_message_at TEXT NOT NULL,
-      usage_json TEXT
+      usage_json TEXT,
+      metadata_json TEXT
     );
 
     CREATE TABLE IF NOT EXISTS chat_messages (

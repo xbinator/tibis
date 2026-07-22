@@ -249,7 +249,8 @@ export function createSessionBranchData(input: CreateSessionBranchInput): Sessio
     createdAt: input.now,
     updatedAt: input.now,
     lastMessageAt: input.now,
-    usage: sumUsage(messages)
+    usage: sumUsage(messages),
+    metadata: input.sourceSession.metadata ? structuredClone(input.sourceSession.metadata) : undefined
   };
 
   return { session, messages };

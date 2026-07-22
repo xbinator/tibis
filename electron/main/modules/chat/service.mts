@@ -10,6 +10,8 @@ import type {
   ChatMessageRecord,
   ChatMessageRole,
   ChatSession,
+  ChatSessionMetadata,
+  ChatSessionModelMetadata,
   ChatSessionType,
   PaginatedSessionsResult,
   SessionCursor,
@@ -35,17 +37,17 @@ const MESSAGE_ROLE_ORDER_SQL = `
   END
 `;
 
-// ==================== SQL — 会话 (9 条) ====================
+// ==================== SQL — 会话 (10 条) ====================
 
 const SELECT_SESSIONS_BY_TYPE_SQL = `
-  SELECT id, type, title, created_at, updated_at, last_message_at, usage_json
+  SELECT id, type, title, created_at, updated_at, last_message_at, usage_json, metadata_json
   FROM chat_sessions
   WHERE type = ?
   ORDER BY last_message_at DESC, updated_at DESC, created_at DESC
   LIMIT ?
 `;
 const SELECT_SESSIONS_BY_CURSOR_SQL = `
-  SELECT id, type, title, created_at, updated_at, last_message_at, usage_json
+  SELECT id, type, title, created_at, updated_at, last_message_at, usage_json, metadata_json
   FROM chat_sessions
   WHERE type = ?
     AND (last_message_at < ? OR (last_message_at = ? AND created_at < ?))
@@ -53,20 +55,20 @@ const SELECT_SESSIONS_BY_CURSOR_SQL = `
   LIMIT ?
 `;
 const SELECT_SESSION_BY_ID_SQL = `
-  SELECT id, type, title, created_at, updated_at, last_message_at, usage_json
+  SELECT id, type, title, created_at, updated_at, last_message_at, usage_json, metadata_json
   FROM chat_sessions
   WHERE id = ?
   LIMIT 1
 `;
 const UPSERT_SESSION_SQL = `
   INSERT OR REPLACE INTO chat_sessions
-    (id, type, title, created_at, updated_at, last_message_at, usage_json)
-  VALUES (?, ?, ?, ?, ?, ?, ?)
+    (id, type, title, created_at, updated_at, last_message_at, usage_json, metadata_json)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `;
 const INSERT_SESSION_SQL = `
   INSERT INTO chat_sessions
-    (id, type, title, created_at, updated_at, last_message_at, usage_json)
-  VALUES (?, ?, ?, ?, ?, ?, ?)
+    (id, type, title, created_at, updated_at, last_message_at, usage_json, metadata_json)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `;
 const UPDATE_SESSION_LAST_MESSAGE_AT_SQL = `
   UPDATE chat_sessions
@@ -76,6 +78,11 @@ const UPDATE_SESSION_LAST_MESSAGE_AT_SQL = `
 const UPDATE_SESSION_TITLE_SQL = `
   UPDATE chat_sessions
   SET title = ?, updated_at = ?
+  WHERE id = ?
+`;
+const UPDATE_SESSION_METADATA_SQL = `
+  UPDATE chat_sessions
+  SET metadata_json = ?, updated_at = ?
   WHERE id = ?
 `;
 const SELECT_SESSION_USAGE_SQL = 'SELECT usage_json FROM chat_sessions WHERE id = ?';
@@ -149,6 +156,7 @@ interface ChatSessionRow {
   updated_at: string;
   last_message_at: string;
   usage_json: string | null;
+  metadata_json: string | null;
 }
 
 interface ChatMessageRow {
@@ -215,6 +223,33 @@ function parseStrictJson<T>(json: string | null, fieldName: string, validator: J
  */
 function isRecordValue(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * 判断未知值是否为有效的会话模型标识。
+ * @param value - 待验证的元数据字段
+ * @returns Provider 和模型标识均为非空字符串时返回 true
+ */
+function isSessionModelMetadata(value: unknown): value is ChatSessionModelMetadata {
+  return (
+    isRecordValue(value) &&
+    typeof value.providerId === 'string' &&
+    value.providerId.trim().length > 0 &&
+    typeof value.modelId === 'string' &&
+    value.modelId.trim().length > 0
+  );
+}
+
+/**
+ * 防御性解析会话元数据，损坏的模型字段按缺失元数据处理。
+ * @param json - 数据库存储的元数据 JSON
+ * @returns 合法元数据；JSON 或模型结构无效时返回 undefined
+ */
+function parseSessionMetadata(json: string | null): ChatSessionMetadata | undefined {
+  const value = parseJson<unknown>(json);
+  if (!isRecordValue(value)) return undefined;
+  if (value.model !== undefined && !isSessionModelMetadata(value.model)) return undefined;
+  return value as ChatSessionMetadata;
 }
 
 /**
@@ -358,7 +393,8 @@ function mapSessionRow(row: ChatSessionRow): ChatSession | null {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastMessageAt: row.last_message_at,
-    usage: parseJson<AIUsage>(row.usage_json)
+    usage: parseJson<AIUsage>(row.usage_json),
+    metadata: parseSessionMetadata(row.metadata_json)
   };
 }
 
@@ -479,7 +515,8 @@ class ChatSessionManager {
       session.createdAt,
       session.updatedAt,
       session.lastMessageAt,
-      stringifyJson(session.usage)
+      stringifyJson(session.usage),
+      stringifyJson(session.metadata)
     ]);
   }
 
@@ -491,6 +528,26 @@ class ChatSessionManager {
   getSessionById(sessionId: string): ChatSession | undefined {
     const rows = dbSelect<ChatSessionRow>(SELECT_SESSION_BY_ID_SQL, [sessionId]);
     return rows.length ? mapSessionRow(rows[0]) ?? undefined : undefined;
+  }
+
+  /**
+   * 原子合并并持久化单个会话的模型元数据。
+   * @param sessionId - 会话 ID
+   * @param model - 待持久化的模型标识
+   * @returns 已更新的完整会话
+   */
+  updateSessionModel(sessionId: string, model: ChatSessionModelMetadata): ChatSession {
+    if (!isSessionModelMetadata(model)) throw new Error('会话模型格式无效');
+
+    return transaction((): ChatSession => {
+      const session = this.getSessionById(sessionId);
+      if (!session) throw new Error('找不到聊天会话');
+
+      const updatedAt = dayjs().toISOString();
+      const metadata: ChatSessionMetadata = { ...(session.metadata ?? {}), model };
+      dbExecute(UPDATE_SESSION_METADATA_SQL, [stringifyJson(metadata), updatedAt, sessionId]);
+      return { ...session, metadata, updatedAt };
+    });
   }
 
   /**
@@ -529,7 +586,8 @@ class ChatSessionManager {
       branch.session.createdAt,
       branch.session.updatedAt,
       branch.session.lastMessageAt,
-      stringifyJson(branch.session.usage)
+      stringifyJson(branch.session.usage),
+      stringifyJson(branch.session.metadata)
     ]);
     for (const message of branch.messages) {
       dbExecute(INSERT_MESSAGE_SQL, buildMessageUpsertParams(message));

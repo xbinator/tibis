@@ -20,7 +20,7 @@ import type {
   AIUsage
 } from 'types/ai';
 import type { ChatMessageRecord } from 'types/chat';
-import type { ChatRuntimeCapabilityDescriptor, ChatRuntimeContext, ChatRuntimeEventMap } from 'types/chat-runtime';
+import type { ChatRuntimeCapabilityDescriptor, ChatRuntimeContext, ChatRuntimeEventMap, ChatRuntimeModelSelection } from 'types/chat-runtime';
 
 /** Runtime 生命周期状态。 */
 export type ChatRuntimeStatus = 'running' | 'completed';
@@ -40,6 +40,8 @@ export interface ActiveChatRuntime {
   agentId: string;
   /** 父 runtime id。 */
   parentRuntimeId?: string;
+  /** Renderer 在本 Runtime 启动时冻结的模型标识。 */
+  model?: ChatRuntimeModelSelection;
   /** Renderer 重建能力所需的可克隆描述符。 */
   capabilities?: ChatRuntimeCapabilityDescriptor;
   /** 当前模型上下文窗口。 */
@@ -227,8 +229,8 @@ export interface ChatRuntimeServiceDependencies {
   messageReader: ChatRuntimeMessageReader;
   /** runtime 流式执行器。 */
   streamExecutor: ChatRuntimeStreamExecutor;
-  /** 解析当前模型并在单次模型请求边界内冻结。 */
-  resolveModel: () => Promise<ChatModelResolution | null>;
+  /** 解析指定 Runtime 模型，缺失时回退全局默认模型。 */
+  resolveModel: (model?: ChatRuntimeModelSelection) => Promise<ChatModelResolution | null>;
   /** 调用结构化上下文摘要模型。 */
   compactionGenerateText: SummaryGeneratorDependencies['generateText'];
   /** 可选的上下文压缩 executor 测试替身。 */

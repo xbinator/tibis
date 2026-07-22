@@ -7,6 +7,7 @@ import type {
   ChatMessageHistoryCursor,
   ChatMessageRecord,
   ChatSession,
+  ChatSessionModelMetadata,
   ChatSessionType,
   PaginatedSessionsResult,
   SessionCursor,
@@ -27,6 +28,19 @@ import { useTodoStore } from './todo';
 
 /** 会话历史分页大小。 */
 const SESSION_PAGE_SIZE = 20;
+
+/** 同一会话按 ID 加载时共享的在途请求。 */
+const sessionLoadPromises = new Map<string, Promise<ChatSession | undefined>>();
+
+/**
+ * 创建聊天会话时可选的初始字段。
+ */
+interface CreateSessionOptions {
+  /** 初始标题。 */
+  title?: string;
+  /** 首次 Runtime 已冻结的模型。 */
+  model?: ChatSessionModelMetadata;
+}
 
 /**
  * 聊天会话 Store 状态。
@@ -212,6 +226,35 @@ export const useChatSessionStore = defineStore('chat', {
     },
 
     /**
+     * 按 ID 加载未出现在当前分页集合中的会话。
+     * @param sessionId - 要加载的会话 ID
+     * @returns 已加载会话；会话不存在或数据库仍在初始化时返回 undefined
+     */
+    async loadSessionById(sessionId: string): Promise<ChatSession | undefined> {
+      const localSession = this.findSession(sessionId);
+      if (localSession) return localSession;
+
+      let request = sessionLoadPromises.get(sessionId);
+      if (!request) {
+        request = retryDuringDatabaseInitialization(async (): Promise<ChatSession | undefined> => {
+          const result = await getElectronAPI().chatSessionGet(sessionId);
+          return unwrap(result);
+        });
+        sessionLoadPromises.set(sessionId, request);
+      }
+
+      const [error, session] = await asyncTo(request);
+      if (sessionLoadPromises.get(sessionId) === request) sessionLoadPromises.delete(sessionId);
+      if (error) {
+        if (isDatabaseInitializationRaceError(error)) return undefined;
+        throw error;
+      }
+
+      if (session) this.sessions = mergeSessions([session], this.sessions);
+      return session;
+    },
+
+    /**
      * 加载会话的聊天消息，可选择使用历史游标。
      * @param sessionId - 要加载的会话 ID。
      * @param cursor - 可选的历史游标。
@@ -272,9 +315,17 @@ export const useChatSessionStore = defineStore('chat', {
      * @param options - 可选的会话元数据。
      * @returns 创建的会话记录。
      */
-    async createSession(type: ChatSessionType, { title = '新会话' }: { title?: string } = {}): Promise<ChatSession> {
+    async createSession(type: ChatSessionType, { title = '新会话', model }: CreateSessionOptions = {}): Promise<ChatSession> {
       const now = dayjs().toISOString();
-      const session: ChatSession = { id: nanoid(), type, title, createdAt: now, updatedAt: now, lastMessageAt: now };
+      const session: ChatSession = {
+        id: nanoid(),
+        type,
+        title,
+        createdAt: now,
+        updatedAt: now,
+        lastMessageAt: now,
+        metadata: model ? { model: toCloneableData(model) } : undefined
+      };
 
       await retryDuringDatabaseInitialization(async () => {
         const result = await getElectronAPI().chatSessionCreate(session);
@@ -283,6 +334,38 @@ export const useChatSessionStore = defineStore('chat', {
 
       this.sessions = mergeSessions([session], this.sessions);
       return session;
+    },
+
+    /**
+     * 持久化会话模型，并以主进程返回的完整会话更新本地集合。
+     * @param sessionId - 会话 ID
+     * @param model - 新模型标识
+     * @returns 已持久化的完整会话
+     */
+    async updateSessionModel(sessionId: string, model: ChatSessionModelMetadata): Promise<ChatSession> {
+      await this.loadSessionById(sessionId);
+      const [error, session] = await asyncTo(
+        retryDuringDatabaseInitialization(async (): Promise<ChatSession> => {
+          const result = await getElectronAPI().chatSessionUpdateModel(sessionId, toCloneableData(model));
+          return unwrap(result);
+        })
+      );
+      if (error) throw error;
+
+      this.sessions = mergeSessions([session], this.sessions);
+      return session;
+    },
+
+    /**
+     * 保留已有会话模型，仅在旧会话缺少模型元数据时补写。
+     * @param sessionId - 会话 ID
+     * @param model - 缺少元数据时要写入的 Runtime 模型
+     * @returns 已具备模型元数据的会话
+     */
+    async ensureSessionModel(sessionId: string, model: ChatSessionModelMetadata): Promise<ChatSession> {
+      const session = await this.loadSessionById(sessionId);
+      if (!session) throw new Error('找不到聊天会话');
+      return session.metadata?.model ? session : this.updateSessionModel(sessionId, model);
     },
 
     /**

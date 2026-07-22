@@ -28,6 +28,7 @@ import type {
   ChatRuntimeContinueInput,
   ChatRuntimeContextUsageSnapshot,
   ChatRuntimeEstimateContextInput,
+  ChatRuntimeModelSelection,
   ChatRuntimeRecoverySnapshot,
   ChatRuntimeSendInput,
   ChatRuntimeStartResult,
@@ -67,6 +68,7 @@ import {
 import { applyRuntimeContext } from './messages/runtime-context.mjs';
 import { applyUserChoiceAnswer, cloneRuntimeMessage } from './messages/user-choice.mjs';
 import { createAutoNamePrompt, normalizeAutoNameTitle } from './model/auto-name.mjs';
+import type { ChatModelResolution } from './model/resolver.mjs';
 import { createDefaultChatModelResolver } from './model/resolver.mjs';
 import { createCompactRuntime, createContinuationRuntime, createSendRuntime, createUserChoiceRuntime } from './runners/factory.mjs';
 import { createRuntimeStreamExecutor } from './stream/index.mjs';
@@ -197,7 +199,9 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   const createMessageId = dependencies.createMessageId ?? createDefaultMessageId;
   const now = dependencies.now ?? (() => new Date().toISOString());
   const requestModelResolver = createDefaultChatModelResolver();
-  const resolveModel = dependencies.resolveModel ?? (() => requestModelResolver.resolve());
+  const resolveModel =
+    dependencies.resolveModel ??
+    ((model?: ChatRuntimeModelSelection): Promise<ChatModelResolution | null> => requestModelResolver.resolve(model));
   const compactionGenerateText =
     dependencies.compactionGenerateText ?? ((createOptions, request, callOptions) => aiService.generateText(createOptions, request, callOptions));
   const autoNameResolver = dependencies.autoNameResolveModel ?? (() => createDefaultChatModelResolver().resolve());
@@ -561,7 +565,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     });
     if (!runtime.contextWindow || runtime.contextWindow < 1) return projection.messages;
 
-    const [resolutionResult] = await Promise.allSettled([resolveModel()]);
+    const [resolutionResult] = await Promise.allSettled([resolveModel(runtime.model)]);
     const resolution = resolutionResult.status === 'fulfilled' ? resolutionResult.value : null;
     if (resolution) runtime.resolvedModel = resolution;
     const thresholdBudget = createCompactionBudget({ contextWindow: runtime.contextWindow, noncompressibleTokens: 0 });
@@ -831,7 +835,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   async function runManualCompaction(runtime: ActiveChatRuntime, assistantMessage: ChatMessageRecord): Promise<void> {
     const [sourceResult, resolutionResult] = await Promise.allSettled([
       Promise.resolve().then(() => messageReader.getMessages(runtime.sessionId)),
-      resolveModel()
+      resolveModel(runtime.model)
     ]);
     if (!activeRuntimes.has(runtime.runtimeId)) return;
     const capturedMessages =

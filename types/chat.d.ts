@@ -593,6 +593,26 @@ export type ChatMessagePart =
   | ChatMessageCompactionPart;
 
 /**
+ * 单个聊天会话持久化的模型标识。
+ */
+export interface ChatSessionModelMetadata {
+  /** Provider 稳定标识。 */
+  providerId: string;
+  /** Provider 内的模型标识。 */
+  modelId: string;
+}
+
+/**
+ * 可扩展的聊天会话元数据。
+ */
+export interface ChatSessionMetadata {
+  /** 会话后续 Runtime 使用的模型。 */
+  model?: ChatSessionModelMetadata;
+  /** 主进程更新模型时需要保留的其他元数据字段。 */
+  [key: string]: unknown;
+}
+
+/**
  * 聊天会话
  */
 export interface ChatSession {
@@ -610,6 +630,8 @@ export interface ChatSession {
   lastMessageAt: string;
   /** 会话累计 Token 使用统计 */
   usage?: AIUsage;
+  /** 会话级可扩展元数据。 */
+  metadata?: ChatSessionMetadata;
 }
 
 /**

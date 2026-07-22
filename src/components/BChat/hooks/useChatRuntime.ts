@@ -37,6 +37,7 @@ export type BChatRuntimeSendInput = Pick<
   | 'files'
   | 'userMessageId'
   | 'userMessageCreatedAt'
+  | 'model'
   | 'contextWindow'
   | 'system'
   | 'workspaceRoot'
@@ -53,6 +54,7 @@ export type BChatRuntimeContinueInput = Pick<
   ChatRuntimeContinueInput,
   | 'runtimeId'
   | 'sessionId'
+  | 'model'
   | 'contextWindow'
   | 'system'
   | 'workspaceRoot'
@@ -75,6 +77,7 @@ export type BChatRuntimeSubmitUserChoiceInput = Pick<
   ChatRuntimeSubmitUserChoiceInput,
   | 'runtimeId'
   | 'sessionId'
+  | 'model'
   | 'contextWindow'
   | 'system'
   | 'workspaceRoot'

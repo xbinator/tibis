@@ -15,6 +15,7 @@ type RuntimeBaseState = Pick<
   | 'sessionId'
   | 'clientId'
   | 'agentId'
+  | 'model'
   | 'capabilities'
   | 'contextWindow'
   | 'system'
@@ -40,6 +41,7 @@ function createRuntimeBase(input: RuntimeFactoryInput, runtimeId: string, sessio
     sessionId,
     clientId: input.clientId,
     agentId: input.agentId,
+    model: input.model,
     capabilities: input.capabilities,
     contextWindow: input.contextWindow,
     system: input.system,

@@ -2,7 +2,7 @@
  * @file session.test.ts
  * @description 聊天会话 store 消息草稿恢复与单条更新测试。
  */
-import type { ChatMessageRecord, ChatSession, PaginatedSessionsResult, SessionPaginationParams } from 'types/chat';
+import type { ChatMessageRecord, ChatSession, ChatSessionModelMetadata, PaginatedSessionsResult, SessionPaginationParams } from 'types/chat';
 import type { ChatHandlerResult } from 'types/electron-api';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,8 +13,10 @@ import { useChatSessionStore } from '@/stores/chat/session';
 const mockElectronAPI = vi.hoisted(() => ({
   chatSessionList: vi.fn<(type: 'assistant', pagination?: SessionPaginationParams) => Promise<ChatHandlerResult<PaginatedSessionsResult>>>(),
   chatSessionCreate: vi.fn<(session: ChatSession) => Promise<ChatHandlerResult<void>>>(),
+  chatSessionGet: vi.fn<(sessionId: string) => Promise<ChatHandlerResult<ChatSession | undefined>>>(),
   chatSessionBranch: vi.fn<(sourceSessionId: string, targetMessageId: string) => Promise<ChatHandlerResult<ChatSession>>>(),
   chatSessionUpdateTitle: vi.fn<(sessionId: string, title: string) => Promise<ChatHandlerResult<void>>>(),
+  chatSessionUpdateModel: vi.fn<(sessionId: string, model: ChatSessionModelMetadata) => Promise<ChatHandlerResult<ChatSession>>>(),
   chatSessionDelete: vi.fn<(sessionId: string) => Promise<ChatHandlerResult<void>>>(),
   chatMessageList: vi.fn<(sessionId: string) => Promise<{ ok: true; data: ChatMessageRecord[] }>>(),
   chatMessageAdd: vi.fn<(message: ChatMessageRecord) => Promise<{ ok: true; data: void }>>(),
@@ -47,17 +49,20 @@ function createDeferred<T>(): Deferred<T> {
 /**
  * 创建测试会话。
  * @param id - 会话 ID
- * @param lastMessageAt - 最近消息时间
+ * @param options - 最近消息时间或会话字段覆盖
  * @returns 测试会话
  */
-function createSession(id: string, lastMessageAt = '2026-07-22T00:00:00.000Z'): ChatSession {
+function createSession(id: string, options: string | Partial<ChatSession> = '2026-07-22T00:00:00.000Z'): ChatSession {
+  const overrides = typeof options === 'string' ? {} : options;
+  const lastMessageAt = typeof options === 'string' ? options : options.lastMessageAt ?? '2026-07-22T00:00:00.000Z';
   return {
     id,
     type: 'assistant',
     title: `会话 ${id}`,
     createdAt: lastMessageAt,
     updatedAt: lastMessageAt,
-    lastMessageAt
+    lastMessageAt,
+    ...overrides
   };
 }
 
@@ -91,8 +96,10 @@ describe('useChatSessionStore', () => {
     setActivePinia(createPinia());
     mockElectronAPI.chatSessionList.mockReset();
     mockElectronAPI.chatSessionCreate.mockReset();
+    mockElectronAPI.chatSessionGet.mockReset();
     mockElectronAPI.chatSessionBranch.mockReset();
     mockElectronAPI.chatSessionUpdateTitle.mockReset();
+    mockElectronAPI.chatSessionUpdateModel.mockReset();
     mockElectronAPI.chatSessionDelete.mockReset();
     mockElectronAPI.chatMessageList.mockReset();
     mockElectronAPI.chatMessageAdd.mockReset();
@@ -142,6 +149,63 @@ describe('useChatSessionStore', () => {
     await loadingPromise;
 
     expect(store.sessions.map((session: ChatSession): string => session.id)).toEqual([createdSession.id, 'session-existing']);
+  });
+
+  it('loads an unpaged session by id and coalesces concurrent requests', async (): Promise<void> => {
+    const model: ChatSessionModelMetadata = { providerId: 'provider-1', modelId: 'model-2' };
+    const deferred = createDeferred<ChatHandlerResult<ChatSession | undefined>>();
+    mockElectronAPI.chatSessionGet.mockReturnValue(deferred.promise);
+    const store = useChatSessionStore();
+
+    const first = store.loadSessionById('session-old');
+    const second = store.loadSessionById('session-old');
+    deferred.resolve({ ok: true, data: createSession('session-old', { metadata: { model } }) });
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      expect.objectContaining({ id: 'session-old' }),
+      expect.objectContaining({ id: 'session-old' })
+    ]);
+    expect(mockElectronAPI.chatSessionGet).toHaveBeenCalledOnce();
+    expect(store.findSession('session-old')?.metadata?.model).toEqual(model);
+  });
+
+  it('creates a session with the first runtime model', async (): Promise<void> => {
+    const model: ChatSessionModelMetadata = { providerId: 'provider-1', modelId: 'model-2' };
+    mockElectronAPI.chatSessionCreate.mockResolvedValue({ ok: true, data: undefined });
+    const store = useChatSessionStore();
+
+    const session = await store.createSession('assistant', { title: 'Hello', model });
+
+    expect(session.metadata?.model).toEqual(model);
+    expect(mockElectronAPI.chatSessionCreate).toHaveBeenCalledWith(expect.objectContaining({ metadata: { model } }));
+  });
+
+  it('persists a missing model once and preserves an existing model', async (): Promise<void> => {
+    const model: ChatSessionModelMetadata = { providerId: 'provider-1', modelId: 'model-2' };
+    const store = useChatSessionStore();
+    store.sessions = [createSession('legacy')];
+    mockElectronAPI.chatSessionUpdateModel.mockResolvedValue({
+      ok: true,
+      data: createSession('legacy', { metadata: { model } })
+    });
+
+    await store.ensureSessionModel('legacy', model);
+    await store.ensureSessionModel('legacy', { providerId: 'provider-2', modelId: 'model-3' });
+
+    expect(mockElectronAPI.chatSessionUpdateModel).toHaveBeenCalledOnce();
+    expect(store.findSession('legacy')?.metadata?.model).toEqual(model);
+  });
+
+  it('keeps the previous session when a model update fails', async (): Promise<void> => {
+    const previousModel: ChatSessionModelMetadata = { providerId: 'provider-1', modelId: 'model-1' };
+    const store = useChatSessionStore();
+    const original = createSession('session-a', { metadata: { model: previousModel } });
+    store.sessions = [original];
+    mockElectronAPI.chatSessionUpdateModel.mockResolvedValue({ ok: false, error: '模型写入失败', code: 'SQLITE_ERROR' });
+
+    await expect(store.updateSessionModel('session-a', { providerId: 'provider-2', modelId: 'model-2' })).rejects.toThrow('模型写入失败');
+
+    expect(store.findSession('session-a')).toEqual(original);
   });
 
   it('recovers interrupted assistant drafts and persists the interrupt marker while loading messages', async (): Promise<void> => {

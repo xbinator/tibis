@@ -2,7 +2,7 @@
  * @file service-runtime-fields.test.ts
  * @description 主进程聊天服务的 Runtime 字段、用量与会话分支持久化测试。
  */
-import type { ChatMessageRecord } from 'types/chat';
+import type { ChatMessageRecord, ChatSessionModelMetadata } from 'types/chat';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { chatSessionManager } from '../../../../../electron/main/modules/chat/service.mts';
 
@@ -19,6 +19,88 @@ describe('chat main service runtime fields', (): void => {
     databaseMock.dbExecute.mockReset();
     databaseMock.dbSelect.mockReset();
     databaseMock.transaction.mockImplementation((fn: () => unknown): unknown => fn());
+  });
+
+  it('maps valid session model metadata and ignores malformed metadata', (): void => {
+    databaseMock.dbSelect
+      .mockReturnValueOnce([
+        {
+          id: 'session-valid',
+          type: 'assistant',
+          title: 'Valid',
+          created_at: '2026-07-22T00:00:00.000Z',
+          updated_at: '2026-07-22T00:00:00.000Z',
+          last_message_at: '2026-07-22T00:00:00.000Z',
+          usage_json: null,
+          metadata_json: JSON.stringify({ model: { providerId: 'provider-1', modelId: 'model-2' } })
+        }
+      ])
+      .mockReturnValueOnce([
+        {
+          id: 'session-invalid',
+          type: 'assistant',
+          title: 'Invalid',
+          created_at: '2026-07-22T00:00:00.000Z',
+          updated_at: '2026-07-22T00:00:00.000Z',
+          last_message_at: '2026-07-22T00:00:00.000Z',
+          usage_json: null,
+          metadata_json: JSON.stringify({ model: { providerId: '', modelId: 1 } })
+        }
+      ]);
+
+    expect(chatSessionManager.getSessionById('session-valid')?.metadata?.model).toEqual({ providerId: 'provider-1', modelId: 'model-2' });
+    expect(chatSessionManager.getSessionById('session-invalid')?.metadata).toBeUndefined();
+  });
+
+  it('serializes model metadata when creating a session', (): void => {
+    const metadata = { model: { providerId: 'provider-1', modelId: 'model-2' } };
+
+    chatSessionManager.createSession({
+      id: 'session-created',
+      type: 'assistant',
+      title: 'Created',
+      createdAt: '2026-07-22T00:00:00.000Z',
+      updatedAt: '2026-07-22T00:00:00.000Z',
+      lastMessageAt: '2026-07-22T00:00:00.000Z',
+      metadata
+    });
+
+    expect(databaseMock.dbExecute).toHaveBeenCalledWith(expect.stringContaining('INSERT OR REPLACE INTO chat_sessions'), [
+      'session-created',
+      'assistant',
+      'Created',
+      '2026-07-22T00:00:00.000Z',
+      '2026-07-22T00:00:00.000Z',
+      '2026-07-22T00:00:00.000Z',
+      null,
+      JSON.stringify(metadata)
+    ]);
+  });
+
+  it('atomically merges and returns updated session model metadata', (): void => {
+    const model: ChatSessionModelMetadata = { providerId: 'provider-2', modelId: 'model-3' };
+    databaseMock.dbSelect.mockReturnValueOnce([
+      {
+        id: 'session-1',
+        type: 'assistant',
+        title: 'Session',
+        created_at: '2026-07-22T00:00:00.000Z',
+        updated_at: '2026-07-22T00:00:00.000Z',
+        last_message_at: '2026-07-22T00:00:00.000Z',
+        usage_json: null,
+        metadata_json: JSON.stringify({ layout: 'compact', model: { providerId: 'provider-1', modelId: 'model-1' } })
+      }
+    ]);
+
+    const session = chatSessionManager.updateSessionModel('session-1', model);
+
+    expect(session.metadata).toMatchObject({ layout: 'compact', model });
+    expect(databaseMock.transaction).toHaveBeenCalled();
+    expect(databaseMock.dbExecute).toHaveBeenCalledWith(expect.stringContaining('UPDATE chat_sessions'), [
+      JSON.stringify({ layout: 'compact', model }),
+      expect.any(String),
+      'session-1'
+    ]);
   });
 
   it('maps runtime ownership fields from persisted message rows', (): void => {
@@ -221,7 +303,8 @@ describe('chat main service runtime fields', (): void => {
           created_at: '2026-07-14T08:00:00.000Z',
           updated_at: '2026-07-14T08:00:00.000Z',
           last_message_at: '2026-07-14T08:02:00.000Z',
-          usage_json: null
+          usage_json: null,
+          metadata_json: JSON.stringify({ model: { providerId: 'provider-branch', modelId: 'model-branch' } })
         }
       ])
       .mockReturnValueOnce([
@@ -266,8 +349,10 @@ describe('chat main service runtime fields', (): void => {
     expect(databaseMock.transaction).toHaveBeenCalledTimes(transactionCallCount + 1);
     expect(databaseMock.dbSelect.mock.calls[1]?.[0]).not.toContain('LIMIT');
     expect(session).toMatchObject({ type: 'assistant', title: '原标题（2）' });
+    expect(session.metadata?.model).toEqual({ providerId: 'provider-branch', modelId: 'model-branch' });
     expect(session.id).not.toBe('session-source');
-    expect(databaseMock.dbExecute).toHaveBeenCalledWith(expect.stringMatching(/INSERT INTO chat_sessions/), expect.any(Array));
+    const sessionInsertCall = databaseMock.dbExecute.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO chat_sessions'));
+    expect(sessionInsertCall?.[1]).toEqual(expect.arrayContaining([JSON.stringify(session.metadata)]));
     expect(databaseMock.dbExecute.mock.calls.filter(([sql]) => String(sql).includes('INSERT INTO chat_messages'))).toHaveLength(2);
     expect(databaseMock.dbExecute.mock.calls.every(([sql]) => !String(sql).includes('OR REPLACE'))).toBe(true);
   });

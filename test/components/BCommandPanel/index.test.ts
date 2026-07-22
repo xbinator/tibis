@@ -8,7 +8,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BCommandPanel from '@/components/BCommandPanel/index.vue';
-import type { CommandPanelScope } from '@/components/BCommandPanel/types';
+import type { CommandPanelModelContext, CommandPanelScope } from '@/components/BCommandPanel/types';
 import type { RecentRecord } from '@/shared/storage';
 import { useCommandPanelStore } from '@/stores/ui/commandPanel';
 
@@ -204,11 +204,12 @@ function mountCommandPanel(): VueWrapper {
  * 打开命令面板并等待刷新。
  * @param scope - 命令面板范围
  * @param onClose - 关闭回调
+ * @param modelContext - 模型范围的调用方上下文
  */
-async function openPanel(scope: CommandPanelScope, onClose?: () => void): Promise<void> {
+async function openPanel(scope: CommandPanelScope, onClose?: () => void, modelContext?: CommandPanelModelContext): Promise<void> {
   const commandPanelStore = useCommandPanelStore();
   if (scope === 'model') {
-    commandPanelStore.openModel({ onClose });
+    commandPanelStore.openModel({ onClose, modelContext });
   } else {
     commandPanelStore.openRecent({ onClose });
   }
@@ -327,6 +328,24 @@ describe('BCommandPanel', (): void => {
     expect(setChatModelMock).toHaveBeenCalledWith({ providerId: 'openai', modelId: 'gpt-4o' });
     expect(onCloseFocus).toHaveBeenCalled();
     expect(wrapper.find('.b-modal-stub').exists()).toBe(false);
+  });
+
+  it('uses a caller model context instead of the global service model store', async (): Promise<void> => {
+    const onModelChange = vi.fn<(_model: { providerId: string; modelId: string }) => Promise<void>>().mockResolvedValue(undefined);
+    setChatModelMock.mockClear();
+    const wrapper = mountCommandPanel();
+    await openPanel('model', undefined, {
+      getCurrentModel: (): { providerId: string; modelId: string } => ({ providerId: 'openai', modelId: 'gpt-4.1' }),
+      onModelChange
+    });
+
+    const items = wrapper.findAll('.b-command-panel__item');
+    expect(items[1].classes()).toContain('b-command-panel__item--current');
+    await items[0].trigger('click');
+    await flushPromises();
+
+    expect(onModelChange).toHaveBeenCalledWith({ providerId: 'openai', modelId: 'gpt-4o' });
+    expect(setChatModelMock).not.toHaveBeenCalled();
   });
 
   it('contains mouse selection errors without Vue error handler noise', async (): Promise<void> => {

@@ -3,6 +3,7 @@
  * @description ChatRuntime 请求配置纯策略测试。
  */
 import type { AIToolExecutor } from 'types/ai';
+import type { ChatRuntimeModelSelection } from 'types/chat-runtime';
 import { describe, expect, it } from 'vitest';
 import { buildRuntimeRequestConfig } from '@/ai/chat/policies/runtimeRequest';
 
@@ -27,6 +28,7 @@ function createTool(name: string): AIToolExecutor {
 describe('buildRuntimeRequestConfig', (): void => {
   it('filters memory tools and includes current runtime metadata', (): void => {
     const result = buildRuntimeRequestConfig({
+      model: { providerId: 'provider-1', modelId: 'model-2' },
       contextWindow: 32000,
       system: 'memory context',
       workspaceRoot: '/workspace',
@@ -37,9 +39,12 @@ describe('buildRuntimeRequestConfig', (): void => {
       tavily: { enabled: true, apiKey: 'test-key' },
       mcp: { servers: [], enabledServerIds: [], enabledTools: [], toolInstructions: '' }
     });
+    const { model }: { model: ChatRuntimeModelSelection } = result.config;
 
     expect(result.rendererTools.map((tool) => tool.definition.name)).toEqual(['read_file']);
+    expect(model).toEqual({ providerId: 'provider-1', modelId: 'model-2' });
     expect(result.config).toMatchObject({
+      model: { providerId: 'provider-1', modelId: 'model-2' },
       contextWindow: 32000,
       system: 'memory context',
       workspaceRoot: '/workspace',
@@ -52,6 +57,7 @@ describe('buildRuntimeRequestConfig', (): void => {
 
   it('does not expose transport tools when the provider lacks tool support', (): void => {
     const result = buildRuntimeRequestConfig({
+      model: { providerId: 'provider-1', modelId: 'model-2' },
       contextWindow: 8000,
       candidateTools: [createTool('read_file')],
       toolSupport: false,

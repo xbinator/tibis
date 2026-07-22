@@ -11,7 +11,7 @@ import type { ChatModelResolution } from '../../../../../../electron/main/module
 import type { ChatRuntimeStreamExecutor } from '../../../../../../electron/main/modules/chat/runtime/types.mjs';
 import type { AICreateOptions, AIInvokeResult, AIRequestOptions, AIServiceError } from 'types/ai';
 import type { ChatMessageCompactionPart, ChatMessagePart, ChatMessageRecord, StructuredContextSummary } from 'types/chat';
-import type { ChatRuntimeCompactInput, ChatRuntimeContinueInput, ChatRuntimeEventMap, ChatRuntimeSendInput } from 'types/chat-runtime';
+import type { ChatRuntimeCompactInput, ChatRuntimeContinueInput, ChatRuntimeEventMap, ChatRuntimeModelSelection, ChatRuntimeSendInput } from 'types/chat-runtime';
 import { describe, expect, it, vi } from 'vitest';
 import { createChatRuntimeService } from '../../../../../../electron/main/modules/chat/runtime/service.mjs';
 import { chatSessionManager } from '../../../../../../electron/main/modules/chat/service.mjs';
@@ -1656,6 +1656,8 @@ describe('chat runtime service shell', (): void => {
       modelSourceMessages = structuredClone(sourceMessages ?? []);
       return {};
     });
+    /** 自动压缩使用的 Runtime 模型解析器。 */
+    const resolveModel = vi.fn<(_model?: ChatRuntimeModelSelection) => Promise<ChatModelResolution | null>>(async () => createModelResolution());
     const service = createChatRuntimeService({
       emit: vi.fn(),
       createMessageId: (role) => `${role}-message-auto`,
@@ -1672,7 +1674,7 @@ describe('chat runtime service shell', (): void => {
           if (checkpoint?.type === 'compaction') order.push(`write:${checkpoint.status}`);
         }
       },
-      resolveModel: async () => createModelResolution(),
+      resolveModel,
       compactionGenerateText: async (_createOptions: AICreateOptions, request: AIRequestOptions): Promise<[undefined, AIInvokeResult]> => {
         summaryRequests.push(structuredClone(request));
         return [undefined, { text: '', output: createCompactionSummary('old-source-part') }];
@@ -1684,6 +1686,7 @@ describe('chat runtime service shell', (): void => {
       createInput({
         content: '$weather 当前任务必须保留原文',
         contextWindow: 12_000,
+        model: { providerId: 'provider-1', modelId: 'model-2' },
         userMessageId: 'user-message-auto',
         parts: [
           {
@@ -1720,6 +1723,7 @@ describe('chat runtime service shell', (): void => {
     expect(JSON.stringify(modelSourceMessages)).not.toContain('x'.repeat(13_000));
     expect(JSON.stringify(summaryRequests)).not.toContain(skillContent);
     expect(JSON.stringify(messages)).not.toContain(skillContent);
+    expect(resolveModel).toHaveBeenCalledWith({ providerId: 'provider-1', modelId: 'model-2' });
   });
 
   it('manually compacts into a compaction-only assistant message without creating a user message', async (): Promise<void> => {
@@ -1735,6 +1739,8 @@ describe('chat runtime service shell', (): void => {
         finished: true
       }
     ];
+    /** 手动压缩使用的 Runtime 模型解析器。 */
+    const resolveModel = vi.fn<(_model?: ChatRuntimeModelSelection) => Promise<ChatModelResolution | null>>(async () => createModelResolution());
     const service = createChatRuntimeService({
       emit: collector.emit,
       createMessageId: (): string => 'assistant-manual-compaction',
@@ -1749,7 +1755,7 @@ describe('chat runtime service shell', (): void => {
           if (index >= 0) messages[index] = structuredClone(message);
         }
       },
-      resolveModel: async () => createModelResolution(),
+      resolveModel,
       compactionGenerateText: async (): Promise<[undefined, AIInvokeResult]> => [undefined, { text: '', output: createCompactionSummary('old-source-part') }],
       streamExecutor: createNoopStreamExecutor()
     });
@@ -1758,6 +1764,7 @@ describe('chat runtime service shell', (): void => {
       sessionId: 'session-1',
       clientId: 'bchat',
       agentId: 'primary',
+      model: { providerId: 'provider-1', modelId: 'model-2' },
       contextWindow: 12_000
     };
 
@@ -1773,6 +1780,7 @@ describe('chat runtime service shell', (): void => {
     expect(createdMessages).toHaveLength(1);
     expect(createdMessages[0]).toMatchObject({ role: 'assistant', content: '', loading: false, finished: true });
     expect(createdMessages[0].parts).toEqual([expect.objectContaining({ type: 'compaction', status: 'success' })]);
+    expect(resolveModel).toHaveBeenCalledWith({ providerId: 'provider-1', modelId: 'model-2' });
   });
 
   it('rejects manual compaction before inserting a message when the session is busy', async (): Promise<void> => {

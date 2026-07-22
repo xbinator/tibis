@@ -2,7 +2,14 @@
  * @file ipc.mts
  * @description 聊天模块 IPC handler 注册。
  */
-import type { ChatMessageHistoryCursor, ChatMessageRecord, ChatSession, ChatSessionType, SessionPaginationParams } from 'types/chat';
+import type {
+  ChatMessageHistoryCursor,
+  ChatMessageRecord,
+  ChatSession,
+  ChatSessionModelMetadata,
+  ChatSessionType,
+  SessionPaginationParams
+} from 'types/chat';
 import type { ChatHandlerResult } from 'types/electron-api';
 import { ipcMain } from 'electron';
 import { chatSessionManager } from './service.mjs';
@@ -21,7 +28,7 @@ function wrapHandler<T>(fn: (...args: unknown[]) => T): (...args: unknown[]) => 
 }
 
 export function registerChatHandlers(): void {
-  // ── Session (6 个) ──
+  // ── Session (8 个) ──
   ipcMain.handle(
     'chat:session:list',
     wrapHandler((_event, type, pagination?) => {
@@ -35,6 +42,12 @@ export function registerChatHandlers(): void {
     })
   );
   ipcMain.handle(
+    'chat:session:get',
+    wrapHandler((_event, sessionId) => {
+      return chatSessionManager.getSessionById(sessionId as string);
+    })
+  );
+  ipcMain.handle(
     'chat:session:branch',
     wrapHandler((_event, sourceSessionId, targetMessageId) => {
       return chatSessionManager.branchSession(sourceSessionId as string, targetMessageId as string);
@@ -44,6 +57,12 @@ export function registerChatHandlers(): void {
     'chat:session:updateTitle',
     wrapHandler((_event, sessionId, title) => {
       chatSessionManager.updateSessionTitle(sessionId as string, title as string);
+    })
+  );
+  ipcMain.handle(
+    'chat:session:updateModel',
+    wrapHandler((_event, sessionId, model) => {
+      return chatSessionManager.updateSessionModel(sessionId as string, model as ChatSessionModelMetadata);
     })
   );
   ipcMain.handle(

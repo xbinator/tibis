@@ -8,7 +8,13 @@ import type { createChatConfirmationController } from '../utils/confirmationCont
 import type { Message } from '../utils/types';
 import type { AIServiceError, AIToolExecutor } from 'types/ai';
 import type { ChatMessageFile } from 'types/chat';
-import type { ChatRuntimeAbortResult, ChatRuntimeBridgeRequestEvent, ChatRuntimeContextUsageSnapshot, ChatRuntimeUserInputPart } from 'types/chat-runtime';
+import type {
+  ChatRuntimeAbortResult,
+  ChatRuntimeBridgeRequestEvent,
+  ChatRuntimeContextUsageSnapshot,
+  ChatRuntimeModelSelection,
+  ChatRuntimeUserInputPart
+} from 'types/chat-runtime';
 import type { ComputedRef, Ref } from 'vue';
 import { computed, nextTick, ref } from 'vue';
 import { cloneDeep } from 'lodash-es';
@@ -65,7 +71,7 @@ interface UseChatWorkflowOptions {
   /** 工具确认控制器 */
   confirmationController: ChatConfirmationController;
   /** 确保存在可持久化会话 */
-  ensureActiveSession: (title: string) => Promise<string>;
+  ensureActiveSession: (title: string, model: ChatRuntimeModelSelection) => Promise<string>;
   /** 获取未加载的更早历史 */
   fetchAllPriorHistory: (sessionId: string) => Promise<Message[]>;
   /** 替换 renderer 当前消息 */
@@ -177,6 +183,15 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
     return runtimeLauncher.prepare(operationSequence, selectionSource, selectionParts);
   }
 
+  /**
+   * 在 Runtime 注册与 IPC 启动前保证会话模型已持久化。
+   * @param sessionId - 当前会话 ID
+   * @param prepared - 已冻结模型的 Runtime 请求
+   */
+  async function ensurePreparedModel(sessionId: string, prepared: PreparedRuntimeRequest): Promise<void> {
+    await chatStore.ensureSessionModel(sessionId, prepared.config.model);
+  }
+
   /** 处理 Runtime 完成。 */
   async function handleRuntimeComplete(nextMessage: Message): Promise<void> {
     options.sessionActor.markCompleted();
@@ -286,6 +301,7 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
     }
 
     try {
+      await ensurePreparedModel(options.activeSessionId.value, prepared);
       await handleBeforeRegenerate(sourceMessages);
       const runtimeId = runtimeLauncher.start(prepared);
       managedRuntimeId = runtimeId;
@@ -299,6 +315,7 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
       runtimeLauncher.finish(result, runtimeId);
     } catch (error: unknown) {
       if (!isCurrentOperation(operationId)) return false;
+      if (!managedRuntimeId) options.messages.value.splice(0, options.messages.value.length, ...sourceMessages, ...removedMessages);
       if (managedRuntimeId) options.actorSystem.unregisterRuntime(managedRuntimeId);
       const workflowError = {
         code: 'runtime_start_failed',
@@ -317,7 +334,12 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
     if (loading.value) return;
     beginOperation();
     options.sessionActor.regenerate(nextMessage.id);
-    if (!(await startRuntimeRegenerate(nextMessage))) {
+    const [error, started] = await asyncTo(startRuntimeRegenerate(nextMessage));
+    if (error) {
+      options.showRuntimeError(error.message);
+      return;
+    }
+    if (!started) {
       options.sessionActor.markPreparationFailed({ code: 'preparation_failed', message: '重新生成准备未完成' });
     }
   }
@@ -340,6 +362,7 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
         return;
       }
 
+      await ensurePreparedModel(sessionId, prepared);
       const runtimeId = runtimeLauncher.start(prepared);
       managedRuntimeId = runtimeId;
       const result = await chatRuntime.compact({
@@ -377,7 +400,7 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
       const prepared = await prepareRuntimeWithCapabilities(input.userMessage, input.parts);
       if (!isCurrentOperation(operationId) || !prepared) return;
 
-      const sessionId = await options.ensureActiveSession(input.userMessage.content);
+      const sessionId = await options.ensureActiveSession(input.userMessage.content, prepared.config.model);
       if (!isCurrentOperation(operationId)) return;
       pendingSessionId = sessionId;
       pendingUserMessage = input.userMessage;
@@ -448,6 +471,9 @@ export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflo
     getActiveRuntimeId: (): string | undefined => options.sessionActor.activeRuntimeId.value,
     resolveRuntimeRequestConfig: options.resolveRuntimeRequestConfig,
     prepareRuntimeRequest: (): ReturnType<PrepareRuntimeRequest> => prepareRuntimeWithCapabilities(findLastUserMessage(options.messages.value)),
+    ensureSessionModel: async (sessionId: string, model: ChatRuntimeModelSelection): Promise<void> => {
+      await chatStore.ensureSessionModel(sessionId, model);
+    },
     onContinueStarted: (answer): void => {
       beginOperation();
       options.sessionActor.continueWithAnswer(answer);

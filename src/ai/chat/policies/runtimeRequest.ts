@@ -3,7 +3,7 @@
  * @description ChatRuntime 请求配置与 renderer 工具快照纯策略。
  */
 import type { AIMCPRequestConfig, AITavilyRuntimeConfig, AIToolExecutor } from 'types/ai';
-import type { ChatRuntimeContext, ChatRuntimeSendInput } from 'types/chat-runtime';
+import type { ChatRuntimeContext, ChatRuntimeModelSelection, ChatRuntimeSendInput } from 'types/chat-runtime';
 import type { MemoryInjectionMode } from '@/ai/memory/types';
 import { toTransportTools } from '@/ai/tools/stream';
 import { filterMemoryTools } from './memorySelection';
@@ -12,12 +12,17 @@ import { filterMemoryTools } from './memorySelection';
 export type ChatRuntimeRequestConfig = Pick<
   ChatRuntimeSendInput,
   'contextWindow' | 'system' | 'workspaceRoot' | 'tools' | 'skillContentHashes' | 'runtimeContext' | 'tavily' | 'mcp' | 'capabilities'
->;
+> & {
+  /** 当前 Runtime 已冻结的模型标识。 */
+  model: ChatRuntimeModelSelection;
+};
 
 /**
  * Runtime 请求配置纯策略输入。
  */
 export interface RuntimeRequestPolicyInput {
+  /** 当前 Runtime 使用的模型标识。 */
+  model: ChatRuntimeModelSelection;
   /** 模型上下文窗口 */
   contextWindow: number;
   /** 已解析 system prompt */
@@ -62,6 +67,7 @@ export function buildRuntimeRequestConfig(input: RuntimeRequestPolicyInput): Run
 
   return {
     config: {
+      model: input.model,
       contextWindow: input.contextWindow,
       system: input.system,
       workspaceRoot: input.workspaceRoot,

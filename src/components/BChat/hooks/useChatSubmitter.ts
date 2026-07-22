@@ -7,15 +7,10 @@ import type { PreparedRuntimeRequest } from './useRuntimeRequestConfig';
 import type { AdaptedUserMessageInput, MessagePartUpdateInput, SubmitAction } from '../utils/submitAction';
 import type { Message } from '../utils/types';
 import type { AIUserChoiceAnswerData } from 'types/chat';
-import type { ChatRuntimeSendInput, ChatRuntimeStartResult } from 'types/chat-runtime';
+import type { ChatRuntimeModelSelection, ChatRuntimeStartResult } from 'types/chat-runtime';
 import type { Ref } from 'vue';
 import { cloneDeep } from 'lodash-es';
-
-/** ChatRuntime 通用请求配置。 */
-type ChatRuntimeRequestConfig = Pick<
-  ChatRuntimeSendInput,
-  'contextWindow' | 'system' | 'workspaceRoot' | 'tools' | 'skillContentHashes' | 'runtimeContext' | 'tavily' | 'mcp' | 'capabilities'
->;
+import type { ChatRuntimeRequestConfig } from '@/ai/chat/policies/runtimeRequest';
 
 /**
  * BChat 统一提交 hook 选项。
@@ -33,6 +28,8 @@ interface UseChatSubmitterOptions {
   resolveRuntimeRequestConfig: () => Promise<ChatRuntimeRequestConfig | null>;
   /** 准备完整 Runtime 请求和 renderer capabilities。 */
   prepareRuntimeRequest?: () => Promise<PreparedRuntimeRequest | null>;
+  /** 在 Runtime 启动前保证会话模型已持久化。 */
+  ensureSessionModel: (sessionId: string, model: ChatRuntimeModelSelection) => Promise<void>;
   /** 用户选择开始续跑回调。 */
   onContinueStarted?: (answer: AIUserChoiceAnswerData) => void;
   /** 在 IPC 前注册 Runtime 并返回 renderer 分配的 ID。 */
@@ -94,6 +91,7 @@ export function useChatSubmitter(options: UseChatSubmitterOptions): UseChatSubmi
         return;
       }
 
+      await options.ensureSessionModel(sessionId, prepared.config.model);
       runtimeId = options.startRuntime(prepared);
 
       const result = await options.submitUserChoice({

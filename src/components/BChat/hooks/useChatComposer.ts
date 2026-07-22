@@ -26,6 +26,8 @@ type EditorInstance = InstanceType<typeof BSmartEditor> & BSmartEditorExpose;
  * Chat Composer hook 依赖项。
  */
 interface UseChatComposerOptions {
+  /** 当前活动会话 ID；空值表示草稿。 */
+  activeSessionId: Readonly<Ref<string | null>>;
   /** 文件拖拽容器引用 */
   containerRef: Ref<HTMLElement | null>;
   /** 交互容器 API */
@@ -105,7 +107,7 @@ export function useChatComposer(options: UseChatComposerOptions): UseChatCompose
 
   const promptChipResolver = createChatChipResolver(handleOpenPromptFileReference, options.openSkill);
   const input = useChatInput({ focusInput });
-  const model = useModelSelection();
+  const model = useModelSelection(options.activeSessionId);
   const imageUpload = useImageUpload({ supportsVision: model.supportsVision, inputEvents: input, interactionAPI: options.interactionAPI });
   const fileReference = useFileReference({
     insertTextAtCursor,

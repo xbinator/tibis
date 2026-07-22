@@ -58,6 +58,7 @@ import { useNavigate } from '@/hooks/useNavigate';
 import { useOpenFile } from '@/hooks/useOpenFile';
 import { native } from '@/shared/platform';
 import { useProviderStore } from '@/stores/ai/provider';
+import type { SelectedModel } from '@/stores/ai/serviceModel';
 import { useServiceModelStore } from '@/stores/ai/serviceModel';
 import { useCommandPanelStore } from '@/stores/ui/commandPanel';
 import { useRecentStore } from '@/stores/workspace/recent';
@@ -147,9 +148,12 @@ const recentSource = createRecentSource({
 const modelSource = createModelSource({
   loadProviders: () => providerStore.loadProviders(),
   loadChatModel: () => serviceModelStore.loadChatModel(),
-  setChatModel: (model) => serviceModelStore.setChatModel(model),
+  setChatModel: async (model: SelectedModel): Promise<void> => {
+    const handled = await commandPanelStore.changeContextModel(model);
+    if (!handled) await serviceModelStore.setChatModel(model);
+  },
   getAvailableModels: () => providerStore.availableModels,
-  getCurrentModel: () => serviceModelStore.chatModel,
+  getCurrentModel: (): SelectedModel | undefined => commandPanelStore.getContextModel() ?? serviceModelStore.chatModel,
   renderModelIcon: (model, context) => h(BModelIcon, { provider: model.providerId, model: model.modelId, class: context.className, size: context.size })
 });
 /** source 映射表。 */

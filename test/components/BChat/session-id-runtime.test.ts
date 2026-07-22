@@ -4,7 +4,7 @@
  * @vitest-environment jsdom
  */
 /* eslint-disable vue/one-component-per-file */
-import type { AIToolExecutor } from 'types/ai';
+import type { AIProvider, AIToolExecutor } from 'types/ai';
 import type {
   AIUserChoiceAnswerData,
   ChatMessageFilePartInput,
@@ -14,6 +14,7 @@ import type {
   ChatSession
 } from 'types/chat';
 import type {
+  ChatRuntimeCompactInput,
   ChatRuntimeContinueInput,
   ChatRuntimeHandlerResult,
   ChatRuntimeSendInput,
@@ -39,12 +40,16 @@ import { useSettingStore } from '@/stores/ui/setting';
 import { emitRuntimeEvent, resetRuntimeEventListeners, type RuntimeEventListeners } from './runtime-event-test-utils';
 
 const chatStoreMock = vi.hoisted(() => ({
-  createSession: vi.fn<(type: 'assistant', options: { title: string }) => Promise<ChatSession>>(),
+  createSession: vi.fn<(type: 'assistant', options: { title: string; model?: { providerId: string; modelId: string } }) => Promise<ChatSession>>(),
   branchSession: vi.fn<(sourceSessionId: string, targetMessageId: string) => Promise<ChatSession>>(),
   addSessionMessage: vi.fn<(sessionId: string | null, message: Message) => Promise<void>>(),
   updateSessionMessage: vi.fn<(sessionId: string | null | undefined, message: Message) => Promise<void>>(),
   setSessionMessages: vi.fn<(sessionId: string | null | undefined, messages: Message[]) => Promise<void>>(),
   getSessionMessages: vi.fn<(sessionId: string) => Promise<Message[]>>(),
+  loadSessionById: vi.fn<(sessionId: string) => Promise<ChatSession | undefined>>(),
+  findSession: vi.fn<(sessionId?: string | null) => ChatSession | undefined>(),
+  updateSessionModel: vi.fn<(sessionId: string, model: { providerId: string; modelId: string }) => Promise<ChatSession>>(),
+  ensureSessionModel: vi.fn<(sessionId: string, model: { providerId: string; modelId: string }) => Promise<ChatSession>>(),
   getSessions: vi.fn()
 }));
 
@@ -56,13 +61,13 @@ const promptEditorMockState = vi.hoisted(() => ({
   replaceTextRange: vi.fn()
 }));
 const getPathForFileMock = vi.hoisted(() => vi.fn<(_file: File) => string | null>().mockReturnValue('/workspace/My Notes/note.md'));
-const getAvailableServiceConfigMock = vi.hoisted(() => vi.fn());
 const getModelToolSupportMock = vi.hoisted(() => vi.fn());
 const runtimeListeners = vi.hoisted<RuntimeEventListeners>(() => ({}));
 const electronAPIMock = vi.hoisted(() => ({
   chatRuntimeEstimateContext: vi.fn(),
   chatRuntimeSend: vi.fn(),
   chatRuntimeContinue: vi.fn(),
+  chatRuntimeCompact: vi.fn(),
   chatRuntimeSubmitUserChoice: vi.fn(),
   chatRuntimeAbort: vi.fn(),
   chatRuntimeSubmitToolResult: vi.fn(),
@@ -313,7 +318,6 @@ vi.mock('@/stores/chat/todo', () => ({
 vi.mock('@/stores/ai/serviceModel', () => ({
   useServiceModelStore: vi.fn(() => ({
     chatModel: { providerId: 'provider-1', modelId: 'model-1' },
-    getAvailableServiceConfig: getAvailableServiceConfigMock,
     loadChatModel: vi.fn(() => Promise.resolve()),
     setChatModel: vi.fn()
   }))
@@ -328,9 +332,15 @@ vi.mock('@/stores/ai/provider', () => ({
     providers: [
       {
         id: 'provider-1',
-        models: [{ id: 'model-1', supportsVision: false, contextWindow: 200000 }]
-      }
-    ]
+        name: 'Provider 1',
+        description: 'Provider for BChat runtime tests',
+        type: 'openai',
+        isEnabled: true,
+        models: [{ id: 'model-1', name: 'Model 1', type: 'chat', isEnabled: true, supportsVision: false, contextWindow: 200000 }]
+      } satisfies AIProvider
+    ],
+    availableModels: [],
+    loadProviders: vi.fn((): Promise<void> => Promise.resolve())
   }))
 }));
 
@@ -645,10 +655,15 @@ describe('BChat sessionId runtime', (): void => {
     chatStoreMock.updateSessionMessage.mockReset();
     chatStoreMock.setSessionMessages.mockReset();
     chatStoreMock.getSessionMessages.mockReset();
+    chatStoreMock.loadSessionById.mockReset();
+    chatStoreMock.findSession.mockReset();
+    chatStoreMock.updateSessionModel.mockReset();
+    chatStoreMock.ensureSessionModel.mockReset();
     chatStoreMock.getSessions.mockReset();
     electronAPIMock.chatRuntimeSend.mockReset();
     electronAPIMock.chatRuntimeEstimateContext.mockReset();
     electronAPIMock.chatRuntimeContinue.mockReset();
+    electronAPIMock.chatRuntimeCompact.mockReset();
     electronAPIMock.chatRuntimeSubmitUserChoice.mockReset();
     electronAPIMock.chatRuntimeAbort.mockReset();
     electronAPIMock.chatRuntimeSubmitToolResult.mockReset();
@@ -664,7 +679,6 @@ describe('BChat sessionId runtime', (): void => {
     electronAPIMock.chatRuntimeOnBridgeRequested.mockClear();
     electronAPIMock.chatRuntimeOnError.mockClear();
     electronAPIMock.chatRuntimeOnComplete.mockClear();
-    getAvailableServiceConfigMock.mockReset();
     getModelToolSupportMock.mockReset();
     promptEditorMockState.focus.mockReset();
     promptEditorMockState.saveCursorPosition.mockReset();
@@ -714,14 +728,25 @@ describe('BChat sessionId runtime', (): void => {
     resetRuntimeEventListeners(runtimeListeners);
     conversationViewMockState.scrollToBottom.mockReset();
     chatStoreMock.getSessionMessages.mockResolvedValue([]);
+    chatStoreMock.loadSessionById.mockResolvedValue(undefined);
+    chatStoreMock.findSession.mockReturnValue(undefined);
     chatStoreMock.getSessions.mockResolvedValue({ items: [], hasMore: false });
     chatStoreMock.addSessionMessage.mockResolvedValue();
     chatStoreMock.updateSessionMessage.mockResolvedValue();
     chatStoreMock.setSessionMessages.mockResolvedValue();
+    chatStoreMock.ensureSessionModel.mockImplementation(
+      async (sessionId, model): Promise<ChatSession> => ({
+        ...createSession(sessionId, sessionId),
+        metadata: { model }
+      })
+    );
     electronAPIMock.chatRuntimeSend.mockImplementation((input: ChatRuntimeSendInput) =>
       Promise.resolve({ ok: true, data: { runtimeId: input.runtimeId, sessionId: input.sessionId ?? 'session-created' } })
     );
     electronAPIMock.chatRuntimeContinue.mockImplementation((input: ChatRuntimeContinueInput) =>
+      Promise.resolve({ ok: true, data: { runtimeId: input.runtimeId, sessionId: input.sessionId } })
+    );
+    electronAPIMock.chatRuntimeCompact.mockImplementation((input: ChatRuntimeCompactInput) =>
       Promise.resolve({ ok: true, data: { runtimeId: input.runtimeId, sessionId: input.sessionId } })
     );
     electronAPIMock.chatRuntimeSubmitUserChoice.mockImplementation((input: ChatRuntimeSubmitUserChoiceInput) =>
@@ -738,12 +763,24 @@ describe('BChat sessionId runtime', (): void => {
         contextWindow: 200_000
       }
     });
-    getAvailableServiceConfigMock.mockResolvedValue({
-      providerId: 'provider-1',
-      modelId: 'model-1'
-    });
     getModelToolSupportMock.mockResolvedValue({ supported: true });
     useSettingStore().setSidebarVisible(true);
+  });
+
+  it('loads a directly opened session before resolving its runtime model', async (): Promise<void> => {
+    const session = { ...createSession('session-active', 'Active'), metadata: { model: { providerId: 'provider-1', modelId: 'model-1' } } };
+    chatStoreMock.loadSessionById.mockResolvedValue(session);
+    chatStoreMock.findSession.mockReturnValue(session);
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+
+    wrapper.findComponent(BSmartEditorStub).vm.$emit('update:value', 'hello');
+    wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
+    await flushPromises();
+
+    expect(chatStoreMock.loadSessionById).toHaveBeenCalledWith('session-active');
+    expect(chatStoreMock.loadSessionById.mock.invocationCallOrder[0]).toBeLessThan(getModelToolSupportMock.mock.invocationCallOrder[0]);
+    wrapper.unmount();
   });
 
   it('passes only markdown recent files to prompt editor file mentions', async (): Promise<void> => {
@@ -804,7 +841,10 @@ describe('BChat sessionId runtime', (): void => {
     wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
     await flushPromises();
 
-    expect(chatStoreMock.createSession).toHaveBeenCalledWith('assistant', { title: 'hello' });
+    expect(chatStoreMock.createSession).toHaveBeenCalledWith('assistant', {
+      title: 'hello',
+      model: { providerId: 'provider-1', modelId: 'model-1' }
+    });
     expect(wrapper.emitted('session-created')?.[0]).toEqual([createdSession]);
     expect(electronAPIMock.chatRuntimeSend).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'session-created', content: 'hello' }));
     expect(wrapper.emitted('loading-change')).toContainEqual([true]);
@@ -950,6 +990,88 @@ describe('BChat sessionId runtime', (): void => {
     expect(chatStoreMock.addSessionMessage).not.toHaveBeenCalledWith('session-created', expect.objectContaining({ role: 'user', content: 'hello' }));
   });
 
+  it('persists a legacy session model before sending a runtime request', async (): Promise<void> => {
+    const order: string[] = [];
+    chatStoreMock.ensureSessionModel.mockImplementation(async (sessionId, model): Promise<ChatSession> => {
+      order.push('persist-model');
+      return { ...createSession(sessionId, sessionId), metadata: { model } };
+    });
+    electronAPIMock.chatRuntimeSend.mockImplementation(async (input: ChatRuntimeSendInput): Promise<ChatRuntimeHandlerResult<ChatRuntimeStartResult>> => {
+      order.push('runtime-send');
+      return { ok: true, data: { runtimeId: input.runtimeId, sessionId: input.sessionId ?? 'session-active' } };
+    });
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+
+    wrapper.findComponent(BSmartEditorStub).vm.$emit('update:value', 'hello');
+    wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
+    await flushPromises();
+
+    expect(order).toEqual(['persist-model', 'runtime-send']);
+    wrapper.unmount();
+  });
+
+  it('blocks a send when legacy session model persistence fails', async (): Promise<void> => {
+    chatStoreMock.ensureSessionModel.mockRejectedValue(new Error('metadata failed'));
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+
+    wrapper.findComponent(BSmartEditorStub).vm.$emit('update:value', 'hello');
+    wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
+    await flushPromises();
+
+    expect(electronAPIMock.chatRuntimeSend).not.toHaveBeenCalled();
+    const toastQueue = wrapper.findComponent({ name: 'InteractionContainer' }).props('toastQueue') as ToastItem[];
+    expect(toastQueue).toContainEqual(expect.objectContaining({ type: 'error', content: 'metadata failed' }));
+    wrapper.unmount();
+  });
+
+  it('persists the session model before manual context compaction', async (): Promise<void> => {
+    const order: string[] = [];
+    chatStoreMock.ensureSessionModel.mockImplementation(async (sessionId, model): Promise<ChatSession> => {
+      order.push('persist-model');
+      return { ...createSession(sessionId, sessionId), metadata: { model } };
+    });
+    electronAPIMock.chatRuntimeCompact.mockImplementation(async (input: ChatRuntimeCompactInput) => {
+      order.push('runtime-compact');
+      return { ok: true, data: { runtimeId: input.runtimeId, sessionId: input.sessionId } };
+    });
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+
+    wrapper.findComponent(BSmartEditorStub).vm.$emit('slash-command', {
+      id: 'compact',
+      trigger: '/compact',
+      title: '压缩上下文',
+      description: '压缩当前长会话上下文',
+      group: 'command',
+      selectAction: { type: 'emit' }
+    });
+    await flushPromises();
+
+    expect(order).toEqual(['persist-model', 'runtime-compact']);
+    wrapper.unmount();
+  });
+
+  it('blocks manual compaction when session model persistence fails', async (): Promise<void> => {
+    chatStoreMock.ensureSessionModel.mockRejectedValue(new Error('metadata failed'));
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+
+    wrapper.findComponent(BSmartEditorStub).vm.$emit('slash-command', {
+      id: 'compact',
+      trigger: '/compact',
+      title: '压缩上下文',
+      description: '压缩当前长会话上下文',
+      group: 'command',
+      selectAction: { type: 'emit' }
+    });
+    await flushPromises();
+
+    expect(electronAPIMock.chatRuntimeCompact).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
   it('loads persisted context usage before an existing session sends again', async (): Promise<void> => {
     const wrapper = mountBChat('session-1');
     await flushPromises();
@@ -1068,9 +1190,12 @@ describe('BChat sessionId runtime', (): void => {
 
     const visibleMessages = wrapper.findComponent(ConversationViewStub).props('messages') as Message[];
 
-    expect(chatStoreMock.createSession).toHaveBeenCalledWith('assistant', { title: '查天气 上海' });
+    expect(chatStoreMock.createSession).toHaveBeenCalledWith('assistant', {
+      title: '查天气 上海',
+      model: { providerId: 'provider-1', modelId: 'model-1' }
+    });
     expect(visibleMessages).toEqual([]);
-    expect(getAvailableServiceConfigMock).toHaveBeenCalled();
+    expect(getModelToolSupportMock).toHaveBeenCalledWith('provider-1', 'model-1');
     expect(electronAPIMock.chatRuntimeSend).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'session-created', content: '查天气 上海' }));
   });
 
@@ -1818,11 +1943,20 @@ describe('BChat sessionId runtime', (): void => {
   });
 
   it('regenerates assistant messages through main process ChatRuntime', async (): Promise<void> => {
+    const order: string[] = [];
     const userMessage = createMessage('user-regenerate', '重新回答');
     const assistantMessage = createAssistantMessage({
       id: 'assistant-old',
       content: '旧回答',
       parts: [{ id: 'part0041', type: 'text', text: '旧回答' }]
+    });
+    chatStoreMock.ensureSessionModel.mockImplementation(async (sessionId, model): Promise<ChatSession> => {
+      order.push('persist-model');
+      return { ...createSession(sessionId, sessionId), metadata: { model } };
+    });
+    electronAPIMock.chatRuntimeContinue.mockImplementation(async (input: ChatRuntimeContinueInput) => {
+      order.push('runtime-continue');
+      return { ok: true, data: { runtimeId: input.runtimeId, sessionId: input.sessionId } };
     });
     chatStoreMock.getSessionMessages.mockResolvedValueOnce([userMessage, assistantMessage]).mockResolvedValueOnce([]);
     const wrapper = mountBChat('session-active');
@@ -1846,6 +1980,27 @@ describe('BChat sessionId runtime', (): void => {
     );
     const [continueInput] = electronAPIMock.chatRuntimeContinue.mock.calls[0] as [ChatRuntimeContinueInput];
     expect(continueInput.messages).toEqual([expect.objectContaining({ id: 'user-regenerate', role: 'user' })]);
+    expect(order).toEqual(['persist-model', 'runtime-continue']);
+  });
+
+  it('blocks regeneration when session model persistence fails', async (): Promise<void> => {
+    const userMessage = createMessage('user-regenerate', '重新回答');
+    const assistantMessage = createAssistantMessage({
+      id: 'assistant-old',
+      content: '旧回答',
+      parts: [{ id: 'part-regenerate-old', type: 'text', text: '旧回答' }]
+    });
+    chatStoreMock.getSessionMessages.mockResolvedValueOnce([userMessage, assistantMessage]).mockResolvedValueOnce([]);
+    chatStoreMock.ensureSessionModel.mockRejectedValue(new Error('metadata failed'));
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+
+    wrapper.findComponent(ConversationViewStub).vm.$emit('regenerate', assistantMessage);
+    await flushPromises();
+
+    expect(electronAPIMock.chatRuntimeContinue).not.toHaveBeenCalled();
+    expect(chatStoreMock.setSessionMessages).not.toHaveBeenCalled();
+    wrapper.unmount();
   });
 
   it('creates a branch from the target assistant message and switches through the existing session event', async (): Promise<void> => {

@@ -3,7 +3,7 @@
  * @description BChat 输入工具栏模型选择器显示测试。
  * @vitest-environment jsdom
  */
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ModelSelector from '@/components/BChat/components/InputToolbar/ModelSelector.vue';
 
@@ -74,7 +74,22 @@ vi.mock('@/components/BModel/Icon.vue', () => ({
 
 describe('ModelSelector', (): void => {
   beforeEach((): void => {
+    mockLoadProviders.mockReset();
     mockLoadProviders.mockResolvedValue(undefined);
+  });
+
+  it('does not load provider data on mount', async (): Promise<void> => {
+    mount(ModelSelector, {
+      global: {
+        stubs: {
+          BIcon: true
+        }
+      }
+    });
+
+    await flushPromises();
+
+    expect(mockLoadProviders).not.toHaveBeenCalled();
   });
 
   it('shows a placeholder when no current model name is available', (): void => {

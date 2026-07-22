@@ -340,11 +340,13 @@ describe('runtime stream executor', (): void => {
     });
     const streamText = vi.fn().mockResolvedValue([undefined, { stream: createTextStream() }]);
     const executor = createRuntimeStreamExecutor({ resolver: { resolve }, streamText });
+    const model = { providerId: 'provider-1', modelId: 'model-2' };
 
-    const result = await executor({ runtime, userMessage, assistantMessage }, async (message) => {
+    const result = await executor({ runtime: { ...runtime, model }, userMessage, assistantMessage }, async (message) => {
       updates.push({ ...message, parts: [...message.parts] });
     });
 
+    expect(resolve).toHaveBeenCalledWith(model);
     expect(streamText).toHaveBeenCalledWith(
       expect.objectContaining({ providerId: 'openai' }),
       expect.objectContaining({
