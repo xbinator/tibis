@@ -12,6 +12,13 @@ import WelcomePage from '@/views/welcome/index.vue';
 
 const topRecentRecordsMock = vi.hoisted<{ value: RecentRecord[] }>(() => ({ value: [] }));
 const ensureLoadedMock = vi.hoisted(() => vi.fn());
+const routerPushMock = vi.hoisted(() => vi.fn<(path: string) => Promise<void>>(() => Promise.resolve()));
+
+vi.mock('vue-router', () => ({
+  useRouter: () => ({
+    push: routerPushMock
+  })
+}));
 
 vi.mock('@/hooks/useNavigate', () => ({
   useNavigate: () => ({
@@ -109,6 +116,7 @@ describe('WelcomePage', (): void => {
   beforeEach((): void => {
     setActivePinia(createPinia());
     ensureLoadedMock.mockClear();
+    routerPushMock.mockClear();
     topRecentRecordsMock.value = [];
   });
 
@@ -141,5 +149,18 @@ describe('WelcomePage', (): void => {
 
     expect(recentItem.find('.recent-record-icon-stub').attributes('data-record-id')).toBe('web-1');
     expect(recentItem.find('.recent-record-icon-stub').attributes('data-size')).toBe('14');
+  });
+
+  it('opens the standalone chat page from the quick action entry', async (): Promise<void> => {
+    const wrapper = mountWelcomePage();
+    const chatEntry = wrapper.find('[data-test-id="welcome-open-chat"]');
+
+    expect(chatEntry.exists()).toBe(true);
+    expect(chatEntry.text()).toContain('开始聊天');
+    expect(chatEntry.html()).toContain('lucide:message-circle');
+
+    await chatEntry.trigger('click');
+
+    expect(routerPushMock).toHaveBeenCalledWith('/chat');
   });
 });

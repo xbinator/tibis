@@ -2,6 +2,13 @@
   <div class="welcome-page">
     <div class="welcome-container">
       <div class="actions-section">
+        <div class="action-card" data-test-id="welcome-open-chat" @click="handleOpenChat">
+          <div class="action-icon">
+            <Icon icon="lucide:message-circle" width="16" height="16" />
+          </div>
+          <span class="action-label">开始聊天</span>
+        </div>
+
         <div class="action-card" @click="handleNewFile">
           <div class="action-icon">
             <Icon icon="lucide:file-plus" width="16" height="16" />
@@ -50,14 +57,18 @@
  */
 
 import { computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { useNavigate } from '@/hooks/useNavigate';
 import { useOpenFile } from '@/hooks/useOpenFile';
+import { createChatPath } from '@/router/routes/helpers/chatRouteTab';
 import { isDocumentRecord } from '@/shared/storage';
 import { useCommandPanelStore } from '@/stores/ui/commandPanel';
 import { useRecentStore } from '@/stores/workspace/recent';
+import { asyncTo } from '@/utils/asyncTo';
 import { resolveFileTitle } from '@/utils/file/title';
 
+const router = useRouter();
 const { openWebview } = useNavigate();
 const commandPanelStore = useCommandPanelStore();
 const recentStore = useRecentStore();
@@ -79,6 +90,13 @@ function handleNewFile(): void {
  */
 async function handleOpenFile(): Promise<void> {
   await openNativeFile();
+}
+
+/**
+ * 打开独立聊天页草稿入口。
+ */
+async function handleOpenChat(): Promise<void> {
+  await asyncTo(router.push(createChatPath()));
 }
 
 /**
