@@ -1,5 +1,5 @@
 <template>
-  <BDropdown v-model:open="open" :disabled="isDisabled" :align="{ offset: [-48, 0] }">
+  <BDropdown v-model:open="open" :disabled="isDisabled" :align="{ offset: [-84, 0] }">
     <BButton square size="small" type="text" :disabled="isDisabled">
       <BIcon icon="lucide:history" :size="16" />
     </BButton>
