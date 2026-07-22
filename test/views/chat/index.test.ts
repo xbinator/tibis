@@ -26,6 +26,14 @@ const routerMocks = vi.hoisted(() => ({
 const routeFailureMock = vi.hoisted(() => ({ type: 'aborted' }));
 const abortRuntimeMock = vi.hoisted(() => vi.fn<() => Promise<void>>());
 const resetDraftMock = vi.hoisted(() => vi.fn<() => Promise<void>>());
+const ensureSessionsMock = vi.hoisted(() => vi.fn<() => Promise<void>>());
+const messageErrorMock = vi.hoisted(() => vi.fn());
+
+vi.mock('ant-design-vue', () => ({
+  message: {
+    error: messageErrorMock
+  }
+}));
 
 vi.mock('vue-router', () => ({
   useRoute: (): typeof routerMocks.route => routerMocks.route,
@@ -34,6 +42,12 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/router/navigation', () => ({
   isBlockingNavigationFailure: (result: unknown): boolean => result === routeFailureMock
+}));
+
+vi.mock('@/stores/chat/session', () => ({
+  useChatSessionStore: (): { ensureSessions: typeof ensureSessionsMock } => ({
+    ensureSessions: ensureSessionsMock
+  })
 }));
 
 vi.mock('@/components/BChat/index.vue', () => ({
@@ -101,6 +115,25 @@ describe('chat page', (): void => {
     abortRuntimeMock.mockResolvedValue();
     resetDraftMock.mockReset();
     resetDraftMock.mockResolvedValue();
+    ensureSessionsMock.mockReset();
+    ensureSessionsMock.mockResolvedValue();
+    messageErrorMock.mockReset();
+  });
+
+  it('ensures the shared session collection on mount', async (): Promise<void> => {
+    mountPage('session-a');
+    await flushPromises();
+
+    expect(ensureSessionsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps shared session initialization silent when loading fails', async (): Promise<void> => {
+    ensureSessionsMock.mockRejectedValue(new Error('load failed'));
+
+    mountPage('session-a');
+    await flushPromises();
+
+    expect(messageErrorMock).not.toHaveBeenCalled();
   });
 
   it('captures the route session for draft and persisted pages', (): void => {

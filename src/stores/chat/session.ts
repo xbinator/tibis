@@ -3,17 +3,81 @@
  * @description 聊天会话和消息持久化存储。
  */
 import type { AIUsage } from 'types/ai';
-import type { ChatMessageHistoryCursor, ChatMessageRecord, ChatSession, ChatSessionType, PaginatedSessionsResult, SessionPaginationParams } from 'types/chat';
+import type {
+  ChatMessageHistoryCursor,
+  ChatMessageRecord,
+  ChatSession,
+  ChatSessionType,
+  PaginatedSessionsResult,
+  SessionCursor,
+  SessionPaginationParams
+} from 'types/chat';
 import { toRaw } from 'vue';
 import { defineStore } from 'pinia';
 import dayjs from 'dayjs';
+import { orderBy, uniqBy } from 'lodash-es';
 import { nanoid } from 'nanoid';
 import { recoverInterruptedAssistantDrafts } from '@/components/BChat/utils/interruptedDraftRecovery';
 import { is, type PersistableMessage } from '@/components/BChat/utils/messageHelper';
 import type { Message } from '@/components/BChat/utils/types';
 import { getElectronAPI, unwrap } from '@/shared/platform/electron-api';
 import { isDatabaseInitializationRaceError, retryDuringDatabaseInitialization } from '@/shared/storage/utils/database';
+import { asyncTo } from '@/utils/asyncTo';
 import { useTodoStore } from './todo';
+
+/** 会话历史分页大小。 */
+const SESSION_PAGE_SIZE = 20;
+
+/**
+ * 聊天会话 Store 状态。
+ */
+interface ChatSessionState {
+  /** 已加载和运行期间创建的会话集合。 */
+  sessions: ChatSession[];
+  /** 会话集合是否正在加载。 */
+  sessionsLoading: boolean;
+  /** 是否成功完成过首次加载。 */
+  sessionsLoaded: boolean;
+  /** 服务端是否还有下一页会话。 */
+  sessionsHasMore: boolean;
+  /** 下一页会话游标。 */
+  sessionsNextCursor?: SessionCursor;
+}
+
+/**
+ * 合并并按最近活动时间倒序排列会话。
+ * @param primarySessions - 优先保留的会话集合
+ * @param fallbackSessions - 用于补齐缺失 ID 的会话集合
+ * @returns 去重并排序后的会话集合
+ */
+function mergeSessions(primarySessions: ChatSession[], fallbackSessions: ChatSession[]): ChatSession[] {
+  const sessions = uniqBy([...primarySessions, ...fallbackSessions], 'id');
+  return orderBy(sessions, [(session: ChatSession): string => session.lastMessageAt || session.updatedAt || session.createdAt], ['desc']);
+}
+
+/**
+ * 从集合移除指定会话。
+ * @param sessions - 当前会话集合
+ * @param sessionId - 要移除的会话 ID
+ * @returns 移除后的会话集合
+ */
+function removeSession(sessions: ChatSession[], sessionId: string): ChatSession[] {
+  return sessions.filter((session: ChatSession): boolean => session.id !== sessionId);
+}
+
+/**
+ * 更新会话最近活动时间并恢复排序。
+ * @param sessions - 当前会话集合
+ * @param sessionId - 目标会话 ID
+ * @param lastMessageAt - 最新消息时间
+ * @returns 更新后的会话集合
+ */
+function touchSession(sessions: ChatSession[], sessionId: string, lastMessageAt: string): ChatSession[] {
+  const session = sessions.find((item: ChatSession): boolean => item.id === sessionId);
+  if (!session) return sessions;
+
+  return mergeSessions([{ ...session, updatedAt: lastMessageAt, lastMessageAt }], sessions);
+}
 
 /**
  * 将值转换为 Electron IPC 可克隆的纯数据。
@@ -33,6 +97,25 @@ function toCloneableData<T>(value: T): T {
   }
 
   return JSON.parse(JSON.stringify(rawValue)) as T;
+}
+
+/**
+ * 按类型读取一页持久化会话。
+ * @param type - 会话类型过滤器
+ * @param pagination - 分页参数
+ * @returns 分页会话结果
+ */
+async function fetchSessions(type: ChatSessionType, pagination?: SessionPaginationParams): Promise<PaginatedSessionsResult> {
+  try {
+    return await retryDuringDatabaseInitialization(async () => {
+      const plainPagination = pagination ? toCloneableData(pagination) : undefined;
+      const result = await getElectronAPI().chatSessionList(type, plainPagination);
+      return unwrap(result);
+    });
+  } catch (error: unknown) {
+    if (isDatabaseInitializationRaceError(error)) return { items: [], hasMore: false };
+    throw error;
+  }
 }
 
 /**
@@ -63,7 +146,71 @@ function fromRecordMessage(record: ChatMessageRecord): Message {
 }
 
 export const useChatSessionStore = defineStore('chat', {
+  state: (): ChatSessionState => ({
+    sessions: [],
+    sessionsLoading: false,
+    sessionsLoaded: false,
+    sessionsHasMore: true,
+    sessionsNextCursor: undefined
+  }),
+  getters: {
+    /**
+     * 按 ID 查找已加载的会话。
+     * @param state - 聊天会话 Store 状态
+     * @returns 会话查询函数
+     */
+    findSession:
+      (state: ChatSessionState): ((sessionId?: string | null) => ChatSession | undefined) =>
+      (sessionId?: string | null): ChatSession | undefined =>
+        state.sessions.find((session: ChatSession): boolean => session.id === sessionId)
+  },
   actions: {
+    /**
+     * 加载指定游标对应的会话页并合并到唯一集合。
+     * @param cursor - 下一页游标；空值表示第一页
+     */
+    async loadSessionPage(cursor?: SessionCursor): Promise<void> {
+      if (this.sessionsLoading) return;
+
+      this.sessionsLoading = true;
+      const [error, result] = await asyncTo(
+        fetchSessions('assistant', {
+          limit: SESSION_PAGE_SIZE,
+          cursor
+        })
+      );
+      this.sessionsLoading = false;
+      if (error) throw error;
+
+      // 服务端结果优先覆盖同 ID 旧数据，同时保留请求期间刚创建的本地会话。
+      this.sessions = mergeSessions(result.items, this.sessions);
+      this.sessionsHasMore = result.hasMore;
+      this.sessionsNextCursor = result.nextCursor;
+      if (!cursor) this.sessionsLoaded = true;
+    },
+
+    /**
+     * 确保会话集合已完成首次加载。
+     */
+    async ensureSessions(): Promise<void> {
+      if (this.sessionsLoaded || this.sessionsLoading) return;
+      await this.loadSessionPage();
+    },
+
+    /**
+     * 加载会话集合下一页。
+     */
+    async loadMoreSessions(): Promise<void> {
+      if (this.sessionsLoading) return;
+      if (!this.sessionsLoaded) {
+        await this.loadSessionPage();
+        return;
+      }
+      if (!this.sessionsHasMore) return;
+
+      await this.loadSessionPage(this.sessionsNextCursor);
+    },
+
     /**
      * 加载会话的聊天消息，可选择使用历史游标。
      * @param sessionId - 要加载的会话 ID。
@@ -93,29 +240,6 @@ export const useChatSessionStore = defineStore('chat', {
       } catch (error: unknown) {
         if (isDatabaseInitializationRaceError(error)) {
           return [];
-        }
-
-        throw error;
-      }
-    },
-
-    /**
-     * 按类型加载会话，用于历史导航，支持基于游标的分页。
-     * @param type - 会话类型过滤器。
-     * @param pagination - 可选的分页参数，用于基于游标的加载。
-     * @returns 分页会话结果，包含会话列表、是否有更多数据标志和下一个游标。
-     */
-    async getSessions(type: ChatSessionType, pagination?: SessionPaginationParams): Promise<PaginatedSessionsResult> {
-      try {
-        return await retryDuringDatabaseInitialization(async () => {
-          // 深拷贝以剥离 Vue 响应式 Proxy，否则 Electron IPC 结构化克隆会失败
-          const plainPagination = pagination ? toCloneableData(pagination) : undefined;
-          const result = await getElectronAPI().chatSessionList(type, plainPagination);
-          return unwrap(result);
-        });
-      } catch (error: unknown) {
-        if (isDatabaseInitializationRaceError(error)) {
-          return { items: [], hasMore: false };
         }
 
         throw error;
@@ -157,6 +281,7 @@ export const useChatSessionStore = defineStore('chat', {
         unwrap(result);
       });
 
+      this.sessions = mergeSessions([session], this.sessions);
       return session;
     },
 
@@ -167,10 +292,13 @@ export const useChatSessionStore = defineStore('chat', {
      * @returns 已持久化的新会话
      */
     async branchSession(sourceSessionId: string, targetMessageId: string): Promise<ChatSession> {
-      return retryDuringDatabaseInitialization(async (): Promise<ChatSession> => {
+      const session = await retryDuringDatabaseInitialization(async (): Promise<ChatSession> => {
         const result = await getElectronAPI().chatSessionBranch(sourceSessionId, targetMessageId);
         return unwrap(result);
       });
+
+      this.sessions = mergeSessions([session], this.sessions);
+      return session;
     },
 
     /**
@@ -188,6 +316,7 @@ export const useChatSessionStore = defineStore('chat', {
         const result = await getElectronAPI().chatMessageAdd(record);
         unwrap(result);
       });
+      this.sessions = touchSession(this.sessions, sessionId, record.createdAt);
     },
 
     /**
@@ -235,6 +364,9 @@ export const useChatSessionStore = defineStore('chat', {
         const result = await getElectronAPI().chatSessionUpdateTitle(sessionId, title);
         unwrap(result);
       });
+
+      const session = this.findSession(sessionId);
+      if (session) this.sessions = mergeSessions([{ ...session, title }], this.sessions);
     },
 
     /**
@@ -246,6 +378,7 @@ export const useChatSessionStore = defineStore('chat', {
         const result = await getElectronAPI().chatSessionDelete(sessionId);
         unwrap(result);
       });
+      this.sessions = removeSession(this.sessions, sessionId);
 
       // 级联清理该会话的 todo 数据（在 unwrap 成功后执行，try-catch 防止中断删除流程）
       try {

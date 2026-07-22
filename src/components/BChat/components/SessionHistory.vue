@@ -1,3 +1,7 @@
+<!--
+  @file SessionHistory.vue
+  @description 展示共享聊天会话集合，并处理切换、分页请求和删除交互。
+-->
 <template>
   <BDropdown v-model:open="open" :disabled="isDisabled" :align="{ offset: [-84, 0] }">
     <BButton square size="small" type="text" :disabled="isDisabled">
@@ -6,7 +10,7 @@
 
     <template #overlay>
       <div class="session-history" @click.stop>
-        <div v-if="displayedSessions.length || loading" ref="scrollContainer" class="session-history__list">
+        <div v-if="chatStore.sessions.length || chatStore.sessionsLoading" ref="scrollContainer" class="session-history__list">
           <div class="session-history__list-inner">
             <template v-for="group in groupedSessions" :key="group.key">
               <div class="session-history__group-title">
@@ -30,7 +34,7 @@
               </div>
             </template>
 
-            <div v-if="loading" class="session-history__loading">
+            <div v-if="chatStore.sessionsLoading" class="session-history__loading">
               <BIcon icon="lucide:loader-2" :size="14" class="is-spinning" />
               <span>加载中...</span>
             </div>
@@ -44,8 +48,8 @@
 </template>
 
 <script setup lang="ts">
-import type { ChatSession, SessionCursor, SessionPaginationParams } from 'types/chat';
-import { computed, onMounted, ref, watch } from 'vue';
+import type { ChatSession } from 'types/chat';
+import { computed, ref } from 'vue';
 import { useInfiniteScroll } from '@vueuse/core';
 import { message } from 'ant-design-vue';
 import dayjs from 'dayjs';
@@ -79,11 +83,6 @@ interface SessionGroup {
   sessions: ChatSession[];
 }
 
-const CHAT_SESSION_TYPE = 'assistant';
-
-/** 每页加载数量 */
-const PAGE_SIZE = 20;
-
 const props = withDefaults(defineProps<Props>(), {
   activeSessionId: null,
   disabled: false
@@ -94,32 +93,14 @@ const chatStore = useChatSessionStore();
 /** 聊天标签运行时态存储，用于判断每个会话是否处于运行/等待等忙碌状态。 */
 const runtimeStore = useChatTabRuntimeStore();
 
-/** 已加载的会话列表（增量累加） */
-const displayedSessions = ref<ChatSession[]>([]);
-
-/** 下一页游标 */
-const nextCursor = ref<SessionCursor>();
-
-/** 是否还有更多数据可加载 */
-const hasMore = ref(true);
-
-/** 加载状态 */
-const loading = ref(false);
-
 /** 滚动容器引用 */
 const scrollContainer = ref<HTMLElement>();
 
 const emit = defineEmits<{
   (e: 'switch-session', sessionId: string): void;
   (e: 'delete-session', sessionId: string): void;
-  (e: 'update:currentSession', session: ChatSession | undefined): void;
+  (e: 'load-more'): void;
 }>();
-
-/** 当前选中的会话对象 */
-const currentSession = computed<ChatSession | undefined>(() => {
-  if (!props.activeSessionId) return undefined;
-  return displayedSessions.value.find((s) => s.id === props.activeSessionId);
-});
 
 const isDisabled = computed(() => props.disabled);
 /** 忙碌会话 ID 集合：从聊天标签运行时态直接推导，供删除按钮判断是否禁用。 */
@@ -129,77 +110,6 @@ const activeRuntimeIds = computed<Set<string>>((): Set<string> => {
   const busyIds = map(busyRecords, 'sessionId');
 
   return new Set(busyIds);
-});
-
-/**
- * 加载会话数据
- * @param isRefresh - 是否为刷新操作（重置列表并从第一页加载）
- */
-async function loadSessions(isRefresh = false): Promise<void> {
-  if (loading.value) return;
-  if (!isRefresh && !hasMore.value) return;
-
-  loading.value = true;
-
-  try {
-    const pagination: SessionPaginationParams = {
-      limit: PAGE_SIZE,
-      cursor: isRefresh ? undefined : nextCursor.value
-    };
-
-    const result = await chatStore.getSessions(CHAT_SESSION_TYPE, pagination);
-
-    if (isRefresh) {
-      displayedSessions.value = result.items;
-    } else {
-      displayedSessions.value.push(...result.items);
-    }
-
-    nextCursor.value = result.nextCursor;
-    hasMore.value = result.hasMore;
-
-    emit('update:currentSession', currentSession.value);
-  } catch {
-    message.error('加载会话失败');
-  } finally {
-    loading.value = false;
-  }
-}
-
-/**
- * 刷新会话列表（从第一页重新加载）
- */
-async function refreshSessions(): Promise<void> {
-  hasMore.value = true;
-  nextCursor.value = undefined;
-  await loadSessions(true);
-}
-
-/**
- * 监听 activeSessionId 变化，如果切换到不在当前列表中的会话则刷新列表
- */
-watch(
-  () => props.activeSessionId,
-  async (newId, oldId) => {
-    if (newId && newId !== oldId) {
-      const exists = displayedSessions.value.some((s) => s.id === newId);
-      if (!exists) {
-        await refreshSessions();
-      }
-    }
-
-    emit('update:currentSession', currentSession.value);
-  },
-  { immediate: true }
-);
-
-onMounted(async () => {
-  await loadSessions(true);
-});
-
-/** 暴露刷新方法供父组件调用 */
-defineExpose({
-  refreshSessions
 });
 
 /**
@@ -230,7 +140,7 @@ function formatSessionDay(timestamp: string): string {
 
 /** 按日期分组的会话列表 */
 const groupedSessions = computed<SessionGroup[]>(() => {
-  const groups = groupBy(displayedSessions.value, (session) => toDateKey(session.lastMessageAt || session.updatedAt || session.createdAt || ''));
+  const groups = groupBy(chatStore.sessions, (session: ChatSession) => toDateKey(session.lastMessageAt || session.updatedAt || session.createdAt || ''));
 
   return map(groups, (_sessions, key) => ({ key, label: formatSessionDay(_sessions[0].lastMessageAt), sessions: _sessions }));
 });
@@ -240,8 +150,8 @@ const groupedSessions = computed<SessionGroup[]>(() => {
  */
 useInfiniteScroll(
   scrollContainer,
-  () => {
-    loadSessions();
+  (): void => {
+    emit('load-more');
   },
   { distance: 50 }
 );
@@ -265,34 +175,12 @@ function handleSwitchSession(sessionId: string): void {
  */
 async function handleDeleteSession(sessionId: string): Promise<void> {
   if (props.disabled) return;
-  if (loading.value) return;
+  if (chatStore.sessionsLoading) return;
   if (activeRuntimeIds.value.has(sessionId)) return;
 
-  loading.value = true;
   const [error] = await asyncTo(chatStore.deleteSession(sessionId));
-  loading.value = false;
 
   if (!error) {
-    // 从已加载列表中移除被删除的会话，保持分页状态
-    displayedSessions.value = displayedSessions.value.filter((s) => s.id !== sessionId);
-
-    // 更新游标为当前列表最后一条数据的时间戳
-    if (displayedSessions.value.length > 0) {
-      const lastItem = displayedSessions.value[displayedSessions.value.length - 1];
-      nextCursor.value = {
-        lastMessageAt: lastItem.lastMessageAt,
-        createdAt: lastItem.createdAt
-      };
-    } else {
-      // 列表清空后重置游标
-      nextCursor.value = undefined;
-    }
-
-    // 如果当前列表已空且还有更多数据，加载下一页
-    if (displayedSessions.value.length === 0 && hasMore.value) {
-      await loadSessions(true);
-    }
-
     emit('delete-session', sessionId);
   } else {
     message.error(error.message || '删除会话失败，请重试');

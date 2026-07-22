@@ -3,8 +3,9 @@
  * @description ChatSider 会话选择状态管理。
  */
 import type { ChatSession } from 'types/chat';
-import type { Ref } from 'vue';
-import { ref } from 'vue';
+import type { ComputedRef } from 'vue';
+import { computed } from 'vue';
+import { useChatSessionStore } from '@/stores/chat/session';
 import { useSettingStore } from '@/stores/ui/setting';
 
 /**
@@ -19,18 +20,14 @@ interface UseChatSessionOptions {
  * ChatSider 会话选择状态。
  */
 interface ChatSessionApi {
-  /** 当前激活会话对象，用于标题展示。 */
-  currentSession: Ref<ChatSession | undefined>;
-  /** 会话选择加载状态。 */
-  loading: Ref<boolean>;
+  /** 当前激活会话，由共享 Store 集合推导。 */
+  currentSession: ComputedRef<ChatSession | undefined>;
   /** 切换当前激活会话。 */
   switchSession: (sessionId: string) => Promise<void>;
   /** 进入新会话草稿态。 */
   createDraftSession: () => Promise<void>;
   /** 当前会话被删除后的外层状态同步。 */
   handleDeletedSession: (sessionId: string) => void;
-  /** 同步当前会话对象。 */
-  setCurrentSession: (session: ChatSession | undefined) => void;
 }
 
 /**
@@ -39,27 +36,17 @@ interface ChatSessionApi {
  * @returns 会话 API
  */
 export function useChatSession(options: UseChatSessionOptions): ChatSessionApi {
+  const chatStore = useChatSessionStore();
   const settingStore = useSettingStore();
-
-  /** 当前激活会话对象。 */
-  const currentSession = ref<ChatSession | undefined>(undefined);
-  /** 会话选择加载状态。 */
-  const loading = ref(false);
-
-  /**
-   * 同步当前会话对象。
-   * @param session - 当前会话对象
-   */
-  function setCurrentSession(session: ChatSession | undefined): void {
-    currentSession.value = session;
-  }
+  /** 当前激活会话的只读计算视图。 */
+  const currentSession = computed<ChatSession | undefined>(() => chatStore.findSession(settingStore.chatSidebarActiveSessionId));
 
   /**
    * 判断侧栏会话操作是否应被拒绝。
    * @returns 是否应拒绝会话操作
    */
   function shouldRejectSessionAction(): boolean {
-    return options.isChatLoading() || loading.value;
+    return options.isChatLoading();
   }
 
   /**
@@ -80,7 +67,6 @@ export function useChatSession(options: UseChatSessionOptions): ChatSessionApi {
     if (shouldRejectSessionAction()) return;
 
     settingStore.setChatSidebarActiveSessionId(null);
-    currentSession.value = undefined;
   }
 
   /**
@@ -92,15 +78,12 @@ export function useChatSession(options: UseChatSessionOptions): ChatSessionApi {
     if (sessionId !== settingStore.chatSidebarActiveSessionId) return;
 
     settingStore.setChatSidebarActiveSessionId(null);
-    currentSession.value = undefined;
   }
 
   return {
     currentSession,
-    loading,
     switchSession,
     createDraftSession,
-    handleDeletedSession,
-    setCurrentSession
+    handleDeletedSession
   };
 }

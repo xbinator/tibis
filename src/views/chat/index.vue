@@ -26,6 +26,7 @@ import BChat from '@/components/BChat/index.vue';
 import { isBlockingNavigationFailure } from '@/router/navigation';
 import { CHAT_DRAFT_TAB_ID, createChatPath, createChatTabId, findChatTab } from '@/router/routes/helpers/chatRouteTab';
 import { normalizeRouteParam } from '@/router/routes/helpers/fileRouteTab';
+import { useChatSessionStore } from '@/stores/chat/session';
 import type { ChatTabRuntimeController, ChatTabSourceStatus } from '@/stores/chat/tabRuntime';
 import { useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
 import type { Tab } from '@/stores/workspace/tabs';
@@ -39,6 +40,7 @@ const route = useRoute();
 /** 页面实例创建时捕获的不可变会话 ID，避免后台 KeepAlive 实例跟随全局路由变化。 */
 const initialSessionId = normalizeRouteParam(route.params.sessionId) ?? null;
 const router = useRouter();
+const chatStore = useChatSessionStore();
 const tabsStore = useTabsStore();
 const runtimeStore = useChatTabRuntimeStore();
 const bChatRef = ref<BChatInstance>();
@@ -181,6 +183,7 @@ onActivated(markCurrentViewed);
 
 onMounted((): void => {
   runtimeStore.registerController(ownerTabId.value, runtimeController);
+  asyncTo(chatStore.ensureSessions());
 });
 
 onUnmounted((): void => {

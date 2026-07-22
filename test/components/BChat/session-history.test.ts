@@ -3,7 +3,7 @@
  * @description 会话历史忙碌状态删除保护测试。
  * @vitest-environment jsdom
  */
-import type { ChatSession, PaginatedSessionsResult } from 'types/chat';
+import type { ChatSession } from 'types/chat';
 import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,17 +11,22 @@ import SessionHistory from '@/components/BChat/components/SessionHistory.vue';
 import { useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
 
 const chatStoreMock = vi.hoisted(() => ({
-  getSessions: vi.fn<() => Promise<PaginatedSessionsResult>>(),
+  sessions: [] as ChatSession[],
+  sessionsLoading: false,
+  sessionsHasMore: true,
   deleteSession: vi.fn<(sessionId: string) => Promise<void>>()
 }));
 const messageErrorMock = vi.hoisted(() => vi.fn());
+const infiniteScrollState = vi.hoisted(() => ({ callback: undefined as (() => void) | undefined }));
 
 vi.mock('@/stores/chat/session', () => ({
   useChatSessionStore: (): typeof chatStoreMock => chatStoreMock
 }));
 
 vi.mock('@vueuse/core', () => ({
-  useInfiniteScroll: vi.fn()
+  useInfiniteScroll: vi.fn((_target: unknown, callback: () => void): void => {
+    infiniteScrollState.callback = callback;
+  })
 }));
 
 vi.mock('ant-design-vue', () => ({
@@ -71,11 +76,38 @@ function mountHistory(): ReturnType<typeof mount> {
 describe('SessionHistory busy deletion', (): void => {
   beforeEach((): void => {
     setActivePinia(createPinia());
-    chatStoreMock.getSessions.mockReset();
+    chatStoreMock.sessions = [createSession('session-a')];
+    chatStoreMock.sessionsLoading = false;
+    chatStoreMock.sessionsHasMore = true;
     chatStoreMock.deleteSession.mockReset();
-    chatStoreMock.getSessions.mockResolvedValue({ items: [createSession('session-a')], hasMore: false });
     chatStoreMock.deleteSession.mockResolvedValue();
     messageErrorMock.mockReset();
+    infiniteScrollState.callback = undefined;
+  });
+
+  it('renders the shared Store collection without exposing a refresh method', (): void => {
+    const wrapper = mountHistory();
+
+    expect(wrapper.text()).toContain('会话 session-a');
+    expect('refreshSessions' in wrapper.vm).toBe(false);
+  });
+
+  it('requests the next page through an event when more sessions are available', (): void => {
+    const wrapper = mountHistory();
+
+    infiniteScrollState.callback?.();
+
+    expect(wrapper.emitted('load-more')).toEqual([[]]);
+  });
+
+  it('always delegates infinite-scroll requests to the Store owner', (): void => {
+    chatStoreMock.sessionsHasMore = false;
+    chatStoreMock.sessionsLoading = true;
+    const wrapper = mountHistory();
+
+    infiniteScrollState.callback?.();
+
+    expect(wrapper.emitted('load-more')).toEqual([[]]);
   });
 
   it('disables deletion while the session is busy', async (): Promise<void> => {

@@ -28,12 +28,11 @@
         </BButton>
 
         <SessionHistory
-          ref="sessionHistoryRef"
-          v-model:current-session="currentSession"
           :active-session-id="settingStore.chatSidebarActiveSessionId"
           :disabled="isSessionActionDisabled"
           @switch-session="handleSwitchSession"
           @delete-session="handleDeletedSession"
+          @load-more="loadMoreSessions"
         />
         <BButton square size="small" type="text" :disabled="isSessionActionDisabled" @click="openChatPage">
           <BIcon icon="lucide:square-arrow-out-up-right" :size="16" />
@@ -50,7 +49,6 @@
         :session-id="settingStore.chatSidebarActiveSessionId"
         @new-session="handleCreateDraftSession"
         @session-created="handleSessionCreated"
-        @session-title-persisted="handleSessionTitlePersisted"
         @loading-change="handleChatLoadingChange"
       />
     </div>
@@ -59,9 +57,9 @@
 
 <script setup lang="ts">
 import type { ChatSession } from 'types/chat';
-import { computed, defineAsyncComponent, reactive, ref } from 'vue';
+import { computed, defineAsyncComponent, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Input as AInput } from 'ant-design-vue';
+import { Input as AInput, message } from 'ant-design-vue';
 import BButton from '@/components/BButton/index.vue';
 import SessionHistory from '@/components/BChat/components/SessionHistory.vue';
 import { vFocus } from '@/directives/focus';
@@ -101,23 +99,39 @@ const titleEditor = reactive({ editing: false, draft: '', saving: false });
 
 const {
   currentSession,
-  loading: sessionLoading,
   switchSession,
   createDraftSession,
-  handleDeletedSession: syncDeletedSession,
-  setCurrentSession
+  handleDeletedSession: syncDeletedSession
 } = useChatSession({
   isChatLoading: () => chatLoading.value
 });
 
-/** 会话历史组件实例引用。 */
-const sessionHistoryRef = ref<InstanceType<typeof SessionHistory>>();
 /** BChat 组件实例引用，用于调用聚焦输入框等方法。 */
 const bChatRef = ref<InstanceType<typeof BChat>>();
 /** 当前标题。 */
 const currentTitle = computed<string>(() => currentSession.value?.title || '新会话');
 /** 是否禁用会话切换、新会话和删除操作。 */
-const isSessionActionDisabled = computed<boolean>(() => chatLoading.value || sessionLoading.value);
+const isSessionActionDisabled = computed<boolean>(() => chatLoading.value || chatStore.sessionsLoading);
+
+/**
+ * 确保共享会话集合完成首次加载。
+ */
+async function ensureSessions(): Promise<void> {
+  const [error] = await asyncTo(chatStore.ensureSessions());
+  if (error) message.error('加载会话失败');
+}
+
+/**
+ * 加载共享会话集合下一页。
+ */
+async function loadMoreSessions(): Promise<void> {
+  const [error] = await asyncTo(chatStore.loadMoreSessions());
+  if (error) message.error('加载会话失败');
+}
+
+onMounted((): void => {
+  asyncTo(ensureSessions());
+});
 
 /**
  * 双击当前标题后进入编辑态，聚焦与全选交给 v-focus 统一处理。
@@ -142,14 +156,8 @@ async function finishTitleEdit(): Promise<void> {
   if (!session || !nextTitle || nextTitle === session.title) return;
 
   titleEditor.saving = true;
-  const [error] = await asyncTo(chatStore.updateSessionTitle(session.id, nextTitle));
+  await asyncTo(chatStore.updateSessionTitle(session.id, nextTitle));
   titleEditor.saving = false;
-  if (error) return;
-
-  if (currentSession.value?.id === session.id) {
-    setCurrentSession({ ...currentSession.value, title: nextTitle });
-  }
-  await asyncTo(sessionHistoryRef.value?.refreshSessions() ?? Promise.resolve());
 }
 
 /**
@@ -221,23 +229,8 @@ function handleDeletedSession(sessionId: string): void {
  * 同步 BChat 内部创建的新会话。
  * @param session - 新创建的会话对象
  */
-async function handleSessionCreated(session: ChatSession): Promise<void> {
+function handleSessionCreated(session: ChatSession): void {
   settingStore.setChatSidebarActiveSessionId(session.id);
-  setCurrentSession(session);
-  await sessionHistoryRef.value?.refreshSessions();
-}
-
-/**
- * 同步 BChat 自动命名后持久化的会话标题。
- * @param sessionId - 已更新标题的会话 ID
- * @param title - 自动生成后的会话标题
- */
-async function handleSessionTitlePersisted(sessionId: string, title: string): Promise<void> {
-  if (currentSession.value?.id === sessionId) {
-    setCurrentSession({ ...currentSession.value, title });
-  }
-
-  await sessionHistoryRef.value?.refreshSessions();
 }
 
 /**

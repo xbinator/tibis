@@ -4,22 +4,17 @@
  * @vitest-environment jsdom
  */
 /* eslint-disable vue/one-component-per-file */
-import type { ChatSession, PaginatedSessionsResult } from 'types/chat';
+import type { ChatSession } from 'types/chat';
 import { defineComponent, h, nextTick } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ChatSider from '@/layouts/default/components/ChatSider.vue';
+import { useChatSessionStore } from '@/stores/chat/session';
 import { useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
 import { useSettingStore } from '@/stores/ui/setting';
 import { useTabsStore } from '@/stores/workspace/tabs';
 
-const chatStoreMock = vi.hoisted(() => ({
-  getSessions: vi.fn<() => Promise<PaginatedSessionsResult>>(),
-  updateSessionTitle: vi.fn<(sessionId: string, title: string) => Promise<void>>()
-}));
-
-const sessionHistoryRefreshMock = vi.hoisted(() => vi.fn<() => Promise<void>>());
 const bChatResetDraftMock = vi.hoisted(() => vi.fn<() => Promise<void>>());
 const routerPushMock = vi.hoisted(() => vi.fn<(path: string) => Promise<unknown>>());
 const routeFailureMock = vi.hoisted(() => ({ type: 'aborted' }));
@@ -32,10 +27,6 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/router/navigation', () => ({
   isBlockingNavigationFailure: (result: unknown): boolean => result === routeFailureMock
-}));
-
-vi.mock('@/stores/chat/session', () => ({
-  useChatSessionStore: vi.fn(() => chatStoreMock)
 }));
 
 vi.mock('@/components/BButton/index.vue', () => ({
@@ -69,14 +60,8 @@ vi.mock('@/components/BChat/index.vue', () => ({
 vi.mock('@/components/BChat/components/SessionHistory.vue', () => ({
   default: {
     name: 'SessionHistory',
-    props: ['activeSessionId', 'disabled', 'currentSession'],
-    emits: ['switch-session', 'delete-session', 'update:currentSession'],
-    setup(_props: unknown, { expose }: { expose: (exposed: { refreshSessions: () => Promise<void> }) => void }) {
-      expose({
-        refreshSessions: sessionHistoryRefreshMock
-      });
-      return {};
-    },
+    props: ['activeSessionId', 'disabled'],
+    emits: ['switch-session', 'delete-session', 'load-more'],
     template: '<button class="session-history-stub" :disabled="disabled"></button>'
   }
 }));
@@ -95,18 +80,6 @@ function createSession(id: string, title: string): ChatSession {
     createdAt: '2026-06-15T00:00:00.000Z',
     updatedAt: '2026-06-15T00:00:00.000Z',
     lastMessageAt: '2026-06-15T00:00:00.000Z'
-  };
-}
-
-/**
- * 创建分页会话结果。
- * @param items - 会话列表
- * @returns 分页结果
- */
-function createSessionPage(items: ChatSession[]): PaginatedSessionsResult {
-  return {
-    items,
-    hasMore: false
   };
 }
 
@@ -173,18 +146,25 @@ function mountChatSider(): ReturnType<typeof mount> {
   });
 }
 
+/** 当前测试使用的真实响应式聊天会话 Store。 */
+let chatStore: ReturnType<typeof useChatSessionStore>;
+
 describe('ChatSider', (): void => {
   afterEach((): void => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   beforeEach((): void => {
     setActivePinia(createPinia());
     localStorage.clear();
-    chatStoreMock.getSessions.mockReset();
-    chatStoreMock.updateSessionTitle.mockReset();
-    chatStoreMock.updateSessionTitle.mockResolvedValue();
-    sessionHistoryRefreshMock.mockReset();
+    chatStore = useChatSessionStore();
+    vi.spyOn(chatStore, 'ensureSessions').mockResolvedValue();
+    vi.spyOn(chatStore, 'loadMoreSessions').mockResolvedValue();
+    vi.spyOn(chatStore, 'updateSessionTitle').mockImplementation(async (sessionId: string, title: string): Promise<void> => {
+      const session = chatStore.findSession(sessionId);
+      if (session) session.title = title;
+    });
     bChatResetDraftMock.mockReset();
     bChatResetDraftMock.mockResolvedValue();
     routerPushMock.mockReset();
@@ -194,7 +174,7 @@ describe('ChatSider', (): void => {
 
   it('renders BChat with the active session id and displays the SessionHistory current session', async (): Promise<void> => {
     const latestSession = createSession('session-latest', '最近会话');
-    chatStoreMock.getSessions.mockResolvedValue(createSessionPage([latestSession]));
+    chatStore.sessions = [latestSession];
     const settingStore = useSettingStore();
     settingStore.setSidebarVisible(true);
     settingStore.setChatSidebarActiveSessionId('session-latest');
@@ -202,15 +182,13 @@ describe('ChatSider', (): void => {
     const wrapper = mountChatSider();
     await flushPromises();
     await nextTick();
-    wrapper.findComponent({ name: 'SessionHistory' }).vm.$emit('update:currentSession', latestSession);
-    await nextTick();
 
     expect(wrapper.find('.b-chat-stub').attributes('data-session-id')).toBe('session-latest');
     expect(wrapper.text()).toContain('最近会话');
+    expect(chatStore.ensureSessions).toHaveBeenCalledTimes(1);
   });
 
   it('closes the sidebar from the close button', async (): Promise<void> => {
-    chatStoreMock.getSessions.mockResolvedValue(createSessionPage([]));
     const settingStore = useSettingStore();
     settingStore.setSidebarVisible(true);
     const wrapper = mountChatSider();
@@ -226,33 +204,41 @@ describe('ChatSider', (): void => {
     expect(settingStore.sidebarVisible).toBe(false);
   });
 
-  it('syncs internally created sessions and refreshes session history', async (): Promise<void> => {
-    chatStoreMock.getSessions.mockResolvedValue(createSessionPage([]));
+  it('loads the next shared session page when history requests more data', async (): Promise<void> => {
+    const wrapper = mountChatSider();
+
+    wrapper.findComponent({ name: 'SessionHistory' }).vm.$emit('load-more');
+    await flushPromises();
+
+    expect(chatStore.loadMoreSessions).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses a session created through the shared Store without refreshing history', async (): Promise<void> => {
     const settingStore = useSettingStore();
     settingStore.setSidebarVisible(true);
     const wrapper = mountChatSider();
     await flushPromises();
     await nextTick();
     const createdSession = createSession('session-created', '首条消息');
+    chatStore.sessions = [createdSession];
 
     wrapper.findComponent({ name: 'BChat' }).vm.$emit('session-created', createdSession);
     await nextTick();
 
     expect(settingStore.chatSidebarActiveSessionId).toBe('session-created');
     expect(wrapper.text()).toContain('首条消息');
-    expect(sessionHistoryRefreshMock).toHaveBeenCalledTimes(1);
   });
 
-  it('updates current title and refreshes history after BChat persists generated title', async (): Promise<void> => {
+  it('displays the title already synchronized by the shared Store', async (): Promise<void> => {
     const latestSession = createSession('session-latest', '首条消息');
-    chatStoreMock.getSessions.mockResolvedValue(createSessionPage([latestSession]));
+    chatStore.sessions = [latestSession];
     const settingStore = useSettingStore();
     settingStore.setSidebarVisible(true);
     settingStore.setChatSidebarActiveSessionId('session-latest');
     const wrapper = mountChatSider();
     await flushPromises();
     await nextTick();
-    wrapper.findComponent({ name: 'SessionHistory' }).vm.$emit('update:currentSession', latestSession);
+    chatStore.sessions[0].title = '生成标题';
     await nextTick();
 
     wrapper.findComponent({ name: 'BChat' }).vm.$emit('session-title-persisted', 'session-latest', '生成标题');
@@ -260,18 +246,16 @@ describe('ChatSider', (): void => {
     await nextTick();
 
     expect(wrapper.text()).toContain('生成标题');
-    expect(sessionHistoryRefreshMock).toHaveBeenCalledTimes(1);
   });
 
   it('focuses and selects the title input before saving with Enter', async (): Promise<void> => {
     const latestSession = createSession('session-latest', '原标题');
-    chatStoreMock.getSessions.mockResolvedValue(createSessionPage([latestSession]));
+    chatStore.sessions = [latestSession];
     const settingStore = useSettingStore();
     settingStore.setSidebarVisible(true);
     settingStore.setChatSidebarActiveSessionId('session-latest');
     const wrapper = mountChatSider();
     await flushPromises();
-    wrapper.findComponent({ name: 'SessionHistory' }).vm.$emit('update:currentSession', latestSession);
     await nextTick();
 
     vi.useFakeTimers();
@@ -293,20 +277,18 @@ describe('ChatSider', (): void => {
     await input.trigger('keydown', { key: 'Enter' });
     await flushPromises();
 
-    expect(chatStoreMock.updateSessionTitle).toHaveBeenCalledWith('session-latest', '手动标题');
+    expect(chatStore.updateSessionTitle).toHaveBeenCalledWith('session-latest', '手动标题');
     expect(wrapper.text()).toContain('手动标题');
-    expect(sessionHistoryRefreshMock).toHaveBeenCalledTimes(1);
   });
 
   it('saves the edited title when the input loses focus', async (): Promise<void> => {
     const latestSession = createSession('session-latest', '原标题');
-    chatStoreMock.getSessions.mockResolvedValue(createSessionPage([latestSession]));
+    chatStore.sessions = [latestSession];
     const settingStore = useSettingStore();
     settingStore.setSidebarVisible(true);
     settingStore.setChatSidebarActiveSessionId('session-latest');
     const wrapper = mountChatSider();
     await flushPromises();
-    wrapper.findComponent({ name: 'SessionHistory' }).vm.$emit('update:currentSession', latestSession);
     await nextTick();
 
     await wrapper.find('.chat-sider__title').trigger('dblclick');
@@ -317,13 +299,13 @@ describe('ChatSider', (): void => {
     titleInput.vm.$emit('blur', new FocusEvent('blur'));
     await flushPromises();
 
-    expect(chatStoreMock.updateSessionTitle).toHaveBeenCalledWith('session-latest', '失焦标题');
+    expect(chatStore.updateSessionTitle).toHaveBeenCalledWith('session-latest', '失焦标题');
     expect(wrapper.text()).toContain('失焦标题');
   });
 
   it('clears active session when BChat requests a new draft session', async (): Promise<void> => {
     const latestSession = createSession('session-old', '旧会话');
-    chatStoreMock.getSessions.mockResolvedValue(createSessionPage([latestSession]));
+    chatStore.sessions = [latestSession];
     const settingStore = useSettingStore();
     settingStore.setSidebarVisible(true);
     const wrapper = mountChatSider();
@@ -339,7 +321,6 @@ describe('ChatSider', (): void => {
   });
 
   it('disables session controls while chat is loading', async (): Promise<void> => {
-    chatStoreMock.getSessions.mockResolvedValue(createSessionPage([]));
     useSettingStore().setSidebarVisible(true);
     const wrapper = mountChatSider();
     await flushPromises();
@@ -359,7 +340,7 @@ describe('ChatSider', (): void => {
 
   it('opens the side session in a chat tab and resets the side to draft', async (): Promise<void> => {
     const sideSession = createSession('session-a', '会话 A');
-    chatStoreMock.getSessions.mockResolvedValue(createSessionPage([sideSession]));
+    chatStore.sessions = [sideSession];
     const settingStore = useSettingStore();
     settingStore.setSidebarVisible(true);
     settingStore.setChatSidebarActiveSessionId('session-a');
@@ -379,7 +360,6 @@ describe('ChatSider', (): void => {
   });
 
   it('opens or reuses the unique draft tab from an empty ChatSider', async (): Promise<void> => {
-    chatStoreMock.getSessions.mockResolvedValue(createSessionPage([]));
     const settingStore = useSettingStore();
     settingStore.setSidebarVisible(true);
     useTabsStore().tabs = [{ id: 'chat:new', path: '/chat', title: '新会话', cacheKey: 'chat:new' }];
@@ -399,7 +379,7 @@ describe('ChatSider', (): void => {
 
   it('preserves the side session when opening the page route fails', async (): Promise<void> => {
     const sideSession = createSession('session-a', '会话 A');
-    chatStoreMock.getSessions.mockResolvedValue(createSessionPage([sideSession]));
+    chatStore.sessions = [sideSession];
     routerPushMock.mockRejectedValue(new Error('navigation failed'));
     const settingStore = useSettingStore();
     settingStore.setSidebarVisible(true);
@@ -419,7 +399,7 @@ describe('ChatSider', (): void => {
 
   it('preserves the side session when the page route resolves with a navigation failure', async (): Promise<void> => {
     const sideSession = createSession('session-a', '会话 A');
-    chatStoreMock.getSessions.mockResolvedValue(createSessionPage([sideSession]));
+    chatStore.sessions = [sideSession];
     routerPushMock.mockResolvedValue(routeFailureMock);
     const settingStore = useSettingStore();
     settingStore.setSidebarVisible(true);
@@ -438,7 +418,6 @@ describe('ChatSider', (): void => {
   });
 
   it('navigates to an owned history session without replacing the side session', async (): Promise<void> => {
-    chatStoreMock.getSessions.mockResolvedValue(createSessionPage([]));
     const settingStore = useSettingStore();
     settingStore.setSidebarVisible(true);
     settingStore.setChatSidebarActiveSessionId('session-b');
@@ -456,7 +435,6 @@ describe('ChatSider', (): void => {
   });
 
   it('navigates to chat:new when it temporarily owns a history session', async (): Promise<void> => {
-    chatStoreMock.getSessions.mockResolvedValue(createSessionPage([]));
     const settingStore = useSettingStore();
     settingStore.setSidebarVisible(true);
     settingStore.setChatSidebarActiveSessionId('session-b');
@@ -473,7 +451,6 @@ describe('ChatSider', (): void => {
   });
 
   it('keeps the ordinary history switch behavior when no page owns the session', async (): Promise<void> => {
-    chatStoreMock.getSessions.mockResolvedValue(createSessionPage([]));
     const settingStore = useSettingStore();
     settingStore.setSidebarVisible(true);
     settingStore.setChatSidebarActiveSessionId('session-b');
@@ -488,7 +465,6 @@ describe('ChatSider', (): void => {
   });
 
   it('removes the owning chat tab after successful session deletion', async (): Promise<void> => {
-    chatStoreMock.getSessions.mockResolvedValue(createSessionPage([]));
     const tabsStore = useTabsStore();
     tabsStore.tabs = [{ id: 'chat:session-a', path: '/chat/session-a', title: '会话 A', cacheKey: 'chat:session-a' }];
     useChatTabRuntimeStore().ensureTab('chat:session-a', 'session-a');
@@ -503,7 +479,6 @@ describe('ChatSider', (): void => {
   });
 
   it('removes chat:new when the deleted session is its temporary owner', async (): Promise<void> => {
-    chatStoreMock.getSessions.mockResolvedValue(createSessionPage([]));
     const tabsStore = useTabsStore();
     tabsStore.tabs = [{ id: 'chat:new', path: '/chat', title: '新会话', cacheKey: 'chat:new' }];
     useChatTabRuntimeStore().ensureTab('chat:new', 'session-a');
@@ -518,7 +493,6 @@ describe('ChatSider', (): void => {
   });
 
   it('navigates to a surviving tab when the deleted chat page is active', async (): Promise<void> => {
-    chatStoreMock.getSessions.mockResolvedValue(createSessionPage([]));
     routeMock.fullPath = '/chat/session-a';
     const tabsStore = useTabsStore();
     tabsStore.tabs = [

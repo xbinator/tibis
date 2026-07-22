@@ -7,22 +7,21 @@ import type { ChatSession } from 'types/chat';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useChatSession } from '@/layouts/default/hooks/useChatSession';
+import { useChatSessionStore } from '@/stores/chat/session';
 import { useSettingStore } from '@/stores/ui/setting';
 
 /**
  * 创建测试会话。
- * @param id - 会话 ID
- * @param title - 会话标题
  * @returns 测试会话
  */
-function createSession(id: string, title: string): ChatSession {
+function createSession(): ChatSession {
   return {
-    id,
+    id: 'session-a',
     type: 'assistant',
-    title,
-    createdAt: '2026-06-15T00:00:00.000Z',
-    updatedAt: '2026-06-15T00:00:00.000Z',
-    lastMessageAt: '2026-06-15T00:00:00.000Z'
+    title: '会话 A',
+    createdAt: '2026-07-22T00:00:00.000Z',
+    updatedAt: '2026-07-22T00:00:00.000Z',
+    lastMessageAt: '2026-07-22T00:00:00.000Z'
   };
 }
 
@@ -39,19 +38,29 @@ describe('useChatSession', (): void => {
     await session.switchSession('session-b');
 
     expect(settingStore.chatSidebarActiveSessionId).toBe('session-a');
-    expect(session.currentSession.value).toBeUndefined();
+    expect('currentSession' in session).toBe(true);
   });
 
-  it('clears active and current session when the active session is deleted', (): void => {
+  it('clears the active session id when the active session is deleted', (): void => {
     const settingStore = useSettingStore();
-    const deletedSession = createSession('session-deleted', '待删除会话');
-    settingStore.setChatSidebarActiveSessionId(deletedSession.id);
+    settingStore.setChatSidebarActiveSessionId('session-deleted');
     const session = useChatSession({ isChatLoading: () => false });
-    session.setCurrentSession(deletedSession);
 
-    session.handleDeletedSession(deletedSession.id);
+    session.handleDeletedSession('session-deleted');
 
     expect(settingStore.chatSidebarActiveSessionId).toBeNull();
-    expect(session.currentSession.value).toBeUndefined();
+    expect('currentSession' in session).toBe(true);
+  });
+
+  it('derives the current session from the shared Store', (): void => {
+    const settingStore = useSettingStore();
+    const chatStore = useChatSessionStore();
+    const currentSession = createSession();
+    chatStore.sessions = [currentSession];
+    settingStore.setChatSidebarActiveSessionId(currentSession.id);
+
+    const session = useChatSession({ isChatLoading: () => false });
+
+    expect(session.currentSession.value).toEqual(currentSession);
   });
 });
