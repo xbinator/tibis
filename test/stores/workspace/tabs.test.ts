@@ -132,4 +132,34 @@ describe('tabs store replacement', (): void => {
 
     expect(store.tabs[0]?.status).toBe('error');
   });
+
+  it('sanitizes malformed persisted tabs and their related state', (): void => {
+    local.setItem('app_tabs', {
+      tabs: [
+        null,
+        {},
+        { id: 42, path: '/invalid-id', title: 'invalid' },
+        { id: 'chat:session-a', path: '/chat/session-a', title: '会话 A', cacheKey: 99, icon: ' lucide:message-circle ', status: 'loading' },
+        { id: 'chat:session-a', path: '/duplicate', title: '重复会话' }
+      ],
+      dirtyById: { 'chat:session-a': true, ghost: true, invalid: 'yes' },
+      missingById: null,
+      cachedKeys: [null, 42, 'ghost-cache']
+    });
+
+    const store = useTabsStore();
+
+    expect(store.tabs).toEqual([
+      {
+        id: 'chat:session-a',
+        path: '/chat/session-a',
+        title: '会话 A',
+        cacheKey: 'chat:session-a',
+        icon: 'lucide:message-circle'
+      }
+    ]);
+    expect(store.dirtyById).toEqual({ 'chat:session-a': true });
+    expect(store.missingById).toEqual({});
+    expect(store.cachedKeys).toEqual(['chat:session-a']);
+  });
 });

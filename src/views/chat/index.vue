@@ -29,6 +29,7 @@ import { normalizeRouteParam } from '@/router/routes/helpers/fileRouteTab';
 import { useChatSessionStore } from '@/stores/chat/session';
 import type { ChatTabRuntimeController } from '@/stores/chat/tab';
 import { useChatTabStore } from '@/stores/chat/tab';
+import { useSettingStore } from '@/stores/ui/setting';
 import type { Tab } from '@/stores/workspace/tabs';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import { asyncTo } from '@/utils/asyncTo';
@@ -41,6 +42,7 @@ const route = useRoute();
 const initialSessionId = normalizeRouteParam(route.params.sessionId) ?? null;
 const router = useRouter();
 const chatStore = useChatSessionStore();
+const settingStore = useSettingStore();
 const tabsStore = useTabsStore();
 const runtimeStore = useChatTabStore();
 const bChatRef = ref<BChatInstance>();
@@ -48,6 +50,11 @@ const bChatRef = ref<BChatInstance>();
 const ownerTabId = ref<string>(createChatTabId(initialSessionId));
 /** 等待 Runtime 空闲后晋升的草稿会话。 */
 const pendingSession = ref<ChatSession>();
+
+// 独立聊天页接管同一会话时，侧栏回到空白草稿，避免两个 BChat 同时拥有同一会话。
+if (initialSessionId && settingStore.chatSidebarActiveSessionId === initialSessionId) {
+  settingStore.setChatSidebarActiveSessionId(null);
+}
 
 /** 页面注册到运行态 Store 的终止控制器。 */
 const runtimeController: ChatTabRuntimeController = {
@@ -67,14 +74,14 @@ runtimeStore.syncStatus(ownerTabId.value);
  */
 function isTabActive(tabId: string): boolean {
   const owner = tabsStore.tabs.find((tab: Tab): boolean => tab.id === tabId);
-  if (owner) return route.path === owner.path;
+  if (owner) return route.fullPath === owner.path;
 
   const sessionId = runtimeStore.records[tabId]?.sessionId;
-
   const fallbackPath = tabId === CHAT_DRAFT_TAB_ID ? createChatPath() : createChatPath(sessionId);
 
   return route.path === fallbackPath;
 }
+
 /** 当前组件拥有的聊天标签是否处于活动路由。 */
 const ownerActive = computed<boolean>((): boolean => isTabActive(ownerTabId.value));
 /** 当前持久化会话标题。 */
@@ -89,9 +96,7 @@ function markCurrentViewed(): void {
   if (ownerActive.value) runtimeStore.markViewed(ownerTabId.value);
 }
 
-/**
- * 同步当前持久化会话标题到聊天页标签。
- */
+/** 同步当前持久化会话标题到聊天页标签。 */
 function syncInitialSessionTitle(): void {
   if (!initialSessionId) return;
 
@@ -101,9 +106,7 @@ function syncInitialSessionTitle(): void {
   tabsStore.updateTabTitle({ id: ownerTabId.value, title });
 }
 
-/**
- * 确保共享会话集合完成加载，并在加载后补齐当前标签标题。
- */
+/** 确保共享会话集合完成加载，并在加载后补齐当前标签标题。 */
 async function ensureSharedSessions(): Promise<void> {
   const [error] = await asyncTo(chatStore.ensureSessions());
   if (!error) syncInitialSessionTitle();
@@ -115,7 +118,7 @@ async function ensureSharedSessions(): Promise<void> {
  */
 async function promoteDraft(): Promise<void> {
   const session = pendingSession.value;
-  if (!session || ownerTabId.value !== CHAT_DRAFT_TAB_ID) return;
+  if (!session || ownerTabId.value !== CHAT_DRAFT_TAB_ID || runtimeStore.isClosing(ownerTabId.value)) return;
 
   const sourceTab = findChatTab(tabsStore.tabs);
   if (!sourceTab) return;
@@ -130,7 +133,13 @@ async function promoteDraft(): Promise<void> {
     icon: sourceTab.icon ?? 'lucide:message-circle'
   };
   const wasActive = isTabActive(CHAT_DRAFT_TAB_ID);
-  if (!tabsStore.replaceTab({ sourceId: CHAT_DRAFT_TAB_ID, tab: targetTab })) return;
+  // 活动草稿在导航完成前保留原路径，使 HeaderTabs 始终能识别并安全关闭当前标签。
+  const replacementTab = wasActive ? { ...targetTab, path: sourceTab.path } : targetTab;
+  runtimeStore.markPromoting([targetTabId]);
+  if (!tabsStore.replaceTab({ sourceId: CHAT_DRAFT_TAB_ID, tab: replacementTab })) {
+    runtimeStore.clearPromoting([targetTabId]);
+    return;
+  }
 
   runtimeStore.promoteTab(CHAT_DRAFT_TAB_ID, targetTabId, session.id);
   ownerTabId.value = targetTabId;
@@ -141,11 +150,16 @@ async function promoteDraft(): Promise<void> {
       tabsStore.replaceTab({ sourceId: targetTabId, tab: sourceTab });
       runtimeStore.promoteTab(targetTabId, CHAT_DRAFT_TAB_ID, session.id);
       ownerTabId.value = CHAT_DRAFT_TAB_ID;
+      runtimeStore.clearPromoting([targetTabId]);
       return;
     }
+
+    // 测试替身或无 afterEach 的宿主也需要在导航成功后提交最终路径。
+    tabsStore.addTab(targetTab, { preserveTitle: true });
   }
 
   pendingSession.value = undefined;
+  runtimeStore.clearPromoting([targetTabId]);
 }
 
 /**
@@ -200,7 +214,7 @@ function handleRuntimeStatus(event: BChatRuntimeStatusChange): void {
 
   const tabId = ownerTabId.value;
   runtimeStore.setStatus(tabId, event.status);
-  if (event.status === 'idle') asyncTo(promoteDraft());
+  if (event.status === 'idle' && !runtimeStore.isClosing(tabId)) asyncTo(promoteDraft());
 }
 
 /** 导航到模型 Provider 设置页。 */
@@ -210,6 +224,13 @@ function handleProviderNavigate(): void {
 
 watch(() => route.fullPath, markCurrentViewed, { immediate: true });
 watch(initialSessionTitle, syncInitialSessionTitle, { immediate: true });
+watch(
+  (): boolean => runtimeStore.isClosing(ownerTabId.value),
+  (closing: boolean, previousClosing: boolean): void => {
+    // 关闭被取消时，恢复终止回调暂缓的草稿晋升。
+    if (!closing && previousClosing && runtimeStore.getStatus(ownerTabId.value) === 'idle') asyncTo(promoteDraft());
+  }
+);
 onActivated((): void => {
   markCurrentViewed();
   syncInitialSessionTitle();

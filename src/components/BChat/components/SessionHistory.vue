@@ -103,9 +103,12 @@ const emit = defineEmits<{
 }>();
 
 const isDisabled = computed(() => props.disabled);
-/** 忙碌会话 ID 集合：从聊天标签运行时态直接推导，供删除按钮判断是否禁用。 */
+/** 忙碌会话 ID 集合：运行、等待或标签身份晋升期间均禁止删除。 */
 const activeRuntimeIds = computed<Set<string>>((): Set<string> => {
-  const busyRecords = filter(Object.values(runtimeStore.records), (record) => record.sessionId && isActiveRuntimeStatus(record.status));
+  const busyRecords = filter(
+    Object.values(runtimeStore.records),
+    (record) => record.sessionId && (isActiveRuntimeStatus(record.status) || runtimeStore.isPromoting(record.tabId))
+  );
 
   const busyIds = map(busyRecords, 'sessionId');
 

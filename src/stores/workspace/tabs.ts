@@ -4,7 +4,7 @@
  */
 
 import { defineStore } from 'pinia';
-import { omit } from 'lodash-es';
+import { isPlainObject, omit, uniqBy } from 'lodash-es';
 import { resolveRouteCacheName } from '@/router/cache';
 import { storeEvents } from '@/stores/helpers/events';
 import type { FileMissingPayload, FileRecoveredPayload } from '@/stores/helpers/events';
@@ -143,11 +143,45 @@ function normalizeTab(tab: Tab): Tab {
 
 /**
  * 规范化持久化标签页并移除历史瞬时状态。
- * @param tab - 从持久化数据读取的标签页
- * @returns 不含瞬时状态的标签页
+ * @param value - 从持久化数据读取的未知标签值
+ * @returns 不含瞬时状态的有效标签；字段损坏时返回 undefined
  */
-function normalizePersistedTab(tab: Tab): Tab {
-  return omit(normalizeTab(tab), ['status']);
+function normalizePersistedTab(value: unknown): Tab | undefined {
+  if (!isPlainObject(value)) return undefined;
+
+  const tab = value as Record<string, unknown>;
+  const id = typeof tab.id === 'string' ? tab.id.trim() : '';
+  const path = typeof tab.path === 'string' ? tab.path.trim() : '';
+  const title = typeof tab.title === 'string' ? tab.title.trim() : undefined;
+  if (!id || !path || title === undefined) return undefined;
+
+  const cacheKey = typeof tab.cacheKey === 'string' ? tab.cacheKey.trim() : '';
+  const icon = typeof tab.icon === 'string' ? tab.icon.trim() : '';
+  return {
+    id,
+    path,
+    title,
+    cacheKey: cacheKey || id,
+    ...(icon ? { icon } : {})
+  };
+}
+
+/**
+ * 过滤持久化布尔映射，仅保留当前有效标签的 true 标记。
+ * @param value - 未知持久化映射
+ * @param validIds - 当前有效标签 ID
+ * @returns 安全的状态映射
+ */
+function normalizeFlagMap(value: unknown, validIds: Set<string>): Record<string, boolean> {
+  if (!isPlainObject(value)) return {};
+
+  return Object.entries(value as Record<string, unknown>).reduce<Record<string, boolean>>(
+    (result: Record<string, boolean>, [tabId, enabled]): Record<string, boolean> => {
+      if (enabled === true && validIds.has(tabId)) result[tabId] = true;
+      return result;
+    },
+    {}
+  );
 }
 
 /**
@@ -169,17 +203,20 @@ function normalizeTabsState(value: unknown): TabsState {
     return { ...DEFAULT_TABS_STATE };
   }
 
-  const saved = value as Partial<TabsState>;
+  const saved = value as Record<string, unknown>;
   if (!Array.isArray(saved.tabs)) return { ...DEFAULT_TABS_STATE };
 
-  const tabs = saved.tabs.map(normalizePersistedTab);
-  const savedCachedKeys = Array.isArray(saved.cachedKeys) ? saved.cachedKeys : [];
+  const tabs = uniqBy(
+    saved.tabs.map(normalizePersistedTab).filter((tab: Tab | undefined): tab is Tab => tab !== undefined),
+    (tab: Tab): string => tab.id
+  );
+  const validIds = new Set(tabs.map((tab: Tab): string => tab.id));
 
   return {
     tabs,
-    dirtyById: saved.dirtyById ?? {},
-    missingById: saved.missingById ?? {},
-    cachedKeys: normalizeCachedKeys([...savedCachedKeys, ...tabs.map((tab: Tab) => tab.cacheKey || tab.id)])
+    dirtyById: normalizeFlagMap(saved.dirtyById, validIds),
+    missingById: normalizeFlagMap(saved.missingById, validIds),
+    cachedKeys: normalizeCachedKeys(tabs.map((tab: Tab): string => tab.cacheKey || tab.id))
   };
 }
 

@@ -59,9 +59,21 @@ describe('useTabCloseGuard', (): void => {
     expect(modalConfirmMock).not.toHaveBeenCalled();
   });
 
+  it('rejects a chat tab close while its identity promotion is in flight', async (): Promise<void> => {
+    const runtimeStore = useChatTabStore();
+    runtimeStore.ensureTab('chat:session-a', 'session-a');
+    runtimeStore.markPromoting(['chat:session-a']);
+
+    await expect(useTabCloseGuard().canClose(createPlan({ targetTabIds: ['chat:session-a'] }))).resolves.toBe(false);
+
+    expect(runtimeStore.isClosing('chat:session-a')).toBe(false);
+    expect(modalConfirmMock).not.toHaveBeenCalled();
+  });
+
   it('aborts an active runtime before allowing close', async (): Promise<void> => {
     const runtimeStore = useChatTabStore();
     const abort = vi.fn<() => Promise<void>>().mockResolvedValue();
+    runtimeStore.ensureTab('chat:session-a', 'session-a');
     runtimeStore.registerController('chat:session-a', { abort });
     runtimeStore.setStatus('chat:session-a', 'running');
 
@@ -74,6 +86,8 @@ describe('useTabCloseGuard', (): void => {
     const runtimeStore = useChatTabStore();
     const abortA = vi.fn<() => Promise<void>>().mockResolvedValue();
     const abortB = vi.fn<() => Promise<void>>().mockResolvedValue();
+    runtimeStore.ensureTab('chat:session-a', 'session-a');
+    runtimeStore.ensureTab('chat:session-b', 'session-b');
     runtimeStore.registerController('chat:session-a', { abort: abortA });
     runtimeStore.registerController('chat:session-b', { abort: abortB });
     runtimeStore.setStatus('chat:session-a', 'running');
@@ -88,21 +102,37 @@ describe('useTabCloseGuard', (): void => {
   it('keeps the plan when runtime confirmation is cancelled', async (): Promise<void> => {
     const runtimeStore = useChatTabStore();
     const abort = vi.fn<() => Promise<void>>().mockResolvedValue();
+    runtimeStore.ensureTab('chat:session-a', 'session-a');
     runtimeStore.registerController('chat:session-a', { abort });
     runtimeStore.setStatus('chat:session-a', 'running');
     modalConfirmMock.mockResolvedValue([true, false]);
 
     await expect(useTabCloseGuard().canClose(createPlan({ targetTabIds: ['chat:session-a'] }))).resolves.toBe(false);
     expect(abort).not.toHaveBeenCalled();
+    expect(runtimeStore.isClosing('chat:session-a')).toBe(false);
   });
 
   it('reports an abort failure and keeps the close plan', async (): Promise<void> => {
     const runtimeStore = useChatTabStore();
+    runtimeStore.ensureTab('chat:session-a', 'session-a');
     runtimeStore.registerController('chat:session-a', { abort: vi.fn<() => Promise<void>>().mockRejectedValue(new Error('abort failed')) });
     runtimeStore.setStatus('chat:session-a', 'running');
 
     await expect(useTabCloseGuard().canClose(createPlan({ targetTabIds: ['chat:session-a'] }))).resolves.toBe(false);
     expect(messageErrorMock).toHaveBeenCalledWith('终止聊天失败：abort failed');
+    expect(runtimeStore.isClosing('chat:session-a')).toBe(false);
+  });
+
+  it('keeps close intent after approval until cleanup or explicit cancellation', async (): Promise<void> => {
+    const runtimeStore = useChatTabStore();
+    runtimeStore.ensureTab('chat:session-a', 'session-a');
+    const guard = useTabCloseGuard();
+
+    await expect(guard.canClose(createPlan({ targetTabIds: ['chat:session-a'] }))).resolves.toBe(true);
+    expect(runtimeStore.isClosing('chat:session-a')).toBe(true);
+
+    guard.cancelClose(['chat:session-a']);
+    expect(runtimeStore.isClosing('chat:session-a')).toBe(false);
   });
 
   it('retains the existing dirty confirmation result', async (): Promise<void> => {

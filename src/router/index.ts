@@ -22,7 +22,10 @@ const router = createRouter({
  * 路由后置守卫
  * 根据路由元信息设置窗口标题
  */
-router.afterEach((to) => {
+router.afterEach((to, _from, failure): void => {
+  // 失败导航不会成为当前页面，因此不能同步为顶部标签。
+  if (failure) return;
+
   // 路由拦截添加 Tab
   if (!to.meta?.hideTab) {
     const tabsStore = useTabsStore();

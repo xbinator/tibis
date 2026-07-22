@@ -16,6 +16,8 @@ interface TabCloseGuardApi {
   canClose: (plan: TabClosePlan) => Promise<boolean>;
   /** 清理已关闭聊天标签的 Runtime。 */
   cleanupClosedTabs: (tabIds: string[]) => void;
+  /** 取消未完成的标签关闭事务。 */
+  cancelClose: (tabIds: string[]) => void;
 }
 
 /**
@@ -77,8 +79,29 @@ export function useTabCloseGuard(): TabCloseGuardApi {
    */
   async function canClose(plan: TabClosePlan): Promise<boolean> {
     if (plan.disabled) return false;
-    if (!(await confirmRuntimeClose(plan))) return false;
-    return confirmDirtyClose(plan);
+    const chatTabIds = plan.targetTabIds.filter((tabId: string): boolean => tabId.startsWith('chat:'));
+    // 标签身份尚未提交完成时不允许并发关闭，否则导航取消会让关闭计划失去目标。
+    if (chatTabIds.some((tabId: string): boolean => runtimeStore.isPromoting(tabId))) return false;
+    // 同一标签只允许一个关闭事务，避免重复点击互相清除关闭意图。
+    if (chatTabIds.some((tabId: string): boolean => runtimeStore.isClosing(tabId))) return false;
+    runtimeStore.markClosing(chatTabIds);
+
+    if (!(await confirmRuntimeClose(plan))) {
+      runtimeStore.clearClosing(chatTabIds);
+      return false;
+    }
+
+    const dirtyAllowed = await confirmDirtyClose(plan);
+    if (!dirtyAllowed) runtimeStore.clearClosing(chatTabIds);
+    return dirtyAllowed;
+  }
+
+  /**
+   * 取消未能提交的关闭事务。
+   * @param tabIds - 原关闭计划中的标签 ID
+   */
+  function cancelClose(tabIds: string[]): void {
+    runtimeStore.clearClosing(tabIds.filter((tabId: string): boolean => tabId.startsWith('chat:')));
   }
 
   /**
@@ -89,5 +112,5 @@ export function useTabCloseGuard(): TabCloseGuardApi {
     tabIds.filter((tabId: string): boolean => tabId.startsWith('chat:')).forEach((tabId: string): void => runtimeStore.removeTab(tabId));
   }
 
-  return { canClose, cleanupClosedTabs };
+  return { canClose, cleanupClosedTabs, cancelClose };
 }

@@ -31,6 +31,7 @@ import type { BDraggableMoveEvent } from '@/components/BDraggable/types';
 import HeaderTab from '@/layouts/default/components/HeaderTab.vue';
 import { useTabCloseGuard } from '@/layouts/default/hooks/useTabCloseGuard';
 import { getHeaderTabsWheelScrollDelta } from '@/layouts/default/utils/headerTabsScroll';
+import { isBlockingNavigationFailure } from '@/router/navigation';
 import { createChatTabId } from '@/router/routes/helpers/chatRouteTab';
 import { isMac } from '@/shared/platform/env';
 import type { ChatSessionTitlePayload } from '@/stores/helpers/events';
@@ -44,7 +45,7 @@ import { asyncTo } from '@/utils/asyncTo';
 const tabsStore = useTabsStore();
 const recentStore = useRecentStore();
 const settingStore = useSettingStore();
-const { canClose, cleanupClosedTabs } = useTabCloseGuard();
+const { canClose, cleanupClosedTabs, cancelClose } = useTabCloseGuard();
 const route = useRoute();
 const router = useRouter();
 
@@ -121,7 +122,7 @@ async function handleClickTab(path: string): Promise<void> {
   }
 
   if (path && route.fullPath !== path) {
-    await router.push(path);
+    await asyncTo(router.push(path));
   }
 }
 
@@ -139,11 +140,17 @@ async function handleCloseButton(tab: Tab): Promise<void> {
 
   if (!(await canClose(plan))) return;
 
+  // 活动标签先完成回退导航，避免导航失败后当前路由指向已被移除的页面。
+  if (plan.requiresNavigation) {
+    const [navigationError, navigationResult] = await asyncTo(router.push(plan.nextActivePath ?? '/welcome'));
+    if (navigationError || isBlockingNavigationFailure(navigationResult)) {
+      cancelClose(plan.targetTabIds);
+      return;
+    }
+  }
+
   tabsStore.applyClosePlan(plan);
   cleanupClosedTabs(plan.targetTabIds);
-
-  if (!plan.requiresNavigation) return;
-  await router.push(plan.nextActivePath ?? '/welcome');
 }
 
 /**

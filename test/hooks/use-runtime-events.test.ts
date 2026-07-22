@@ -286,7 +286,7 @@ describe('useRuntimeEvents', (): void => {
     expect(agent?.getSnapshot().matches('waiting')).toBe(true);
     expect(visibleEvents).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'runtimeCompleted' }));
     expect(system.getRuntimeCapabilities('runtime-1')).toBeUndefined();
-    expect(useChatTabStore().getStatus('chat:session-1')).toBe('waiting');
+    expect(useChatTabStore().records['chat:session-1']).toBeUndefined();
     scope.stop();
     system.stop();
   });

@@ -72,6 +72,16 @@ function normalizeSidebarWidth(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : DEFAULT_SETTINGS.sidebarWidth;
 }
 
+/**
+ * 规范化聊天侧栏持久化会话 ID。
+ * @param value - 未知持久化值
+ * @returns 非空会话 ID；无效值返回 null
+ */
+function normalizeChatSessionId(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  return value.trim() || null;
+}
+
 function normalizeSettings(value: unknown): PersistedSettingState {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return { ...DEFAULT_SETTINGS };
@@ -80,7 +90,7 @@ function normalizeSettings(value: unknown): PersistedSettingState {
   const settings = value as Partial<PersistedSettingState>;
   const merged = defaultsDeep({}, settings, DEFAULT_SETTINGS) as PersistedSettingState;
   const normalized: PersistedSettingState = {
-    chatSidebarActiveSessionId: merged.chatSidebarActiveSessionId,
+    chatSidebarActiveSessionId: normalizeChatSessionId(merged.chatSidebarActiveSessionId),
     memoryEnabled: merged.memoryEnabled,
     providerSidebarCollapsed: merged.providerSidebarCollapsed,
     settingsSidebarCollapsed: merged.settingsSidebarCollapsed,

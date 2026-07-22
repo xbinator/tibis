@@ -16,13 +16,18 @@ import type { Tab } from '@/stores/workspace/tabs';
 import { useTabsStore } from '@/stores/workspace/tabs';
 
 const routeMock = vi.hoisted(() => ({ fullPath: '/welcome' }));
-const routerPushMock = vi.hoisted(() => vi.fn<(path: string) => Promise<void>>());
+const routerPushMock = vi.hoisted(() => vi.fn<(path: string) => Promise<unknown>>());
+const routeFailureMock = vi.hoisted(() => ({ type: 'aborted' }));
 const modalConfirmMock = vi.hoisted(() => vi.fn<() => Promise<[boolean, boolean]>>());
 const messageErrorMock = vi.hoisted(() => vi.fn());
 
 vi.mock('vue-router', () => ({
   useRoute: (): typeof routeMock => routeMock,
   useRouter: (): { push: typeof routerPushMock } => ({ push: routerPushMock })
+}));
+
+vi.mock('@/router/navigation', () => ({
+  isBlockingNavigationFailure: (result: unknown): boolean => result === routeFailureMock
 }));
 
 vi.mock('@iconify/vue', () => ({
@@ -102,7 +107,7 @@ describe('HeaderTabs chat status', (): void => {
     setActivePinia(createPinia());
     routeMock.fullPath = '/welcome';
     routerPushMock.mockReset();
-    routerPushMock.mockResolvedValue();
+    routerPushMock.mockResolvedValue(undefined);
     modalConfirmMock.mockReset();
     modalConfirmMock.mockResolvedValue([false, true]);
     messageErrorMock.mockReset();
@@ -149,6 +154,7 @@ describe('HeaderTabs chat status', (): void => {
     tabsStore.tabs = [createTab('chat:session-a', '/chat/session-a')];
     const abort = vi.fn<() => Promise<void>>().mockResolvedValue();
     const runtimeStore = useChatTabStore();
+    runtimeStore.ensureTab('chat:session-a', 'session-a');
     runtimeStore.registerController('chat:session-a', { abort });
     runtimeStore.setStatus('chat:session-a', 'running');
     const wrapper = mountTabs();
@@ -168,6 +174,7 @@ describe('HeaderTabs chat status', (): void => {
     tabsStore.tabs = [createTab('chat:session-a', '/chat/session-a')];
     const abort = vi.fn<() => Promise<void>>().mockRejectedValue(new Error('abort failed'));
     const runtimeStore = useChatTabStore();
+    runtimeStore.ensureTab('chat:session-a', 'session-a');
     runtimeStore.registerController('chat:session-a', { abort });
     runtimeStore.setStatus('chat:session-a', 'running');
     const cancelledWrapper = mountTabs();
@@ -197,5 +204,39 @@ describe('HeaderTabs chat status', (): void => {
     expect(modalConfirmMock).toHaveBeenCalledTimes(1);
     expect(useChatTabStore().controllers.size).toBe(0);
     expect(tabsStore.tabs).toEqual([]);
+  });
+
+  it('keeps an active chat tab when fallback navigation is rejected', async (): Promise<void> => {
+    routeMock.fullPath = '/chat/session-a';
+    const tabsStore = useTabsStore();
+    const runtimeStore = useChatTabStore();
+    tabsStore.tabs = [createTab('chat:session-a', '/chat/session-a')];
+    runtimeStore.ensureTab('chat:session-a', 'session-a');
+    routerPushMock.mockRejectedValue(new Error('navigation failed'));
+    const wrapper = mountTabs();
+
+    await wrapper.find('.header-tab__close').trigger('click');
+    await flushPromises();
+
+    expect(tabsStore.tabs).toHaveLength(1);
+    expect(runtimeStore.records['chat:session-a']).toBeDefined();
+    expect(runtimeStore.isClosing('chat:session-a')).toBe(false);
+  });
+
+  it('keeps an active chat tab when fallback navigation is aborted', async (): Promise<void> => {
+    routeMock.fullPath = '/chat/session-a';
+    const tabsStore = useTabsStore();
+    const runtimeStore = useChatTabStore();
+    tabsStore.tabs = [createTab('chat:session-a', '/chat/session-a')];
+    runtimeStore.ensureTab('chat:session-a', 'session-a');
+    routerPushMock.mockResolvedValue(routeFailureMock);
+    const wrapper = mountTabs();
+
+    await wrapper.find('.header-tab__close').trigger('click');
+    await flushPromises();
+
+    expect(tabsStore.tabs).toHaveLength(1);
+    expect(runtimeStore.records['chat:session-a']).toBeDefined();
+    expect(runtimeStore.isClosing('chat:session-a')).toBe(false);
   });
 });

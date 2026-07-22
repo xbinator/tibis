@@ -48,7 +48,7 @@ interface ChatRouteApi {
   /** 路由优先的会话切换。 */
   switchSession: (sessionId: string) => Promise<void>;
   /** 同步成功删除后的侧栏状态，并关闭对应顶部聊天标签。 */
-  handleDeletedSession: (sessionId: string) => void;
+  handleDeletedSession: (sessionId: string) => Promise<void>;
 }
 
 /**
@@ -127,7 +127,7 @@ export function useChatRoute(options: UseChatRouteOptions): ChatRouteApi {
    * 同步成功删除后的侧栏状态，并关闭对应顶部聊天标签。
    * @param sessionId - 已删除会话 ID
    */
-  function handleDeletedSession(sessionId: string): void {
+  async function handleDeletedSession(sessionId: string): Promise<void> {
     const target = resolveRoute(sessionId);
     options.syncDeletedSession(sessionId);
     if (!target) return;
@@ -137,9 +137,13 @@ export function useChatRoute(options: UseChatRouteOptions): ChatRouteApi {
       activeTabId: target.path === route.fullPath ? target.tabId : null,
       allowCloseLastTab: true
     });
+    if (plan.requiresNavigation) {
+      const [navigationError, navigationResult] = await asyncTo(router.push(plan.nextActivePath ?? '/welcome'));
+      if (navigationError || isBlockingNavigationFailure(navigationResult)) return;
+    }
+
     tabsStore.applyClosePlan(plan);
     runtimeStore.removeTab(target.tabId);
-    if (plan.requiresNavigation) asyncTo(router.push(plan.nextActivePath ?? '/welcome'));
   }
 
   return {

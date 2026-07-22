@@ -104,6 +104,45 @@ describe('recoverRuntimes', (): void => {
     system.stop();
   });
 
+  it('does not mark a recovered completion unread when its tab is active', async (): Promise<void> => {
+    const snapshot = createSnapshot();
+    useTabsStore().tabs = [{ id: 'chat:session-1', path: '/chat/session-1', title: '会话 1', cacheKey: 'chat:session-1' }];
+    electronAPIMock.chatRuntimeListActive.mockResolvedValueOnce({ ok: true, data: [snapshot] }).mockResolvedValueOnce({ ok: true, data: [] });
+    electronAPIMock.chatRuntimeSubmitToolResult.mockResolvedValue({ ok: true });
+    electronAPIMock.chatRuntimeSubmitBridgeResponse.mockResolvedValue({ ok: true });
+    const system = createChatActorSystem();
+    system.start();
+
+    await recoverRuntimes(system, { isTabActive: (tabId: string): boolean => tabId === 'chat:session-1' });
+
+    expect(useChatTabStore().getStatus('chat:session-1')).toBe('idle');
+    system.stop();
+  });
+
+  it('does not recreate a top-tab binding closed between recovery queries', async (): Promise<void> => {
+    const snapshot = createSnapshot();
+    const tabsStore = useTabsStore();
+    const runtimeStore = useChatTabStore();
+    tabsStore.tabs = [{ id: 'chat:session-1', path: '/chat/session-1', title: '会话 1', cacheKey: 'chat:session-1' }];
+    electronAPIMock.chatRuntimeListActive
+      .mockResolvedValueOnce({ ok: true, data: [snapshot] })
+      .mockImplementationOnce(async (): Promise<{ ok: true; data: ChatRuntimeRecoverySnapshot[] }> => {
+        tabsStore.tabs = [];
+        runtimeStore.removeTab('chat:session-1');
+        return { ok: true, data: [snapshot] };
+      });
+    electronAPIMock.chatRuntimeSubmitToolResult.mockResolvedValue({ ok: true });
+    electronAPIMock.chatRuntimeSubmitBridgeResponse.mockResolvedValue({ ok: true });
+    const system = createChatActorSystem();
+    system.start();
+
+    await recoverRuntimes(system);
+
+    expect(runtimeStore.records['chat:session-1']).toBeUndefined();
+    expect(runtimeStore.controllers.has('chat:session-1')).toBe(false);
+    system.stop();
+  });
+
   it('restores a running draft runtime to the persisted chat:new tab', async (): Promise<void> => {
     const snapshot = createSnapshot();
     useTabsStore().tabs = [{ id: 'chat:new', path: '/chat', title: '新会话', cacheKey: 'chat:new' }];

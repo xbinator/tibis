@@ -3,6 +3,7 @@
  * @description 从主进程活跃 Runtime 快照重建 renderer Chat actor 与待处理请求。
  */
 import type { ChatRuntimeHandlerResult, ChatRuntimeRecoveryPendingRequest, ChatRuntimeRecoverySnapshot } from 'types/chat-runtime';
+import { useRoute } from 'vue-router';
 import type { ChatActorSystem } from '@/ai/chat/actorSystem';
 import type { RuntimeExecutionCapabilities } from '@/ai/chat/runtimeCapabilities';
 import { CHAT_DRAFT_TAB_ID, createChatTabId } from '@/router/routes/helpers/chatRouteTab';
@@ -21,6 +22,12 @@ interface RecoveredRuntimeBinding {
   tabId: string;
   /** 恢复流程创建的控制器；已挂载 BChat 提供控制器时为空。 */
   controller?: ChatTabRuntimeController;
+}
+
+/** Runtime 恢复流程的页面状态依赖。 */
+interface RuntimeRecoveryOptions {
+  /** 判断恢复记录所属标签当前是否正在被查看。 */
+  isTabActive?: (tabId: string) => boolean;
 }
 
 /** 已恢复请求的稳定键。 */
@@ -119,7 +126,10 @@ function syncRecoveredRuntime(
   const runtimeStore = useChatTabStore();
   const { tabs } = useTabsStore();
   const persistedTabId = createChatTabId(snapshot.sessionId);
-  const knownTabId = bindings.get(snapshot.runtimeId)?.tabId ?? (snapshot.runtimeId === draftRuntimeId ? CHAT_DRAFT_TAB_ID : undefined);
+  const boundTabId = bindings.get(snapshot.runtimeId)?.tabId;
+  // 用户可能在两次快照查询之间关闭标签，旧绑定只有在标签仍可见时才可复用。
+  const visibleBoundTabId = boundTabId && tabs.some((tab: Tab): boolean => tab.id === boundTabId) ? boundTabId : undefined;
+  const knownTabId = visibleBoundTabId ?? (snapshot.runtimeId === draftRuntimeId ? CHAT_DRAFT_TAB_ID : undefined);
   const tabId = knownTabId ?? (tabs.some((tab: Tab): boolean => tab.id === persistedTabId) ? persistedTabId : undefined);
   if (!tabId) return;
 
@@ -201,8 +211,9 @@ async function hydrateSnapshots(
 /**
  * 从主进程事实源恢复活跃 ChatRuntime。
  * @param actorSystem - 应用级 Chat actor system
+ * @param options - 当前页面状态依赖
  */
-export async function recoverRuntimes(actorSystem: ChatActorSystem): Promise<void> {
+export async function recoverRuntimes(actorSystem: ChatActorSystem, options: RuntimeRecoveryOptions = {}): Promise<void> {
   const electronAPI = getElectronAPI();
   const replayedRequestKeys = new Set<string>();
   const bindings = new Map<string, RecoveredRuntimeBinding>();
@@ -226,13 +237,17 @@ export async function recoverRuntimes(actorSystem: ChatActorSystem): Promise<voi
     if (binding?.controller) {
       useChatTabStore().unregisterController(binding.tabId, binding.controller);
     }
-    if (binding) useChatTabStore().markCompleted(binding.tabId, false);
+    if (binding) useChatTabStore().markCompleted(binding.tabId, options.isTabActive?.(binding.tabId) ?? false);
   }
 }
 
 /** 在应用启动时异步恢复 ChatRuntime，失败只记录日志。 */
 export function useRuntimeRecovery(actorSystem: ChatActorSystem): void {
-  recoverRuntimes(actorSystem).catch((error: unknown): void => {
+  const route = useRoute();
+  const tabsStore = useTabsStore();
+  recoverRuntimes(actorSystem, {
+    isTabActive: (tabId: string): boolean => tabsStore.tabs.some((tab: Tab): boolean => tab.id === tabId && tab.path === route.fullPath)
+  }).catch((error: unknown): void => {
     logger.error(`[chat-runtime-recovery] ${error instanceof Error ? error.message : String(error)}`);
   });
 }

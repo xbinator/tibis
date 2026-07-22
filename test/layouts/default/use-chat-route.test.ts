@@ -145,17 +145,32 @@ describe('useChatRoute', (): void => {
     expect(switchSessionMock).toHaveBeenCalledWith('session-a');
   });
 
-  it('syncs deleted side state and closes the owning chat tab', (): void => {
+  it('syncs deleted side state and closes the owning chat tab', async (): Promise<void> => {
     routeMock.fullPath = '/chat/session-a';
     const tabsStore = useTabsStore();
     tabsStore.tabs = [createTab('chat:session-a', '/chat/session-a'), createTab('welcome', '/welcome')];
     useChatTabStore().ensureTab('chat:session-a', 'session-a');
 
-    createRouteApi().handleDeletedSession('session-a');
+    await createRouteApi().handleDeletedSession('session-a');
 
     expect(syncDeletedSessionMock).toHaveBeenCalledWith('session-a');
     expect(tabsStore.tabs.map((tab: Tab): string => tab.id)).toEqual(['welcome']);
     expect(useChatTabStore().records['chat:session-a']).toBeUndefined();
     expect(routerPushMock).toHaveBeenCalledWith('/welcome');
+  });
+
+  it('keeps the active deleted-session tab when fallback navigation is blocked', async (): Promise<void> => {
+    routeMock.fullPath = '/chat/session-a';
+    const tabsStore = useTabsStore();
+    const runtimeStore = useChatTabStore();
+    tabsStore.tabs = [createTab('chat:session-a', '/chat/session-a')];
+    runtimeStore.ensureTab('chat:session-a', 'session-a');
+    routerPushMock.mockResolvedValue(routeFailureMock);
+
+    await createRouteApi().handleDeletedSession('session-a');
+
+    expect(syncDeletedSessionMock).toHaveBeenCalledWith('session-a');
+    expect(tabsStore.tabs).toHaveLength(1);
+    expect(runtimeStore.records['chat:session-a']).toBeDefined();
   });
 });

@@ -10,6 +10,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useChatTabStore } from '@/stores/chat/tab';
+import { useSettingStore } from '@/stores/ui/setting';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import ChatPage from '@/views/chat/index.vue';
 
@@ -147,6 +148,24 @@ describe('chat page', (): void => {
     expect(persistedWrapper.findComponent({ name: 'BChat' }).props()).toEqual({ sessionId: 'session-a' });
   });
 
+  it('releases a matching sidebar session when the chat page claims it', (): void => {
+    const settingStore = useSettingStore();
+    settingStore.setChatSidebarActiveSessionId('session-a');
+
+    mountPage('session-a');
+
+    expect(settingStore.chatSidebarActiveSessionId).toBeNull();
+  });
+
+  it('keeps an unrelated sidebar session when the chat page opens', (): void => {
+    const settingStore = useSettingStore();
+    settingStore.setChatSidebarActiveSessionId('session-b');
+
+    mountPage('session-a');
+
+    expect(settingStore.chatSidebarActiveSessionId).toBe('session-b');
+  });
+
   it('keeps the captured session when the global route changes', async (): Promise<void> => {
     const wrapper = mountPage('session-a');
 
@@ -161,6 +180,7 @@ describe('chat page', (): void => {
     routerMocks.route.fullPath = '/welcome';
     const runtimeStore = useChatTabStore();
     const tabsStore = useTabsStore();
+    runtimeStore.ensureTab('chat:session-a', 'session-a');
     runtimeStore.setStatus('chat:session-a', 'running');
     tabsStore.tabs = [{ id: 'chat:session-a', path: '/chat/session-a', title: '会话 A', cacheKey: 'chat:session-a' }];
 
@@ -235,6 +255,53 @@ describe('chat page', (): void => {
     expect(runtimeStore.findOwner('session-a')?.tabId).toBe('chat:new');
   });
 
+  it('defers draft promotion while its tab is closing and resumes after cancellation', async (): Promise<void> => {
+    const tabsStore = useTabsStore();
+    const runtimeStore = useChatTabStore();
+    tabsStore.tabs = [{ id: 'chat:new', path: '/chat', title: '新会话', cacheKey: 'chat:new' }];
+    const wrapper = mountPage(null);
+    findBChat(wrapper).$emit('session-created', createSession('session-a', '会话 A'));
+    runtimeStore.markClosing(['chat:new']);
+
+    findBChat(wrapper).$emit('runtime-status-change', { status: 'idle' });
+    await flushPromises();
+
+    expect(tabsStore.tabs[0]?.id).toBe('chat:new');
+    expect(routerMocks.replace).not.toHaveBeenCalled();
+
+    runtimeStore.clearClosing(['chat:new']);
+    await flushPromises();
+
+    expect(tabsStore.tabs[0]?.id).toBe('chat:session-a');
+    expect(routerMocks.replace).toHaveBeenCalledWith('/chat/session-a');
+  });
+
+  it('keeps the promoted draft identifiable as active until route replacement finishes', async (): Promise<void> => {
+    let finishNavigation: ((result: unknown) => void) | undefined;
+    routerMocks.replace.mockImplementationOnce(
+      (): Promise<unknown> =>
+        new Promise((resolve): void => {
+          finishNavigation = resolve;
+        })
+    );
+    const tabsStore = useTabsStore();
+    tabsStore.tabs = [{ id: 'chat:new', path: '/chat', title: '新会话', cacheKey: 'chat:new' }];
+    const wrapper = mountPage(null);
+
+    findBChat(wrapper).$emit('session-created', createSession('session-a', '会话 A'));
+    findBChat(wrapper).$emit('runtime-status-change', { status: 'idle' });
+    await nextTick();
+
+    expect(tabsStore.tabs[0]).toMatchObject({ id: 'chat:session-a', path: '/chat' });
+    expect(tabsStore.tabs.find((tab): boolean => tab.path === routerMocks.route.fullPath)?.id).toBe('chat:session-a');
+    expect(useChatTabStore().isPromoting('chat:session-a')).toBe(true);
+
+    finishNavigation?.(undefined);
+    await flushPromises();
+    expect(tabsStore.tabs[0]?.path).toBe('/chat/session-a');
+    expect(useChatTabStore().isPromoting('chat:session-a')).toBe(false);
+  });
+
   it('opens a branch as a separate persisted chat tab', async (): Promise<void> => {
     routerMocks.route.path = '/chat/session-a';
     routerMocks.route.fullPath = '/chat/session-a';
@@ -300,6 +367,27 @@ describe('chat page', (): void => {
 
     expect(runtimeStore.getStatus('chat:session-a')).toBe('idle');
     activeWrapper.unmount();
+  });
+
+  it('treats a matching full path with query as the active chat tab', async (): Promise<void> => {
+    routerMocks.route.path = '/chat/session-a';
+    routerMocks.route.fullPath = '/chat/session-a?source=history';
+    const runtimeStore = useChatTabStore();
+    const tabsStore = useTabsStore();
+    tabsStore.tabs = [
+      {
+        id: 'chat:session-a',
+        path: '/chat/session-a?source=history',
+        title: '会话 A',
+        cacheKey: 'chat:session-a'
+      }
+    ];
+    const wrapper = mountPage('session-a');
+
+    findBChat(wrapper).$emit('runtime-status-change', { status: 'completed', sessionId: 'session-a' });
+    await flushPromises();
+
+    expect(runtimeStore.getStatus('chat:session-a')).toBe('idle');
   });
 
   it('registers a controller that aborts through the mounted BChat instance', async (): Promise<void> => {
