@@ -57,7 +57,7 @@ import { filter, groupBy, map } from 'lodash-es';
 import BButton from '@/components/BButton/index.vue';
 import BDropdown from '@/components/BDropdown/index.vue';
 import { useChatSessionStore } from '@/stores/chat/session';
-import { isActiveRuntimeStatus, useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
+import { isActiveRuntimeStatus, useChatTabStore } from '@/stores/chat/tab';
 import { asyncTo } from '@/utils/asyncTo';
 
 /**
@@ -91,7 +91,7 @@ const props = withDefaults(defineProps<Props>(), {
 const open = ref(false);
 const chatStore = useChatSessionStore();
 /** 聊天标签运行时态存储，用于判断每个会话是否处于运行/等待等忙碌状态。 */
-const runtimeStore = useChatTabRuntimeStore();
+const runtimeStore = useChatTabStore();
 
 /** 滚动容器引用 */
 const scrollContainer = ref<HTMLElement>();

@@ -5,7 +5,7 @@
  */
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { isActiveRuntimeStatus, useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
+import { isActiveRuntimeStatus, useChatTabStore } from '@/stores/chat/tab';
 import type { Tab } from '@/stores/workspace/tabs';
 import { useTabsStore } from '@/stores/workspace/tabs';
 
@@ -30,7 +30,7 @@ describe('chat tab runtime store', (): void => {
   });
 
   it('promotes draft ownership and controller to the persisted tab', async (): Promise<void> => {
-    const store = useChatTabRuntimeStore();
+    const store = useChatTabStore();
     const tabsStore = useTabsStore();
     const abort = vi.fn<() => Promise<void>>().mockResolvedValue();
     tabsStore.tabs = [createTab('chat:new')];
@@ -50,7 +50,7 @@ describe('chat tab runtime store', (): void => {
   });
 
   it('keeps completed unread until the tab is viewed', (): void => {
-    const store = useChatTabRuntimeStore();
+    const store = useChatTabStore();
     const tabsStore = useTabsStore();
     tabsStore.tabs = [createTab('chat:session-a')];
     store.ensureTab('chat:session-a', 'session-a');
@@ -66,7 +66,7 @@ describe('chat tab runtime store', (): void => {
   });
 
   it('does not mark an active completed tab as unread', (): void => {
-    const store = useChatTabRuntimeStore();
+    const store = useChatTabStore();
     const tabsStore = useTabsStore();
     tabsStore.tabs = [createTab('chat:session-a')];
     store.ensureTab('chat:session-a', 'session-a');
@@ -81,7 +81,7 @@ describe('chat tab runtime store', (): void => {
   it('writes chat runtime states through to generic tab status', (): void => {
     const tabsStore = useTabsStore();
     tabsStore.tabs = [createTab('chat:running'), createTab('chat:waiting'), createTab('chat:error'), createTab('chat:completed')];
-    const store = useChatTabRuntimeStore();
+    const store = useChatTabStore();
 
     store.setStatus('chat:running', 'running');
     store.setStatus('chat:waiting', 'waiting');
@@ -94,7 +94,7 @@ describe('chat tab runtime store', (): void => {
   it('clears generic status when removing a runtime record', (): void => {
     const tabsStore = useTabsStore();
     tabsStore.tabs = [createTab('chat:session-a')];
-    const store = useChatTabRuntimeStore();
+    const store = useChatTabStore();
     store.setStatus('chat:session-a', 'running');
 
     store.removeTab('chat:session-a');
@@ -105,7 +105,7 @@ describe('chat tab runtime store', (): void => {
   it('keeps runtime record setup free of generic tab status side effects', (): void => {
     const tabsStore = useTabsStore();
     tabsStore.tabs = [{ ...createTab('chat:session-a'), status: 'attention' }];
-    const store = useChatTabRuntimeStore();
+    const store = useChatTabStore();
 
     store.ensureTab('chat:session-a');
     store.bindSession('chat:session-a', 'session-a');
@@ -115,7 +115,7 @@ describe('chat tab runtime store', (): void => {
   });
 
   it('restores an existing runtime status through an explicit action', (): void => {
-    const store = useChatTabRuntimeStore();
+    const store = useChatTabStore();
     const tabsStore = useTabsStore();
     store.setStatus('chat:session-a', 'running');
     tabsStore.tabs = [createTab('chat:session-a')];
@@ -125,7 +125,7 @@ describe('chat tab runtime store', (): void => {
   });
 
   it('stores only runtime ownership and status for a waiting tab', (): void => {
-    const store = useChatTabRuntimeStore();
+    const store = useChatTabStore();
     store.ensureTab('chat:session-a', 'session-a');
     store.setStatus('chat:session-a', 'waiting');
 
@@ -141,7 +141,7 @@ describe('chat tab runtime store', (): void => {
   });
 
   it('aborts only running or waiting target tabs', async (): Promise<void> => {
-    const store = useChatTabRuntimeStore();
+    const store = useChatTabStore();
     const runningAbort = vi.fn<() => Promise<void>>().mockResolvedValue();
     const idleAbort = vi.fn<() => Promise<void>>().mockResolvedValue();
     store.ensureTab('chat:running', 'running');
@@ -157,7 +157,7 @@ describe('chat tab runtime store', (): void => {
   });
 
   it('rejects an active runtime without a registered controller', async (): Promise<void> => {
-    const store = useChatTabRuntimeStore();
+    const store = useChatTabStore();
     store.ensureTab('chat:session-a', 'session-a');
     store.setStatus('chat:session-a', 'waiting');
 
@@ -165,7 +165,7 @@ describe('chat tab runtime store', (): void => {
   });
 
   it('rejects a partially failed batch after invoking every active controller', async (): Promise<void> => {
-    const store = useChatTabRuntimeStore();
+    const store = useChatTabStore();
     const abortA = vi.fn<() => Promise<void>>().mockResolvedValue();
     const abortB = vi.fn<() => Promise<void>>().mockRejectedValue(new Error('abort B failed'));
     store.setStatus('chat:session-a', 'running');

@@ -9,7 +9,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SelectOption } from '@/components/BSelect/types';
-import { useToolPermissionStore } from '@/stores/chat/toolPermission';
+import { useChatPermissionStore } from '@/stores/chat/permission';
 import BasicSettingsPage from '@/views/settings/basic/index.vue';
 
 vi.mock('@/theme', () => ({
@@ -105,9 +105,7 @@ function mountBasicSettingsPage(): VueWrapper {
  * @returns 按钮包装器
  */
 function findButtonByText(wrapper: VueWrapper, text: string): DOMWrapper<HTMLButtonElement> {
-  const button = wrapper
-    .findAll<HTMLButtonElement>('button')
-    .find((item: DOMWrapper<HTMLButtonElement>): boolean => item.text().includes(text));
+  const button = wrapper.findAll<HTMLButtonElement>('button').find((item: DOMWrapper<HTMLButtonElement>): boolean => item.text().includes(text));
 
   if (!button) {
     throw new Error(`未找到按钮：${text}`);
@@ -123,9 +121,7 @@ function findButtonByText(wrapper: VueWrapper, text: string): DOMWrapper<HTMLBut
  * @returns 权限行包装器
  */
 function findPermissionRow(wrapper: VueWrapper, label: string): DOMWrapper<Element> {
-  const row = wrapper
-    .findAll('.basic-settings__permission-row')
-    .find((item: DOMWrapper<Element>): boolean => item.text().includes(label));
+  const row = wrapper.findAll('.basic-settings__permission-row').find((item: DOMWrapper<Element>): boolean => item.text().includes(label));
 
   if (!row) {
     throw new Error(`未找到权限行：${label}`);
@@ -141,7 +137,7 @@ describe('BasicSettingsPage tool permissions', (): void => {
   });
 
   it('renders persisted tool permission grants with readable labels', (): void => {
-    const store = useToolPermissionStore();
+    const store = useChatPermissionStore();
     store.grantToolPermission('operate_webpage', 'always');
     store.grantToolPermission('update_settings', 'always');
 
@@ -159,7 +155,7 @@ describe('BasicSettingsPage tool permissions', (): void => {
   });
 
   it('revokes one persisted tool permission grant', async (): Promise<void> => {
-    const store = useToolPermissionStore();
+    const store = useChatPermissionStore();
     store.grantToolPermission('operate_webpage', 'always');
     store.grantToolPermission('update_settings', 'always');
     const wrapper = mountBasicSettingsPage();
@@ -172,7 +168,7 @@ describe('BasicSettingsPage tool permissions', (): void => {
   });
 
   it('clears all persisted tool permission grants', async (): Promise<void> => {
-    const store = useToolPermissionStore();
+    const store = useChatPermissionStore();
     store.grantToolPermission('operate_webpage', 'always');
     store.grantToolPermission('update_settings', 'always');
     const wrapper = mountBasicSettingsPage();

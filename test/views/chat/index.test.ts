@@ -9,7 +9,7 @@ import { nextTick } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
+import { useChatTabStore } from '@/stores/chat/tab';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import ChatPage from '@/views/chat/index.vue';
 
@@ -156,7 +156,7 @@ describe('chat page', (): void => {
   it('restores an existing runtime status when a background page is created', (): void => {
     routerMocks.route.path = '/welcome';
     routerMocks.route.fullPath = '/welcome';
-    const runtimeStore = useChatTabRuntimeStore();
+    const runtimeStore = useChatTabStore();
     const tabsStore = useTabsStore();
     runtimeStore.setStatus('chat:session-a', 'running');
     tabsStore.tabs = [{ id: 'chat:session-a', path: '/chat/session-a', title: '会话 A', cacheKey: 'chat:session-a' }];
@@ -168,7 +168,7 @@ describe('chat page', (): void => {
 
   it('binds a draft session immediately but promotes only after runtime becomes idle', async (): Promise<void> => {
     const tabsStore = useTabsStore();
-    const runtimeStore = useChatTabRuntimeStore();
+    const runtimeStore = useChatTabStore();
     tabsStore.tabs = [{ id: 'chat:new', path: '/chat', title: '新会话', cacheKey: 'chat:new' }];
     const wrapper = mountPage(null);
 
@@ -208,7 +208,7 @@ describe('chat page', (): void => {
 
   it('rolls back draft promotion when route replacement resolves with a navigation failure', async (): Promise<void> => {
     const tabsStore = useTabsStore();
-    const runtimeStore = useChatTabRuntimeStore();
+    const runtimeStore = useChatTabStore();
     tabsStore.tabs = [{ id: 'chat:new', path: '/chat', title: '新会话', cacheKey: 'chat:new' }];
     routerMocks.replace.mockResolvedValue(routeFailureMock);
     const wrapper = mountPage(null);
@@ -258,7 +258,7 @@ describe('chat page', (): void => {
   it('updates only the inactive owner status when chat waits for user input', async (): Promise<void> => {
     routerMocks.route.path = '/welcome';
     routerMocks.route.fullPath = '/welcome';
-    const runtimeStore = useChatTabRuntimeStore();
+    const runtimeStore = useChatTabStore();
     const wrapper = mountPage('session-a');
 
     findBChat(wrapper).$emit('runtime-status-change', { status: 'waiting' });
@@ -271,7 +271,7 @@ describe('chat page', (): void => {
   it('marks a background completion unread and clears it when mounted as active', async (): Promise<void> => {
     routerMocks.route.path = '/welcome';
     routerMocks.route.fullPath = '/welcome';
-    const runtimeStore = useChatTabRuntimeStore();
+    const runtimeStore = useChatTabStore();
     const wrapper = mountPage('session-a');
 
     findBChat(wrapper).$emit('runtime-status-change', { status: 'completed', sessionId: 'session-a' });
@@ -289,7 +289,7 @@ describe('chat page', (): void => {
   });
 
   it('registers a controller that aborts through the mounted BChat instance', async (): Promise<void> => {
-    const runtimeStore = useChatTabRuntimeStore();
+    const runtimeStore = useChatTabStore();
     mountPage('session-a');
     runtimeStore.setStatus('chat:session-a', 'running');
 

@@ -10,7 +10,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HeaderTabs from '@/layouts/default/components/HeaderTabs.vue';
-import { useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
+import { useChatTabStore } from '@/stores/chat/tab';
 import { storeEvents } from '@/stores/helpers/events';
 import type { Tab } from '@/stores/workspace/tabs';
 import { useTabsStore } from '@/stores/workspace/tabs';
@@ -148,7 +148,7 @@ describe('HeaderTabs chat status', (): void => {
     const tabsStore = useTabsStore();
     tabsStore.tabs = [createTab('chat:session-a', '/chat/session-a')];
     const abort = vi.fn<() => Promise<void>>().mockResolvedValue();
-    const runtimeStore = useChatTabRuntimeStore();
+    const runtimeStore = useChatTabStore();
     runtimeStore.registerController('chat:session-a', { abort });
     runtimeStore.setStatus('chat:session-a', 'running');
     const wrapper = mountTabs();
@@ -167,7 +167,7 @@ describe('HeaderTabs chat status', (): void => {
     const tabsStore = useTabsStore();
     tabsStore.tabs = [createTab('chat:session-a', '/chat/session-a')];
     const abort = vi.fn<() => Promise<void>>().mockRejectedValue(new Error('abort failed'));
-    const runtimeStore = useChatTabRuntimeStore();
+    const runtimeStore = useChatTabStore();
     runtimeStore.registerController('chat:session-a', { abort });
     runtimeStore.setStatus('chat:session-a', 'running');
     const cancelledWrapper = mountTabs();
@@ -195,7 +195,7 @@ describe('HeaderTabs chat status', (): void => {
     await flushPromises();
 
     expect(modalConfirmMock).toHaveBeenCalledTimes(1);
-    expect(useChatTabRuntimeStore().controllers.size).toBe(0);
+    expect(useChatTabStore().controllers.size).toBe(0);
     expect(tabsStore.tabs).toEqual([]);
   });
 });

@@ -1,5 +1,5 @@
 /**
- * @file tabRuntime.ts
+ * @file tab.ts
  * @description 管理聊天标签的 renderer 运行时归属、可视状态与终止控制器。
  */
 import { toRaw } from 'vue';
@@ -84,7 +84,7 @@ function createRuntimeRecord(tabId: string, sessionId?: string): ChatTabRuntimeR
 }
 
 /** 聊天标签 renderer 运行时 Store。 */
-export const useChatTabRuntimeStore = defineStore('chat-tab-runtime', {
+export const useChatTabStore = defineStore('chat-tab', {
   state: (): ChatTabRuntimeState => ({
     records: {},
     controllers: new Map<string, ChatTabRuntimeController>()

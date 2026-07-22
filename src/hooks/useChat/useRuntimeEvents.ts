@@ -24,8 +24,8 @@ import { createShellCommandId } from '@/ai/tools/shellCommandId';
 import { executeToolCall } from '@/ai/tools/stream';
 import { createChatTabId } from '@/router/routes/helpers/chatRouteTab';
 import { getElectronAPI } from '@/shared/platform/electron-api';
-import { useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
-import { useToolPermissionStore } from '@/stores/chat/toolPermission';
+import { useChatPermissionStore } from '@/stores/chat/permission';
+import { useChatTabStore } from '@/stores/chat/tab';
 import { assertRuntimeResult, createBridgeFailure, createToolFailure, createWorkflowError, isManagedRuntime } from './error';
 
 /** 工具 Promise 完成后等待已排队 finished 事件的最大时间。 */
@@ -56,7 +56,7 @@ export function useRuntimeEvents(actorSystem: ChatActorSystem): void {
   const electronAPI = getElectronAPI();
   const toolAbortControllers = new Map<string, AbortController>();
   const shellRoutes = new Map<string, ShellEventRoute>();
-  const runtimeStore = useChatTabRuntimeStore();
+  const runtimeStore = useChatTabStore();
 
   /**
    * 解析 Runtime 会话当前所属的聊天标签，兼容尚未晋升的 chat:new。
@@ -76,7 +76,7 @@ export function useRuntimeEvents(actorSystem: ChatActorSystem): void {
   function createToolAbortKey(runtimeId: string, toolCallId: string): string {
     return `${runtimeId}:${toolCallId}`;
   }
-  const toolPermissionStore = useToolPermissionStore();
+  const toolPermissionStore = useChatPermissionStore();
 
   /**
    * 判断事件是否属于已接管 Runtime。

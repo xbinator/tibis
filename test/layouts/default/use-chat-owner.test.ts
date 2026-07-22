@@ -6,7 +6,7 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useChatOwner } from '@/layouts/default/hooks/useChatOwner';
-import { useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
+import { useChatTabStore } from '@/stores/chat/tab';
 import type { Tab } from '@/stores/workspace/tabs';
 import { useTabsStore } from '@/stores/workspace/tabs';
 
@@ -37,7 +37,7 @@ describe('useChatOwner', (): void => {
 
   it('normalizes a runtime-owned draft session', (): void => {
     useTabsStore().tabs = [createTab('chat:new', '/chat')];
-    useChatTabRuntimeStore().ensureTab('chat:new', 'session-a');
+    useChatTabStore().ensureTab('chat:new', 'session-a');
 
     expect(useChatOwner().findOwner('session-a')).toEqual({
       tabId: 'chat:new',
@@ -47,7 +47,7 @@ describe('useChatOwner', (): void => {
   });
 
   it('provides a fallback path when a runtime owner has no visible tab', (): void => {
-    useChatTabRuntimeStore().ensureTab('chat:session-a', 'session-a');
+    useChatTabStore().ensureTab('chat:session-a', 'session-a');
 
     expect(useChatOwner().findOwner('session-a')).toEqual({
       tabId: 'chat:session-a',

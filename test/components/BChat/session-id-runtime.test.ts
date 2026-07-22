@@ -33,8 +33,8 @@ import type { FileMentionOption } from '@/components/BSmart/types';
 import { emitChatFileReferenceInsert } from '@/shared/chat/fileReference';
 import { native } from '@/shared/platform';
 import type { StoredFile } from '@/shared/storage';
+import { useChatPermissionStore } from '@/stores/chat/permission';
 import type { TodoItem } from '@/stores/chat/todo';
-import { useToolPermissionStore } from '@/stores/chat/toolPermission';
 import { useSettingStore } from '@/stores/ui/setting';
 import { emitRuntimeEvent, resetRuntimeEventListeners, type RuntimeEventListeners } from './runtime-event-test-utils';
 
@@ -1025,7 +1025,7 @@ describe('BChat sessionId runtime', (): void => {
     wrapper.findComponent({ name: 'ConfirmationSheet' }).vm.$emit('action', 'approve-session');
     await flushPromises();
 
-    expect(useToolPermissionStore().sessionToolPermissionGrants.write_file).toBe(true);
+    expect(useChatPermissionStore().sessionToolPermissionGrants.write_file).toBe(true);
     expect(electronAPIMock.chatRuntimeSubmitConfirmation).toHaveBeenCalledWith({
       runtimeId,
       confirmationId: 'confirmation-1',

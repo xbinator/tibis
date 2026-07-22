@@ -8,8 +8,8 @@ import type { RuntimeExecutionCapabilities } from '@/ai/chat/runtimeCapabilities
 import { CHAT_DRAFT_TAB_ID, createChatTabId } from '@/router/routes/helpers/chatRouteTab';
 import { logger } from '@/shared/logger';
 import { getElectronAPI } from '@/shared/platform/electron-api';
-import type { ChatTabRuntimeController } from '@/stores/chat/tabRuntime';
-import { useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
+import type { ChatTabRuntimeController } from '@/stores/chat/tab';
+import { useChatTabStore } from '@/stores/chat/tab';
 import { useSettingStore } from '@/stores/ui/setting';
 import type { Tab } from '@/stores/workspace/tabs';
 import { useTabsStore } from '@/stores/workspace/tabs';
@@ -59,7 +59,7 @@ function createDegradedCapabilities(snapshot: ChatRuntimeRecoverySnapshot): Runt
  * @returns 标签 Runtime 控制器
  */
 function createRecoveredController(actorSystem: ChatActorSystem, snapshot: ChatRuntimeRecoverySnapshot, tabId: string): ChatTabRuntimeController {
-  const runtimeStore = useChatTabRuntimeStore();
+  const runtimeStore = useChatTabStore();
   const electronAPI = getElectronAPI();
   let controller: ChatTabRuntimeController;
 
@@ -116,7 +116,7 @@ function syncRecoveredRuntime(
   bindings: Map<string, RecoveredRuntimeBinding>,
   draftRuntimeId?: string
 ): void {
-  const runtimeStore = useChatTabRuntimeStore();
+  const runtimeStore = useChatTabStore();
   const { tabs } = useTabsStore();
   const persistedTabId = createChatTabId(snapshot.sessionId);
   const knownTabId = bindings.get(snapshot.runtimeId)?.tabId ?? (snapshot.runtimeId === draftRuntimeId ? CHAT_DRAFT_TAB_ID : undefined);
@@ -224,9 +224,9 @@ export async function recoverRuntimes(actorSystem: ChatActorSystem): Promise<voi
     actorSystem.unregisterRuntime(snapshot.runtimeId);
     const binding = bindings.get(snapshot.runtimeId);
     if (binding?.controller) {
-      useChatTabRuntimeStore().unregisterController(binding.tabId, binding.controller);
+      useChatTabStore().unregisterController(binding.tabId, binding.controller);
     }
-    if (binding) useChatTabRuntimeStore().markCompleted(binding.tabId, false);
+    if (binding) useChatTabStore().markCompleted(binding.tabId, false);
   }
 }
 

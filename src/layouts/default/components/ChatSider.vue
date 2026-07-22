@@ -66,7 +66,7 @@ import { vFocus } from '@/directives/focus';
 import { isBlockingNavigationFailure } from '@/router/navigation';
 import { createChatPath } from '@/router/routes/helpers/chatRouteTab';
 import { useChatSessionStore } from '@/stores/chat/session';
-import { useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
+import { useChatTabStore } from '@/stores/chat/tab';
 import { useSettingStore } from '@/stores/ui/setting';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import { asyncTo } from '@/utils/asyncTo';
@@ -85,7 +85,7 @@ const chatStore = useChatSessionStore();
 /** 顶部标签状态存储。 */
 const tabsStore = useTabsStore();
 /** 聊天标签的 renderer 运行态存储。 */
-const runtimeStore = useChatTabRuntimeStore();
+const runtimeStore = useChatTabStore();
 /** 应用路由。 */
 const router = useRouter();
 /** 当前活动路由。 */

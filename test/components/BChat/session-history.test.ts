@@ -8,7 +8,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import SessionHistory from '@/components/BChat/components/SessionHistory.vue';
-import { useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
+import { useChatTabStore } from '@/stores/chat/tab';
 
 const chatStoreMock = vi.hoisted(() => ({
   sessions: [] as ChatSession[],
@@ -111,7 +111,7 @@ describe('SessionHistory busy deletion', (): void => {
   });
 
   it('disables deletion while the session is busy', async (): Promise<void> => {
-    const runtimeStore = useChatTabRuntimeStore();
+    const runtimeStore = useChatTabStore();
     runtimeStore.ensureTab('chat:session-a', 'session-a');
     runtimeStore.setStatus('chat:session-a', 'running');
     const wrapper = mountHistory();
@@ -126,7 +126,7 @@ describe('SessionHistory busy deletion', (): void => {
   });
 
   it('enables deletion when the runtime record is removed', async (): Promise<void> => {
-    const runtimeStore = useChatTabRuntimeStore();
+    const runtimeStore = useChatTabStore();
     runtimeStore.ensureTab('chat:session-a', 'session-a');
     runtimeStore.setStatus('chat:session-a', 'running');
     const wrapper = mountHistory();
@@ -144,7 +144,7 @@ describe('SessionHistory busy deletion', (): void => {
   });
 
   it('treats waiting status as busy', async (): Promise<void> => {
-    const runtimeStore = useChatTabRuntimeStore();
+    const runtimeStore = useChatTabStore();
     runtimeStore.ensureTab('chat:session-a', 'session-a');
     runtimeStore.setStatus('chat:session-a', 'waiting');
     const wrapper = mountHistory();

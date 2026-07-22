@@ -8,7 +8,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createChatActorSystem } from '@/ai/chat/actorSystem';
 import { recoverRuntimes } from '@/hooks/useChat/useRuntimeRecovery';
-import { useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
+import { useChatTabStore } from '@/stores/chat/tab';
 import { useSettingStore } from '@/stores/ui/setting';
 import { useTabsStore } from '@/stores/workspace/tabs';
 
@@ -72,7 +72,7 @@ describe('recoverRuntimes', (): void => {
     expect(electronAPIMock.chatRuntimeSubmitBridgeResponse).toHaveBeenCalledWith(
       expect.objectContaining({ runtimeId: 'runtime-1', result: expect.objectContaining({ status: 'failure' }) })
     );
-    const runtimeStore = useChatTabRuntimeStore();
+    const runtimeStore = useChatTabStore();
     expect(runtimeStore.getStatus('chat:session-1')).toBe('waiting');
     expect(runtimeStore.controllers.has('chat:session-1')).toBe(true);
 
@@ -99,8 +99,8 @@ describe('recoverRuntimes', (): void => {
 
     expect(system.actor.getSnapshot().context.runtimeRoutes.has('runtime-1')).toBe(false);
     expect(system.getSession('session-1')?.getSnapshot().matches('idle')).toBe(true);
-    expect(useChatTabRuntimeStore().getStatus('chat:session-1')).toBe('completed');
-    expect(useChatTabRuntimeStore().controllers.has('chat:session-1')).toBe(false);
+    expect(useChatTabStore().getStatus('chat:session-1')).toBe('completed');
+    expect(useChatTabStore().controllers.has('chat:session-1')).toBe(false);
     system.stop();
   });
 
@@ -115,7 +115,7 @@ describe('recoverRuntimes', (): void => {
 
     await recoverRuntimes(system);
 
-    const runtimeStore = useChatTabRuntimeStore();
+    const runtimeStore = useChatTabStore();
     expect(runtimeStore.findOwner('session-1')?.tabId).toBe('chat:new');
     expect(runtimeStore.getStatus('chat:new')).toBe('waiting');
     expect(runtimeStore.records['chat:session-1']).toBeUndefined();
@@ -133,7 +133,7 @@ describe('recoverRuntimes', (): void => {
 
     await recoverRuntimes(system);
 
-    const runtimeStore = useChatTabRuntimeStore();
+    const runtimeStore = useChatTabStore();
     expect(runtimeStore.findOwner('session-1')).toBeUndefined();
     expect(runtimeStore.records['chat:session-1']).toBeUndefined();
     expect(runtimeStore.controllers.has('chat:session-1')).toBe(false);

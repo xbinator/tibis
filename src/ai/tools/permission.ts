@@ -4,7 +4,7 @@
  */
 import type { AIToolConfirmationAdapter, AIToolConfirmationRequest } from './confirmation';
 import type { AIToolDefinition, AIToolExecutionResult } from 'types/ai';
-import { useToolPermissionStore } from '@/stores/chat/toolPermission';
+import { useChatPermissionStore } from '@/stores/chat/permission';
 import { createToolCancelledResult, createToolFailureResult, createToolSuccessResult } from './results';
 
 /**
@@ -36,7 +36,7 @@ function getExecutionErrorMessage(error: unknown): string {
  * @returns 是否已有授权
  */
 function hasToolGrant(toolName: string): boolean {
-  const toolPermissionStore = useToolPermissionStore();
+  const toolPermissionStore = useChatPermissionStore();
 
   return Boolean(toolPermissionStore.alwaysToolPermissionGrants[toolName] || toolPermissionStore.sessionToolPermissionGrants[toolName]);
 }
@@ -47,7 +47,7 @@ function hasToolGrant(toolName: string): boolean {
  * @returns 是否可以自动执行
  */
 function canAutoExecute(definition: AIToolDefinition): boolean {
-  const toolPermissionStore = useToolPermissionStore();
+  const toolPermissionStore = useChatPermissionStore();
 
   if (definition.riskLevel === 'read') {
     return true;
@@ -102,7 +102,7 @@ async function executeOperation<TResult>(options: ExecuteWithPermissionOptions<T
  * @returns 工具执行结果
  */
 export async function executeWithPermission<TResult>(options: ExecuteWithPermissionOptions<TResult>): Promise<AIToolExecutionResult<TResult>> {
-  const toolPermissionStore = useToolPermissionStore();
+  const toolPermissionStore = useChatPermissionStore();
 
   if (toolPermissionStore.toolPermissionMode === 'readonly' && options.definition.riskLevel !== 'read') {
     return createToolFailureResult(options.definition.name, 'PERMISSION_DENIED', '当前权限模式不允许执行该工具');

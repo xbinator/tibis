@@ -11,7 +11,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ChatSider from '@/layouts/default/components/ChatSider.vue';
 import { useChatSessionStore } from '@/stores/chat/session';
-import { useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
+import { useChatTabStore } from '@/stores/chat/tab';
 import { useSettingStore } from '@/stores/ui/setting';
 import { useTabsStore } from '@/stores/workspace/tabs';
 
@@ -423,7 +423,7 @@ describe('ChatSider', (): void => {
     settingStore.setChatSidebarActiveSessionId('session-b');
     const tabsStore = useTabsStore();
     tabsStore.tabs = [{ id: 'chat:session-a', path: '/chat/session-a', title: '会话 A', cacheKey: 'chat:session-a' }];
-    useChatTabRuntimeStore().ensureTab('chat:session-a', 'session-a');
+    useChatTabStore().ensureTab('chat:session-a', 'session-a');
     const wrapper = mountChatSider();
     await flushPromises();
 
@@ -439,7 +439,7 @@ describe('ChatSider', (): void => {
     settingStore.setSidebarVisible(true);
     settingStore.setChatSidebarActiveSessionId('session-b');
     useTabsStore().tabs = [{ id: 'chat:new', path: '/chat', title: '新会话', cacheKey: 'chat:new' }];
-    useChatTabRuntimeStore().ensureTab('chat:new', 'session-a');
+    useChatTabStore().ensureTab('chat:new', 'session-a');
     const wrapper = mountChatSider();
     await flushPromises();
 
@@ -467,7 +467,7 @@ describe('ChatSider', (): void => {
   it('removes the owning chat tab after successful session deletion', async (): Promise<void> => {
     const tabsStore = useTabsStore();
     tabsStore.tabs = [{ id: 'chat:session-a', path: '/chat/session-a', title: '会话 A', cacheKey: 'chat:session-a' }];
-    useChatTabRuntimeStore().ensureTab('chat:session-a', 'session-a');
+    useChatTabStore().ensureTab('chat:session-a', 'session-a');
     const wrapper = mountChatSider();
     await flushPromises();
 
@@ -475,13 +475,13 @@ describe('ChatSider', (): void => {
     await flushPromises();
 
     expect(tabsStore.tabs).toEqual([]);
-    expect(useChatTabRuntimeStore().records['chat:session-a']).toBeUndefined();
+    expect(useChatTabStore().records['chat:session-a']).toBeUndefined();
   });
 
   it('removes chat:new when the deleted session is its temporary owner', async (): Promise<void> => {
     const tabsStore = useTabsStore();
     tabsStore.tabs = [{ id: 'chat:new', path: '/chat', title: '新会话', cacheKey: 'chat:new' }];
-    useChatTabRuntimeStore().ensureTab('chat:new', 'session-a');
+    useChatTabStore().ensureTab('chat:new', 'session-a');
     const wrapper = mountChatSider();
     await flushPromises();
 
@@ -489,7 +489,7 @@ describe('ChatSider', (): void => {
     await flushPromises();
 
     expect(tabsStore.tabs).toEqual([]);
-    expect(useChatTabRuntimeStore().records['chat:new']).toBeUndefined();
+    expect(useChatTabStore().records['chat:new']).toBeUndefined();
   });
 
   it('navigates to a surviving tab when the deleted chat page is active', async (): Promise<void> => {
@@ -499,7 +499,7 @@ describe('ChatSider', (): void => {
       { id: 'chat:session-a', path: '/chat/session-a', title: '会话 A', cacheKey: 'chat:session-a' },
       { id: 'welcome', path: '/welcome', title: '欢迎', cacheKey: 'welcome' }
     ];
-    useChatTabRuntimeStore().ensureTab('chat:session-a', 'session-a');
+    useChatTabStore().ensureTab('chat:session-a', 'session-a');
     const wrapper = mountChatSider();
     await flushPromises();
 

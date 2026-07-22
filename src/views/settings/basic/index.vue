@@ -80,7 +80,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { SelectOption } from '@/components/BSelect/types';
-import { useToolPermissionStore } from '@/stores/chat/toolPermission';
+import { useChatPermissionStore } from '@/stores/chat/permission';
 import type { EditorViewMode, EditorPageWidth, EditorSaveStrategy } from '@/stores/editor/preferences';
 import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 import type { ThemeMode } from '@/stores/ui/setting';
@@ -92,7 +92,7 @@ import { MENU_ITEMS } from '@/views/settings/constants';
 
 const editorStore = useEditorPreferencesStore();
 const settingStore = useSettingStore();
-const toolPermissionStore = useToolPermissionStore();
+const toolPermissionStore = useChatPermissionStore();
 
 /**
  * 工具授权展示项。

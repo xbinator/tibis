@@ -1,5 +1,5 @@
 /**
- * @file toolPermission.ts
+ * @file permission.ts
  * @description AI 工具权限 Store，管理权限模式与授权记录。
  */
 import { defineStore } from 'pinia';
@@ -70,7 +70,7 @@ const TOOL_PERMISSION_CONFIG: PersistConfig<PersistedToolPermissionState> = {
   ]
 };
 
-export const useToolPermissionStore = defineStore('toolPermission', {
+export const useChatPermissionStore = defineStore('chat-permission', {
   state: (): ToolPermissionState => ({
     ...loadPersistedState(TOOL_PERMISSION_CONFIG),
     sessionToolPermissionGrants: {}

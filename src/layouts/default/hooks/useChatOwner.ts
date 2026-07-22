@@ -3,7 +3,7 @@
  * @description 将聊天标签与 Runtime 记录归一为统一的会话 Owner。
  */
 import { CHAT_DRAFT_TAB_ID, createChatPath, findChatTab } from '@/router/routes/helpers/chatRouteTab';
-import { useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
+import { useChatTabStore } from '@/stores/chat/tab';
 import type { Tab } from '@/stores/workspace/tabs';
 import { useTabsStore } from '@/stores/workspace/tabs';
 
@@ -48,7 +48,7 @@ function createOwner(tabId: string, path: string, sessionId?: string | null): Ch
  */
 export function useChatOwner(): ChatOwnerApi {
   const tabsStore = useTabsStore();
-  const runtimeStore = useChatTabRuntimeStore();
+  const runtimeStore = useChatTabStore();
 
   /**
    * 查找草稿或持久化会话 Owner。

@@ -3,7 +3,7 @@
  * @description 集中处理顶部标签关闭前的 Runtime 终止和未保存确认。
  */
 import { message } from 'ant-design-vue';
-import { isActiveRuntimeStatus, useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
+import { isActiveRuntimeStatus, useChatTabStore } from '@/stores/chat/tab';
 import type { TabClosePlan } from '@/stores/workspace/tabs';
 import { asyncTo } from '@/utils/asyncTo';
 import { Modal } from '@/utils/modal';
@@ -23,7 +23,7 @@ interface TabCloseGuardApi {
  * @returns 标签关闭守卫 API
  */
 export function useTabCloseGuard(): TabCloseGuardApi {
-  const runtimeStore = useChatTabRuntimeStore();
+  const runtimeStore = useChatTabStore();
 
   /**
    * 确认并终止关闭计划中的活动聊天 Runtime。

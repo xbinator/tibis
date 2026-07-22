@@ -18,8 +18,8 @@ import { createRegenerationSlice } from '@/ai/chat/policies/regeneration';
 import { getRuntimeConfirmationGrantScope } from '@/ai/chat/policies/runtimeConfirmation';
 import type { ChatSessionUIEvent } from '@/ai/chat/sessionEvents';
 import { getElectronAPI } from '@/shared/platform/electron-api';
+import { useChatPermissionStore } from '@/stores/chat/permission';
 import { useChatSessionStore } from '@/stores/chat/session';
-import { useToolPermissionStore } from '@/stores/chat/toolPermission';
 import { asyncTo } from '@/utils/asyncTo';
 import { parseUserInput } from '../utils/filePartParser';
 import { append, create, userChoice } from '../utils/messageHelper';
@@ -137,7 +137,7 @@ interface RuntimeUserMessageSendInput {
  */
 export function useChatWorkflow(options: UseChatWorkflowOptions): UseChatWorkflowReturn {
   const chatStore = useChatSessionStore();
-  const toolPermissionStore = useToolPermissionStore();
+  const toolPermissionStore = useChatPermissionStore();
   const preflightLoading = ref<boolean>(false);
   let operationSequence = 0;
   const loading = computed<boolean>(

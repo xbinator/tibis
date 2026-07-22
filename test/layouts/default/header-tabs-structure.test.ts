@@ -48,7 +48,7 @@ describe('HeaderTabs drag region structure', (): void => {
   });
 
   it('does not access the chat runtime store', (): void => {
-    expect(headerTabsSource).not.toContain('useChatTabRuntimeStore');
+    expect(headerTabsSource).not.toContain('useChatTabStore');
     expect(headerTabsSource).not.toContain('ChatTabRuntimeStatus');
     expect(headerTabsSource).not.toContain('resolveTabStatus');
   });

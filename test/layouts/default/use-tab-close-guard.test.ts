@@ -6,7 +6,7 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useTabCloseGuard } from '@/layouts/default/hooks/useTabCloseGuard';
-import { useChatTabRuntimeStore } from '@/stores/chat/tabRuntime';
+import { useChatTabStore } from '@/stores/chat/tab';
 import type { TabClosePlan } from '@/stores/workspace/tabs';
 
 const modalConfirmMock = vi.hoisted(() => vi.fn<(title: string, content: string) => Promise<[boolean, boolean]>>());
@@ -60,7 +60,7 @@ describe('useTabCloseGuard', (): void => {
   });
 
   it('aborts an active runtime before allowing close', async (): Promise<void> => {
-    const runtimeStore = useChatTabRuntimeStore();
+    const runtimeStore = useChatTabStore();
     const abort = vi.fn<() => Promise<void>>().mockResolvedValue();
     runtimeStore.registerController('chat:session-a', { abort });
     runtimeStore.setStatus('chat:session-a', 'running');
@@ -71,7 +71,7 @@ describe('useTabCloseGuard', (): void => {
   });
 
   it('confirms and aborts an active batch once', async (): Promise<void> => {
-    const runtimeStore = useChatTabRuntimeStore();
+    const runtimeStore = useChatTabStore();
     const abortA = vi.fn<() => Promise<void>>().mockResolvedValue();
     const abortB = vi.fn<() => Promise<void>>().mockResolvedValue();
     runtimeStore.registerController('chat:session-a', { abort: abortA });
@@ -86,7 +86,7 @@ describe('useTabCloseGuard', (): void => {
   });
 
   it('keeps the plan when runtime confirmation is cancelled', async (): Promise<void> => {
-    const runtimeStore = useChatTabRuntimeStore();
+    const runtimeStore = useChatTabStore();
     const abort = vi.fn<() => Promise<void>>().mockResolvedValue();
     runtimeStore.registerController('chat:session-a', { abort });
     runtimeStore.setStatus('chat:session-a', 'running');
@@ -97,7 +97,7 @@ describe('useTabCloseGuard', (): void => {
   });
 
   it('reports an abort failure and keeps the close plan', async (): Promise<void> => {
-    const runtimeStore = useChatTabRuntimeStore();
+    const runtimeStore = useChatTabStore();
     runtimeStore.registerController('chat:session-a', { abort: vi.fn<() => Promise<void>>().mockRejectedValue(new Error('abort failed')) });
     runtimeStore.setStatus('chat:session-a', 'running');
 
@@ -113,7 +113,7 @@ describe('useTabCloseGuard', (): void => {
   });
 
   it('cleans runtime records after tabs have closed', (): void => {
-    const runtimeStore = useChatTabRuntimeStore();
+    const runtimeStore = useChatTabStore();
     runtimeStore.ensureTab('chat:session-a', 'session-a');
     runtimeStore.registerController('chat:session-a', { abort: vi.fn<() => Promise<void>>().mockResolvedValue() });
 
