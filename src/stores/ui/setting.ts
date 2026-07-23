@@ -25,7 +25,7 @@ interface PersistedSettingState {
   providerSidebarCollapsed: boolean;
   settingsSidebarCollapsed: boolean;
   theme: ThemeMode;
-  /** 主题预设 ID，如 'default'、'velora' */
+  /** 主题预设 ID，如 'default'、'graphite' */
   themePreset: string;
   sidebarVisible: boolean;
   sidebarWidth: number;
@@ -203,7 +203,7 @@ export const useSettingStore = defineStore('setting', {
 
     /**
      * 设置主题预设
-     * @param presetId - 预设 ID，如 'default'、'velora'
+     * @param presetId - 预设 ID，如 'default'、'graphite'
      */
     setThemePreset(presetId: string): void {
       this.themePreset = presetId;
