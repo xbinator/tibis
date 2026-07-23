@@ -3,7 +3,7 @@
  * @description 系统级事件监听与处理，支持注册多个处理器，可扩展。
  */
 import { onMounted, onUnmounted } from 'vue';
-import { useOpenFile } from '@/hooks/useOpenFile';
+import { useNavigate } from '@/hooks/useNavigate';
 import { getElectronAPI } from '@/shared/platform/electron-api';
 
 /**
@@ -43,7 +43,7 @@ export function useSystem(): void {
   let unregisterElectronListener: (() => void) | undefined;
 
   // 注册默认处理器：将系统传入的文件路径在编辑器中打开
-  const { openFileByPath } = useOpenFile();
+  const { openFileByPath } = useNavigate();
   onSystemOpenFile((filePath: string) => openFileByPath(filePath));
 
   onMounted(() => {

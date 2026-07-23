@@ -54,8 +54,8 @@
 import { computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
-import { useOpenFile } from '@/hooks/useOpenFile';
-import { useRecentRecordActions } from '@/hooks/useRecentRecordActions';
+import { useNavigate } from '@/hooks/useNavigate';
+import { useRecentRecord } from '@/hooks/useRecentRecord';
 import { createChatPath } from '@/router/routes/helpers/chatRouteTab';
 import { createRecentKey, resolveRecentDescription, resolveRecentTitle, type RecentRecord } from '@/shared/storage';
 import { useCommandPanelStore } from '@/stores/ui/commandPanel';
@@ -65,8 +65,8 @@ import { asyncTo } from '@/utils/asyncTo';
 const router = useRouter();
 const commandPanelStore = useCommandPanelStore();
 const recentStore = useRecentStore();
-const { createNewFile, openNativeFile } = useOpenFile();
-const { openRecentRecord } = useRecentRecordActions();
+const { createNewFile, openNativeFile } = useNavigate();
+const { openRecentRecord } = useRecentRecord();
 
 const topRecentRecords = computed(() => recentStore.topRecentRecords);
 

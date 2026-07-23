@@ -1,14 +1,14 @@
 /**
- * @file use-recent-record-actions.test.ts
+ * @file use-recent-record.test.ts
  * @description 验证最近记录公共打开与删除用例。
  * @vitest-environment jsdom
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RecentRecord, StoredDocumentRecord } from '@/shared/storage';
-import { useRecentRecordActions } from '@/hooks/useRecentRecordActions';
+import { useRecentRecord } from '@/hooks/useRecentRecord';
 
 const routerPushMock = vi.hoisted(() => vi.fn<(_path: string) => Promise<void>>());
-const openFileMock = vi.hoisted(() => vi.fn<(_record: StoredDocumentRecord) => Promise<void>>());
+const openDocumentMock = vi.hoisted(() => vi.fn<(_record: StoredDocumentRecord) => Promise<StoredDocumentRecord | null>>());
 const openWebviewMock = vi.hoisted(() => vi.fn<(_url: URL) => void>());
 const loadSessionByIdMock = vi.hoisted(() => vi.fn<(_sessionId: string) => Promise<unknown>>());
 const removeRecentMock = vi.hoisted(() => vi.fn<(_id: string) => Promise<void>>());
@@ -20,14 +20,9 @@ vi.mock('vue-router', () => ({
   })
 }));
 
-vi.mock('@/hooks/useOpenFile', () => ({
-  useOpenFile: () => ({
-    openFile: openFileMock
-  })
-}));
-
 vi.mock('@/hooks/useNavigate', () => ({
   useNavigate: () => ({
+    openDocument: openDocumentMock,
     openWebview: openWebviewMock
   })
 }));
@@ -128,12 +123,12 @@ function createWebviewRecord(overrides: Partial<Extract<RecentRecord, { type: 'w
   };
 }
 
-describe('useRecentRecordActions', (): void => {
+describe('useRecentRecord', (): void => {
   beforeEach((): void => {
     routerPushMock.mockReset();
     routerPushMock.mockResolvedValue(undefined);
-    openFileMock.mockReset();
-    openFileMock.mockResolvedValue(undefined);
+    openDocumentMock.mockReset();
+    openDocumentMock.mockImplementation(async (record: StoredDocumentRecord): Promise<StoredDocumentRecord> => record);
     openWebviewMock.mockReset();
     loadSessionByIdMock.mockReset();
     loadSessionByIdMock.mockResolvedValue({ id: 'session-a' });
@@ -143,27 +138,27 @@ describe('useRecentRecordActions', (): void => {
   });
 
   it('opens document records through the file opener', async (): Promise<void> => {
-    const actions = useRecentRecordActions();
+    const actions = useRecentRecord();
     const record = createFileRecord();
 
     await actions.openRecentRecord(record);
 
-    expect(openFileMock).toHaveBeenCalledWith(record);
+    expect(openDocumentMock).toHaveBeenCalledWith(record);
     expect(routerPushMock).not.toHaveBeenCalled();
   });
 
   it('opens widget records through the document handler', async (): Promise<void> => {
-    const actions = useRecentRecordActions();
+    const actions = useRecentRecord();
     const record = createWidgetRecord();
 
     await actions.openRecentRecord(record);
 
-    expect(openFileMock).toHaveBeenCalledWith(record);
+    expect(openDocumentMock).toHaveBeenCalledWith(record);
     expect(routerPushMock).not.toHaveBeenCalled();
   });
 
   it('opens existing chat records through their url after session validation', async (): Promise<void> => {
-    const actions = useRecentRecordActions();
+    const actions = useRecentRecord();
 
     await actions.openRecentRecord(createChatRecord());
 
@@ -172,7 +167,7 @@ describe('useRecentRecordActions', (): void => {
   });
 
   it('removes stale chat records without navigating', async (): Promise<void> => {
-    const actions = useRecentRecordActions();
+    const actions = useRecentRecord();
     loadSessionByIdMock.mockResolvedValue(undefined);
 
     await actions.openRecentRecord(createChatRecord());
@@ -182,7 +177,7 @@ describe('useRecentRecordActions', (): void => {
   });
 
   it('opens WebView records through the webview opener', async (): Promise<void> => {
-    const actions = useRecentRecordActions();
+    const actions = useRecentRecord();
 
     await actions.openRecentRecord(createWebviewRecord());
 
@@ -191,7 +186,7 @@ describe('useRecentRecordActions', (): void => {
   });
 
   it('routes WebView records with non-http urls through router', async (): Promise<void> => {
-    const actions = useRecentRecordActions();
+    const actions = useRecentRecord();
 
     await actions.openRecentRecord(createWebviewRecord({ url: '/webview/local' }));
 
@@ -200,7 +195,7 @@ describe('useRecentRecordActions', (): void => {
   });
 
   it('removes document records by stable key and closes their tab', async (): Promise<void> => {
-    const actions = useRecentRecordActions();
+    const actions = useRecentRecord();
 
     await actions.removeRecentRecord(createFileRecord());
 
@@ -209,7 +204,7 @@ describe('useRecentRecordActions', (): void => {
   });
 
   it('removes widget records by stable key and closes their tab', async (): Promise<void> => {
-    const actions = useRecentRecordActions();
+    const actions = useRecentRecord();
 
     await actions.removeRecentRecord(createWidgetRecord());
 
@@ -218,7 +213,7 @@ describe('useRecentRecordActions', (): void => {
   });
 
   it('removes chat records by stable key without closing document tabs', async (): Promise<void> => {
-    const actions = useRecentRecordActions();
+    const actions = useRecentRecord();
 
     await actions.removeRecentRecord(createChatRecord());
 

@@ -24,15 +24,10 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/hooks/useNavigate', () => ({
   useNavigate: () => ({
-    openWebview: vi.fn()
-  })
-}));
-
-vi.mock('@/hooks/useOpenFile', () => ({
-  useOpenFile: () => ({
     createNewFile: vi.fn(),
-    openFileById: vi.fn(),
-    openNativeFile: vi.fn()
+    openDocument: vi.fn(),
+    openNativeFile: vi.fn(),
+    openWebview: vi.fn()
   })
 }));
 
@@ -177,7 +172,7 @@ describe('WelcomePage', (): void => {
     const chatEntry = wrapper.find('[data-test-id="welcome-open-chat"]');
 
     expect(chatEntry.exists()).toBe(true);
-    expect(chatEntry.text()).toContain('开始聊天');
+    expect(chatEntry.text()).toContain('新对话');
     expect(chatEntry.html()).toContain('lucide:message-circle');
 
     await chatEntry.trigger('click');

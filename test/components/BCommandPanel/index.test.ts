@@ -32,7 +32,7 @@ const recentStoreMock = vi.hoisted<RecentStoreMock>(() => ({
 const routerPushMock = vi.hoisted(() => vi.fn<(_path: string) => Promise<void>>());
 const loadSessionByIdMock = vi.hoisted(() => vi.fn<(_sessionId: string) => Promise<unknown>>());
 const removeTabMock = vi.hoisted(() => vi.fn<(_id: string) => void>());
-const openFileMock = vi.hoisted(() => vi.fn<(_record: Extract<RecentRecord, { type: 'file' }>) => Promise<void>>());
+const openDocumentMock = vi.hoisted(() => vi.fn<(_record: Extract<RecentRecord, { type: 'file' }>) => Promise<unknown>>());
 const openFileByPathMock = vi.hoisted(() => vi.fn<(_path: string) => Promise<void>>());
 const openWebviewMock = vi.hoisted(() => vi.fn<(_url: URL) => void>());
 const getPathStatusMock = vi.hoisted(() => vi.fn<(_path: string) => Promise<{ exists: boolean; isFile: boolean }>>());
@@ -81,15 +81,10 @@ vi.mock('@/stores/workspace/tabs', () => ({
   })
 }));
 
-vi.mock('@/hooks/useOpenFile', () => ({
-  useOpenFile: () => ({
-    openFile: openFileMock,
-    openFileByPath: openFileByPathMock
-  })
-}));
-
 vi.mock('@/hooks/useNavigate', () => ({
   useNavigate: () => ({
+    openDocument: openDocumentMock,
+    openFileByPath: openFileByPathMock,
     openWebview: openWebviewMock
   })
 }));
@@ -272,7 +267,7 @@ describe('BCommandPanel', (): void => {
     loadSessionByIdMock.mockReset();
     loadSessionByIdMock.mockResolvedValue({ id: 'session-a' });
     removeTabMock.mockClear();
-    openFileMock.mockResolvedValue(undefined);
+    openDocumentMock.mockResolvedValue(undefined);
     openFileByPathMock.mockResolvedValue(undefined);
     openWebviewMock.mockClear();
     getPathStatusMock.mockResolvedValue({ exists: false, isFile: false });

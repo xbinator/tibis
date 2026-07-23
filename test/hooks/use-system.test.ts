@@ -23,8 +23,8 @@ vi.mock('@/shared/platform/electron-api', () => ({
   })
 }));
 
-vi.mock('@/hooks/useOpenFile', () => ({
-  useOpenFile: () => ({
+vi.mock('@/hooks/useNavigate', () => ({
+  useNavigate: () => ({
     openFileByPath: openFileByPathMock
   })
 }));

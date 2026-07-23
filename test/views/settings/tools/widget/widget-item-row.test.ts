@@ -34,8 +34,8 @@ const loggerMock = vi.hoisted(() => ({
   warn: vi.fn<(...args: unknown[]) => void>()
 }));
 
-vi.mock('@/hooks/useOpenFile', () => ({
-  useOpenFile: () => ({ openWidgetFile: openWidgetFileMock })
+vi.mock('@/hooks/useNavigate', () => ({
+  useNavigate: () => ({ openWidgetFile: openWidgetFileMock })
 }));
 
 vi.mock('@/shared/platform', () => ({

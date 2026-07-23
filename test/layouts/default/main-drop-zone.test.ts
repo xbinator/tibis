@@ -22,7 +22,7 @@ interface TestFileList {
 }
 
 const openFileByPathMock = vi.hoisted(() => vi.fn<(_path: string) => Promise<unknown>>().mockResolvedValue({ id: 'opened-file' }));
-const openFileMock = vi.hoisted(() => vi.fn<(_file: unknown) => Promise<unknown>>().mockResolvedValue({ id: 'opened-file' }));
+const openDocumentMock = vi.hoisted(() => vi.fn<(_file: unknown) => Promise<unknown>>().mockResolvedValue({ id: 'opened-file' }));
 const getPathForFileMock = vi.hoisted(() => vi.fn<(_file: File) => string | null>().mockReturnValue('/tmp/dropped.md'));
 const routerPushMock = vi.hoisted(() => vi.fn<(_location: unknown) => Promise<void>>().mockResolvedValue(undefined));
 const createAndOpenMock = vi.hoisted(() => vi.fn());
@@ -65,9 +65,9 @@ vi.mock('vue-router', () => ({
   })
 }));
 
-vi.mock('@/hooks/useOpenFile', () => ({
-  useOpenFile: () => ({
-    openFile: openFileMock,
+vi.mock('@/hooks/useNavigate', () => ({
+  useNavigate: () => ({
+    openDocument: openDocumentMock,
     openFileByPath: openFileByPathMock
   })
 }));
@@ -137,7 +137,7 @@ describe('MainDropZone', () => {
 
   beforeEach((): void => {
     openFileByPathMock.mockClear();
-    openFileMock.mockClear();
+    openDocumentMock.mockClear();
     getPathForFileMock.mockClear();
     routerPushMock.mockClear();
     createAndOpenMock.mockClear();
@@ -183,7 +183,7 @@ describe('MainDropZone', () => {
         savedContent: 'hello'
       })
     );
-    expect(openFileMock).toHaveBeenCalledWith(expect.objectContaining({ title: 'dropped.md' }));
+    expect(openDocumentMock).toHaveBeenCalledWith(expect.objectContaining({ title: 'dropped.md' }));
   });
 
   it('ignores dropped tibis files because widget sessions use json records', async (): Promise<void> => {
@@ -199,7 +199,7 @@ describe('MainDropZone', () => {
     await flushPromises();
 
     expect(createAndOpenMock).not.toHaveBeenCalled();
-    expect(openFileMock).not.toHaveBeenCalled();
+    expect(openDocumentMock).not.toHaveBeenCalled();
     expect(routerPushMock).not.toHaveBeenCalled();
   });
 });

@@ -165,14 +165,9 @@ vi.mock('@/ai/tools/context/webview', () => ({
   webviewToolContextRegistry: registryMockState.webviewToolContextRegistry
 }));
 
-vi.mock('@/hooks/useOpenDraft', () => ({
-  useOpenDraft: vi.fn(() => ({
-    openDraft: vi.fn()
-  }))
-}));
-
-vi.mock('@/hooks/useOpenFile', () => ({
-  useOpenFile: vi.fn(() => ({
+vi.mock('@/hooks/useNavigate', () => ({
+  useNavigate: vi.fn(() => ({
+    openDraft: vi.fn(),
     openFileByPath: vi.fn()
   }))
 }));

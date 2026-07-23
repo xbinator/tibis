@@ -285,21 +285,11 @@ vi.mock('@/hooks/useWorkspaceRoot', () => ({
 
 vi.mock('@/hooks/useNavigate', () => ({
   useNavigate: vi.fn(() => ({
+    openDraft: vi.fn(),
     openFile: vi.fn(),
+    openFileByPath: vi.fn(),
     openSkill: vi.fn(),
     openWebview: vi.fn()
-  }))
-}));
-
-vi.mock('@/hooks/useOpenFile', () => ({
-  useOpenFile: vi.fn(() => ({
-    openFileByPath: vi.fn()
-  }))
-}));
-
-vi.mock('@/hooks/useOpenDraft', () => ({
-  useOpenDraft: vi.fn(() => ({
-    openDraft: vi.fn()
   }))
 }));
 

@@ -5,7 +5,6 @@
 
 import { useRouter, type Router } from 'vue-router';
 import { useNavigate } from '@/hooks/useNavigate';
-import { useOpenFile } from '@/hooks/useOpenFile';
 import { createRecentKey, isChatRecord, isDocumentRecord, type RecentRecord, type RecentRecordType, type StoredDocumentRecord } from '@/shared/storage';
 import { useChatSessionStore } from '@/stores/chat/session';
 import { useRecentStore } from '@/stores/workspace/recent';
@@ -86,12 +85,12 @@ async function pushRecentUrl(router: Router, url: string): Promise<void> {
 
 /**
  * 创建文件型最近记录处理器。
- * @param openFile - 文件打开函数
+ * @param openDocument - 文档打开函数
  * @param recentStore - 最近记录存储
  * @param tabsStore - 标签页存储
  * @returns 文件型最近记录处理器
  */
-function createDocumentHandler(openFile: OpenDocument, recentStore: RecentStore, tabsStore: TabsStore): RecentRecordHandler {
+function createDocumentHandler(openDocument: OpenDocument, recentStore: RecentStore, tabsStore: TabsStore): RecentRecordHandler {
   return {
     /**
      * 打开文件型最近记录。
@@ -100,7 +99,7 @@ function createDocumentHandler(openFile: OpenDocument, recentStore: RecentStore,
     async open(record: RecentRecord): Promise<void> {
       if (!isDocumentRecord(record)) return;
 
-      await openFile(record);
+      await openDocument(record);
     },
     /**
      * 删除文件型最近记录并关闭同 ID 标签页。
@@ -184,17 +183,16 @@ function createWebviewHandler(openWebview: OpenWebview, recentStore: RecentStore
  * 提供最近记录打开和删除行为。
  * @returns 最近记录动作集合
  */
-export function useRecentRecordActions(): RecentRecordActions {
+export function useRecentRecord(): RecentRecordActions {
   const router = useRouter();
-  const { openWebview } = useNavigate();
-  const { openFile } = useOpenFile();
+  const { openDocument, openWebview } = useNavigate();
   const chatStore = useChatSessionStore();
   const recentStore = useRecentStore();
   const tabsStore = useTabsStore();
 
   const handlers = {
-    file: createDocumentHandler(openFile, recentStore, tabsStore),
-    widget: createDocumentHandler(openFile, recentStore, tabsStore),
+    file: createDocumentHandler(openDocument, recentStore, tabsStore),
+    widget: createDocumentHandler(openDocument, recentStore, tabsStore),
     chat: createChatHandler(chatStore, recentStore, router),
     webview: createWebviewHandler(openWebview, recentStore, router)
   } satisfies Record<RecentRecordType, RecentRecordHandler>;

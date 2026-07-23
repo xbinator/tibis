@@ -17,13 +17,14 @@ import { ref } from 'vue';
 import { customAlphabet } from 'nanoid';
 import { OPEN_FILE_EXTENSIONS } from '@/constants/extensions';
 import { resolveDroppedFilePath, useFileDrop } from '@/hooks/useFileDrop';
-import { useOpenFile } from '@/hooks/useOpenFile';
+import { useNavigate } from '@/hooks/useNavigate';
 import { createDocumentDescription, createDocumentTitle, createRecentUrl, type StoredFile } from '@/shared/storage';
 import { useRecentStore } from '@/stores/workspace/recent';
+import { asyncTo } from '@/utils/asyncTo';
 
 const nanoid = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz_', 8);
 const recentStore = useRecentStore();
-const { openFile, openFileByPath } = useOpenFile();
+const { openDocument, openFileByPath } = useNavigate();
 const dropZoneRef = ref<HTMLElement>();
 
 /**
@@ -52,6 +53,22 @@ async function createDroppedDraft(file: File, ext: string): Promise<StoredFile> 
 }
 
 /**
+ * 打开拖拽文件或创建未保存草稿。
+ * @param file - 拖拽得到的浏览器 File 对象
+ * @param ext - 文件扩展名
+ */
+async function openDroppedFile(file: File, ext: string): Promise<void> {
+  const droppedFilePath = resolveDroppedFilePath(file);
+  if (droppedFilePath) {
+    await openFileByPath(droppedFilePath);
+    return;
+  }
+
+  const createdFile = await createDroppedDraft(file, ext);
+  await openDocument(createdFile);
+}
+
+/**
  * 处理拖拽打开文件。
  * @param files - 拖拽得到的文件列表
  */
@@ -64,18 +81,8 @@ async function handleDropFiles(files: File[]): Promise<void> {
     return;
   }
 
-  try {
-    const droppedFilePath = resolveDroppedFilePath(file);
-    if (droppedFilePath) {
-      await openFileByPath(droppedFilePath);
-      return;
-    }
-
-    const createdFile = await createDroppedDraft(file, ext);
-    await openFile(createdFile);
-  } catch (error) {
-    console.error('Failed to drop file:', error);
-  }
+  const [dropError] = await asyncTo(openDroppedFile(file, ext));
+  if (dropError) console.error('Failed to drop file:', dropError);
 }
 
 /** 通用文件拖拽 hook */

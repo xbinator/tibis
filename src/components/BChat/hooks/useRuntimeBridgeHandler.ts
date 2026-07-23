@@ -5,8 +5,7 @@
 import type { ChatRuntimeBridgeRequestEvent } from 'types/chat-runtime';
 import { editorToolContextRegistry } from '@/ai/tools/context/editor';
 import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
-import type { useOpenDraft } from '@/hooks/useOpenDraft';
-import type { useOpenFile } from '@/hooks/useOpenFile';
+import type { useNavigate } from '@/hooks/useNavigate';
 import { native } from '@/shared/platform';
 import { useRecentStore } from '@/stores/workspace/recent';
 import { handleBChatRuntimeBridgeRequest } from '../utils/runtimeBridge';
@@ -17,9 +16,9 @@ import { useRuntimeSettings } from './useRuntimeSettings';
  */
 interface UseRuntimeBridgeHandlerOptions {
   /** 打开未保存草稿 */
-  openDraft: ReturnType<typeof useOpenDraft>['openDraft'];
+  openDraft: ReturnType<typeof useNavigate>['openDraft'];
   /** 按路径打开文件 */
-  openFileByPath: ReturnType<typeof useOpenFile>['openFileByPath'];
+  openFileByPath: ReturnType<typeof useNavigate>['openFileByPath'];
   /** 在应用 Webview 中打开 URL */
   openWebview: (url: URL) => void;
 }

@@ -227,9 +227,8 @@ tibis/
 │   │   ├── useFileDrop.ts            # 文件拖拽处理
 │   │   ├── useImagePreview.ts        # 图片预览（跨平台：Electron 原生 / Web）
 │   │   ├── useMenuAction.ts          # 系统菜单动作注册
-│   │   ├── useNavigate.ts            # 统一导航
-│   │   ├── useOpenDraft.ts           # 草稿文件打开
-│   │   ├── useOpenFile.ts            # 统一文件打开
+│   │   ├── useNavigate/              # 统一导航（链接、文档、引用定位、草稿、Skill）
+│   │   ├── useRecentRecord/          # 最近记录统一打开与删除
 │   │   ├── useScroller.ts            # DOM 滚动包装
 │   │   ├── useShortcuts.ts           # 键盘快捷键（@vueuse/core useMagicKeys）
 │   │   ├── useSystem.ts              # 系统信息查询
@@ -304,7 +303,7 @@ tibis/
 │   ├── ai/                           # 工具系统测试（builtin / tool-registry / drawing-context）
 │   ├── components/                   # BChat、BColorPicker、BEditor、BMessage、BMonaco、BWidget
 │   ├── electron/                     # 主进程测试（ai/errors、chat/runtime、lifecycle、mcp/transport、ui、updater）
-│   ├── hooks/                        # useFileController / useClipboard / useImagePreview / useOpenFile / useSystem
+│   ├── hooks/                        # useFileController / useClipboard / useImagePreview / useNavigate / useRecentRecord / useSystem
 │   ├── layouts/                      # ChatSider、HeaderTabs、useHelpActive 等
 │   ├── router/                       # widget 路由
 │   ├── shared/storage/               # files、providers、settings、tool-settings、database
@@ -1038,7 +1037,7 @@ Vite 对第三方依赖做细粒度拆包，提升 Electron 内嵌 Web 首屏性
 | `ai/` | 工具系统（builtin-index、builtin-main-process-tool、todo-write、tool-registry） |
 | `components/` | BChat、BColorPicker、BEditor、BMessage、BMonaco、BWidget |
 | `electron/` | 主进程 ai/errors、chat/runtime（compaction/context/messages/model/stream/tools）、lifecycle、mcp/transport、ui、updater |
-| `hooks/` | useFileController、useDraftPersistence、useDiskSave、useFileWatch、useClipboard、useImagePreview、useOpenFile、useSystem |
+| `hooks/` | useFileController、useDraftPersistence、useDiskSave、useFileWatch、useClipboard、useImagePreview、useNavigate、useRecentRecord、useSystem |
 | `layouts/` | ChatSider、HeaderTabs（结构 + 滚动）、useHelpActive 等 |
 | `router/` | widget 路由 |
 | `shared/` | 存储层（files、providers、settings、tool-settings、database） |

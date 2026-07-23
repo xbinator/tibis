@@ -1,9 +1,9 @@
 /**
- * @file use-open-file.test.ts
- * @description 验证统一文件打开入口按最近记录类型路由。
+ * @file use-navigate-document.test.ts
+ * @description 验证统一导航入口按最近记录类型路由。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useOpenFile } from '@/hooks/useOpenFile';
+import { useNavigate } from '@/hooks/useNavigate';
 
 const routerPushMock = vi.hoisted(() => vi.fn());
 const getFileByPathMock = vi.hoisted(() => vi.fn());
@@ -35,8 +35,15 @@ vi.mock('@/stores/workspace/tabs', () => ({
   })
 }));
 
+vi.mock('@/stores/editor/fileSelectionIntent', () => ({
+  useFileSelectionIntentStore: () => ({
+    setIntent: vi.fn()
+  })
+}));
+
 vi.mock('@/shared/platform', () => ({
   native: {
+    openExternal: vi.fn(),
     openFile: vi.fn()
   }
 }));
@@ -47,7 +54,7 @@ vi.mock('@/utils/modal', () => ({
   }
 }));
 
-describe('useOpenFile', (): void => {
+describe('useNavigate file actions', (): void => {
   beforeEach((): void => {
     routerPushMock.mockReset();
     getFileByPathMock.mockReset();
@@ -68,7 +75,7 @@ describe('useOpenFile', (): void => {
       savedContent: ''
     });
 
-    const { openFileByPath } = useOpenFile();
+    const { openFileByPath } = useNavigate();
     await openFileByPath('/tmp/widget.json');
 
     expect(routerPushMock).toHaveBeenCalledWith({ name: 'widget', params: { id: 'widget-1' } });
@@ -85,7 +92,7 @@ describe('useOpenFile', (): void => {
       savedContent: ''
     });
 
-    const { openFileByPath } = useOpenFile();
+    const { openFileByPath } = useNavigate();
     await openFileByPath('/tmp/board.json');
 
     expect(routerPushMock).toHaveBeenCalledWith({ name: 'editor', params: { id: 'json-1' } });
@@ -101,7 +108,7 @@ describe('useOpenFile', (): void => {
       content: ''
     });
 
-    const { createNewFile } = useOpenFile();
+    const { createNewFile } = useNavigate();
     await createNewFile();
 
     expect(createAndOpenMock).toHaveBeenCalledWith({
@@ -118,7 +125,7 @@ describe('useOpenFile', (): void => {
   });
 
   it('navigates to an installed widget without creating a content record', async (): Promise<void> => {
-    const { openWidgetFile } = useOpenFile();
+    const { openWidgetFile } = useNavigate();
     await openWidgetFile('weather');
 
     expect(createAndOpenMock).not.toHaveBeenCalled();

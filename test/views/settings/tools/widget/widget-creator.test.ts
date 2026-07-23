@@ -52,8 +52,8 @@ vi.mock('@/utils/file/directory', () => ({
   installDirectory: installDirectoryMock
 }));
 
-vi.mock('@/hooks/useOpenFile', () => ({
-  useOpenFile: () => ({ openWidgetFile: openWidgetFileMock })
+vi.mock('@/hooks/useNavigate', () => ({
+  useNavigate: () => ({ openWidgetFile: openWidgetFileMock })
 }));
 
 vi.mock('@/shared/platform', () => ({

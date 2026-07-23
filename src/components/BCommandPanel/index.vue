@@ -55,8 +55,7 @@ import BModelIcon from '@/components/BModel/Icon.vue';
 import BRecentIcon from '@/components/BRecent/Icon.vue';
 import BScrollbar from '@/components/BScrollbar/index.vue';
 import { useNavigate } from '@/hooks/useNavigate';
-import { useOpenFile } from '@/hooks/useOpenFile';
-import { useRecentRecordActions } from '@/hooks/useRecentRecordActions';
+import { useRecentRecord } from '@/hooks/useRecentRecord';
 import { native } from '@/shared/platform';
 import { useProviderStore } from '@/stores/ai/provider';
 import type { SelectedModel } from '@/stores/ai/serviceModel';
@@ -89,12 +88,10 @@ const recentStore = useRecentStore();
 const providerStore = useProviderStore();
 /** 服务模型 store。 */
 const serviceModelStore = useServiceModelStore();
-/** 文件打开能力。 */
-const { openFileByPath } = useOpenFile();
-/** WebView 打开能力。 */
-const { openWebview } = useNavigate();
+/** 文件与 WebView 打开能力。 */
+const { openFileByPath, openWebview } = useNavigate();
 /** 最近记录打开与删除能力。 */
-const { openRecentRecord, removeRecentRecord } = useRecentRecordActions();
+const { openRecentRecord, removeRecentRecord } = useRecentRecord();
 /** 全局命令面板 Store。 */
 const commandPanelStore = useCommandPanelStore();
 /** 全局命令面板响应式状态。 */

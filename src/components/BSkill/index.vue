@@ -46,7 +46,7 @@ import { computed, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { message } from 'ant-design-vue';
 import { useClipboard } from '@/hooks/useClipboard';
-import { useOpenFile } from '@/hooks/useOpenFile';
+import { useNavigate } from '@/hooks/useNavigate';
 import { native } from '@/shared/platform';
 import { asyncTo } from '@/utils/asyncTo';
 import { createNamespace } from '@/utils/namespace';
@@ -71,7 +71,7 @@ type FileState = { status: 'idle' } | { status: 'loading' } | { status: 'success
 // ─── State ───────────────────────────────────────────────────────────────────
 
 const { clipboard } = useClipboard();
-const { openFileByPath } = useOpenFile();
+const { openFileByPath } = useNavigate();
 
 const selectedFilePath = ref('');
 const fileState = ref<FileState>({ status: 'idle' });

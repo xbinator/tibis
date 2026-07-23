@@ -33,7 +33,7 @@ import { Icon } from '@iconify/vue';
 import { message } from 'ant-design-vue';
 import type { WidgetDefinition } from '@/ai/widget/types';
 import type { DropdownOption } from '@/components/BDropdown/type';
-import { useOpenFile } from '@/hooks/useOpenFile';
+import { useNavigate } from '@/hooks/useNavigate';
 import { native } from '@/shared/platform';
 import { useWidgetStore } from '@/stores/ai/widget';
 import logger from '@/utils/logger';
@@ -49,7 +49,7 @@ interface Props {
 
 const props = defineProps<Props>();
 const store = useWidgetStore();
-const { openWidgetFile } = useOpenFile();
+const { openWidgetFile } = useNavigate();
 /** 当前小组件是否正在执行删除流程。 */
 const deleting = ref(false);
 

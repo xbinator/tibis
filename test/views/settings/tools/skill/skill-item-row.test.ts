@@ -31,11 +31,7 @@ const messageMock = vi.hoisted(() => ({
 }));
 
 vi.mock('@/hooks/useNavigate', () => ({
-  useNavigate: () => ({ openSkill: openSkillMock })
-}));
-
-vi.mock('@/hooks/useOpenFile', () => ({
-  useOpenFile: () => ({ openFileByPath: openFileByPathMock })
+  useNavigate: () => ({ openFileByPath: openFileByPathMock, openSkill: openSkillMock })
 }));
 
 vi.mock('@/shared/platform', () => ({

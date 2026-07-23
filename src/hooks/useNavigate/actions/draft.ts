@@ -1,15 +1,18 @@
 /**
- * @file index.ts
- * @description 创建并打开未保存草稿的通用用例，供 AI 工具降级或其他入口复用。
+ * @file draft.ts
+ * @description 创建并打开未保存草稿的导航能力。
  */
+import type { DocumentNavigationActions, DraftNavigationActions } from '../types';
 import { customAlphabet } from 'nanoid';
 import type { OpenDraftInput, OpenDraftResult } from '@/ai/tools/shared/types';
-import { useOpenFile } from '@/hooks/useOpenFile';
 import { createDocumentDescription, createDocumentTitle, createRecentUrl } from '@/shared/storage';
-import type { StoredFile } from '@/shared/storage/files/types';
+import type { StoredFile } from '@/shared/storage';
 import { useRecentStore } from '@/stores/workspace/recent';
 import { buildUnsavedPath } from '@/utils/file/unsaved';
 
+/**
+ * 生成未保存草稿 ID。
+ */
 const createFileId = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz_', 8);
 
 /**
@@ -51,11 +54,11 @@ export function extractNameAndExt(originalPath: string): { name: string; ext: st
 
 /**
  * 提供创建并打开未保存草稿的通用能力。
- * @returns 草稿创建函数
+ * @param documentActions - 文档导航动作
+ * @returns 草稿导航动作
  */
-export function useOpenDraft() {
+export function useDraftNavigation(documentActions: Pick<DocumentNavigationActions, 'openDocument'>): DraftNavigationActions {
   const recentStore = useRecentStore();
-  const { openFile } = useOpenFile();
 
   /**
    * 创建未保存草稿并打开编辑器。
@@ -84,7 +87,7 @@ export function useOpenDraft() {
     };
 
     const createdFile = await recentStore.createAndOpen(storedFile);
-    await openFile(createdFile);
+    await documentActions.openDocument(createdFile);
 
     const unsavedPath = buildUnsavedPath({
       id: createdFile.id,

@@ -7,7 +7,7 @@ import { computed, onUnmounted } from 'vue';
 import type { ComputedRef } from 'vue';
 import { useToolbarShortcuts } from '@/components/BToolbar/hooks/useToolbarShortcuts';
 import type { ToolbarOptions } from '@/components/BToolbar/types';
-import { useOpenFile } from '@/hooks/useOpenFile';
+import { useNavigate } from '@/hooks/useNavigate';
 import { isElectron } from '@/shared/platform/env';
 import { useCommandPanelStore } from '@/stores/ui/commandPanel';
 import { useRecentStore } from '@/stores/workspace/recent';
@@ -26,7 +26,7 @@ export function useFileActive(): UseFileActiveResult {
   const recentStore = useRecentStore();
   const commandPanelStore = useCommandPanelStore();
   const { register: registerShortcuts } = useToolbarShortcuts();
-  const { createNewFile, openFileById, openNativeFile } = useOpenFile();
+  const { createNewFile, openFileById, openNativeFile } = useNavigate();
 
   /**
    * 创建并打开一个新文件。

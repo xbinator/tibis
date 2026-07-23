@@ -59,7 +59,7 @@ import type { WidgetDefinition } from '@/ai/widget/types';
 import type { WidgetData } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { createDefaultWidgetExecuteMethod, isDefaultWidgetExecuteMethod } from '@/components/BWidget/utils/widgetExecuteMethod';
-import { useOpenFile } from '@/hooks/useOpenFile';
+import { useNavigate } from '@/hooks/useNavigate';
 import { logger } from '@/shared/logger';
 import { createDirectoryInstallLogger } from '@/shared/logger/directoryInstall';
 import { native } from '@/shared/platform';
@@ -87,7 +87,7 @@ const WIDGET_IMPORT_FILE_EXTENSIONS = ['.zip', '.json'] as const;
 /** 弹窗可见性。 */
 const visible = defineModel<boolean>('open', { default: false });
 const store = useWidgetStore();
-const { openWidgetFile } = useOpenFile();
+const { openWidgetFile } = useNavigate();
 
 /** 表单数据。 */
 const dataItem = reactive<WidgetCreateFormData>({

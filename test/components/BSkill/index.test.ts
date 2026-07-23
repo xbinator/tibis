@@ -16,8 +16,8 @@ vi.mock('@/hooks/useClipboard', () => ({
   useClipboard: () => ({ clipboard: vi.fn() })
 }));
 
-vi.mock('@/hooks/useOpenFile', () => ({
-  useOpenFile: () => ({ openFileByPath: openFileByPathMock })
+vi.mock('@/hooks/useNavigate', () => ({
+  useNavigate: () => ({ openFileByPath: openFileByPathMock })
 }));
 
 vi.mock('@/shared/platform', () => ({

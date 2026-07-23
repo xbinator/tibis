@@ -26,8 +26,7 @@ import { editorToolContextRegistry } from '@/ai/tools/context/editor';
 import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
 import { createWidgetHttpClient, executeWidgetRuntime, type WidgetConsoleLevel, type WidgetLogLevel } from '@/components/BWidget/utils/widgetRuntime';
 import { formatWidgetLogArgs } from '@/components/BWidget/utils/widgetRuntime/logger';
-import { useOpenDraft } from '@/hooks/useOpenDraft';
-import { useOpenFile } from '@/hooks/useOpenFile';
+import { useNavigate } from '@/hooks/useNavigate';
 import { useWorkspaceRoot } from '@/hooks/useWorkspaceRoot';
 import { logger } from '@/shared/logger';
 import { native } from '@/shared/platform';
@@ -69,9 +68,9 @@ interface UseRuntimeToolsReturn {
   /** 解析本轮显式选择的 Skill 内容快照。 */
   resolveSkillSnapshots: (names: string[]) => Promise<ChatRuntimeSkillSnapshot[]>;
   /** 创建并打开未保存草稿。 */
-  openDraft: ReturnType<typeof useOpenDraft>['openDraft'];
+  openDraft: ReturnType<typeof useNavigate>['openDraft'];
   /** 通过文件路径打开文件标签页。 */
-  openFileByPath: ReturnType<typeof useOpenFile>['openFileByPath'];
+  openFileByPath: ReturnType<typeof useNavigate>['openFileByPath'];
 }
 
 /**
@@ -84,8 +83,7 @@ export function useRuntimeTools(options: UseRuntimeToolsOptions): UseRuntimeTool
   const widgetStore = useWidgetStore();
   const toolSettingsStore = useToolSettingsStore();
   const recentStore = useRecentStore();
-  const { openDraft } = useOpenDraft();
-  const { openFileByPath } = useOpenFile();
+  const { openDraft, openFileByPath } = useNavigate();
   const { workspaceRoot, getWorkspaceRoot } = useWorkspaceRoot();
   /** open_widget 前置执行阶段复用的托管 HTTP 客户端。 */
   const widgetHttpClient = createWidgetHttpClient();
@@ -142,7 +140,7 @@ export function useRuntimeTools(options: UseRuntimeToolsOptions): UseRuntimeTool
     openDraft,
     /**
      * 通过文件路径打开文件标签页。
-     * 封装 useOpenFile().openFileByPath，返回 { id } 或 null。
+     * 封装 useNavigate().openFileByPath，返回 { id } 或 null。
      */
     openFileByPath,
     /**
