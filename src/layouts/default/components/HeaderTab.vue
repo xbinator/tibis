@@ -3,7 +3,7 @@
   @description 单个标签页渲染组件，包含图标、通用状态指示和关闭按钮。
 -->
 <template>
-  <div :data-tab-id="tab.id" class="header-tab" :class="tabClass" @click="emit('click')">
+  <div :data-tab-id="tab.id" class="header-tab" :class="tabClass" @click="emit('click')" @contextmenu.prevent="emit('contextmenu', $event)">
     <div class="header-tab__title">
       <span v-if="tabsStore.isDirty(tab.id)" class="header-tab__dirty-mark">*</span>
       <!-- 运行状态与最近记录图标互斥展示 -->
@@ -70,6 +70,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   (e: 'click'): void;
   (e: 'close'): void;
+  (e: 'contextmenu', event: MouseEvent): void;
 }>();
 
 const route = useRoute();

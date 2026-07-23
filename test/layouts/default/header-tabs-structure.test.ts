@@ -47,6 +47,12 @@ describe('HeaderTabs drag region structure', (): void => {
     expect(getStyleBlock(headerTabSource, '.header-tab')).not.toContain('margin-right: 4px;');
   });
 
+  it('uses a single HeaderTabMenu instead of per-tab dropdown wrappers', (): void => {
+    expect(headerTabsSource).toContain('HeaderTabMenu');
+    expect(headerTabsSource).not.toContain('<BDropdown');
+    expect(headerTabsSource).not.toContain('trigger="contextmenu"');
+  });
+
   it('does not access the chat runtime store', (): void => {
     expect(headerTabsSource).not.toContain('useChatTabStore');
     expect(headerTabsSource).not.toContain('ChatTabRuntimeStatus');

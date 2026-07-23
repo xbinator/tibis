@@ -90,6 +90,19 @@ describe('HeaderTab generic status', (): void => {
     expect(wrapper.find('.recent-icon-stub').exists()).toBe(true);
   });
 
+  it('emits the original contextmenu event from the tab root', async (): Promise<void> => {
+    const wrapper = mountHeaderTab();
+
+    await wrapper.find('.header-tab').trigger('contextmenu', { clientX: 120, clientY: 48 });
+
+    const emittedEvent = wrapper.emitted('contextmenu')?.[0]?.[0];
+    expect(emittedEvent).toBeInstanceOf(MouseEvent);
+    expect((emittedEvent as MouseEvent).clientX).toBe(120);
+    expect((emittedEvent as MouseEvent).clientY).toBe(48);
+    expect(headerTabSource).toContain("(e: 'contextmenu', event: MouseEvent): void;");
+    expect(headerTabSource).toContain("@contextmenu.prevent=\"emit('contextmenu', $event)\"");
+  });
+
   it('does not depend on chat runtime types or stores', (): void => {
     expect(headerTabSource).not.toContain('@/stores/chat/');
     expect(headerTabSource).not.toContain('ChatTabRuntimeStatus');
