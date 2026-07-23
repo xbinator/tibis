@@ -19,7 +19,7 @@
 
 <script setup lang="ts">
 import type { ChatSession } from 'types/chat';
-import { computed, onActivated, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onActivated, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import BChat from '@/components/BChat/index.vue';
 import type { BChatRuntimeStatusChange } from '@/components/BChat/utils/types';
@@ -99,6 +99,19 @@ const initialSessionTitle = computed<string>((): string => {
 /** 标记当前活动聊天已被用户查看。 */
 function markCurrentViewed(): void {
   if (ownerActive.value) runtimeStore.markViewed(ownerTabId.value);
+}
+
+/**
+ * 在当前聊天页成为活动标签后聚焦底部智能输入编辑器。
+ */
+function focusChatInput(): void {
+  if (!ownerActive.value) return;
+
+  nextTick((): void => {
+    if (!ownerActive.value) return;
+
+    bChatRef.value?.focusInput();
+  });
 }
 
 /** 同步当前持久化会话标题到聊天页标签。 */
@@ -292,6 +305,7 @@ onActivated((): void => {
   markCurrentViewed();
   syncInitialSessionTitle();
   asyncTo(recordRecentSession());
+  focusChatInput();
 });
 
 onMounted((): void => {

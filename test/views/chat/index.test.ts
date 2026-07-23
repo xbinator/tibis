@@ -5,7 +5,7 @@
  */
 import type { ChatSession } from 'types/chat';
 import type { ComponentPublicInstance } from 'vue';
-import { nextTick } from 'vue';
+import { defineComponent, nextTick, ref } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -27,6 +27,7 @@ const routerMocks = vi.hoisted(() => ({
 const routeFailureMock = vi.hoisted(() => ({ type: 'aborted' }));
 const abortRuntimeMock = vi.hoisted(() => vi.fn<() => Promise<void>>());
 const resetDraftMock = vi.hoisted(() => vi.fn<() => Promise<void>>());
+const focusInputMock = vi.hoisted(() => vi.fn<() => void>());
 const ensureSessionsMock = vi.hoisted(() => vi.fn<() => Promise<void>>());
 const loadSessionByIdMock = vi.hoisted(() => vi.fn<(sessionId: string) => Promise<ChatSession | undefined>>());
 const findSessionMock = vi.hoisted(() => vi.fn<(sessionId: string | null | undefined) => ChatSession | undefined>());
@@ -74,8 +75,11 @@ vi.mock('@/components/BChat/index.vue', () => ({
       }
     },
     emits: ['session-created', 'session-title-persisted', 'new-session', 'runtime-status-change', 'navigate-to-provider'],
-    setup(_props: unknown, { expose }: { expose: (value: { abortRuntime: () => Promise<void>; resetDraft: () => Promise<void> }) => void }) {
-      expose({ abortRuntime: abortRuntimeMock, resetDraft: resetDraftMock });
+    setup(
+      _props: unknown,
+      { expose }: { expose: (value: { abortRuntime: () => Promise<void>; focusInput: () => void; resetDraft: () => Promise<void> }) => void }
+    ) {
+      expose({ abortRuntime: abortRuntimeMock, focusInput: focusInputMock, resetDraft: resetDraftMock });
       return {};
     },
     template: '<div class="b-chat-page-stub"></div>'
@@ -114,6 +118,30 @@ function findBChat(wrapper: ReturnType<typeof mount>): ComponentPublicInstance {
   return wrapper.findComponent({ name: 'BChat' }).vm;
 }
 
+/**
+ * 挂载 KeepAlive 包裹的独立聊天页。
+ * @param sessionId - 当前路由会话 ID
+ * @returns 页面可见状态
+ */
+function mountKeepAlivePage(sessionId: string | null): { visible: { value: boolean } } {
+  const visible = ref<boolean>(true);
+  routerMocks.route.params = sessionId ? { sessionId } : {};
+  routerMocks.route.path = sessionId ? `/chat/${sessionId}` : '/chat';
+  routerMocks.route.fullPath = routerMocks.route.path;
+  mount(
+    defineComponent({
+      name: 'ChatPageKeepAliveHarness',
+      components: { ChatPage },
+      setup(): { visible: typeof visible } {
+        return { visible };
+      },
+      template: '<KeepAlive><ChatPage v-if="visible" /></KeepAlive>'
+    })
+  );
+
+  return { visible };
+}
+
 describe('chat page', (): void => {
   beforeEach((): void => {
     setActivePinia(createPinia());
@@ -129,6 +157,7 @@ describe('chat page', (): void => {
     abortRuntimeMock.mockResolvedValue();
     resetDraftMock.mockReset();
     resetDraftMock.mockResolvedValue();
+    focusInputMock.mockReset();
     ensureSessionsMock.mockReset();
     ensureSessionsMock.mockResolvedValue();
     loadSessionByIdMock.mockReset();
@@ -201,6 +230,21 @@ describe('chat page', (): void => {
     await nextTick();
 
     expect(wrapper.findComponent({ name: 'BChat' }).props('sessionId')).toBe('session-a');
+  });
+
+  it('focuses the smart editor when the page opens and activates again', async (): Promise<void> => {
+    const { visible } = mountKeepAlivePage('session-a');
+    await nextTick();
+
+    expect(focusInputMock).toHaveBeenCalledTimes(1);
+
+    visible.value = false;
+    await nextTick();
+    visible.value = true;
+    await nextTick();
+    await nextTick();
+
+    expect(focusInputMock).toHaveBeenCalledTimes(2);
   });
 
   it('restores an existing runtime status when a background page is created', (): void => {
