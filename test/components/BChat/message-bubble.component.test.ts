@@ -383,13 +383,16 @@ function createQuestionToolPart(): ChatMessageToolPart {
 /**
  * 挂载消息气泡。
  * @param message - 待渲染消息
+ * @param submitAction - 消息级交互提交函数
+ * @param loading - 是否禁用助手历史操作
  * @returns 组件包装器
  */
-function mountMessageBubble(message: Message, submitAction?: (action: SubmitAction) => Promise<void> | void): VueWrapper {
+function mountMessageBubble(message: Message, submitAction?: (action: SubmitAction) => Promise<void> | void, loading = false): VueWrapper {
   return mount(MessageBubble, {
     props: {
       message,
-      submitAction
+      submitAction,
+      loading
     },
     global: {
       stubs: {
@@ -528,6 +531,24 @@ describe('MessageBubble', (): void => {
     expect(branchEvents?.[0]?.[0]).toEqual(message);
     expect(branchButton?.props('disabled')).toBe(false);
     expect(branchButton?.props('loading')).toBe(false);
+  });
+
+  it('disables branch and regenerate while assistant actions are locked', async (): Promise<void> => {
+    const message = createAssistantMessage();
+    const wrapper = mountMessageBubble(message, undefined, true);
+    const branchButton = wrapper.findAllComponents(BButtonStub).find((button): boolean => button.props('icon') === 'lucide:git-branch');
+    const regenerateButton = wrapper.findAllComponents(BButtonStub).find((button): boolean => button.props('icon') === 'lucide:refresh-cw');
+    const copyButton = wrapper.findAllComponents(BButtonStub).find((button): boolean => button.props('icon') === 'lucide:copy');
+
+    expect(branchButton?.props('disabled')).toBe(true);
+    expect(regenerateButton?.props('disabled')).toBe(true);
+    expect(copyButton?.props('disabled')).toBe(false);
+
+    await branchButton?.trigger('click');
+    await regenerateButton?.trigger('click');
+
+    expect(wrapper.emitted('branch')).toBeUndefined();
+    expect(wrapper.emitted('regenerate')).toBeUndefined();
   });
 
   it('does not show regenerate for runtime error messages', (): void => {

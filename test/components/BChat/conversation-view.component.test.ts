@@ -25,6 +25,10 @@ vi.mock('@/components/BChat/components/MessageBubble.vue', () => ({
         type: Boolean,
         default: false
       },
+      loading: {
+        type: Boolean,
+        default: false
+      },
       canRollback: {
         type: Function,
         default: undefined
@@ -244,6 +248,33 @@ describe('ConversationView', (): void => {
     await nextTick();
 
     expect(wrapper.get('.message-bubble').text()).toBe('done:awaiting_user_input:disabled:no-rollback');
+  });
+
+  it('uses loading to lock assistant bubble actions', async (): Promise<void> => {
+    const message = createAssistantMessage(createQuestionToolPart('done'));
+    const wrapper = mount(ConversationViewForTest, {
+      props: {
+        messages: [message],
+        loading: true,
+        disabled: false
+      },
+      global: {
+        stubs: {
+          BIcon: true
+        }
+      }
+    });
+
+    expect(wrapper.findComponent({ name: 'MessageBubble' }).props('loading')).toBe(true);
+
+    await wrapper.setProps({
+      messages: [message],
+      loading: false,
+      disabled: false
+    });
+    await nextTick();
+
+    expect(wrapper.findComponent({ name: 'MessageBubble' }).props('loading')).toBe(false);
   });
 
   it('updates open_widget display when result data changes without status changes', async (): Promise<void> => {

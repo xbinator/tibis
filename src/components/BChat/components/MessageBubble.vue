@@ -47,8 +47,8 @@
 
     <!-- 助手消息工具栏 -->
     <div v-if="showAssistantToolbar" :class="bem('toolbar')">
-      <BButton type="text" size="small" square icon="lucide:git-branch" @click="$emit('branch', message)" />
-      <BButton square type="text" size="small" icon="lucide:refresh-cw" @click="$emit('regenerate', message)" />
+      <BButton type="text" size="small" square icon="lucide:git-branch" :disabled="loading" @click="handleBranchClick" />
+      <BButton square type="text" size="small" icon="lucide:refresh-cw" :disabled="loading" @click="handleRegenerateClick" />
       <BButton type="text" size="small" square icon="lucide:copy" @click="handleCopy(message)" />
     </div>
 
@@ -114,6 +114,8 @@ const props = defineProps<{
   message: Message;
   /** 会话已结束时禁用交互（如 QuestionCard） */
   disabled?: boolean;
+  /** 是否禁用助手消息历史操作（分支、重新生成）。 */
+  loading?: boolean;
   /** 判断消息是否可回退 */
   canRollback?: (message: Message) => boolean;
   /** 可 await 的统一提交函数，用于让运行态组件等待宿主提交完成。 */
@@ -224,6 +226,22 @@ async function handleImageClick(index: number): Promise<void> {
 function handleCopy(message: Message): void {
   const content = extractLastTextPart(message);
   clipboard(content, { successMessage: '已复制到剪贴板' });
+}
+
+/**
+ * 触发助手消息分支。
+ */
+function handleBranchClick(): void {
+  if (props.loading) return;
+  emit('branch', props.message);
+}
+
+/**
+ * 触发助手消息重新生成。
+ */
+function handleRegenerateClick(): void {
+  if (props.loading) return;
+  emit('regenerate', props.message);
 }
 
 /** 是否处于回退二次确认态（inline 确认条） */
