@@ -6,6 +6,7 @@
 import { defineStore } from 'pinia';
 import { isPlainObject, omit, uniqBy } from 'lodash-es';
 import { resolveRouteCacheName } from '@/router/cache';
+import { createRecentKey } from '@/shared/storage';
 import { storeEvents } from '@/stores/helpers/events';
 import type { FileMissingPayload, FileRecoveredPayload } from '@/stores/helpers/events';
 import { loadPersistedState, persistState } from '@/stores/helpers/persist';
@@ -52,6 +53,8 @@ export interface Tab {
   cacheKey?: string;
   /** 标签页显示图标，使用 Iconify 图标名 */
   icon?: string;
+  /** 标签页关联的最近记录稳定键。 */
+  recentKey?: string;
   /** 标签页瞬时视觉状态，不进入持久化。 */
   status?: TabStatus;
 }
@@ -124,12 +127,57 @@ const DEFAULT_TABS_STATE: TabsState = {
 };
 
 /**
+ * 安全解码路由片段。
+ * @param value - 原始路由片段
+ * @returns 解码后的路由片段
+ */
+function decodeRouteSegment(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+/**
+ * 从路由路径解析指定前缀后的业务 ID。
+ * @param path - 标签页路径
+ * @param routePrefix - 路由前缀
+ * @returns 解码后的业务 ID，非目标路由时返回空字符串
+ */
+function resolveRouteEntityId(path: string, routePrefix: string): string {
+  if (!path.startsWith(routePrefix)) return '';
+
+  const rawId = path.slice(routePrefix.length).split(/[/?#]/)[0] ?? '';
+  return rawId ? decodeRouteSegment(rawId).trim() : '';
+}
+
+/**
+ * 从旧标签页路径迁移最近记录稳定键。
+ * @param path - 标签页路径
+ * @returns 最近记录稳定键，非最近记录路由时返回空字符串
+ */
+function deriveRecentKey(path: string): string {
+  const fileId = resolveRouteEntityId(path, '/editor/');
+  if (fileId) return createRecentKey({ type: 'file', id: fileId });
+
+  const widgetId = resolveRouteEntityId(path, '/widget/');
+  if (widgetId) return createRecentKey({ type: 'widget', id: widgetId });
+
+  const chatId = resolveRouteEntityId(path, '/chat/');
+  if (chatId) return createRecentKey({ type: 'chat', id: chatId });
+
+  return '';
+}
+
+/**
  * 规范化运行时标签页数据，兼容缺少 cacheKey 的记录并保留瞬时状态。
  * @param tab - 待规范化的标签页
  * @returns 带有缓存 key 的运行时标签页
  */
 function normalizeTab(tab: Tab): Tab {
   const icon = typeof tab.icon === 'string' ? tab.icon.trim() : '';
+  const recentKey = typeof tab.recentKey === 'string' ? tab.recentKey.trim() : deriveRecentKey(tab.path);
 
   return {
     id: tab.id,
@@ -137,6 +185,7 @@ function normalizeTab(tab: Tab): Tab {
     title: tab.title,
     cacheKey: tab.cacheKey || tab.id,
     ...(icon ? { icon } : {}),
+    ...(recentKey ? { recentKey } : {}),
     ...(tab.status ? { status: tab.status } : {})
   };
 }
@@ -157,11 +206,13 @@ function normalizePersistedTab(value: unknown): Tab | undefined {
 
   const cacheKey = typeof tab.cacheKey === 'string' ? tab.cacheKey.trim() : '';
   const icon = typeof tab.icon === 'string' ? tab.icon.trim() : '';
+  const recentKey = typeof tab.recentKey === 'string' ? tab.recentKey.trim() : '';
   return {
     id,
     path,
     title,
     cacheKey: cacheKey || id,
+    ...(recentKey ? { recentKey } : {}),
     ...(icon ? { icon } : {})
   };
 }

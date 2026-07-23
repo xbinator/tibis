@@ -194,6 +194,9 @@ function createFileRecord(overrides: Partial<Extract<RecentRecord, { type: 'file
     content: '',
     name: 'alpha',
     ext: 'md',
+    url: '/editor/file-1',
+    title: 'alpha.md',
+    description: '/tmp/alpha.md',
     ...overrides
   };
 }
@@ -206,9 +209,10 @@ function createFileRecord(overrides: Partial<Extract<RecentRecord, { type: 'file
 function createChatRecord(overrides: Partial<Extract<RecentRecord, { type: 'chat' }>> = {}): Extract<RecentRecord, { type: 'chat' }> {
   return {
     type: 'chat',
-    id: 'chat:session-a',
-    sessionId: 'session-a',
+    id: 'session-a',
+    url: '/chat/session-a',
     title: '会话 A',
+    description: '聊天会话',
     createdAt: 1,
     openedAt: 2,
     ...overrides
@@ -257,8 +261,8 @@ describe('BCommandPanel', (): void => {
       value: scrollIntoViewMock
     });
     recentStoreMock.recentRecords = [
-      createFileRecord({ id: 'file-1', name: 'alpha', path: '/tmp/alpha.md' }),
-      createFileRecord({ id: 'file-2', name: 'beta', path: '/tmp/beta.md' })
+      createFileRecord({ id: 'file-1', name: 'alpha', path: '/tmp/alpha.md', url: '/editor/file-1', title: 'alpha.md', description: '/tmp/alpha.md' }),
+      createFileRecord({ id: 'file-2', name: 'beta', path: '/tmp/beta.md', url: '/editor/file-2', title: 'beta.md', description: '/tmp/beta.md' })
     ];
     recentStoreMock.ensureLoaded.mockResolvedValue(undefined);
     recentStoreMock.removeFile.mockReset();
@@ -348,7 +352,7 @@ describe('BCommandPanel', (): void => {
     await wrapper.find('.b-command-panel__item-delete').trigger('click');
     await flushPromises();
 
-    expect(recentStoreMock.removeFile).toHaveBeenCalledWith('file-1');
+    expect(recentStoreMock.removeFile).toHaveBeenCalledWith('file:file-1');
     expect(removeTabMock).toHaveBeenCalledWith('file-1');
     expect(wrapper.find('.b-modal-stub').exists()).toBe(true);
   });

@@ -6,6 +6,7 @@
 import { useRouter } from 'vue-router';
 import { customAlphabet } from 'nanoid';
 import { native } from '@/shared/platform';
+import { createDocumentDescription, createDocumentTitle, createRecentUrl } from '@/shared/storage';
 import type { StoredDocumentRecord } from '@/shared/storage/files/types';
 import { useRecentStore } from '@/stores/workspace/recent';
 import { useTabsStore } from '@/stores/workspace/tabs';
@@ -161,9 +162,13 @@ export function useOpenFile(): OpenFileActions {
    * @returns 创建后的文件记录
    */
   async function createNewFile(): Promise<StoredDocumentRecord> {
+    const fileId = createFileId();
     const createdFile = await recentStore.createAndOpen({
       type: 'file',
-      id: createFileId(),
+      id: fileId,
+      url: createRecentUrl('file', fileId),
+      title: createDocumentTitle('Untitled', 'md'),
+      description: createDocumentDescription(null),
       path: null,
       name: 'Untitled',
       ext: 'md',

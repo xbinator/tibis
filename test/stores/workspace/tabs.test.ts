@@ -102,6 +102,31 @@ describe('tabs store replacement', (): void => {
     expect(local.getItem<TabsState>('app_tabs')?.tabs[0]).not.toHaveProperty('status');
   });
 
+  it('keeps recentKey in memory and persisted tab snapshots', (): void => {
+    const store = useTabsStore();
+
+    store.addTab({ ...createTab('file-a', '/editor/file-a'), recentKey: 'file:file-a' });
+
+    expect(store.tabs[0]?.recentKey).toBe('file:file-a');
+    expect(local.getItem<TabsState>('app_tabs')?.tabs[0]).toMatchObject({ recentKey: 'file:file-a' });
+  });
+
+  it('derives recentKey for legacy persisted editor and widget tabs', (): void => {
+    local.setItem('app_tabs', {
+      tabs: [
+        { id: 'shared-id', path: '/editor/shared-id', title: '文件' },
+        { id: 'shared-id-widget', path: '/widget/shared-id', title: 'Widget' }
+      ],
+      dirtyById: {},
+      missingById: {},
+      cachedKeys: []
+    });
+
+    const store = useTabsStore();
+
+    expect(store.tabs.map((tab) => tab.recentKey)).toEqual(['file:shared-id', 'widget:shared-id']);
+  });
+
   it('keeps an explicitly supplied status when adding a new tab', (): void => {
     const store = useTabsStore();
 
@@ -155,6 +180,7 @@ describe('tabs store replacement', (): void => {
         path: '/chat/session-a',
         title: '会话 A',
         cacheKey: 'chat:session-a',
+        recentKey: 'chat:session-a',
         icon: 'lucide:message-circle'
       }
     ]);

@@ -18,4 +18,8 @@ describe('WelcomePage search recent loading', (): void => {
     expect(welcomePageSource).not.toContain("defineAsyncComponent(() => import('@/components/BCommandPanel/index.vue'))");
     expect(welcomePageSource).not.toContain("defineAsyncComponent(() => import('@/components/BRecent/index.vue'))");
   });
+
+  it('uses the recent record stable key for mixed record rendering', (): void => {
+    expect(welcomePageSource).toContain('v-for="record in topRecentRecords" :key="createRecentKey(record)"');
+  });
 });

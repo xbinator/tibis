@@ -107,6 +107,9 @@ describe('useOpenFile', (): void => {
     expect(createAndOpenMock).toHaveBeenCalledWith({
       type: 'file',
       id: expect.any(String),
+      url: expect.stringMatching(/^\/editor\//),
+      title: 'Untitled.md',
+      description: '未保存文件',
       path: null,
       name: 'Untitled',
       ext: 'md',

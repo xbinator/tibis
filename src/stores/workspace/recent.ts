@@ -1,19 +1,28 @@
 /**
  * @file recent.ts
- * @description 管理最近记录列表（文件 + WebView 网页），并提供统一的打开文件 usecase。
+ * @description 管理最近记录列表（文件 + Widget + WebView + 聊天），并提供统一的打开文件 usecase。
  */
 
 import { defineStore } from 'pinia';
 import { customAlphabet } from 'nanoid';
 import { native } from '@/shared/platform';
 import type { ChatRecentRecord, StoredDocumentRecord, WebviewRecord, RecentRecord, WebviewRecordOptions } from '@/shared/storage';
-import { isDocumentRecord, recentFilesStorage, sortRecentFiles } from '@/shared/storage';
+import {
+  createDocumentDescription,
+  createDocumentTitle,
+  createRecentKey,
+  createRecentUrl,
+  isChatRecord,
+  isDocumentRecord,
+  recentFilesStorage,
+  sortRecentFiles
+} from '@/shared/storage';
 
 /**
  * recent store 的状态定义。
  */
 export interface RecentState {
-  /** 最近记录列表（文件 + webview），始终来自 storage 派生排序结果。 */
+  /** 最近记录列表（文件 + Widget + WebView + 聊天），始终来自 storage 派生排序结果。 */
   recentRecords: RecentRecord[] | null;
 }
 
@@ -78,7 +87,8 @@ export const useRecentStore = defineStore('recent', {
      */
     patchCache(updatedFile: RecentRecord): void {
       if (this.recentRecords === null) return;
-      const filtered = this.recentRecords.filter((f) => f.id !== updatedFile.id);
+      const updatedKey = createRecentKey(updatedFile);
+      const filtered = this.recentRecords.filter((f) => createRecentKey(f) !== updatedKey);
       filtered.unshift(updatedFile);
       this.recentRecords = sortRecentFiles(filtered);
     },
@@ -90,7 +100,12 @@ export const useRecentStore = defineStore('recent', {
     removeCacheEntries(ids: string[]): void {
       if (this.recentRecords === null) return;
       const idSet = new Set(ids);
-      this.recentRecords = this.recentRecords.filter((f) => !idSet.has(f.id));
+      this.recentRecords = this.recentRecords.filter((record) => {
+        if (idSet.has(createRecentKey(record))) return false;
+
+        // 裸 id 仅兼容历史文件/WebView 删除，聊天记录必须通过 chat:{id} 稳定键删除。
+        return isChatRecord(record) || !idSet.has(record.id);
+      });
     },
 
     /**
@@ -183,9 +198,13 @@ export const useRecentStore = defineStore('recent', {
 
         const file = await native.readFile(path);
         const now = Date.now();
+        const fileId = createFileId();
         const createdFile: StoredDocumentRecord = {
           type: 'file',
-          id: createFileId(),
+          id: fileId,
+          url: createRecentUrl('file', fileId),
+          title: createDocumentTitle(file.name, file.ext),
+          description: createDocumentDescription(path),
           path,
           content: file.content,
           savedContent: file.content,
@@ -241,9 +260,13 @@ export const useRecentStore = defineStore('recent', {
           return refreshedFile;
         }
 
+        const fileId = createFileId();
         const createdFile: StoredDocumentRecord = {
           type: 'file',
-          id: createFileId(),
+          id: fileId,
+          url: createRecentUrl('file', fileId),
+          title: createDocumentTitle(diskFile.name, diskFile.ext),
+          description: createDocumentDescription(path),
           path,
           content: diskFile.content,
           savedContent: diskFile.content,

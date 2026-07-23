@@ -75,6 +75,10 @@ const resolvedIcon = computed<string>(() => {
     return props.icon;
   }
 
+  if (props.record?.icon) {
+    return props.record.icon;
+  }
+
   if (props.record?.type === 'webview') {
     return WEB_RECORD_ICON;
   }

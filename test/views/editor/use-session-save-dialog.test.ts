@@ -141,6 +141,9 @@ function createStoredFile(): StoredFile {
   return {
     type: 'file',
     id: 'file-1',
+    url: '/editor/file-1',
+    title: 'note.md',
+    description: FILE_PATH,
     path: FILE_PATH,
     name: 'note',
     ext: 'md',
@@ -157,6 +160,9 @@ function createStoredWidget(): StoredWidget {
   return {
     type: 'widget',
     id: 'file-1',
+    url: '/widget/file-1',
+    title: 'widget.json',
+    description: '/workspace/widget.json',
     path: '/workspace/widget.json',
     name: 'widget',
     ext: 'json',

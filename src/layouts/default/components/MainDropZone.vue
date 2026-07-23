@@ -18,7 +18,7 @@ import { customAlphabet } from 'nanoid';
 import { OPEN_FILE_EXTENSIONS } from '@/constants/extensions';
 import { resolveDroppedFilePath, useFileDrop } from '@/hooks/useFileDrop';
 import { useOpenFile } from '@/hooks/useOpenFile';
-import type { StoredFile } from '@/shared/storage';
+import { createDocumentDescription, createDocumentTitle, createRecentUrl, type StoredFile } from '@/shared/storage';
 import { useRecentStore } from '@/stores/workspace/recent';
 
 const nanoid = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz_', 8);
@@ -35,8 +35,20 @@ const dropZoneRef = ref<HTMLElement>();
 async function createDroppedDraft(file: File, ext: string): Promise<StoredFile> {
   const content = await file.text();
   const name = file.name.split('.').slice(0, -1).join('.') || file.name;
+  const fileId = nanoid();
 
-  return recentStore.createAndOpen({ type: 'file', id: nanoid(), path: null, name, ext, content, savedContent: content });
+  return recentStore.createAndOpen({
+    type: 'file',
+    id: fileId,
+    url: createRecentUrl('file', fileId),
+    title: createDocumentTitle(name, ext),
+    description: createDocumentDescription(null),
+    path: null,
+    name,
+    ext,
+    content,
+    savedContent: content
+  });
 }
 
 /**

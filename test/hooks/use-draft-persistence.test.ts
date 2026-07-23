@@ -49,6 +49,9 @@ function onBuildRecord(context: FileRecordContext<string>): StoredDocumentRecord
   return {
     ...context.fileState,
     type: 'widget',
+    url: `/widget/${context.fileState.id}`,
+    title: `${context.fileState.name}.${context.fileState.ext}`,
+    description: context.fileState.path || '未保存文件',
     savedContent: context.savedContent,
     modifiedAt: context.modifiedAt
   };

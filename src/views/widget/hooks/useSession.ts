@@ -28,7 +28,14 @@ import type {
 } from '@/hooks/useFileController/types';
 import { native } from '@/shared/platform';
 import type { FileState, ReadFileResult } from '@/shared/platform/native/types';
-import type { StoredDocumentRecord, StoredWidget } from '@/shared/storage/files/types';
+import {
+  createDocumentDescription,
+  createDocumentTitle,
+  createRecentKey,
+  createRecentUrl,
+  type StoredDocumentRecord,
+  type StoredWidget
+} from '@/shared/storage';
 import { useWidgetStore } from '@/stores/ai/widget';
 import { useRecentStore } from '@/stores/workspace/recent';
 import { useTabsStore } from '@/stores/workspace/tabs';
@@ -285,7 +292,15 @@ export function useSession(): WidgetSessionReturn {
    * @returns Widget 最近文件记录
    */
   function onBuildRecord(context: FileRecordContext<WidgetData>): StoredWidget {
-    return { ...context.fileState, type: 'widget', savedContent: context.savedContent, modifiedAt: context.modifiedAt };
+    return {
+      ...context.fileState,
+      type: 'widget',
+      url: createRecentUrl('widget', context.fileState.id),
+      title: createDocumentTitle(context.fileState.name, context.fileState.ext),
+      description: createDocumentDescription(context.fileState.path),
+      savedContent: context.savedContent,
+      modifiedAt: context.modifiedAt
+    };
   }
 
   /**
@@ -388,7 +403,13 @@ export function useSession(): WidgetSessionReturn {
   function onSyncWidgetTab(): void {
     if (!fileId.value) return;
 
-    tabsStore.addTab({ id: fileId.value, path: routePath.value, title: currentTitle.value, cacheKey: `widget:${fileId.value}` });
+    tabsStore.addTab({
+      id: fileId.value,
+      path: routePath.value,
+      title: currentTitle.value,
+      cacheKey: `widget:${fileId.value}`,
+      recentKey: createRecentKey({ type: 'widget', id: fileId.value })
+    });
   }
 
   watch([fileId, currentTitle], onSyncWidgetTab, { immediate: true });

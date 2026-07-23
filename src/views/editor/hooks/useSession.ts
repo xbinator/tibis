@@ -30,7 +30,7 @@ import type {
 import { resolveRouteTabInfo } from '@/router/cache';
 import { native } from '@/shared/platform';
 import type { FileState, ReadFileResult } from '@/shared/platform/native/types';
-import type { StoredDocumentRecord, StoredFile } from '@/shared/storage';
+import { createDocumentDescription, createDocumentTitle, createRecentKey, createRecentUrl, type StoredDocumentRecord, type StoredFile } from '@/shared/storage';
 import { useRecentStore } from '@/stores/workspace/recent';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import { asyncTo } from '@/utils/asyncTo';
@@ -226,6 +226,9 @@ export function useSession(fileId: Ref<string>): EditorSessionResult {
     return {
       ...context.fileState,
       type: 'file',
+      url: createRecentUrl('file', context.fileState.id),
+      title: createDocumentTitle(context.fileState.name, context.fileState.ext),
+      description: createDocumentDescription(context.fileState.path),
       savedContent: context.savedContent,
       modifiedAt: context.modifiedAt
     };
@@ -373,7 +376,13 @@ export function useSession(fileId: Ref<string>): EditorSessionResult {
    */
   function onUpdateTab(): void {
     if (!fileId.value) return;
-    tabsStore.addTab({ id: fileId.value, path: sessionPath.value, title: currentTitle.value, cacheKey: sessionCacheKey.value });
+    tabsStore.addTab({
+      id: fileId.value,
+      path: sessionPath.value,
+      title: currentTitle.value,
+      cacheKey: sessionCacheKey.value,
+      recentKey: createRecentKey({ type: 'file', id: fileId.value })
+    });
   }
 
   watch([fileId, () => fileState.value.name, () => fileState.value.ext], onUpdateTab, { immediate: true });
@@ -385,7 +394,17 @@ export function useSession(fileId: Ref<string>): EditorSessionResult {
     const nextId = nanoid();
     const nextName = fileState.value.name ? `${fileState.value.name}-副本` : '';
     const [addError] = await asyncTo(
-      recentStore.addFile({ ...fileState.value, type: 'file' as const, id: nextId, name: nextName, path: null, savedContent: fileState.value.content })
+      recentStore.addFile({
+        ...fileState.value,
+        type: 'file' as const,
+        id: nextId,
+        url: createRecentUrl('file', nextId),
+        title: createDocumentTitle(nextName, fileState.value.ext),
+        description: createDocumentDescription(null),
+        name: nextName,
+        path: null,
+        savedContent: fileState.value.content
+      })
     );
     if (addError) return;
     await asyncTo(router.push({ name: 'editor', params: { id: nextId } }));

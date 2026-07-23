@@ -256,6 +256,9 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
             ? {
                 id: 'draft-1',
                 type: 'file',
+                url: '/editor/draft-1',
+                title: 'note.md',
+                description: '未保存文件',
                 name: 'note',
                 ext: 'md',
                 path: null,

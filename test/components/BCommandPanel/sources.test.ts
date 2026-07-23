@@ -9,14 +9,12 @@ import { createJumpSource } from '@/components/BCommandPanel/sources/jump';
 import { createModelSource } from '@/components/BCommandPanel/sources/model';
 import { createRecentSource } from '@/components/BCommandPanel/sources/recent';
 import type { CommandPanelActionItem } from '@/components/BCommandPanel/types';
-import type { RecentRecord, StoredDocumentRecord, StoredFile } from '@/shared/storage';
+import type { RecentRecord, StoredFile } from '@/shared/storage';
 
-const openFileMock = vi.fn<(_record: StoredDocumentRecord) => Promise<StoredDocumentRecord | null>>();
 const openFileByPathMock = vi.fn<(_path: string) => Promise<StoredFile | null>>();
 const openWebviewMock = vi.fn<(_url: URL) => void>();
-const openChatMock = vi.fn<(_sessionId: string, _recordId: string) => Promise<void>>();
-const removeFileMock = vi.fn<(_id: string) => Promise<void>>();
-const removeTabMock = vi.fn<(_id: string) => void>();
+const openRecentMock = vi.fn<(_record: RecentRecord) => Promise<void>>();
+const removeRecentMock = vi.fn<(_record: RecentRecord) => Promise<void>>();
 const getPathStatusMock = vi.fn<(_path: string) => Promise<{ exists: boolean; isFile: boolean }>>();
 const loadProvidersMock = vi.fn<() => Promise<void>>();
 const loadChatModelMock = vi.fn<() => Promise<void>>();
@@ -35,6 +33,9 @@ function fileRecord(overrides: Partial<Extract<RecentRecord, { type: 'file' }>> 
     content: '',
     name: 'example',
     ext: 'md',
+    url: '/editor/file-1',
+    title: 'example.md',
+    description: '/tmp/example.md',
     ...overrides
   };
 }
@@ -47,9 +48,10 @@ function fileRecord(overrides: Partial<Extract<RecentRecord, { type: 'file' }>> 
 function chatRecord(overrides: Partial<Extract<RecentRecord, { type: 'chat' }>> = {}): Extract<RecentRecord, { type: 'chat' }> {
   return {
     type: 'chat',
-    id: 'chat:session-a',
-    sessionId: 'session-a',
+    id: 'session-a',
+    url: '/chat/session-a',
     title: '会话 A',
+    description: '聊天会话',
     createdAt: 1,
     openedAt: 2,
     ...overrides
@@ -58,12 +60,10 @@ function chatRecord(overrides: Partial<Extract<RecentRecord, { type: 'chat' }>> 
 
 describe('BCommandPanel sources', (): void => {
   beforeEach((): void => {
-    openFileMock.mockReset();
     openFileByPathMock.mockReset();
     openWebviewMock.mockReset();
-    openChatMock.mockReset();
-    removeFileMock.mockReset();
-    removeTabMock.mockReset();
+    openRecentMock.mockReset();
+    removeRecentMock.mockReset();
     getPathStatusMock.mockReset();
     loadProvidersMock.mockResolvedValue(undefined);
     loadChatModelMock.mockResolvedValue(undefined);
@@ -100,12 +100,10 @@ describe('BCommandPanel sources', (): void => {
     const source = createRecentSource({
       getRecords: () => [fileRecord()],
       ensureLoaded: vi.fn(),
-      openFile: openFileMock,
+      openRecent: openRecentMock,
       openFileByPath: openFileByPathMock,
       openWebview: openWebviewMock,
-      openChat: openChatMock,
-      removeRecent: removeFileMock,
-      removeTab: removeTabMock,
+      removeRecent: removeRecentMock,
       getPathStatus: getPathStatusMock,
       pathDebounceMs: 0,
       renderRecentIcon: () => h('span', { class: 'recent-icon-stub' })
@@ -120,21 +118,21 @@ describe('BCommandPanel sources', (): void => {
     const recentGroups = await source.search('');
     const fileItem = recentGroups[0]?.items.find((item) => item.kind === 'file') as CommandPanelActionItem | undefined;
     expect(fileItem?.removable).toBe(true);
+    await fileItem?.onSelect();
+    expect(openRecentMock).toHaveBeenCalledWith(fileRecord());
+
     await fileItem?.onRemove?.();
-    expect(removeFileMock).toHaveBeenCalledWith('file-1');
-    expect(removeTabMock).toHaveBeenCalledWith('file-1');
+    expect(removeRecentMock).toHaveBeenCalledWith(fileRecord());
   });
 
   it('does not match file records by hidden content', async (): Promise<void> => {
     const source = createRecentSource({
       getRecords: () => [fileRecord({ name: 'visible-title', path: '/tmp/visible-title.md', content: 'hidden-needle' })],
       ensureLoaded: vi.fn(),
-      openFile: openFileMock,
+      openRecent: openRecentMock,
       openFileByPath: openFileByPathMock,
       openWebview: openWebviewMock,
-      openChat: openChatMock,
-      removeRecent: removeFileMock,
-      removeTab: removeTabMock,
+      removeRecent: removeRecentMock,
       getPathStatus: getPathStatusMock,
       pathDebounceMs: 0,
       renderRecentIcon: () => h('span', { class: 'recent-icon-stub' })
@@ -149,12 +147,10 @@ describe('BCommandPanel sources', (): void => {
     const source = createRecentSource({
       getRecords: () => [chatRecord()],
       ensureLoaded: vi.fn(),
-      openFile: openFileMock,
+      openRecent: openRecentMock,
       openFileByPath: openFileByPathMock,
       openWebview: openWebviewMock,
-      openChat: openChatMock,
-      removeRecent: removeFileMock,
-      removeTab: removeTabMock,
+      removeRecent: removeRecentMock,
       getPathStatus: getPathStatusMock,
       pathDebounceMs: 0,
       renderRecentIcon: () => h('span', { class: 'recent-icon-stub' })
@@ -166,11 +162,10 @@ describe('BCommandPanel sources', (): void => {
     expect(chatItem).toMatchObject({ kind: 'chat', title: '会话 A', description: '聊天会话', removable: true });
 
     await chatItem?.onSelect();
-    expect(openChatMock).toHaveBeenCalledWith('session-a', 'chat:session-a');
+    expect(openRecentMock).toHaveBeenCalledWith(chatRecord());
 
     await chatItem?.onRemove?.();
-    expect(removeFileMock).toHaveBeenCalledWith('chat:session-a');
-    expect(removeTabMock).not.toHaveBeenCalled();
+    expect(removeRecentMock).toHaveBeenCalledWith(chatRecord());
   });
 
   it('creates model groups and marks current chat model active', async (): Promise<void> => {

@@ -157,6 +157,35 @@ describe('MainDropZone', () => {
     expect(openFileByPathMock).toHaveBeenCalledWith('/tmp/dropped.md');
   });
 
+  it('creates dropped drafts with unified recent record fields', async (): Promise<void> => {
+    getPathForFileMock.mockReturnValue(null);
+    createAndOpenMock.mockImplementation(async (file: unknown): Promise<unknown> => file);
+
+    const wrapper = shallowMount(MainDropZone, {
+      slots: {
+        default: '<div>content</div>'
+      }
+    });
+
+    await wrapper.element.dispatchEvent(createDropEvent(new File(['hello'], 'dropped.md', { type: 'text/markdown' })));
+    await flushPromises();
+
+    expect(createAndOpenMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'file',
+        url: expect.stringMatching(/^\/editor\/[0-9a-z_]+$/),
+        title: 'dropped.md',
+        description: '未保存文件',
+        path: null,
+        name: 'dropped',
+        ext: 'md',
+        content: 'hello',
+        savedContent: 'hello'
+      })
+    );
+    expect(openFileMock).toHaveBeenCalledWith(expect.objectContaining({ title: 'dropped.md' }));
+  });
+
   it('ignores dropped tibis files because widget sessions use json records', async (): Promise<void> => {
     getPathForFileMock.mockReturnValue(null);
 

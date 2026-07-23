@@ -140,6 +140,9 @@ function createStoredWidget(content: string): StoredWidget {
   return {
     type: 'widget',
     id: 'widget-weather',
+    url: '/widget/widget-weather',
+    title: 'widget.json',
+    description: '/old/widget.json',
     path: '/old/widget.json',
     name: 'widget',
     ext: 'json',

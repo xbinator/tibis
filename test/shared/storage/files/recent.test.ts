@@ -3,7 +3,7 @@
  * @description 验证最近记录存储对历史文件数据的迁移兼容行为。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { recentFilesStorage } from '@/shared/storage/files/recent';
+import { createRecentKey, recentFilesStorage } from '@/shared/storage/files/recent';
 import { hashString } from '@/shared/utils/hash';
 
 /** Electron Store 测试替身。 */
@@ -42,6 +42,9 @@ describe('recentFilesStorage.getAllRecentFiles', () => {
         content: '',
         name: 'Legacy',
         ext: 'md',
+        url: '/editor/legacy-file',
+        title: 'Legacy.md',
+        description: '/Users/demo/Documents/Legacy.md',
         openedAt: 100
       }
     ]);
@@ -70,9 +73,12 @@ describe('recentFilesStorage.getAllRecentFiles', () => {
       content: '{"name":"天气"}',
       name: 'weather',
       ext: 'json',
+      url: '/widget/widget-weather',
+      title: 'weather.json',
+      description: '/Users/demo/.tibis/widgets/weather/widget.json',
       openedAt: 200
     });
-    expect(mockElectronAPI.storeSet).not.toHaveBeenCalled();
+    expect(mockElectronAPI.storeSet).toHaveBeenCalledWith('recent_files', records);
   });
 
   it('migrates unknown record types to files', async (): Promise<void> => {
@@ -94,7 +100,10 @@ describe('recentFilesStorage.getAllRecentFiles', () => {
       path: '/Users/demo/Legacy.md',
       content: '# Legacy',
       name: 'Legacy',
-      ext: 'md'
+      ext: 'md',
+      url: '/editor/legacy-record',
+      title: 'Legacy.md',
+      description: '/Users/demo/Legacy.md'
     });
     expect(mockElectronAPI.storeSet).toHaveBeenCalledWith('recent_files', records);
   });
@@ -110,9 +119,10 @@ describe('recentFilesStorage.getAllRecentFiles', () => {
       },
       {
         type: 'chat',
-        id: 'chat:session-a',
-        sessionId: 'session-a',
+        id: 'session-a',
+        url: '/chat/session-a',
         title: '会话 A',
+        description: '聊天会话',
         createdAt: 3,
         openedAt: 4
       }
@@ -123,15 +133,52 @@ describe('recentFilesStorage.getAllRecentFiles', () => {
     expect(records).toEqual([
       {
         type: 'chat',
-        id: 'chat:session-a',
-        sessionId: 'session-a',
+        id: 'session-a',
+        url: '/chat/session-a',
         title: '会话 A',
+        description: '聊天会话',
         createdAt: 3,
         openedAt: 4
       }
     ]);
     expect(mockElectronAPI.storeSet).toHaveBeenCalledWith('recent_files', records);
   });
+
+  it('drops invalid webview records that cannot resolve an opening url', async (): Promise<void> => {
+    mockElectronAPI.storeGet.mockResolvedValue([
+      {
+        type: 'webview',
+        id: 'web-empty',
+        title: '空地址',
+        createdAt: 1,
+        openedAt: 2
+      },
+      {
+        type: 'webview',
+        id: 'web-valid',
+        url: 'https://example.com',
+        title: 'Example Domain',
+        createdAt: 3,
+        openedAt: 4
+      }
+    ]);
+
+    const records = await recentFilesStorage.getAllRecentFiles();
+
+    expect(records).toEqual([
+      {
+        type: 'webview',
+        id: 'web-valid',
+        url: 'https://example.com',
+        title: 'Example Domain',
+        description: 'https://example.com',
+        createdAt: 3,
+        openedAt: 4
+      }
+    ]);
+    expect(mockElectronAPI.storeSet).toHaveBeenCalledWith('recent_files', records);
+  });
+
 });
 
 describe('recentFilesStorage.addWebviewRecord', () => {
@@ -150,11 +197,20 @@ describe('recentFilesStorage.addWebviewRecord', () => {
 
     expect(record).toMatchObject({
       type: 'webview',
+      id: hashString('https://example.com'),
       url: 'https://example.com',
       title: 'Example Domain',
+      description: 'https://example.com',
       favicon: 'https://example.com/favicon.ico'
     });
     expect(mockElectronAPI.storeSet).toHaveBeenCalledWith('recent_files', [record]);
+  });
+
+  it('rejects blank webview urls without writing an invalid record', async (): Promise<void> => {
+    mockElectronAPI.storeGet.mockResolvedValue([]);
+
+    await expect(recentFilesStorage.addWebviewRecord('   ', 'Empty URL')).rejects.toThrow('Webview url is required');
+    expect(mockElectronAPI.storeSet).not.toHaveBeenCalled();
   });
 
   it('preserves an existing favicon when a later update has no favicon', async (): Promise<void> => {
@@ -190,10 +246,12 @@ describe('recentFilesStorage.addChatRecord', () => {
 
     expect(record).toMatchObject({
       type: 'chat',
-      id: 'chat:session-a',
-      sessionId: 'session-a',
-      title: '会话 A'
+      id: 'session-a',
+      url: '/chat/session-a',
+      title: '会话 A',
+      description: '聊天会话'
     });
+    expect(createRecentKey(record)).toBe('chat:session-a');
     expect(mockElectronAPI.storeSet).toHaveBeenCalledWith('recent_files', [record]);
   });
 
@@ -213,9 +271,10 @@ describe('recentFilesStorage.addChatRecord', () => {
 
     expect(record).toMatchObject({
       type: 'chat',
-      id: 'chat:session-a',
-      sessionId: 'session-a',
+      id: 'session-a',
+      url: '/chat/session-a',
       title: '新标题',
+      description: '聊天会话',
       createdAt: 1
     });
     expect(record.openedAt).toBeGreaterThan(2);
@@ -230,6 +289,9 @@ describe('recentFilesStorage.addChatRecord', () => {
       content: '',
       name: 'A',
       ext: 'md',
+      url: '/editor/file-a',
+      title: 'A.md',
+      description: '/Users/demo/A.md',
       openedAt: 100
     };
     mockElectronAPI.storeGet.mockResolvedValue([
@@ -280,9 +342,10 @@ describe('recentFilesStorage.updateChatRecordTitle', () => {
 
     expect(record).toMatchObject({
       type: 'chat',
-      id: 'chat:session-a',
-      sessionId: 'session-a',
+      id: 'session-a',
+      url: '/chat/session-a',
       title: '新标题',
+      description: '聊天会话',
       createdAt: 1,
       openedAt: 2
     });
@@ -296,5 +359,73 @@ describe('recentFilesStorage.updateChatRecordTitle', () => {
 
     expect(record).toBeNull();
     expect(mockElectronAPI.storeSet).not.toHaveBeenCalled();
+  });
+});
+
+describe('recentFilesStorage.removeRecentFile', () => {
+  beforeEach((): void => {
+    mockElectronAPI.storeGet.mockReset();
+    mockElectronAPI.storeSet.mockReset();
+    mockElectronAPI.storeSet.mockResolvedValue(undefined);
+  });
+
+  it('does not remove chat records that only match a bare file id', async (): Promise<void> => {
+    const fileRecord = {
+      type: 'file',
+      id: 'shared-id',
+      path: null,
+      content: '',
+      name: 'Untitled',
+      ext: 'md',
+      url: '/editor/shared-id',
+      title: 'Untitled.md',
+      description: '未保存文件',
+      createdAt: 1,
+      openedAt: 2
+    };
+    const chatRecord = {
+      type: 'chat',
+      id: 'shared-id',
+      url: '/chat/shared-id',
+      title: '同 ID 会话',
+      description: '聊天会话',
+      createdAt: 3,
+      openedAt: 4
+    };
+    mockElectronAPI.storeGet.mockResolvedValue([fileRecord, chatRecord]);
+
+    await recentFilesStorage.removeRecentFile('shared-id');
+
+    expect(mockElectronAPI.storeSet).toHaveBeenLastCalledWith('recent_files', [chatRecord]);
+  });
+
+  it('removes chat records by their stable recent key', async (): Promise<void> => {
+    const fileRecord = {
+      type: 'file',
+      id: 'shared-id',
+      path: null,
+      content: '',
+      name: 'Untitled',
+      ext: 'md',
+      url: '/editor/shared-id',
+      title: 'Untitled.md',
+      description: '未保存文件',
+      createdAt: 1,
+      openedAt: 2
+    };
+    const chatRecord = {
+      type: 'chat',
+      id: 'shared-id',
+      url: '/chat/shared-id',
+      title: '同 ID 会话',
+      description: '聊天会话',
+      createdAt: 3,
+      openedAt: 4
+    };
+    mockElectronAPI.storeGet.mockResolvedValue([fileRecord, chatRecord]);
+
+    await recentFilesStorage.removeRecentFile('chat:shared-id');
+
+    expect(mockElectronAPI.storeSet).toHaveBeenLastCalledWith('recent_files', [expect.objectContaining(fileRecord)]);
   });
 });

@@ -5,10 +5,16 @@
 import type { CommandPanelActionItem, CommandPanelGroup, CommandPanelIconContext, CommandPanelSource } from '../types';
 import type { VNodeChild } from 'vue';
 import { debounce } from 'lodash-es';
-import type { RecentRecord, StoredDocumentRecord } from '@/shared/storage';
-import { isChatRecord, isDocumentRecord } from '@/shared/storage';
+import type { RecentRecord } from '@/shared/storage';
+import {
+  createRecentKey,
+  createRecentSearchText,
+  getRecentDescriptionClass,
+  isRecentDocumentPath,
+  resolveRecentDescription,
+  resolveRecentTitle
+} from '@/shared/storage';
 import { WEB_RECORD_ICON } from '@/utils/file/icons';
-import { resolveFileTitle } from '@/utils/file/title';
 
 /**
  * 路径状态。
@@ -45,18 +51,14 @@ export interface RecentSourceDeps {
   getRecords: () => RecentRecord[];
   /** 确保最近记录已加载。 */
   ensureLoaded: () => Promise<void> | void;
-  /** 打开文件记录。 */
-  openFile: (record: StoredDocumentRecord) => RecentSourceActionResult;
+  /** 打开最近记录。 */
+  openRecent: (record: RecentRecord) => RecentSourceActionResult;
   /** 按绝对路径打开文件。 */
   openFileByPath: (path: string) => RecentSourceActionResult;
   /** 打开 WebView URL。 */
   openWebview: (url: URL) => void;
-  /** 打开聊天会话页。 */
-  openChat: (sessionId: string, recordId: string) => RecentSourceActionResult;
   /** 删除最近记录。 */
-  removeRecent: (id: string) => Promise<void>;
-  /** 删除关联 tab。 */
-  removeTab: (id: string) => void;
+  removeRecent: (record: RecentRecord) => Promise<void>;
   /** 获取路径状态。 */
   getPathStatus: (path: string) => Promise<PathStatus>;
   /** 路径状态检查 debounce 时间。 */
@@ -221,18 +223,7 @@ async function createAbsolutePathItem(
  * @returns 是否匹配
  */
 function isRecordMatched(record: RecentRecord, re: RegExp): boolean {
-  if (isDocumentRecord(record)) {
-    const searchable = [resolveFileTitle(record), record.name, record.ext, record.path].filter(Boolean).join('\0');
-    return re.test(searchable);
-  }
-
-  if (isChatRecord(record)) {
-    const searchable = [record.title, record.sessionId].filter(Boolean).join('\0');
-    return re.test(searchable);
-  }
-
-  const searchable = [record.url, record.title].filter(Boolean).join('\0');
-  return re.test(searchable);
+  return re.test(createRecentSearchText(record));
 }
 
 /**
@@ -242,52 +233,18 @@ function isRecordMatched(record: RecentRecord, re: RegExp): boolean {
  * @returns 命令面板动作项
  */
 function createRecentRecordItem(record: RecentRecord, deps: RecentSourceDeps): CommandPanelActionItem {
-  if (record.type === 'webview') {
-    return {
-      key: record.id,
-      kind: 'webview',
-      title: record.title,
-      description: record.url,
-      removable: true,
-      onSelect: (): void => deps.openWebview(new URL(record.url)),
-      onRemove: async (): Promise<void> => deps.removeRecent(record.id),
-      renderIcon: (context) => deps.renderRecentIcon({ record }, context)
-    };
-  }
-
-  if (isChatRecord(record)) {
-    return {
-      key: record.id,
-      kind: 'chat',
-      title: record.title,
-      description: '聊天会话',
-      removable: true,
-      onSelect: async (): Promise<void> => {
-        await deps.openChat(record.sessionId, record.id);
-      },
-      onRemove: async (): Promise<void> => deps.removeRecent(record.id),
-      renderIcon: (context) => deps.renderRecentIcon({ record }, context)
-    };
-  }
-
-  if (!isDocumentRecord(record)) {
-    throw new Error('Unsupported recent record type');
-  }
-
-  const isUnsaved = !record.path;
   return {
-    key: record.id,
-    kind: 'file',
-    title: resolveFileTitle(record),
-    description: isUnsaved ? '未保存文件' : record.path ?? '',
-    descriptionClass: isUnsaved ? 'is-unsaved' : '',
+    key: createRecentKey(record),
+    kind: record.type,
+    title: resolveRecentTitle(record),
+    description: resolveRecentDescription(record),
+    descriptionClass: getRecentDescriptionClass(record),
     removable: true,
     onSelect: async (): Promise<void> => {
-      await deps.openFile(record);
+      await deps.openRecent(record);
     },
     onRemove: async (): Promise<void> => {
-      await deps.removeRecent(record.id);
-      deps.removeTab(record.id);
+      await deps.removeRecent(record);
     },
     renderIcon: (context) => deps.renderRecentIcon({ record }, context)
   };
@@ -321,7 +278,7 @@ export function createRecentSource(deps: RecentSourceDeps): CommandPanelSource {
       const filteredRecords = query ? records.filter((record) => isRecordMatched(record, new RegExp(escapeRegExp(query), 'i'))) : records;
 
       for (const record of filteredRecords) {
-        if (pathItem && isDocumentRecord(record) && record.path === pathItem.description) {
+        if (pathItem && isRecentDocumentPath(record, pathItem.description)) {
           continue;
         }
         items.push(createRecentRecordItem(record, deps));

@@ -27,7 +27,7 @@
       <div v-if="topRecentRecords.length" class="recent-files-section">
         <div class="recent-files-title">最近记录</div>
         <div class="recent-files-list">
-          <div v-for="record in topRecentRecords" :key="record.id" class="recent-file-item" @click="handleOpenRecentRecord(record)">
+          <div v-for="record in topRecentRecords" :key="createRecentKey(record)" class="recent-file-item" @click="handleOpenRecentRecord(record)">
             <div class="recent-file-icon">
               <BRecentIcon :record="record" :size="14" />
             </div>
@@ -54,22 +54,19 @@
 import { computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
-import { useNavigate } from '@/hooks/useNavigate';
 import { useOpenFile } from '@/hooks/useOpenFile';
+import { useRecentRecordActions } from '@/hooks/useRecentRecordActions';
 import { createChatPath } from '@/router/routes/helpers/chatRouteTab';
-import { isChatRecord, isDocumentRecord, type ChatRecentRecord, type RecentRecord } from '@/shared/storage';
-import { useChatSessionStore } from '@/stores/chat/session';
+import { createRecentKey, resolveRecentDescription, resolveRecentTitle, type RecentRecord } from '@/shared/storage';
 import { useCommandPanelStore } from '@/stores/ui/commandPanel';
 import { useRecentStore } from '@/stores/workspace/recent';
 import { asyncTo } from '@/utils/asyncTo';
-import { resolveFileTitle } from '@/utils/file/title';
 
 const router = useRouter();
-const { openWebview } = useNavigate();
-const chatStore = useChatSessionStore();
 const commandPanelStore = useCommandPanelStore();
 const recentStore = useRecentStore();
-const { createNewFile, openFileById, openNativeFile } = useOpenFile();
+const { createNewFile, openNativeFile } = useOpenFile();
+const { openRecentRecord } = useRecentRecordActions();
 
 const topRecentRecords = computed(() => recentStore.topRecentRecords);
 
@@ -97,74 +94,11 @@ async function handleOpenChat(): Promise<void> {
 }
 
 /**
- * 打开持久化聊天会话页。
- * @param record - 聊天最近记录
- */
-async function handleOpenChatSession(record: ChatRecentRecord): Promise<void> {
-  const [loadError, session] = await asyncTo(chatStore.loadSessionById(record.sessionId));
-  if (loadError) return;
-
-  if (!session) {
-    await asyncTo(recentStore.removeFile(record.id));
-    return;
-  }
-
-  await asyncTo(router.push(createChatPath(record.sessionId)));
-}
-
-/**
- * 打开最近文件并更新 openedAt。
- * @param id - 文件 ID
- */
-async function handleOpenRecentFile(id: string): Promise<void> {
-  await openFileById(id);
-}
-
-/**
- * 在 webview 中打开 URL。
- * @param url - 目标 URL
- */
-function handleOpenWebview(url: string): void {
-  openWebview(new URL(url));
-}
-
-/**
  * 打开最近记录。
  * @param record - 最近记录
  */
 function handleOpenRecentRecord(record: RecentRecord): void {
-  if (isDocumentRecord(record)) {
-    asyncTo(handleOpenRecentFile(record.id));
-    return;
-  }
-
-  if (isChatRecord(record)) {
-    asyncTo(handleOpenChatSession(record));
-    return;
-  }
-
-  handleOpenWebview(record.url);
-}
-
-/**
- * 解析最近记录主标题。
- * @param record - 最近记录
- * @returns 展示标题
- */
-function resolveRecentTitle(record: RecentRecord): string {
-  return isDocumentRecord(record) ? resolveFileTitle(record) : record.title;
-}
-
-/**
- * 解析最近记录描述。
- * @param record - 最近记录
- * @returns 描述文案
- */
-function resolveRecentDescription(record: RecentRecord): string {
-  if (isDocumentRecord(record)) return record.path || '未保存文件';
-  if (isChatRecord(record)) return '聊天会话';
-
-  return record.url;
+  asyncTo(openRecentRecord(record));
 }
 
 /**

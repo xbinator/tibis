@@ -36,6 +36,7 @@ import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import type { RecentRecord, WebviewRecord } from '@/shared/storage';
+import { createRecentKey } from '@/shared/storage';
 import { useRecentStore } from '@/stores/workspace/recent';
 import type { Tab, TabStatus } from '@/stores/workspace/tabs';
 import { useTabsStore } from '@/stores/workspace/tabs';
@@ -97,8 +98,10 @@ const statusVisual = computed<StatusVisual | undefined>(() => (props.status ? ST
 
 // --------------- 图标解析 ---------------
 
-/** 最近记录 ID 到记录的索引。 */
-const recentRecordsById = computed<Map<string, RecentRecord>>(() => new Map((recentStore.recentRecords ?? []).map((record) => [record.id, record])));
+/** 最近记录稳定键到记录的索引。 */
+const recentRecordsByKey = computed<Map<string, RecentRecord>>(
+  () => new Map((recentStore.recentRecords ?? []).map((record) => [createRecentKey(record), record]))
+);
 
 /** WebView URL 到记录的索引。 */
 const webviewRecordsByUrl = computed<Map<string, WebviewRecord>>(() => {
@@ -150,11 +153,14 @@ function resolveWebviewUrlFromTabPath(path: string): string {
  * @returns 匹配的最近记录，未命中时返回 undefined
  */
 function resolveTabRecentRecord(tab: Tab): RecentRecord | undefined {
-  const record = recentRecordsById.value.get(tab.id);
+  const recentKey = tab.recentKey?.trim();
+  const record = recentKey ? recentRecordsByKey.value.get(recentKey) : undefined;
   if (record) return record;
+
   const webviewUrl = resolveWebviewUrlFromTabPath(tab.path);
-  if (!webviewUrl) return undefined;
-  return webviewRecordsByUrl.value.get(webviewUrl);
+  if (webviewUrl) return webviewRecordsByUrl.value.get(webviewUrl);
+
+  return undefined;
 }
 
 /**

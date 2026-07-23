@@ -10,6 +10,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HeaderTabs from '@/layouts/default/components/HeaderTabs.vue';
+import type { RecentRecord } from '@/shared/storage';
 import type { Tab } from '@/stores/workspace/tabs';
 import { useTabsStore } from '@/stores/workspace/tabs';
 
@@ -23,6 +24,9 @@ const routerPushMock = vi.hoisted(() => vi.fn<(path: string) => Promise<void>>()
 
 /** 最近记录加载 mock。 */
 const ensureLoadedMock = vi.hoisted(() => vi.fn<() => Promise<void>>().mockResolvedValue(undefined));
+
+/** 最近记录列表 mock。 */
+const recentRecordsMock = vi.hoisted<{ value: RecentRecord[] }>(() => ({ value: [] }));
 
 vi.mock('vue-router', () => ({
   useRoute: () => routeMock,
@@ -41,7 +45,9 @@ vi.mock('@iconify/vue', () => ({
 
 vi.mock('@/stores/workspace/recent', () => ({
   useRecentStore: () => ({
-    recentRecords: [],
+    get recentRecords() {
+      return recentRecordsMock.value;
+    },
     ensureLoaded: ensureLoadedMock
   })
 }));
@@ -64,12 +70,20 @@ vi.mock('@/utils/modal', () => ({
 const BRecentIconStub = defineComponent({
   name: 'BRecentIcon',
   props: {
-    record: { type: Object, default: undefined },
+    record: { type: Object as PropType<RecentRecord>, default: undefined },
     fileName: { type: String, default: '' },
     icon: { type: String, default: '' },
     size: { type: [Number, String], default: 14 }
   },
-  template: '<span class="b-recent-icon-stub" :data-icon="icon" :data-file-name="fileName"></span>'
+  template: `
+    <span
+      class="b-recent-icon-stub"
+      :data-icon="icon"
+      :data-file-name="fileName"
+      :data-record-type="record?.type || ''"
+      :data-record-title="record?.title || ''"
+    ></span>
+  `
 });
 
 /**
@@ -111,7 +125,7 @@ const BDraggableStub = defineComponent({
  * @param extra - 额外标签字段
  * @returns 标签页数据
  */
-function createTab(id: string, path: string, title: string, extra: Partial<Tab> = {}): Tab {
+function createTab(id: string, path: string, title: string, extra: Partial<Tab> & { recentKey?: string } = {}): Tab {
   return {
     id,
     path,
@@ -119,6 +133,27 @@ function createTab(id: string, path: string, title: string, extra: Partial<Tab> 
     cacheKey: id,
     ...extra
   } as Tab;
+}
+
+/**
+ * 创建文件型最近记录测试数据。
+ * @param type - 文件型记录类型
+ * @param title - 展示标题
+ * @returns 文件型最近记录
+ */
+function createDocumentRecord(type: 'file' | 'widget', title: string): Extract<RecentRecord, { type: 'file' | 'widget' }> {
+  return {
+    type,
+    id: 'shared-id',
+    url: type === 'file' ? '/editor/shared-id' : '/widget/shared-id',
+    title,
+    description: `/tmp/${title}`,
+    path: `/tmp/${title}`,
+    content: '',
+    savedContent: '',
+    name: title,
+    ext: type === 'file' ? 'md' : 'widget'
+  };
 }
 
 /**
@@ -142,6 +177,7 @@ describe('HeaderTabs icon rendering', (): void => {
     setActivePinia(createPinia());
     routerPushMock.mockClear();
     ensureLoadedMock.mockClear();
+    recentRecordsMock.value = [];
   });
 
   it('uses the configured tab icon before file name based icon inference', (): void => {
@@ -165,6 +201,18 @@ describe('HeaderTabs icon rendering', (): void => {
     expect(draggable.attributes('data-direction')).toBe('horizontal');
     expect(draggable.attributes('data-item-key')).toBe('id');
     expect(wrapper.findAll('.header-tab')).toHaveLength(2);
+  });
+
+  it('uses explicit tab recentKey without deriving identity from route path', (): void => {
+    const tabsStore = useTabsStore();
+    tabsStore.tabs = [createTab('shared-id', '/preview/shared-id', 'File Preview', { recentKey: 'file:shared-id' })];
+    recentRecordsMock.value = [createDocumentRecord('file', 'file.md'), createDocumentRecord('widget', 'widget.json')];
+
+    const wrapper = mountHeaderTabs();
+    const icon = wrapper.find('.b-recent-icon-stub');
+
+    expect(icon.attributes('data-record-type')).toBe('file');
+    expect(icon.attributes('data-record-title')).toBe('file.md');
   });
 
   it('moves tabs when BDraggable emits a move event', (): void => {

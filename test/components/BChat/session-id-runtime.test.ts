@@ -594,6 +594,9 @@ function createStoredFile(overrides: Partial<StoredFile> = {}): StoredFile {
   return {
     type: 'file',
     id: 'file-1',
+    url: '/editor/file-1',
+    title: 'note.md',
+    description: '/workspace/note.md',
     path: '/workspace/note.md',
     content: '',
     name: 'note.md',

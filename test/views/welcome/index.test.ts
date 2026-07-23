@@ -113,9 +113,10 @@ function createWebviewRecord(overrides: Partial<Extract<RecentRecord, { type: 'w
 function createChatRecord(overrides: Partial<Extract<RecentRecord, { type: 'chat' }>> = {}): Extract<RecentRecord, { type: 'chat' }> {
   return {
     type: 'chat',
-    id: 'chat:session-a',
-    sessionId: 'session-a',
+    id: 'session-a',
+    url: '/chat/session-a',
     title: '会话 A',
+    description: '聊天会话',
     createdAt: 1,
     openedAt: 2,
     ...overrides
@@ -156,16 +157,6 @@ describe('WelcomePage', (): void => {
     expect(source).not.toContain('welcome-open-widget');
     expect(source).not.toContain('createNewWidgetFile');
     expect(source).not.toContain('<span class="action-label">小组件</span>');
-  });
-
-  it('delegates recent record icon rendering to BRecentIcon', (): void => {
-    const source = readWelcomePageSource();
-
-    expect(source).toContain('<BRecentIcon :record="record" :size="14" />');
-    expect(source).not.toContain("import { resolveFileIcon } from '@/utils/file/icons';");
-    expect(source).not.toContain('getRecentRecordFavicon');
-    expect(source).not.toContain('getRecentRecordIcon');
-    expect(source).not.toContain("record.ext === 'tibis' ? 'lucide:pen-line' : 'lucide:file-text'");
   });
 
   it('passes recent records to the shared icon component', (): void => {

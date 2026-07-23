@@ -48,7 +48,6 @@
 import type { CommandPanelActionItem, CommandPanelGroup, CommandPanelItem, CommandPanelJumpItem, CommandPanelSource, CommandPanelSourceId } from './types';
 import type { VNodeChild } from 'vue';
 import { computed, h, nextTick, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import BIcon from '@/components/BIcon/index.vue';
 import BModal from '@/components/BModal/index.vue';
@@ -57,15 +56,13 @@ import BRecentIcon from '@/components/BRecent/Icon.vue';
 import BScrollbar from '@/components/BScrollbar/index.vue';
 import { useNavigate } from '@/hooks/useNavigate';
 import { useOpenFile } from '@/hooks/useOpenFile';
-import { createChatPath } from '@/router/routes/helpers/chatRouteTab';
+import { useRecentRecordActions } from '@/hooks/useRecentRecordActions';
 import { native } from '@/shared/platform';
 import { useProviderStore } from '@/stores/ai/provider';
 import type { SelectedModel } from '@/stores/ai/serviceModel';
 import { useServiceModelStore } from '@/stores/ai/serviceModel';
-import { useChatSessionStore } from '@/stores/chat/session';
 import { useCommandPanelStore } from '@/stores/ui/commandPanel';
 import { useRecentStore } from '@/stores/workspace/recent';
-import { useTabsStore } from '@/stores/workspace/tabs';
 import { asyncTo } from '@/utils/asyncTo';
 import { createNamespace } from '@/utils/namespace';
 import { createJumpSource } from './sources/jump';
@@ -88,20 +85,16 @@ interface FocusInputOptions {
 
 /** 最近记录 store。 */
 const recentStore = useRecentStore();
-/** 标签页 store。 */
-const tabsStore = useTabsStore();
-/** 路由实例。 */
-const router = useRouter();
-/** 聊天会话 store。 */
-const chatStore = useChatSessionStore();
 /** Provider store。 */
 const providerStore = useProviderStore();
 /** 服务模型 store。 */
 const serviceModelStore = useServiceModelStore();
 /** 文件打开能力。 */
-const { openFile, openFileByPath } = useOpenFile();
+const { openFileByPath } = useOpenFile();
 /** WebView 打开能力。 */
 const { openWebview } = useNavigate();
+/** 最近记录打开与删除能力。 */
+const { openRecentRecord, removeRecentRecord } = useRecentRecordActions();
 /** 全局命令面板 Store。 */
 const commandPanelStore = useCommandPanelStore();
 /** 全局命令面板响应式状态。 */
@@ -136,35 +129,16 @@ function RenderItemIcon(props: { item: CommandPanelItem }): VNodeChild {
   return h(BIcon, { class: iconClass, icon: 'lucide:circle', size: 16 });
 }
 
-/**
- * 打开聊天会话页。
- * @param sessionId - 聊天会话 ID
- * @param recordId - 聊天最近记录 ID
- */
-async function openChatPage(sessionId: string, recordId: string): Promise<void> {
-  const [loadError, session] = await asyncTo(chatStore.loadSessionById(sessionId));
-  if (loadError) return;
-
-  if (!session) {
-    await asyncTo(recentStore.removeFile(recordId));
-    return;
-  }
-
-  await asyncTo(router.push(createChatPath(sessionId)));
-}
-
 /** 跳转命令 source。 */
 const jumpSource = createJumpSource();
 /** 最近记录 source。 */
 const recentSource = createRecentSource({
   getRecords: () => recentStore.recentRecords ?? [],
   ensureLoaded: () => recentStore.ensureLoaded(),
-  openFile,
+  openRecent: openRecentRecord,
   openFileByPath,
   openWebview,
-  openChat: openChatPage,
-  removeRecent: (id: string) => recentStore.removeFile(id),
-  removeTab: (id: string) => tabsStore.removeTab(id),
+  removeRecent: removeRecentRecord,
   getPathStatus: native.getPathStatus,
   renderRecentIcon: (item, context) =>
     h(BRecentIcon, { record: item.record, fileName: item.fileName, icon: item.icon, class: context.className, size: context.size })

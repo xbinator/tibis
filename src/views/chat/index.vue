@@ -185,6 +185,7 @@ async function promoteDraft(): Promise<void> {
     path: targetPath,
     title: session.title,
     cacheKey: targetTabId,
+    recentKey: createChatRecentId(session.id),
     icon: sourceTab.icon ?? 'lucide:message-circle'
   };
   const wasActive = isTabActive(CHAT_DRAFT_TAB_ID);

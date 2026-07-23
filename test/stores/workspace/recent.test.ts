@@ -5,7 +5,7 @@
  */
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ChatRecentRecord } from '@/shared/storage';
+import type { ChatRecentRecord, RecentRecord } from '@/shared/storage';
 import { useRecentStore } from '@/stores/workspace/recent';
 
 const storageMocks = vi.hoisted(() => ({
@@ -50,9 +50,10 @@ describe('useRecentStore chat records', (): void => {
     const store = useRecentStore();
     const record: ChatRecentRecord = {
       type: 'chat',
-      id: 'chat:session-a',
-      sessionId: 'session-a',
+      id: 'session-a',
+      url: '/chat/session-a',
       title: '会话 A',
+      description: '聊天会话',
       createdAt: 1,
       openedAt: 2
     };
@@ -70,9 +71,10 @@ describe('useRecentStore chat records', (): void => {
     const store = useRecentStore();
     const oldRecord: ChatRecentRecord = {
       type: 'chat',
-      id: 'chat:session-a',
-      sessionId: 'session-a',
+      id: 'session-a',
+      url: '/chat/session-a',
       title: '会话 A',
+      description: '聊天会话',
       createdAt: 1,
       openedAt: 2
     };
@@ -83,9 +85,10 @@ describe('useRecentStore chat records', (): void => {
     store.recentRecords = [
       {
         type: 'chat',
-        id: 'chat:session-b',
-        sessionId: 'session-b',
+        id: 'session-b',
+        url: '/chat/session-b',
         title: '会话 B',
+        description: '聊天会话',
         createdAt: 1,
         openedAt: 4
       },
@@ -104,9 +107,10 @@ describe('useRecentStore chat records', (): void => {
     const store = useRecentStore();
     const record: ChatRecentRecord = {
       type: 'chat',
-      id: 'chat:session-a',
-      sessionId: 'session-a',
+      id: 'session-a',
+      url: '/chat/session-a',
       title: '新标题',
+      description: '聊天会话',
       createdAt: 1,
       openedAt: 2
     };
@@ -129,5 +133,37 @@ describe('useRecentStore chat records', (): void => {
 
     expect(result).toBeNull();
     expect(store.recentRecords).toEqual([]);
+  });
+
+  it('keeps chat cache entries when removing a bare file id with the same value', (): void => {
+    const store = useRecentStore();
+    const fileRecord: RecentRecord = {
+      type: 'file',
+      id: 'shared-id',
+      url: '/editor/shared-id',
+      title: 'Untitled.md',
+      description: '未保存文件',
+      path: null,
+      content: '',
+      savedContent: '',
+      name: 'Untitled',
+      ext: 'md',
+      createdAt: 1,
+      openedAt: 2
+    };
+    const chatRecord: RecentRecord = {
+      type: 'chat',
+      id: 'shared-id',
+      url: '/chat/shared-id',
+      title: '同 ID 会话',
+      description: '聊天会话',
+      createdAt: 3,
+      openedAt: 4
+    };
+    store.recentRecords = [fileRecord, chatRecord];
+
+    store.removeCacheEntries(['shared-id']);
+
+    expect(store.recentRecords).toEqual([chatRecord]);
   });
 });

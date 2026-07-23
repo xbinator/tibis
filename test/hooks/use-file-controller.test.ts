@@ -148,6 +148,9 @@ function createEvents(overrides: Partial<FileControllerEvents<string>> = {}): Fi
     onBuildRecord: ({ fileState, savedContent }: FileRecordContext<string>): StoredDocumentRecord => ({
       ...fileState,
       type: 'file',
+      url: `/editor/${fileState.id}`,
+      title: `${fileState.name}.${fileState.ext}`,
+      description: fileState.path || '未保存文件',
       savedContent
     }),
     onWriteFile: vi.fn().mockResolvedValue(undefined),

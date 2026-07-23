@@ -1,6 +1,6 @@
 /**
  * @file recent.ts
- * @description 最近记录存储的读写、排序派生与时间字段归一化（支持文件 + WebView 网页）。
+ * @description 最近记录存储的读写、排序派生与统一 URL 打开字段归一化。
  */
 
 import { isEqual, isNumber, noop } from 'lodash-es';
@@ -15,12 +15,13 @@ import {
   type ChatRecentRecord,
   type WebviewRecord,
   type RecentRecord,
+  type RecentRecordType,
   type WebviewRecordOptions
 } from './types';
 
 const RECENT_FILES_KEY = 'recent_files';
 const MAX_RECENT_FILES = 100;
-const CHAT_RECENT_ID_PREFIX = 'chat:';
+const RECENT_KEY_SEPARATOR = ':';
 
 let writeQueue: Promise<void> = Promise.resolve();
 
@@ -62,6 +63,18 @@ function normalizeOptionalFavicon(value: unknown): string | undefined {
 }
 
 /**
+ * 归一化必填 WebView URL。
+ * @param url - 原始 WebView URL
+ * @returns 非空 WebView URL
+ */
+function normalizeRequiredWebviewUrl(url: string): string {
+  const normalizedUrl = normalizeTextField(url);
+  if (!normalizedUrl) throw new Error('Webview url is required');
+
+  return normalizedUrl;
+}
+
+/**
  * 归一化必填聊天会话 ID。
  * @param sessionId - 原始聊天会话 ID
  * @returns 非空会话 ID
@@ -74,12 +87,21 @@ function normalizeRequiredSessionId(sessionId: string): string {
 }
 
 /**
- * 构建聊天会话最近记录 ID。
+ * 创建最近记录稳定键。
+ * @param record - 最近记录身份
+ * @returns 最近记录稳定键
+ */
+export function createRecentKey(record: Pick<RecentRecord, 'type' | 'id'>): string {
+  return `${record.type}${RECENT_KEY_SEPARATOR}${record.id}`;
+}
+
+/**
+ * 构建聊天会话最近记录兼容键。
  * @param sessionId - 聊天会话 ID
- * @returns 最近记录 ID
+ * @returns 最近记录稳定键
  */
 export function createChatRecentId(sessionId: string): string {
-  return `${CHAT_RECENT_ID_PREFIX}${normalizeRequiredSessionId(sessionId)}`;
+  return createRecentKey({ type: 'chat', id: normalizeRequiredSessionId(sessionId) });
 }
 
 /**
@@ -93,7 +115,41 @@ function normalizeSessionId(value: unknown, fallbackId: unknown): string {
   if (normalized) return normalized;
 
   const id = normalizeTextField(fallbackId);
-  return id.startsWith(CHAT_RECENT_ID_PREFIX) ? id.slice(CHAT_RECENT_ID_PREFIX.length) : id;
+  return id.startsWith('chat:') ? id.slice('chat:'.length) : id;
+}
+
+/**
+ * 创建最近记录 URL。
+ * @param type - 最近记录类型
+ * @param id - 业务对象 ID
+ * @returns 最近记录 URL
+ */
+export function createRecentUrl(type: 'file' | 'widget' | 'chat', id: string): string {
+  const encodedId = encodeURIComponent(id);
+  if (type === 'chat') return `/chat/${encodedId}`;
+  if (type === 'widget') return `/widget/${encodedId}`;
+  return `/editor/${encodedId}`;
+}
+
+/**
+ * 拼接文件展示标题。
+ * @param name - 文件名主体
+ * @param ext - 文件扩展名
+ * @returns 展示标题
+ */
+export function createDocumentTitle(name: string, ext: string): string {
+  if (!name && !ext) return 'Untitled';
+  if (!ext) return name;
+  return `${name}.${ext}`;
+}
+
+/**
+ * 解析最近记录描述。
+ * @param path - 文件路径
+ * @returns 最近记录描述
+ */
+export function createDocumentDescription(path: string | null): string {
+  return path || '未保存文件';
 }
 
 /**
@@ -132,13 +188,20 @@ function normalizeStoredDocumentRecord<T extends StoredDocumentRecord>(file: T, 
   const rawFile = file as unknown as Record<string, unknown>;
   const normalizedPath = normalizePathField(rawFile.path);
   const derivedTitleParts = deriveFileTitleParts(normalizedPath);
+  const id = normalizeTextField(rawFile.id);
+  const name = normalizeTextField(rawFile.name) || derivedTitleParts.name;
+  const ext = normalizeTextField(rawFile.ext).replace(/^\.+/, '') || derivedTitleParts.ext;
   const normalizedFile = {
     ...file,
     type,
+    id,
+    url: createRecentUrl(type, id),
+    title: createDocumentTitle(name, ext),
+    description: createDocumentDescription(normalizedPath),
     path: normalizedPath,
     content: normalizeContentField(rawFile.content),
-    name: normalizeTextField(rawFile.name) || derivedTitleParts.name,
-    ext: normalizeTextField(rawFile.ext).replace(/^\.+/, '') || derivedTitleParts.ext
+    name,
+    ext
   } as T;
 
   if (normalizedFile.savedContent === undefined && normalizedFile.path === null) {
@@ -159,12 +222,110 @@ function normalizeChatRecord(record: ChatRecentRecord): ChatRecentRecord | null 
 
   return {
     type: 'chat',
-    id: createChatRecentId(sessionId),
-    sessionId,
+    id: sessionId,
+    url: createRecentUrl('chat', sessionId),
     title: normalizeTextField(rawRecord.title) || '聊天',
+    description: normalizeTextField(rawRecord.description) || '聊天会话',
     createdAt: normalizeTime(rawRecord.createdAt as number | undefined) || Date.now(),
     openedAt: normalizeTime(rawRecord.openedAt as number | undefined) || Date.now()
   };
+}
+
+/**
+ * 将单个 WebView 最近记录归一化到当前存储模型。
+ * @param record - WebView 最近记录
+ * @returns 归一化后的 WebView 最近记录；缺少 URL 时返回 null
+ */
+function normalizeWebviewRecord(record: WebviewRecord): WebviewRecord | null {
+  const rawRecord = record as unknown as Record<string, unknown>;
+  const url = normalizeTextField(rawRecord.url);
+  const favicon = normalizeOptionalFavicon(rawRecord.favicon);
+
+  if (!url) return null;
+
+  return {
+    type: 'webview',
+    id: normalizeTextField(rawRecord.id) || hashString(url),
+    url,
+    title: normalizeTextField(rawRecord.title) || url,
+    description: normalizeTextField(rawRecord.description) || url,
+    createdAt: normalizeTime(rawRecord.createdAt as number | undefined) || Date.now(),
+    openedAt: normalizeTime(rawRecord.openedAt as number | undefined) || Date.now(),
+    ...(favicon ? { favicon } : {})
+  };
+}
+
+/**
+ * 原始最近记录对象。
+ */
+type RawRecentRecord = Record<string, unknown>;
+
+/**
+ * 最近记录归一化器。
+ */
+type RecentNormalizer = (record: RawRecentRecord) => RecentRecord | null;
+
+/**
+ * 归一化普通文件记录。
+ * @param record - 原始最近记录
+ * @returns 归一化后的普通文件记录
+ */
+function normalizeFileRecord(record: RawRecentRecord): StoredFile {
+  return normalizeStoredDocumentRecord({ ...record, type: 'file' } as StoredFile, 'file');
+}
+
+/**
+ * 归一化 Widget 记录。
+ * @param record - 原始最近记录
+ * @returns 归一化后的 Widget 记录
+ */
+function normalizeWidgetRecord(record: RawRecentRecord): StoredWidget {
+  return normalizeStoredDocumentRecord({ ...record, type: 'widget' } as StoredWidget, 'widget');
+}
+
+/**
+ * 归一化聊天最近记录。
+ * @param record - 原始最近记录
+ * @returns 归一化后的聊天记录，损坏时返回 null
+ */
+function normalizeChatItem(record: RawRecentRecord): ChatRecentRecord | null {
+  return normalizeChatRecord({ ...record, type: 'chat' } as ChatRecentRecord);
+}
+
+/**
+ * 归一化 WebView 最近记录。
+ * @param record - 原始最近记录
+ * @returns 归一化后的 WebView 记录，损坏时返回 null
+ */
+function normalizeWebviewItem(record: RawRecentRecord): WebviewRecord | null {
+  return normalizeWebviewRecord({ ...record, type: 'webview' } as WebviewRecord);
+}
+
+const RECENT_NORMALIZERS = {
+  file: normalizeFileRecord,
+  widget: normalizeWidgetRecord,
+  chat: normalizeChatItem,
+  webview: normalizeWebviewItem
+} satisfies Record<RecentRecordType, RecentNormalizer>;
+
+/**
+ * 判断原始类型是否为当前支持的最近记录类型。
+ * @param value - 原始 type 字段
+ * @returns 是否为支持的最近记录类型
+ */
+function isKnownRecentType(value: unknown): value is RecentRecordType {
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(RECENT_NORMALIZERS, value);
+}
+
+/**
+ * 按记录类型选择归一化器。
+ * 未知或缺失 type 仍按 file 迁移，兼容旧版本只存文件的记录。
+ * @param record - 原始最近记录
+ * @returns 归一化后的最近记录，损坏时返回 null
+ */
+function normalizeRecentRecord(record: RawRecentRecord): RecentRecord | null {
+  const normalizer = isKnownRecentType(record.type) ? RECENT_NORMALIZERS[record.type] : RECENT_NORMALIZERS.file;
+  return normalizer(record);
 }
 
 /**
@@ -176,35 +337,11 @@ function normalizeStoredFiles(files: RecentRecord[]): { files: RecentRecord[]; c
 
   for (const file of files) {
     const rawRecord = file as unknown as Record<string, unknown>;
-
-    if (rawRecord.type === 'webview') {
-      normalizedFiles.push(file);
+    const normalized = normalizeRecentRecord(rawRecord);
+    if (!normalized) {
+      changed = true;
       continue;
     }
-
-    if (rawRecord.type === 'chat') {
-      const normalized = normalizeChatRecord({ ...rawRecord, type: 'chat' } as ChatRecentRecord);
-      if (!normalized) {
-        changed = true;
-        continue;
-      }
-      if (!changed && !isEqual(normalized, file)) {
-        changed = true;
-      }
-      normalizedFiles.push(normalized);
-      continue;
-    }
-
-    if (rawRecord.type === 'widget') {
-      const normalized = normalizeStoredDocumentRecord({ ...rawRecord, type: 'widget' } as StoredWidget, 'widget');
-      if (!changed && !isEqual(normalized, file)) {
-        changed = true;
-      }
-      normalizedFiles.push(normalized);
-      continue;
-    }
-
-    const normalized = normalizeStoredDocumentRecord({ ...rawRecord, type: 'file' } as StoredFile, 'file');
     if (!changed && !isEqual(normalized, file)) {
       changed = true;
     }
@@ -233,6 +370,19 @@ export function sortRecentFiles(records: RecentRecord[]): RecentRecord[] {
 
     return 0;
   });
+}
+
+/**
+ * 判断最近记录是否匹配任意稳定键或兼容 ID。
+ * @param record - 最近记录
+ * @param keys - 稳定键集合
+ * @returns 是否匹配
+ */
+function isRecentKeyMatched(record: RecentRecord, keys: Set<string>): boolean {
+  if (keys.has(createRecentKey(record))) return true;
+
+  // 裸 id 仅保留给历史文件/WebView 调用，聊天记录必须使用 chat:{id} 稳定键，避免跨类型误删。
+  return !isChatRecord(record) && keys.has(record.id);
 }
 
 /** 从 Electron store 读取指定键的值。 */
@@ -298,7 +448,8 @@ export const recentFilesStorage = {
       );
 
       // 去重后前置，降低下次读取时重排的成本
-      const deduped = files.filter((item) => item.id !== normalized.id);
+      const normalizedKey = createRecentKey(normalized);
+      const deduped = files.filter((item) => createRecentKey(item) !== normalizedKey);
       deduped.unshift(normalized);
 
       await writeRecentFiles(deduped);
@@ -327,7 +478,7 @@ export const recentFilesStorage = {
   async updateRecentFile(id: string, updates: Partial<StoredDocumentRecord>): Promise<StoredDocumentRecord> {
     return enqueueWrite(async () => {
       const files = await readRecentFiles();
-      const index = files.findIndex((item) => item.id === id);
+      const index = files.findIndex((item) => isDocumentRecord(item) && item.id === id);
 
       if (index === -1) throw new Error(`File not found: ${id}`);
 
@@ -375,9 +526,12 @@ export const recentFilesStorage = {
    * 根据 URL 生成 hash id，同 URL 自动去重（更新 title 和 openedAt）。
    */
   async addWebviewRecord(url: string, title: string, options?: WebviewRecordOptions): Promise<WebviewRecord> {
+    const normalizedUrl = normalizeRequiredWebviewUrl(url);
+    const normalizedTitle = normalizeTextField(title) || normalizedUrl;
+
     return enqueueWrite(async () => {
       const files = await readRecentFiles();
-      const id = hashString(url);
+      const id = hashString(normalizedUrl);
       const now = Date.now();
       const normalizedFavicon = normalizeOptionalFavicon(options?.favicon);
 
@@ -386,7 +540,14 @@ export const recentFilesStorage = {
       if (existingIndex !== -1) {
         // 更新已有记录
         const existing = files[existingIndex] as WebviewRecord;
-        const updated: WebviewRecord = { ...existing, title, openedAt: now, ...(normalizedFavicon ? { favicon: normalizedFavicon } : {}) };
+        const updated: WebviewRecord = {
+          ...existing,
+          url: normalizedUrl,
+          title: normalizedTitle,
+          description: normalizeTextField(existing.description) || normalizedUrl,
+          openedAt: now,
+          ...(normalizedFavicon ? { favicon: normalizedFavicon } : {})
+        };
         files[existingIndex] = updated;
         await writeRecentFiles(files);
         return updated;
@@ -396,8 +557,9 @@ export const recentFilesStorage = {
       const record: WebviewRecord = {
         type: 'webview',
         id,
-        url,
-        title,
+        url: normalizedUrl,
+        title: normalizedTitle,
+        description: normalizedUrl,
         createdAt: now,
         openedAt: now,
         ...(normalizedFavicon ? { favicon: normalizedFavicon } : {})
@@ -439,16 +601,16 @@ export const recentFilesStorage = {
     return enqueueWrite(async () => {
       const files = await readRecentFiles();
       const now = Date.now();
-      const id = createChatRecentId(normalizedSessionId);
-      const existingIndex = files.findIndex((item) => isChatRecord(item) && item.sessionId === normalizedSessionId);
+      const existingIndex = files.findIndex((item) => isChatRecord(item) && item.id === normalizedSessionId);
 
       if (existingIndex !== -1) {
         const existing = files[existingIndex] as ChatRecentRecord;
         const updated: ChatRecentRecord = {
           ...existing,
-          id,
-          sessionId: normalizedSessionId,
+          id: normalizedSessionId,
+          url: createRecentUrl('chat', normalizedSessionId),
           title: normalizeTextField(title) || existing.title,
+          description: existing.description || '聊天会话',
           openedAt: now
         };
         files.splice(existingIndex, 1);
@@ -459,9 +621,10 @@ export const recentFilesStorage = {
 
       const record: ChatRecentRecord = {
         type: 'chat',
-        id,
-        sessionId: normalizedSessionId,
+        id: normalizedSessionId,
+        url: createRecentUrl('chat', normalizedSessionId),
         title: normalizeTextField(title) || '聊天',
+        description: '聊天会话',
         createdAt: now,
         openedAt: now
       };
@@ -479,7 +642,7 @@ export const recentFilesStorage = {
   async touchChatRecord(id: string): Promise<ChatRecentRecord> {
     return enqueueWrite(async () => {
       const files = await readRecentFiles();
-      const index = files.findIndex((item) => isChatRecord(item) && item.id === id);
+      const index = files.findIndex((item) => isChatRecord(item) && (item.id === id || createRecentKey(item) === id));
 
       if (index === -1) throw new Error(`Chat record not found: ${id}`);
 
@@ -503,7 +666,7 @@ export const recentFilesStorage = {
 
     return enqueueWrite(async () => {
       const files = await readRecentFiles();
-      const index = files.findIndex((item) => isChatRecord(item) && item.sessionId === normalizedSessionId);
+      const index = files.findIndex((item) => isChatRecord(item) && item.id === normalizedSessionId);
 
       if (index === -1) return null;
 
@@ -523,7 +686,7 @@ export const recentFilesStorage = {
     await enqueueWrite(async () => {
       const files = await readRecentFiles();
       const idSet = new Set(ids);
-      await writeRecentFiles(files.filter((file) => !idSet.has(file.id)));
+      await writeRecentFiles(files.filter((file) => !isRecentKeyMatched(file, idSet)));
     });
   },
 

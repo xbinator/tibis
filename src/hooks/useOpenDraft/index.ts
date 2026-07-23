@@ -5,6 +5,7 @@
 import { customAlphabet } from 'nanoid';
 import type { OpenDraftInput, OpenDraftResult } from '@/ai/tools/shared/types';
 import { useOpenFile } from '@/hooks/useOpenFile';
+import { createDocumentDescription, createDocumentTitle, createRecentUrl } from '@/shared/storage';
 import type { StoredFile } from '@/shared/storage/files/types';
 import { useRecentStore } from '@/stores/workspace/recent';
 import { buildUnsavedPath } from '@/utils/file/unsaved';
@@ -69,6 +70,9 @@ export function useOpenDraft() {
     const storedFile: StoredFile = {
       type: 'file',
       id: fileId,
+      url: createRecentUrl('file', fileId),
+      title: createDocumentTitle(name, ext),
+      description: createDocumentDescription(null),
       path: null,
       content: input.content,
       savedContent: '',

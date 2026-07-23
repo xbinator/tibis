@@ -36,6 +36,7 @@ function createWebviewRecord(overrides: Partial<Extract<RecentRecord, { type: 'w
     id: 'web-1',
     url: 'https://example.com',
     title: 'Example Domain',
+    description: 'https://example.com',
     createdAt: 1,
     openedAt: 2,
     ...overrides
@@ -55,6 +56,9 @@ function createFileRecord(overrides: Partial<Extract<RecentRecord, { type: 'file
     content: '',
     name: 'example',
     ext: 'ts',
+    url: '/editor/file-1',
+    title: 'example.ts',
+    description: '/tmp/example.ts',
     ...overrides
   };
 }
@@ -67,9 +71,10 @@ function createFileRecord(overrides: Partial<Extract<RecentRecord, { type: 'file
 function createChatRecord(overrides: Partial<Extract<RecentRecord, { type: 'chat' }>> = {}): Extract<RecentRecord, { type: 'chat' }> {
   return {
     type: 'chat',
-    id: 'chat:session-a',
-    sessionId: 'session-a',
+    id: 'session-a',
+    url: '/chat/session-a',
     title: '会话 A',
+    description: '聊天会话',
     createdAt: 1,
     openedAt: 2,
     ...overrides
