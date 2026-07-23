@@ -60,6 +60,23 @@ function createFileRecord(overrides: Partial<Extract<RecentRecord, { type: 'file
 }
 
 /**
+ * 创建聊天最近记录。
+ * @param overrides - 需要覆盖的字段
+ * @returns 聊天最近记录
+ */
+function createChatRecord(overrides: Partial<Extract<RecentRecord, { type: 'chat' }>> = {}): Extract<RecentRecord, { type: 'chat' }> {
+  return {
+    type: 'chat',
+    id: 'chat:session-a',
+    sessionId: 'session-a',
+    title: '会话 A',
+    createdAt: 1,
+    openedAt: 2,
+    ...overrides
+  };
+}
+
+/**
  * 挂载最近记录图标组件。
  * @param props - 组件属性
  * @returns 组件包装器
@@ -105,6 +122,15 @@ describe('BRecentIcon', (): void => {
     });
 
     expect(wrapper.find('.b-icon-stub').attributes('data-icon')).toBe('vscode-icons:file-type-npm');
+  });
+
+  it('uses the chat icon for chat records', (): void => {
+    const wrapper = mountRecentRecordIcon({
+      record: createChatRecord(),
+      size: 14
+    });
+
+    expect(wrapper.find('.b-icon-stub').attributes('data-icon')).toBe('lucide:message-circle');
   });
 
   it('resolves standalone file names through the shared file icon map', (): void => {

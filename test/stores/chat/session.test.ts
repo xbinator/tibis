@@ -22,6 +22,10 @@ const mockElectronAPI = vi.hoisted(() => ({
   chatMessageAdd: vi.fn<(message: ChatMessageRecord) => Promise<{ ok: true; data: void }>>(),
   chatMessageUpdate: vi.fn<(message: ChatMessageRecord) => Promise<{ ok: true; data: void }>>()
 }));
+const recentStoreMock = vi.hoisted(() => ({
+  updateChatRecordTitle: vi.fn<(_sessionId: string, _title: string) => Promise<unknown>>(),
+  removeFile: vi.fn<(..._ids: string[]) => Promise<void>>()
+}));
 
 /**
  * 可由测试显式完成的异步结果。
@@ -74,6 +78,10 @@ vi.mock('@/shared/platform/electron-api', () => ({
   })
 }));
 
+vi.mock('@/stores/workspace/recent', () => ({
+  useRecentStore: () => recentStoreMock
+}));
+
 /**
  * 创建一条测试用未完成 assistant 持久化记录。
  * @returns 未完成 assistant 记录。
@@ -104,6 +112,10 @@ describe('useChatSessionStore', () => {
     mockElectronAPI.chatMessageList.mockReset();
     mockElectronAPI.chatMessageAdd.mockReset();
     mockElectronAPI.chatMessageUpdate.mockReset();
+    recentStoreMock.updateChatRecordTitle.mockReset();
+    recentStoreMock.updateChatRecordTitle.mockResolvedValue(undefined);
+    recentStoreMock.removeFile.mockReset();
+    recentStoreMock.removeFile.mockResolvedValue(undefined);
   });
 
   it('loads the session collection once and appends later pages without duplicates', async (): Promise<void> => {
@@ -279,6 +291,16 @@ describe('useChatSessionStore', () => {
     expect(store.findSession('session-a')?.title).toBe('新标题');
   });
 
+  it('updates a matching chat recent title after title persistence succeeds', async (): Promise<void> => {
+    const store = useChatSessionStore();
+    store.sessions = [createSession('session-a')];
+    mockElectronAPI.chatSessionUpdateTitle.mockResolvedValue({ ok: true, data: undefined });
+
+    await store.updateSessionTitle('session-a', '新标题');
+
+    expect(recentStoreMock.updateChatRecordTitle).toHaveBeenCalledWith('session-a', '新标题');
+  });
+
   it('removes a session from the collection only after persistence succeeds', async (): Promise<void> => {
     const store = useChatSessionStore();
     store.sessions = [createSession('session-a')];
@@ -287,6 +309,16 @@ describe('useChatSessionStore', () => {
     await store.deleteSession('session-a');
 
     expect(store.findSession('session-a')).toBeUndefined();
+  });
+
+  it('removes the matching chat recent record after session deletion succeeds', async (): Promise<void> => {
+    const store = useChatSessionStore();
+    store.sessions = [createSession('session-a')];
+    mockElectronAPI.chatSessionDelete.mockResolvedValue({ ok: true, data: undefined });
+
+    await store.deleteSession('session-a');
+
+    expect(recentStoreMock.removeFile).toHaveBeenCalledWith('chat:session-a');
   });
 
   it('moves a session to the front after a new message is persisted', async (): Promise<void> => {
@@ -320,6 +352,8 @@ describe('useChatSessionStore', () => {
     await expect(store.deleteSession('session-a')).rejects.toThrow('删除写入失败');
 
     expect(store.findSession('session-a')?.title).toBe('会话 session-a');
+    expect(recentStoreMock.updateChatRecordTitle).not.toHaveBeenCalled();
+    expect(recentStoreMock.removeFile).not.toHaveBeenCalled();
   });
 
   it('throws the Electron branch error without returning a partial session', async (): Promise<void> => {

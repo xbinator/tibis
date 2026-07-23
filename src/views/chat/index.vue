@@ -26,10 +26,12 @@ import type { BChatRuntimeStatusChange } from '@/components/BChat/utils/types';
 import { isBlockingNavigationFailure } from '@/router/navigation';
 import { CHAT_DRAFT_TAB_ID, createChatPath, createChatTabId, findChatTab } from '@/router/routes/helpers/chatRouteTab';
 import { normalizeRouteParam } from '@/router/routes/helpers/fileRouteTab';
+import { createChatRecentId } from '@/shared/storage';
 import { useChatSessionStore } from '@/stores/chat/session';
 import type { ChatTabRuntimeController } from '@/stores/chat/tab';
 import { useChatTabStore } from '@/stores/chat/tab';
 import { useSettingStore } from '@/stores/ui/setting';
+import { useRecentStore } from '@/stores/workspace/recent';
 import type { Tab } from '@/stores/workspace/tabs';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import { asyncTo } from '@/utils/asyncTo';
@@ -43,6 +45,7 @@ const initialSessionId = normalizeRouteParam(route.params.sessionId) ?? null;
 const router = useRouter();
 const chatStore = useChatSessionStore();
 const settingStore = useSettingStore();
+const recentStore = useRecentStore();
 const tabsStore = useTabsStore();
 const runtimeStore = useChatTabStore();
 const bChatRef = ref<BChatInstance>();
@@ -50,6 +53,8 @@ const bChatRef = ref<BChatInstance>();
 const ownerTabId = ref<string>(createChatTabId(initialSessionId));
 /** 等待 Runtime 空闲后晋升的草稿会话。 */
 const pendingSession = ref<ChatSession>();
+/** 最近记录上一次成功写入的 payload，避免重复刷新同一标题。 */
+const lastRecentPayload = ref<string>('');
 
 // 独立聊天页接管同一会话时，侧栏回到空白草稿，避免两个 BChat 同时拥有同一会话。
 if (initialSessionId && settingStore.chatSidebarActiveSessionId === initialSessionId) {
@@ -106,10 +111,60 @@ function syncInitialSessionTitle(): void {
   tabsStore.updateTabTitle({ id: ownerTabId.value, title });
 }
 
+/**
+ * 解析当前聊天最近记录标题。
+ * @param session - 已确认存在的聊天会话
+ * @param title - 外部传入的标题
+ * @returns 最近记录展示标题
+ */
+function resolveRecentTitle(session: ChatSession, title?: string): string {
+  return title?.trim() || session.title.trim() || '聊天';
+}
+
+/**
+ * 加载当前路由对应的持久化聊天会话。
+ * @returns 已存在的聊天会话，不存在或加载失败时返回 null
+ */
+async function loadInitialSession(): Promise<ChatSession | null> {
+  if (!initialSessionId) return null;
+
+  const [error, session] = await asyncTo(chatStore.loadSessionById(initialSessionId));
+  if (error || !session) return null;
+
+  return session;
+}
+
+/**
+ * 记录当前持久化聊天会话到最近记录。
+ * @param title - 可选的最新会话标题
+ */
+async function recordRecentSession(title?: string): Promise<void> {
+  if (!initialSessionId) return;
+
+  const session = await loadInitialSession();
+  if (!session) return;
+
+  const resolvedTitle = resolveRecentTitle(session, title);
+  const payload = [initialSessionId, resolvedTitle].join('\0');
+  if (payload === lastRecentPayload.value) {
+    const [touchError] = await asyncTo(recentStore.touchChatRecord(createChatRecentId(initialSessionId)));
+    if (!touchError) return;
+
+    const [addError] = await asyncTo(recentStore.addChatRecord(initialSessionId, resolvedTitle));
+    if (!addError) lastRecentPayload.value = payload;
+    return;
+  }
+
+  const [error] = await asyncTo(recentStore.addChatRecord(initialSessionId, resolvedTitle));
+  if (!error) lastRecentPayload.value = payload;
+}
+
 /** 确保共享会话集合完成加载，并在加载后补齐当前标签标题。 */
 async function ensureSharedSessions(): Promise<void> {
   const [error] = await asyncTo(chatStore.ensureSessions());
   if (!error) syncInitialSessionTitle();
+
+  await recordRecentSession();
 }
 
 /**
@@ -187,6 +242,7 @@ function handleTitlePersisted(sessionId: string, title: string): void {
   const targetTabId = owner?.tabId ?? createChatTabId(sessionId);
   tabsStore.updateTabTitle({ id: targetTabId, title });
   if (pendingSession.value?.id === sessionId) pendingSession.value.title = title;
+  if (sessionId === initialSessionId) asyncTo(recordRecentSession(title));
 }
 
 /** 打开或复用唯一空白聊天标签。 */
@@ -234,6 +290,7 @@ watch(
 onActivated((): void => {
   markCurrentViewed();
   syncInitialSessionTitle();
+  asyncTo(recordRecentSession());
 });
 
 onMounted((): void => {

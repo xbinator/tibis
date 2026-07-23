@@ -12,6 +12,8 @@ import WelcomePage from '@/views/welcome/index.vue';
 
 const topRecentRecordsMock = vi.hoisted<{ value: RecentRecord[] }>(() => ({ value: [] }));
 const ensureLoadedMock = vi.hoisted(() => vi.fn());
+const removeRecentMock = vi.hoisted(() => vi.fn<(_id: string) => Promise<void>>(() => Promise.resolve()));
+const loadSessionByIdMock = vi.hoisted(() => vi.fn<(_sessionId: string) => Promise<unknown>>(() => Promise.resolve({ id: 'session-a' })));
 const routerPushMock = vi.hoisted(() => vi.fn<(path: string) => Promise<void>>(() => Promise.resolve()));
 
 vi.mock('vue-router', () => ({
@@ -37,9 +39,16 @@ vi.mock('@/hooks/useOpenFile', () => ({
 vi.mock('@/stores/workspace/recent', () => ({
   useRecentStore: () => ({
     ensureLoaded: ensureLoadedMock,
+    removeFile: removeRecentMock,
     get topRecentRecords() {
       return topRecentRecordsMock.value;
     }
+  })
+}));
+
+vi.mock('@/stores/chat/session', () => ({
+  useChatSessionStore: () => ({
+    loadSessionById: loadSessionByIdMock
   })
 }));
 
@@ -97,6 +106,23 @@ function createWebviewRecord(overrides: Partial<Extract<RecentRecord, { type: 'w
 }
 
 /**
+ * 创建聊天最近记录。
+ * @param overrides - 需要覆盖的字段
+ * @returns 聊天最近记录
+ */
+function createChatRecord(overrides: Partial<Extract<RecentRecord, { type: 'chat' }>> = {}): Extract<RecentRecord, { type: 'chat' }> {
+  return {
+    type: 'chat',
+    id: 'chat:session-a',
+    sessionId: 'session-a',
+    title: '会话 A',
+    createdAt: 1,
+    openedAt: 2,
+    ...overrides
+  };
+}
+
+/**
  * 挂载欢迎页。
  * @returns Vue Test Utils 包装器
  */
@@ -116,6 +142,10 @@ describe('WelcomePage', (): void => {
   beforeEach((): void => {
     setActivePinia(createPinia());
     ensureLoadedMock.mockClear();
+    removeRecentMock.mockClear();
+    removeRecentMock.mockResolvedValue(undefined);
+    loadSessionByIdMock.mockClear();
+    loadSessionByIdMock.mockResolvedValue({ id: 'session-a' });
     routerPushMock.mockClear();
     topRecentRecordsMock.value = [];
   });
@@ -162,5 +192,29 @@ describe('WelcomePage', (): void => {
     await chatEntry.trigger('click');
 
     expect(routerPushMock).toHaveBeenCalledWith('/chat');
+  });
+
+  it('opens a persisted chat session from recent records', async (): Promise<void> => {
+    topRecentRecordsMock.value = [createChatRecord()];
+    const wrapper = mountWelcomePage();
+    const recentItem = wrapper.find('.recent-file-item');
+
+    expect(recentItem.text()).toContain('会话 A');
+
+    await recentItem.trigger('click');
+
+    expect(loadSessionByIdMock).toHaveBeenCalledWith('session-a');
+    expect(routerPushMock).toHaveBeenCalledWith('/chat/session-a');
+  });
+
+  it('removes stale chat recent records instead of opening missing sessions', async (): Promise<void> => {
+    loadSessionByIdMock.mockResolvedValue(undefined);
+    topRecentRecordsMock.value = [createChatRecord()];
+    const wrapper = mountWelcomePage();
+
+    await wrapper.find('.recent-file-item').trigger('click');
+
+    expect(removeRecentMock).toHaveBeenCalledWith('chat:session-a');
+    expect(routerPushMock).not.toHaveBeenCalled();
   });
 });

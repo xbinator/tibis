@@ -29,6 +29,8 @@ const recentStoreMock = vi.hoisted<RecentStoreMock>(() => ({
   ensureLoaded: vi.fn(),
   removeFile: vi.fn()
 }));
+const routerPushMock = vi.hoisted(() => vi.fn<(_path: string) => Promise<void>>());
+const loadSessionByIdMock = vi.hoisted(() => vi.fn<(_sessionId: string) => Promise<unknown>>());
 const removeTabMock = vi.hoisted(() => vi.fn<(_id: string) => void>());
 const openFileMock = vi.hoisted(() => vi.fn<(_record: Extract<RecentRecord, { type: 'file' }>) => Promise<void>>());
 const openFileByPathMock = vi.hoisted(() => vi.fn<(_path: string) => Promise<void>>());
@@ -59,6 +61,18 @@ const serviceModelStoreMock = vi.hoisted(() => ({
 
 vi.mock('@/stores/workspace/recent', () => ({
   useRecentStore: () => recentStoreMock
+}));
+
+vi.mock('vue-router', () => ({
+  useRouter: () => ({
+    push: routerPushMock
+  })
+}));
+
+vi.mock('@/stores/chat/session', () => ({
+  useChatSessionStore: () => ({
+    loadSessionById: loadSessionByIdMock
+  })
 }));
 
 vi.mock('@/stores/workspace/tabs', () => ({
@@ -185,6 +199,23 @@ function createFileRecord(overrides: Partial<Extract<RecentRecord, { type: 'file
 }
 
 /**
+ * 创建聊天最近记录。
+ * @param overrides - 覆盖字段
+ * @returns 聊天最近记录
+ */
+function createChatRecord(overrides: Partial<Extract<RecentRecord, { type: 'chat' }>> = {}): Extract<RecentRecord, { type: 'chat' }> {
+  return {
+    type: 'chat',
+    id: 'chat:session-a',
+    sessionId: 'session-a',
+    title: '会话 A',
+    createdAt: 1,
+    openedAt: 2,
+    ...overrides
+  };
+}
+
+/**
  * 挂载命令面板。
  * @returns 组件包装器
  */
@@ -230,7 +261,12 @@ describe('BCommandPanel', (): void => {
       createFileRecord({ id: 'file-2', name: 'beta', path: '/tmp/beta.md' })
     ];
     recentStoreMock.ensureLoaded.mockResolvedValue(undefined);
+    recentStoreMock.removeFile.mockReset();
     recentStoreMock.removeFile.mockResolvedValue(undefined);
+    routerPushMock.mockReset();
+    routerPushMock.mockResolvedValue(undefined);
+    loadSessionByIdMock.mockReset();
+    loadSessionByIdMock.mockResolvedValue({ id: 'session-a' });
     removeTabMock.mockClear();
     openFileMock.mockResolvedValue(undefined);
     openFileByPathMock.mockResolvedValue(undefined);
@@ -315,6 +351,31 @@ describe('BCommandPanel', (): void => {
     expect(recentStoreMock.removeFile).toHaveBeenCalledWith('file-1');
     expect(removeTabMock).toHaveBeenCalledWith('file-1');
     expect(wrapper.find('.b-modal-stub').exists()).toBe(true);
+  });
+
+  it('opens existing chat recent records from the panel', async (): Promise<void> => {
+    recentStoreMock.recentRecords = [createChatRecord()];
+    const wrapper = mountCommandPanel();
+    await openPanel('recent');
+
+    await wrapper.find('.b-command-panel__item').trigger('click');
+    await flushPromises();
+
+    expect(loadSessionByIdMock).toHaveBeenCalledWith('session-a');
+    expect(routerPushMock).toHaveBeenCalledWith('/chat/session-a');
+  });
+
+  it('removes stale chat recent records without navigating', async (): Promise<void> => {
+    recentStoreMock.recentRecords = [createChatRecord()];
+    loadSessionByIdMock.mockResolvedValue(undefined);
+    const wrapper = mountCommandPanel();
+    await openPanel('recent');
+
+    await wrapper.find('.b-command-panel__item').trigger('click');
+    await flushPromises();
+
+    expect(recentStoreMock.removeFile).toHaveBeenCalledWith('chat:session-a');
+    expect(routerPushMock).not.toHaveBeenCalled();
   });
 
   it('selects a model and restores focus callback', async (): Promise<void> => {

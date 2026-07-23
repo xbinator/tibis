@@ -6,7 +6,7 @@ import type { CommandPanelActionItem, CommandPanelGroup, CommandPanelIconContext
 import type { VNodeChild } from 'vue';
 import { debounce } from 'lodash-es';
 import type { RecentRecord, StoredDocumentRecord } from '@/shared/storage';
-import { isDocumentRecord } from '@/shared/storage';
+import { isChatRecord, isDocumentRecord } from '@/shared/storage';
 import { WEB_RECORD_ICON } from '@/utils/file/icons';
 import { resolveFileTitle } from '@/utils/file/title';
 
@@ -51,6 +51,8 @@ export interface RecentSourceDeps {
   openFileByPath: (path: string) => RecentSourceActionResult;
   /** 打开 WebView URL。 */
   openWebview: (url: URL) => void;
+  /** 打开聊天会话页。 */
+  openChat: (sessionId: string, recordId: string) => RecentSourceActionResult;
   /** 删除最近记录。 */
   removeRecent: (id: string) => Promise<void>;
   /** 删除关联 tab。 */
@@ -224,6 +226,11 @@ function isRecordMatched(record: RecentRecord, re: RegExp): boolean {
     return re.test(searchable);
   }
 
+  if (isChatRecord(record)) {
+    const searchable = [record.title, record.sessionId].filter(Boolean).join('\0');
+    return re.test(searchable);
+  }
+
   const searchable = [record.url, record.title].filter(Boolean).join('\0');
   return re.test(searchable);
 }
@@ -243,6 +250,21 @@ function createRecentRecordItem(record: RecentRecord, deps: RecentSourceDeps): C
       description: record.url,
       removable: true,
       onSelect: (): void => deps.openWebview(new URL(record.url)),
+      onRemove: async (): Promise<void> => deps.removeRecent(record.id),
+      renderIcon: (context) => deps.renderRecentIcon({ record }, context)
+    };
+  }
+
+  if (isChatRecord(record)) {
+    return {
+      key: record.id,
+      kind: 'chat',
+      title: record.title,
+      description: '聊天会话',
+      removable: true,
+      onSelect: async (): Promise<void> => {
+        await deps.openChat(record.sessionId, record.id);
+      },
       onRemove: async (): Promise<void> => deps.removeRecent(record.id),
       renderIcon: (context) => deps.renderRecentIcon({ record }, context)
     };

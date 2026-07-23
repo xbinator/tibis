@@ -113,6 +113,11 @@ const DEFAULT_ICON = 'vscode-icons:default-file';
 export const WEB_RECORD_ICON = 'vscode-icons:file-type-geojson';
 
 /**
+ * 聊天最近记录展示用的统一图标。
+ */
+export const CHAT_RECORD_ICON = 'lucide:message-circle';
+
+/**
  * 图标组件的默认回退图标，用于无任何上下文信息时的兜底展示。
  */
 export const DEFAULT_FALLBACK_ICON = 'vscode-icons:default-file';

@@ -19,7 +19,7 @@
 import { computed, ref, type CSSProperties } from 'vue';
 import type { RecentRecord } from '@/shared/storage';
 import { isDocumentRecord } from '@/shared/storage';
-import { DEFAULT_FALLBACK_ICON, resolveFileIcon, WEB_RECORD_ICON } from '@/utils/file/icons';
+import { CHAT_RECORD_ICON, DEFAULT_FALLBACK_ICON, resolveFileIcon, WEB_RECORD_ICON } from '@/utils/file/icons';
 import { resolveFileTitle } from '@/utils/file/title';
 
 defineOptions({
@@ -77,6 +77,10 @@ const resolvedIcon = computed<string>(() => {
 
   if (props.record?.type === 'webview') {
     return WEB_RECORD_ICON;
+  }
+
+  if (props.record?.type === 'chat') {
+    return CHAT_RECORD_ICON;
   }
 
   if (props.record && isDocumentRecord(props.record)) {

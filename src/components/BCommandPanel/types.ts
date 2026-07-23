@@ -38,7 +38,7 @@ export interface CommandPanelIconContext {
 /**
  * 命令面板结果项类型。
  */
-export type CommandPanelItemKind = 'file' | 'webview' | 'absolute-path' | 'url' | 'jump' | 'model';
+export type CommandPanelItemKind = 'file' | 'webview' | 'chat' | 'absolute-path' | 'url' | 'jump' | 'model';
 
 /**
  * 命令面板结果项公共字段。

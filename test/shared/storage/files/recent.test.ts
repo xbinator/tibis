@@ -98,6 +98,40 @@ describe('recentFilesStorage.getAllRecentFiles', () => {
     });
     expect(mockElectronAPI.storeSet).toHaveBeenCalledWith('recent_files', records);
   });
+
+  it('drops invalid chat records that cannot resolve a session id', async (): Promise<void> => {
+    mockElectronAPI.storeGet.mockResolvedValue([
+      {
+        type: 'chat',
+        id: 'chat:',
+        title: '损坏会话',
+        createdAt: 1,
+        openedAt: 2
+      },
+      {
+        type: 'chat',
+        id: 'chat:session-a',
+        sessionId: 'session-a',
+        title: '会话 A',
+        createdAt: 3,
+        openedAt: 4
+      }
+    ]);
+
+    const records = await recentFilesStorage.getAllRecentFiles();
+
+    expect(records).toEqual([
+      {
+        type: 'chat',
+        id: 'chat:session-a',
+        sessionId: 'session-a',
+        title: '会话 A',
+        createdAt: 3,
+        openedAt: 4
+      }
+    ]);
+    expect(mockElectronAPI.storeSet).toHaveBeenCalledWith('recent_files', records);
+  });
 });
 
 describe('recentFilesStorage.addWebviewRecord', () => {
@@ -139,5 +173,128 @@ describe('recentFilesStorage.addWebviewRecord', () => {
     const record = await recentFilesStorage.addWebviewRecord('https://example.com', 'Example Domain Updated');
 
     expect(record.favicon).toBe('https://example.com/favicon.ico');
+  });
+});
+
+describe('recentFilesStorage.addChatRecord', () => {
+  beforeEach((): void => {
+    mockElectronAPI.storeGet.mockReset();
+    mockElectronAPI.storeSet.mockReset();
+    mockElectronAPI.storeSet.mockResolvedValue(undefined);
+  });
+
+  it('creates a chat record keyed by session id', async (): Promise<void> => {
+    mockElectronAPI.storeGet.mockResolvedValue([]);
+
+    const record = await recentFilesStorage.addChatRecord('session-a', '会话 A');
+
+    expect(record).toMatchObject({
+      type: 'chat',
+      id: 'chat:session-a',
+      sessionId: 'session-a',
+      title: '会话 A'
+    });
+    expect(mockElectronAPI.storeSet).toHaveBeenCalledWith('recent_files', [record]);
+  });
+
+  it('updates an existing chat record title and openedAt', async (): Promise<void> => {
+    mockElectronAPI.storeGet.mockResolvedValue([
+      {
+        type: 'chat',
+        id: 'chat:session-a',
+        sessionId: 'session-a',
+        title: '旧标题',
+        createdAt: 1,
+        openedAt: 2
+      }
+    ]);
+
+    const record = await recentFilesStorage.addChatRecord('session-a', '新标题');
+
+    expect(record).toMatchObject({
+      type: 'chat',
+      id: 'chat:session-a',
+      sessionId: 'session-a',
+      title: '新标题',
+      createdAt: 1
+    });
+    expect(record.openedAt).toBeGreaterThan(2);
+    expect(mockElectronAPI.storeSet).toHaveBeenCalledWith('recent_files', [record]);
+  });
+
+  it('moves an updated existing chat record to the front of persisted records', async (): Promise<void> => {
+    const fileRecord = {
+      type: 'file',
+      id: 'file-a',
+      path: '/Users/demo/A.md',
+      content: '',
+      name: 'A',
+      ext: 'md',
+      openedAt: 100
+    };
+    mockElectronAPI.storeGet.mockResolvedValue([
+      fileRecord,
+      {
+        type: 'chat',
+        id: 'chat:session-a',
+        sessionId: 'session-a',
+        title: '旧标题',
+        createdAt: 1,
+        openedAt: 2
+      }
+    ]);
+
+    const record = await recentFilesStorage.addChatRecord('session-a', '新标题');
+
+    expect(mockElectronAPI.storeSet).toHaveBeenCalledWith('recent_files', [record, fileRecord]);
+  });
+
+  it('rejects blank chat session ids without writing an invalid record', async (): Promise<void> => {
+    mockElectronAPI.storeGet.mockResolvedValue([]);
+
+    await expect(recentFilesStorage.addChatRecord('   ', '会话 A')).rejects.toThrow('Chat session id is required');
+    expect(mockElectronAPI.storeSet).not.toHaveBeenCalled();
+  });
+});
+
+describe('recentFilesStorage.updateChatRecordTitle', () => {
+  beforeEach((): void => {
+    mockElectronAPI.storeGet.mockReset();
+    mockElectronAPI.storeSet.mockReset();
+    mockElectronAPI.storeSet.mockResolvedValue(undefined);
+  });
+
+  it('updates an existing chat recent title without changing openedAt', async (): Promise<void> => {
+    mockElectronAPI.storeGet.mockResolvedValue([
+      {
+        type: 'chat',
+        id: 'chat:session-a',
+        sessionId: 'session-a',
+        title: '旧标题',
+        createdAt: 1,
+        openedAt: 2
+      }
+    ]);
+
+    const record = await recentFilesStorage.updateChatRecordTitle('session-a', '新标题');
+
+    expect(record).toMatchObject({
+      type: 'chat',
+      id: 'chat:session-a',
+      sessionId: 'session-a',
+      title: '新标题',
+      createdAt: 1,
+      openedAt: 2
+    });
+    expect(mockElectronAPI.storeSet).toHaveBeenCalledWith('recent_files', [record]);
+  });
+
+  it('returns null without writing when no chat recent record matches', async (): Promise<void> => {
+    mockElectronAPI.storeGet.mockResolvedValue([]);
+
+    const record = await recentFilesStorage.updateChatRecordTitle('session-a', '新标题');
+
+    expect(record).toBeNull();
+    expect(mockElectronAPI.storeSet).not.toHaveBeenCalled();
   });
 });

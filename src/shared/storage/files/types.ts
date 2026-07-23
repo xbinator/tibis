@@ -72,6 +72,24 @@ export interface WebviewRecord {
 }
 
 /**
+ * 聊天会话最近记录。
+ */
+export interface ChatRecentRecord {
+  /** 记录类型 */
+  type: 'chat';
+  /** 记录唯一标识，按会话 ID 派生。 */
+  id: string;
+  /** 聊天会话 ID。 */
+  sessionId: string;
+  /** 聊天会话标题。 */
+  title: string;
+  /** 首次进入最近记录的时间戳。 */
+  createdAt: number;
+  /** 最近一次进入该会话的时间戳。 */
+  openedAt: number;
+}
+
+/**
  * 添加或更新 WebView 最近记录的可选参数。
  */
 export interface WebviewRecordOptions {
@@ -80,9 +98,9 @@ export interface WebviewRecordOptions {
 }
 
 /**
- * 最近记录联合类型（文件 + WebView 网页）。
+ * 最近记录联合类型（文件 + WebView 网页 + 聊天会话）。
  */
-export type RecentRecord = StoredFile | StoredWidget | WebviewRecord;
+export type RecentRecord = StoredFile | StoredWidget | WebviewRecord | ChatRecentRecord;
 
 /**
  * 判断最近记录是否为文件型记录。
@@ -91,4 +109,13 @@ export type RecentRecord = StoredFile | StoredWidget | WebviewRecord;
  */
 export function isDocumentRecord(record: RecentRecord | null | undefined): record is StoredFile | StoredWidget {
   return record?.type === 'file' || record?.type === 'widget';
+}
+
+/**
+ * 判断最近记录是否为聊天会话记录。
+ * @param record - 最近记录
+ * @returns 是否为聊天会话记录
+ */
+export function isChatRecord(record: RecentRecord | null | undefined): record is ChatRecentRecord {
+  return record?.type === 'chat';
 }

@@ -14,6 +14,7 @@ import type { RecentRecord, StoredDocumentRecord, StoredFile } from '@/shared/st
 const openFileMock = vi.fn<(_record: StoredDocumentRecord) => Promise<StoredDocumentRecord | null>>();
 const openFileByPathMock = vi.fn<(_path: string) => Promise<StoredFile | null>>();
 const openWebviewMock = vi.fn<(_url: URL) => void>();
+const openChatMock = vi.fn<(_sessionId: string, _recordId: string) => Promise<void>>();
 const removeFileMock = vi.fn<(_id: string) => Promise<void>>();
 const removeTabMock = vi.fn<(_id: string) => void>();
 const getPathStatusMock = vi.fn<(_path: string) => Promise<{ exists: boolean; isFile: boolean }>>();
@@ -38,11 +39,29 @@ function fileRecord(overrides: Partial<Extract<RecentRecord, { type: 'file' }>> 
   };
 }
 
+/**
+ * 创建聊天最近记录。
+ * @param overrides - 覆盖字段
+ * @returns 聊天最近记录
+ */
+function chatRecord(overrides: Partial<Extract<RecentRecord, { type: 'chat' }>> = {}): Extract<RecentRecord, { type: 'chat' }> {
+  return {
+    type: 'chat',
+    id: 'chat:session-a',
+    sessionId: 'session-a',
+    title: '会话 A',
+    createdAt: 1,
+    openedAt: 2,
+    ...overrides
+  };
+}
+
 describe('BCommandPanel sources', (): void => {
   beforeEach((): void => {
     openFileMock.mockReset();
     openFileByPathMock.mockReset();
     openWebviewMock.mockReset();
+    openChatMock.mockReset();
     removeFileMock.mockReset();
     removeTabMock.mockReset();
     getPathStatusMock.mockReset();
@@ -64,7 +83,7 @@ describe('BCommandPanel sources', (): void => {
             kind: 'jump',
             description: '切换当前使用的模型',
             hideIcon: true,
-            routeInput: '> model',
+            routeInput: '> model'
           }
         ]
       }
@@ -84,6 +103,7 @@ describe('BCommandPanel sources', (): void => {
       openFile: openFileMock,
       openFileByPath: openFileByPathMock,
       openWebview: openWebviewMock,
+      openChat: openChatMock,
       removeRecent: removeFileMock,
       removeTab: removeTabMock,
       getPathStatus: getPathStatusMock,
@@ -112,6 +132,7 @@ describe('BCommandPanel sources', (): void => {
       openFile: openFileMock,
       openFileByPath: openFileByPathMock,
       openWebview: openWebviewMock,
+      openChat: openChatMock,
       removeRecent: removeFileMock,
       removeTab: removeTabMock,
       getPathStatus: getPathStatusMock,
@@ -122,6 +143,34 @@ describe('BCommandPanel sources', (): void => {
     const groups = await source.search('hidden-needle');
 
     expect(groups).toEqual([{ key: 'recent', items: [] }]);
+  });
+
+  it('creates chat recent items that open sessions without closing chat tabs', async (): Promise<void> => {
+    const source = createRecentSource({
+      getRecords: () => [chatRecord()],
+      ensureLoaded: vi.fn(),
+      openFile: openFileMock,
+      openFileByPath: openFileByPathMock,
+      openWebview: openWebviewMock,
+      openChat: openChatMock,
+      removeRecent: removeFileMock,
+      removeTab: removeTabMock,
+      getPathStatus: getPathStatusMock,
+      pathDebounceMs: 0,
+      renderRecentIcon: () => h('span', { class: 'recent-icon-stub' })
+    });
+
+    const groups = await source.search('会话');
+    const chatItem = groups[0]?.items[0] as CommandPanelActionItem | undefined;
+
+    expect(chatItem).toMatchObject({ kind: 'chat', title: '会话 A', description: '聊天会话', removable: true });
+
+    await chatItem?.onSelect();
+    expect(openChatMock).toHaveBeenCalledWith('session-a', 'chat:session-a');
+
+    await chatItem?.onRemove?.();
+    expect(removeFileMock).toHaveBeenCalledWith('chat:session-a');
+    expect(removeTabMock).not.toHaveBeenCalled();
   });
 
   it('creates model groups and marks current chat model active', async (): Promise<void> => {

@@ -28,7 +28,10 @@ const routeFailureMock = vi.hoisted(() => ({ type: 'aborted' }));
 const abortRuntimeMock = vi.hoisted(() => vi.fn<() => Promise<void>>());
 const resetDraftMock = vi.hoisted(() => vi.fn<() => Promise<void>>());
 const ensureSessionsMock = vi.hoisted(() => vi.fn<() => Promise<void>>());
+const loadSessionByIdMock = vi.hoisted(() => vi.fn<(sessionId: string) => Promise<ChatSession | undefined>>());
 const findSessionMock = vi.hoisted(() => vi.fn<(sessionId: string | null | undefined) => ChatSession | undefined>());
+const addChatRecordMock = vi.hoisted(() => vi.fn<(_sessionId: string, _title: string) => Promise<unknown>>());
+const touchChatRecordMock = vi.hoisted(() => vi.fn<(_id: string) => Promise<unknown>>());
 const messageErrorMock = vi.hoisted(() => vi.fn());
 
 vi.mock('ant-design-vue', () => ({
@@ -47,9 +50,17 @@ vi.mock('@/router/navigation', () => ({
 }));
 
 vi.mock('@/stores/chat/session', () => ({
-  useChatSessionStore: (): { ensureSessions: typeof ensureSessionsMock; findSession: typeof findSessionMock } => ({
+  useChatSessionStore: (): { ensureSessions: typeof ensureSessionsMock; loadSessionById: typeof loadSessionByIdMock; findSession: typeof findSessionMock } => ({
     ensureSessions: ensureSessionsMock,
+    loadSessionById: loadSessionByIdMock,
     findSession: findSessionMock
+  })
+}));
+
+vi.mock('@/stores/workspace/recent', () => ({
+  useRecentStore: (): { addChatRecord: typeof addChatRecordMock; touchChatRecord: typeof touchChatRecordMock } => ({
+    addChatRecord: addChatRecordMock,
+    touchChatRecord: touchChatRecordMock
   })
 }));
 
@@ -120,7 +131,13 @@ describe('chat page', (): void => {
     resetDraftMock.mockResolvedValue();
     ensureSessionsMock.mockReset();
     ensureSessionsMock.mockResolvedValue();
+    loadSessionByIdMock.mockReset();
+    loadSessionByIdMock.mockImplementation(async (sessionId: string): Promise<ChatSession | undefined> => findSessionMock(sessionId));
     findSessionMock.mockReset();
+    addChatRecordMock.mockReset();
+    addChatRecordMock.mockResolvedValue(undefined);
+    touchChatRecordMock.mockReset();
+    touchChatRecordMock.mockResolvedValue(undefined);
     messageErrorMock.mockReset();
   });
 
@@ -138,6 +155,17 @@ describe('chat page', (): void => {
     await flushPromises();
 
     expect(messageErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('records the route session when shared session collection loading fails but direct session loading succeeds', async (): Promise<void> => {
+    ensureSessionsMock.mockRejectedValue(new Error('load failed'));
+    loadSessionByIdMock.mockResolvedValue(createSession('session-a', '会话 A'));
+
+    mountPage('session-a');
+    await flushPromises();
+
+    expect(loadSessionByIdMock).toHaveBeenCalledWith('session-a');
+    expect(addChatRecordMock).toHaveBeenCalledWith('session-a', '会话 A');
   });
 
   it('captures the route session for draft and persisted pages', (): void => {
@@ -198,6 +226,72 @@ describe('chat page', (): void => {
     await flushPromises();
 
     expect(tabsStore.tabs[0]?.title).toBe('会话 A');
+  });
+
+  it('records persisted chat sessions in recent records after shared sessions load', async (): Promise<void> => {
+    findSessionMock.mockReturnValue(createSession('session-a', '会话 A'));
+
+    mountPage('session-a');
+    await flushPromises();
+
+    expect(addChatRecordMock).toHaveBeenCalledWith('session-a', '会话 A');
+  });
+
+  it('records a persisted chat session resolved outside the shared session list', async (): Promise<void> => {
+    findSessionMock.mockReturnValue(undefined);
+    loadSessionByIdMock.mockResolvedValue(createSession('session-a', '会话 A'));
+
+    mountPage('session-a');
+    await flushPromises();
+
+    expect(loadSessionByIdMock).toHaveBeenCalledWith('session-a');
+    expect(addChatRecordMock).toHaveBeenCalledWith('session-a', '会话 A');
+  });
+
+  it('does not record recent entries for missing persisted chat sessions', async (): Promise<void> => {
+    findSessionMock.mockReturnValue(undefined);
+    loadSessionByIdMock.mockResolvedValue(undefined);
+
+    mountPage('missing-session');
+    await flushPromises();
+
+    expect(loadSessionByIdMock).toHaveBeenCalledWith('missing-session');
+    expect(addChatRecordMock).not.toHaveBeenCalled();
+    expect(touchChatRecordMock).not.toHaveBeenCalled();
+  });
+
+  it('does not record draft chat pages in recent records', async (): Promise<void> => {
+    mountPage(null);
+    await flushPromises();
+
+    expect(addChatRecordMock).not.toHaveBeenCalled();
+  });
+
+  it('touches the chat recent record when the persisted title has not changed', async (): Promise<void> => {
+    findSessionMock.mockReturnValue(createSession('session-a', '会话 A'));
+    const wrapper = mountPage('session-a');
+    await flushPromises();
+    addChatRecordMock.mockClear();
+
+    findBChat(wrapper).$emit('session-title-persisted', 'session-a', '会话 A');
+    await flushPromises();
+
+    expect(addChatRecordMock).not.toHaveBeenCalled();
+    expect(touchChatRecordMock).toHaveBeenCalledWith('chat:session-a');
+  });
+
+  it('recreates a chat recent record when touching the existing record fails', async (): Promise<void> => {
+    findSessionMock.mockReturnValue(createSession('session-a', '会话 A'));
+    const wrapper = mountPage('session-a');
+    await flushPromises();
+    addChatRecordMock.mockClear();
+    touchChatRecordMock.mockRejectedValueOnce(new Error('missing recent'));
+
+    findBChat(wrapper).$emit('session-title-persisted', 'session-a', '会话 A');
+    await flushPromises();
+
+    expect(touchChatRecordMock).toHaveBeenCalledWith('chat:session-a');
+    expect(addChatRecordMock).toHaveBeenCalledWith('session-a', '会话 A');
   });
 
   it('binds a draft session immediately but promotes only after runtime becomes idle', async (): Promise<void> => {

@@ -6,7 +6,7 @@
 import { defineStore } from 'pinia';
 import { customAlphabet } from 'nanoid';
 import { native } from '@/shared/platform';
-import type { StoredDocumentRecord, WebviewRecord, RecentRecord, WebviewRecordOptions } from '@/shared/storage';
+import type { ChatRecentRecord, StoredDocumentRecord, WebviewRecord, RecentRecord, WebviewRecordOptions } from '@/shared/storage';
 import { isDocumentRecord, recentFilesStorage, sortRecentFiles } from '@/shared/storage';
 
 /**
@@ -347,6 +347,46 @@ export const useRecentStore = defineStore('recent', {
      */
     async touchWebviewRecord(id: string): Promise<WebviewRecord> {
       const result = await recentFilesStorage.touchWebviewRecord(id);
+      this.patchCache(result);
+      this.syncRecentFiles();
+      return result;
+    },
+
+    /**
+     * 添加或更新聊天会话最近记录。
+     * @param sessionId - 聊天会话 ID
+     * @param title - 聊天会话标题
+     * @returns 创建或更新后的聊天最近记录
+     */
+    async addChatRecord(sessionId: string, title: string): Promise<ChatRecentRecord> {
+      const result = await recentFilesStorage.addChatRecord(sessionId, title);
+      this.patchCache(result);
+      this.syncRecentFiles();
+      return result;
+    },
+
+    /**
+     * 更新聊天会话最近记录的 openedAt。
+     * @param id - 聊天最近记录 ID
+     * @returns 更新后的聊天最近记录
+     */
+    async touchChatRecord(id: string): Promise<ChatRecentRecord> {
+      const result = await recentFilesStorage.touchChatRecord(id);
+      this.patchCache(result);
+      this.syncRecentFiles();
+      return result;
+    },
+
+    /**
+     * 更新已存在聊天会话最近记录的标题。
+     * @param sessionId - 聊天会话 ID
+     * @param title - 最新会话标题
+     * @returns 更新后的聊天最近记录；不存在时返回 null
+     */
+    async updateChatRecordTitle(sessionId: string, title: string): Promise<ChatRecentRecord | null> {
+      const result = await recentFilesStorage.updateChatRecordTitle(sessionId, title);
+      if (!result) return null;
+
       this.patchCache(result);
       this.syncRecentFiles();
       return result;

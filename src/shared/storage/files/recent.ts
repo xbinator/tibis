@@ -8,9 +8,11 @@ import { getElectronAPI } from '../../platform/electron-api';
 import { hashString } from '../../utils/hash';
 import {
   isDocumentRecord,
+  isChatRecord,
   type StoredDocumentRecord,
   type StoredFile,
   type StoredWidget,
+  type ChatRecentRecord,
   type WebviewRecord,
   type RecentRecord,
   type WebviewRecordOptions
@@ -18,6 +20,7 @@ import {
 
 const RECENT_FILES_KEY = 'recent_files';
 const MAX_RECENT_FILES = 100;
+const CHAT_RECENT_ID_PREFIX = 'chat:';
 
 let writeQueue: Promise<void> = Promise.resolve();
 
@@ -59,6 +62,41 @@ function normalizeOptionalFavicon(value: unknown): string | undefined {
 }
 
 /**
+ * 归一化必填聊天会话 ID。
+ * @param sessionId - 原始聊天会话 ID
+ * @returns 非空会话 ID
+ */
+function normalizeRequiredSessionId(sessionId: string): string {
+  const normalizedSessionId = normalizeTextField(sessionId);
+  if (!normalizedSessionId) throw new Error('Chat session id is required');
+
+  return normalizedSessionId;
+}
+
+/**
+ * 构建聊天会话最近记录 ID。
+ * @param sessionId - 聊天会话 ID
+ * @returns 最近记录 ID
+ */
+export function createChatRecentId(sessionId: string): string {
+  return `${CHAT_RECENT_ID_PREFIX}${normalizeRequiredSessionId(sessionId)}`;
+}
+
+/**
+ * 从历史记录字段中解析会话 ID。
+ * @param value - 原始会话 ID
+ * @param fallbackId - 原始记录 ID
+ * @returns 归一化后的会话 ID
+ */
+function normalizeSessionId(value: unknown, fallbackId: unknown): string {
+  const normalized = normalizeTextField(value);
+  if (normalized) return normalized;
+
+  const id = normalizeTextField(fallbackId);
+  return id.startsWith(CHAT_RECENT_ID_PREFIX) ? id.slice(CHAT_RECENT_ID_PREFIX.length) : id;
+}
+
+/**
  * 从文件路径中推导文件名和扩展名。
  * @param filePath - 文件路径
  * @returns 文件名主体和扩展名
@@ -73,6 +111,13 @@ function deriveFileTitleParts(filePath: string | null): { name: string; ext: str
     name: matched?.[1] ?? fileName,
     ext: matched?.[2] ?? ''
   };
+}
+
+/**
+ * 将可选时间字段归一化为可排序数字，缺失或非有限数时返回 0。
+ */
+function normalizeTime(value: number | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
 /**
@@ -103,16 +148,51 @@ function normalizeStoredDocumentRecord<T extends StoredDocumentRecord>(file: T, 
 }
 
 /**
+ * 将单个聊天最近记录归一化到当前存储模型。
+ * @param record - 聊天最近记录
+ * @returns 归一化后的聊天最近记录
+ */
+function normalizeChatRecord(record: ChatRecentRecord): ChatRecentRecord | null {
+  const rawRecord = record as unknown as Record<string, unknown>;
+  const sessionId = normalizeSessionId(rawRecord.sessionId, rawRecord.id);
+  if (!sessionId) return null;
+
+  return {
+    type: 'chat',
+    id: createChatRecentId(sessionId),
+    sessionId,
+    title: normalizeTextField(rawRecord.title) || '聊天',
+    createdAt: normalizeTime(rawRecord.createdAt as number | undefined) || Date.now(),
+    openedAt: normalizeTime(rawRecord.openedAt as number | undefined) || Date.now()
+  };
+}
+
+/**
  * 批量归一化存储记录，返回归一化结果及是否产生了需要回写的变化。
  */
 function normalizeStoredFiles(files: RecentRecord[]): { files: RecentRecord[]; changed: boolean } {
   let changed = false;
+  const normalizedFiles: RecentRecord[] = [];
 
-  const normalizedFiles = files.map((file) => {
+  for (const file of files) {
     const rawRecord = file as unknown as Record<string, unknown>;
 
     if (rawRecord.type === 'webview') {
-      return file;
+      normalizedFiles.push(file);
+      continue;
+    }
+
+    if (rawRecord.type === 'chat') {
+      const normalized = normalizeChatRecord({ ...rawRecord, type: 'chat' } as ChatRecentRecord);
+      if (!normalized) {
+        changed = true;
+        continue;
+      }
+      if (!changed && !isEqual(normalized, file)) {
+        changed = true;
+      }
+      normalizedFiles.push(normalized);
+      continue;
     }
 
     if (rawRecord.type === 'widget') {
@@ -120,24 +200,18 @@ function normalizeStoredFiles(files: RecentRecord[]): { files: RecentRecord[]; c
       if (!changed && !isEqual(normalized, file)) {
         changed = true;
       }
-      return normalized;
+      normalizedFiles.push(normalized);
+      continue;
     }
 
     const normalized = normalizeStoredDocumentRecord({ ...rawRecord, type: 'file' } as StoredFile, 'file');
     if (!changed && !isEqual(normalized, file)) {
       changed = true;
     }
-    return normalized;
-  });
+    normalizedFiles.push(normalized);
+  }
 
   return { files: normalizedFiles, changed };
-}
-
-/**
- * 将可选时间字段归一化为可排序数字，缺失或非有限数时返回 0。
- */
-function normalizeTime(value: number | undefined): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
 /**
@@ -355,6 +429,95 @@ export const recentFilesStorage = {
     });
   },
 
+  /**
+   * 添加或覆盖聊天会话最近记录。
+   * 根据会话 ID 生成稳定记录 ID，同一会话自动去重。
+   */
+  async addChatRecord(sessionId: string, title: string): Promise<ChatRecentRecord> {
+    const normalizedSessionId = normalizeRequiredSessionId(sessionId);
+
+    return enqueueWrite(async () => {
+      const files = await readRecentFiles();
+      const now = Date.now();
+      const id = createChatRecentId(normalizedSessionId);
+      const existingIndex = files.findIndex((item) => isChatRecord(item) && item.sessionId === normalizedSessionId);
+
+      if (existingIndex !== -1) {
+        const existing = files[existingIndex] as ChatRecentRecord;
+        const updated: ChatRecentRecord = {
+          ...existing,
+          id,
+          sessionId: normalizedSessionId,
+          title: normalizeTextField(title) || existing.title,
+          openedAt: now
+        };
+        files.splice(existingIndex, 1);
+        files.unshift(updated);
+        await writeRecentFiles(files);
+        return updated;
+      }
+
+      const record: ChatRecentRecord = {
+        type: 'chat',
+        id,
+        sessionId: normalizedSessionId,
+        title: normalizeTextField(title) || '聊天',
+        createdAt: now,
+        openedAt: now
+      };
+      files.unshift(record);
+      await writeRecentFiles(files);
+      return record;
+    });
+  },
+
+  /**
+   * 更新聊天会话最近记录的 openedAt。
+   * @param id - 聊天最近记录 ID
+   * @returns 更新后的记录
+   */
+  async touchChatRecord(id: string): Promise<ChatRecentRecord> {
+    return enqueueWrite(async () => {
+      const files = await readRecentFiles();
+      const index = files.findIndex((item) => isChatRecord(item) && item.id === id);
+
+      if (index === -1) throw new Error(`Chat record not found: ${id}`);
+
+      const record = files[index] as ChatRecentRecord;
+      const touched: ChatRecentRecord = { ...record, openedAt: Date.now() };
+      files.splice(index, 1);
+      files.unshift(touched);
+      await writeRecentFiles(files);
+      return touched;
+    });
+  },
+
+  /**
+   * 更新已存在聊天会话最近记录的标题。
+   * @param sessionId - 聊天会话 ID
+   * @param title - 最新会话标题
+   * @returns 更新后的记录；记录不存在时返回 null
+   */
+  async updateChatRecordTitle(sessionId: string, title: string): Promise<ChatRecentRecord | null> {
+    const normalizedSessionId = normalizeRequiredSessionId(sessionId);
+
+    return enqueueWrite(async () => {
+      const files = await readRecentFiles();
+      const index = files.findIndex((item) => isChatRecord(item) && item.sessionId === normalizedSessionId);
+
+      if (index === -1) return null;
+
+      const record = files[index] as ChatRecentRecord;
+      const updated: ChatRecentRecord = {
+        ...record,
+        title: normalizeTextField(title) || record.title
+      };
+      files[index] = updated;
+      await writeRecentFiles(files);
+      return updated;
+    });
+  },
+
   /** 从最近记录列表中移除一个或多个记录。 */
   async removeRecentFile(...ids: string[]): Promise<void> {
     await enqueueWrite(async () => {
@@ -375,4 +538,4 @@ export const recentFilesStorage = {
   }
 };
 
-export type { StoredDocumentRecord, StoredFile, StoredWidget };
+export type { ChatRecentRecord, StoredDocumentRecord, StoredFile, StoredWidget };
