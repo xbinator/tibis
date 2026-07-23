@@ -73,7 +73,7 @@
 </template>
 
 <script setup lang="ts">
-import type { BChatProps, BChatRuntimeSourceStatus, BChatRuntimeStatusChange, Message } from './utils/types';
+import type { BChatProps, BChatResetDraftOptions, BChatRuntimeSourceStatus, BChatRuntimeStatusChange, Message } from './utils/types';
 import type { ChatMessageConfirmationAction, ChatSession } from 'types/chat';
 import type { ChatRuntimeContextUsageSnapshot } from 'types/chat-runtime';
 import { computed, h, onUnmounted, provide, ref, toRef, watch } from 'vue';
@@ -497,10 +497,10 @@ async function abortRuntime(): Promise<void> {
  * 清空输入与消息并进入新的草稿会话。
  * 该能力供顶部草稿标签复用时显式调用。
  */
-async function resetDraft(): Promise<void> {
+async function resetDraft(options: BChatResetDraftOptions = {}): Promise<void> {
   if (loading.value) return;
-  inputEvents.clear();
-  await resetDraftState();
+  inputEvents.clear(options);
+  await resetDraftState(options);
 }
 
 /**

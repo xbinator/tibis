@@ -16,6 +16,14 @@ interface ChatInputOptions {
 }
 
 /**
+ * 草稿输入清空选项。
+ */
+interface ChatInputClearOptions {
+  /** 是否在清空后聚焦输入框，默认聚焦。 */
+  focus?: boolean;
+}
+
+/**
  * 草稿输入状态管理 hook
  * @param options - 依赖项配置
  * @returns 草稿输入状态和操作方法
@@ -28,11 +36,12 @@ export function useChatInput(options: ChatInputOptions) {
 
   /**
    * 清空当前草稿输入和文件引用，不影响对话内容
+   * @param clearOptions - 清空行为选项
    */
-  function clear(): void {
+  function clear(clearOptions: ChatInputClearOptions = {}): void {
     inputContent.value = '';
     inputImages.value = [];
-    options.focusInput();
+    if (clearOptions.focus !== false) options.focusInput();
   }
 
   /**

@@ -2,7 +2,7 @@
  * @file useChatSessionRuntime.ts
  * @description 管理 BChat 草稿会话、历史加载、会话切换与自动命名运行时态。
  */
-import type { Message } from '../utils/types';
+import type { BChatResetDraftOptions, Message } from '../utils/types';
 import type { ChatSession, ChatSessionModelMetadata } from 'types/chat';
 import type { ComputedRef, Ref } from 'vue';
 import { computed, nextTick, ref, watch } from 'vue';
@@ -41,7 +41,7 @@ interface UseChatSessionRuntimeReturn extends ReturnType<typeof useChatHistory> 
   /** 确保存在可持久化会话 */
   ensureActiveSession: (title: string, model: ChatSessionModelMetadata) => Promise<string>;
   /** 重置内部草稿状态，但不触发外部导航事件。 */
-  resetDraftState: () => Promise<void>;
+  resetDraftState: (resetOptions?: BChatResetDraftOptions) => Promise<void>;
   /** 加载当前会话更多历史 */
   handleLoadHistory: () => Promise<void>;
   /** 捕获自动命名快照 */
@@ -63,14 +63,14 @@ export function useChatSessionRuntime(options: UseChatSessionRuntimeOptions): Us
   const history = useChatHistory();
 
   /** 重置新会话草稿状态。 */
-  async function resetDraftSessionState(): Promise<void> {
+  async function resetDraftSessionState(resetOptions: BChatResetDraftOptions = {}): Promise<void> {
     options.disposeConfirmation();
     createdSessionId.value = null;
     autoNameSession.value = undefined;
     history.setLoadedMessages([]);
     history.hasMoreHistory.value = false;
     await nextTick();
-    options.focusInput();
+    if (resetOptions.focus !== false) options.focusInput();
   }
 
   /** 加载指定会话消息。 */

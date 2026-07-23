@@ -920,7 +920,7 @@ describe('BChat sessionId runtime', (): void => {
     const runtimeId = await submitTextAndReadRuntimeId(wrapper, 'abort from host');
     const exposed = wrapper.vm as unknown as {
       abortRuntime: () => Promise<void>;
-      resetDraft: () => Promise<void>;
+      resetDraft: (options?: { focus?: boolean }) => Promise<void>;
     };
 
     await exposed.abortRuntime();
@@ -934,6 +934,21 @@ describe('BChat sessionId runtime', (): void => {
 
     expect(wrapper.findComponent(BSmartEditorStub).props('value')).toBe('');
     expect(wrapper.emitted('new-session')).toBeUndefined();
+  });
+
+  it('allows parent hosts to reset a draft without focusing the smart editor', async (): Promise<void> => {
+    const wrapper = mountBChat('session-active');
+    await wrapper.setProps({ sessionId: null });
+    await flushPromises();
+    const exposed = wrapper.vm as unknown as {
+      resetDraft: (options?: { focus?: boolean }) => Promise<void>;
+    };
+
+    promptEditorMockState.focus.mockClear();
+    await exposed.resetDraft({ focus: false });
+    await flushPromises();
+
+    expect(promptEditorMockState.focus).not.toHaveBeenCalled();
   });
 
   it('requests a new session from the host without clearing persisted messages', async (): Promise<void> => {

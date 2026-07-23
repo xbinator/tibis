@@ -57,6 +57,8 @@ export interface ChatTabRuntimeRecord {
   sessionId?: string;
   /** 当前聊天 Runtime 状态。 */
   status: ChatTabRuntimeStatus;
+  /** 外部宿主请求当前聊天页聚焦输入框的递增序号。 */
+  focusRequestId?: number;
 }
 
 /**
@@ -267,6 +269,16 @@ export const useChatTabStore = defineStore('chat-tab', {
       if (!record) return;
       if (record.status === 'completed') record.status = 'idle';
       syncTabStatus(tabId, record.status);
+    },
+
+    /**
+     * 请求指定聊天标签在可见时聚焦输入框。
+     * @param tabId - 标签 ID
+     */
+    requestFocus(tabId: string): void {
+      const record = this.records[tabId];
+      if (!record) return;
+      record.focusRequestId = (record.focusRequestId ?? 0) + 1;
     },
 
     /**

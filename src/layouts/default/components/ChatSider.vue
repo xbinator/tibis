@@ -23,7 +23,7 @@
           @keydown.enter.prevent="finishTitleEdit"
         />
         <div v-else :class="[bem('title'), 'truncate']" title="双击修改标题" @dblclick="startTitleEdit">{{ currentTitle }}</div>
-        <!--  -->
+        <!-- 新建会话 -->
         <BButton square size="small" type="text" :disabled="isSessionActionDisabled" @click="handleCreateDraftSession">
           <BIcon icon="lucide:message-circle-plus" :size="16" />
         </BButton>
@@ -35,7 +35,7 @@
           @delete-session="handleDeletedSession"
           @load-more="loadMoreSessions"
         />
-        <!--  -->
+        <!-- 打开聊天页面 -->
         <BButton square size="small" type="text" :disabled="isSessionActionDisabled" @click="openChatPage">
           <BIcon icon="lucide:square-arrow-out-up-right" :size="16" />
         </BButton>
@@ -160,17 +160,11 @@ function handleClose(): void {
 async function handleCreateDraftSession(): Promise<void> {
   if (isSessionActionDisabled.value) return;
   await createDraftSession();
-  await asyncTo(bChatRef.value?.resetDraft() ?? Promise.resolve());
-  // 草稿态切换后聚焦输入框（已在草稿态时 watch 不会触发，需显式调用）。
-  bChatRef.value?.focusInput();
+  await asyncTo(bChatRef.value?.resetDraft({ focus: false }) ?? Promise.resolve());
 }
 
 /** 聊天页路由与已打开标签同步能力。 */
-const {
-  openChatPage,
-  switchSession: handleSwitchSession,
-  handleDeletedSession
-} = useChatRoute({
+const { openChatPage, handleSwitchSession, handleDeletedSession } = useChatRoute({
   isSessionActionDisabled: (): boolean => isSessionActionDisabled.value,
   openDraftSession: handleCreateDraftSession,
   switchSession: switchSideSession,

@@ -4,7 +4,7 @@
  */
 import { useRoute, useRouter } from 'vue-router';
 import { isBlockingNavigationFailure } from '@/router/navigation';
-import { CHAT_DRAFT_TAB_ID, createChatPath, findChatTab } from '@/router/routes/helpers/chatRouteTab';
+import { CHAT_DRAFT_TAB_ID, createChatPath, createChatTabId, findChatTab } from '@/router/routes/helpers/chatRouteTab';
 import { createChatRecentId } from '@/shared/storage';
 import { useChatTabStore } from '@/stores/chat/tab';
 import { useSettingStore } from '@/stores/ui/setting';
@@ -48,7 +48,7 @@ interface ChatRouteApi {
   /** 打开当前侧栏会话对应的聊天页。 */
   openChatPage: () => Promise<void>;
   /** 路由优先的会话切换。 */
-  switchSession: (sessionId: string) => Promise<void>;
+  handleSwitchSession: (sessionId: string) => Promise<void>;
   /** 同步成功删除后的侧栏状态，并关闭对应顶部聊天标签。 */
   handleDeletedSession: (sessionId: string) => Promise<void>;
 }
@@ -109,6 +109,7 @@ export function useChatRoute(options: UseChatRouteOptions): ChatRouteApi {
     const [navigationError, navigationResult] = await asyncTo(router.push(target?.path ?? createChatPath(sessionId)));
     if (navigationError || isBlockingNavigationFailure(navigationResult)) return;
 
+    runtimeStore.requestFocus(target?.tabId ?? createChatTabId(sessionId));
     await options.openDraftSession();
   }
 
@@ -116,10 +117,11 @@ export function useChatRoute(options: UseChatRouteOptions): ChatRouteApi {
    * 优先打开已拥有目标会话的聊天页；未被页面拥有时切换侧栏会话。
    * @param sessionId - 目标会话 ID
    */
-  async function switchSession(sessionId: string): Promise<void> {
+  async function handleSwitchSession(sessionId: string): Promise<void> {
     const target = resolveRoute(sessionId);
     if (target) {
-      await asyncTo(router.push(target.path));
+      const [navigationError, navigationResult] = await asyncTo(router.push(target.path));
+      if (!navigationError && !isBlockingNavigationFailure(navigationResult)) runtimeStore.requestFocus(target.tabId);
       return;
     }
 
@@ -154,7 +156,7 @@ export function useChatRoute(options: UseChatRouteOptions): ChatRouteApi {
   return {
     resolveRoute,
     openChatPage,
-    switchSession,
+    handleSwitchSession,
     handleDeletedSession
   };
 }

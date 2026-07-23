@@ -55,6 +55,8 @@ const ownerTabId = ref<string>(createChatTabId(initialSessionId));
 const pendingSession = ref<ChatSession>();
 /** 最近记录上一次成功写入的 payload，避免重复刷新同一标题。 */
 const lastRecentPayload = ref<string>('');
+/** 是否已有输入框聚焦请求排入下一轮渲染，避免 mount 与 activate 重复触发。 */
+let focusInputQueued = false;
 
 // 独立聊天页接管同一会话时，侧栏回到空白草稿，避免两个 BChat 同时拥有同一会话。
 if (initialSessionId && settingStore.chatSidebarActiveSessionId === initialSessionId) {
@@ -106,8 +108,11 @@ function markCurrentViewed(): void {
  */
 function focusChatInput(): void {
   if (!ownerActive.value) return;
+  if (focusInputQueued) return;
 
+  focusInputQueued = true;
   nextTick((): void => {
+    focusInputQueued = false;
     if (!ownerActive.value) return;
 
     bChatRef.value?.focusInput();
@@ -295,6 +300,10 @@ function handleProviderNavigate(): void {
 watch(() => route.fullPath, markCurrentViewed, { immediate: true });
 watch(initialSessionTitle, syncInitialSessionTitle, { immediate: true });
 watch(
+  (): number | undefined => runtimeStore.records[ownerTabId.value]?.focusRequestId,
+  (): void => focusChatInput()
+);
+watch(
   (): boolean => runtimeStore.isClosing(ownerTabId.value),
   (closing: boolean, previousClosing: boolean): void => {
     // 关闭被取消时，恢复终止回调暂缓的草稿晋升。
@@ -311,6 +320,7 @@ onActivated((): void => {
 onMounted((): void => {
   runtimeStore.registerController(ownerTabId.value, runtimeController);
   asyncTo(ensureSharedSessions());
+  focusChatInput();
 });
 
 onUnmounted((): void => {

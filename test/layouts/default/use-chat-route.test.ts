@@ -129,6 +129,19 @@ describe('useChatRoute', (): void => {
     expect(openDraftSessionMock).toHaveBeenCalledOnce();
   });
 
+  it('requests focus for an already-owned chat page after opening it', async (): Promise<void> => {
+    useSettingStore().setChatSidebarActiveSessionId('session-a');
+    useTabsStore().tabs = [createTab('chat:session-a', '/chat/session-a')];
+    const runtimeStore = useChatTabStore();
+    runtimeStore.ensureTab('chat:session-a', 'session-a');
+
+    await createRouteApi().openChatPage();
+
+    expect(routerPushMock).toHaveBeenCalledWith('/chat/session-a');
+    expect(runtimeStore.records['chat:session-a']?.focusRequestId).toBe(1);
+    expect(openDraftSessionMock).toHaveBeenCalledOnce();
+  });
+
   it('keeps the side session when opening a chat page fails', async (): Promise<void> => {
     useSettingStore().setChatSidebarActiveSessionId('session-a');
     routerPushMock.mockResolvedValue(routeFailureMock);
@@ -141,14 +154,26 @@ describe('useChatRoute', (): void => {
   it('navigates to an already-owned session instead of switching the side chat', async (): Promise<void> => {
     useTabsStore().tabs = [createTab('chat:session-a', '/chat/session-a')];
 
-    await createRouteApi().switchSession('session-a');
+    await createRouteApi().handleSwitchSession('session-a');
 
     expect(routerPushMock).toHaveBeenCalledWith('/chat/session-a');
     expect(switchSessionMock).not.toHaveBeenCalled();
   });
 
+  it('requests focus after switching to an already-owned chat page', async (): Promise<void> => {
+    useTabsStore().tabs = [createTab('chat:session-a', '/chat/session-a')];
+    const runtimeStore = useChatTabStore();
+    runtimeStore.ensureTab('chat:session-a', 'session-a');
+
+    await createRouteApi().handleSwitchSession('session-a');
+
+    expect(routerPushMock).toHaveBeenCalledWith('/chat/session-a');
+    expect(runtimeStore.records['chat:session-a']?.focusRequestId).toBe(1);
+    expect(switchSessionMock).not.toHaveBeenCalled();
+  });
+
   it('delegates to the side session switch when no chat page owns the session', async (): Promise<void> => {
-    await createRouteApi().switchSession('session-a');
+    await createRouteApi().handleSwitchSession('session-a');
 
     expect(routerPushMock).not.toHaveBeenCalled();
     expect(switchSessionMock).toHaveBeenCalledWith('session-a');

@@ -80,6 +80,14 @@ export interface BChatProps {
 }
 
 /**
+ * BChat 草稿重置选项。
+ */
+export interface BChatResetDraftOptions {
+  /** 是否在重置后聚焦输入编辑器，默认聚焦。 */
+  focus?: boolean;
+}
+
+/**
  * BChat 向页面宿主发布的持续运行状态。
  */
 export type BChatRuntimeSourceStatus = 'idle' | 'running' | 'waiting' | 'error';

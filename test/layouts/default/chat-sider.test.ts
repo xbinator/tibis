@@ -15,7 +15,8 @@ import { useChatTabStore } from '@/stores/chat/tab';
 import { useSettingStore } from '@/stores/ui/setting';
 import { useTabsStore } from '@/stores/workspace/tabs';
 
-const bChatResetDraftMock = vi.hoisted(() => vi.fn<() => Promise<void>>());
+const bChatResetDraftMock = vi.hoisted(() => vi.fn<(options?: { focus?: boolean }) => Promise<void>>());
+const bChatFocusInputMock = vi.hoisted(() => vi.fn<() => void>());
 const routerPushMock = vi.hoisted(() => vi.fn<(path: string) => Promise<unknown>>());
 const routeFailureMock = vi.hoisted(() => ({ type: 'aborted' }));
 const routeMock = vi.hoisted(() => ({ fullPath: '/welcome' }));
@@ -46,9 +47,12 @@ vi.mock('@/components/BChat/index.vue', () => ({
     name: 'BChat',
     props: ['sessionId'],
     emits: ['session-created', 'session-title-persisted', 'new-session', 'loading-change'],
-    setup(_props: unknown, { expose }: { expose: (exposed: { focusInput: () => void; resetDraft: () => Promise<void> }) => void }) {
+    setup(
+      _props: unknown,
+      { expose }: { expose: (exposed: { focusInput: () => void; resetDraft: (options?: { focus?: boolean }) => Promise<void> }) => void }
+    ) {
       expose({
-        focusInput: (): void => undefined,
+        focusInput: bChatFocusInputMock,
         resetDraft: bChatResetDraftMock
       });
       return {};
@@ -167,6 +171,7 @@ describe('ChatSider', (): void => {
     });
     bChatResetDraftMock.mockReset();
     bChatResetDraftMock.mockResolvedValue();
+    bChatFocusInputMock.mockReset();
     routerPushMock.mockReset();
     routerPushMock.mockResolvedValue(undefined);
     routeMock.fullPath = '/welcome';
@@ -317,7 +322,8 @@ describe('ChatSider', (): void => {
 
     expect(settingStore.chatSidebarActiveSessionId).toBeNull();
     expect(wrapper.text()).toContain('新会话');
-    expect(bChatResetDraftMock).toHaveBeenCalledOnce();
+    expect(bChatResetDraftMock).toHaveBeenCalledWith({ focus: false });
+    expect(bChatFocusInputMock).not.toHaveBeenCalled();
   });
 
   it('disables session controls while chat is loading', async (): Promise<void> => {
@@ -356,7 +362,8 @@ describe('ChatSider', (): void => {
 
     expect(routerPushMock).toHaveBeenCalledWith('/chat/session-a');
     expect(settingStore.chatSidebarActiveSessionId).toBeNull();
-    expect(bChatResetDraftMock).toHaveBeenCalledTimes(1);
+    expect(bChatResetDraftMock).toHaveBeenCalledWith({ focus: false });
+    expect(bChatFocusInputMock).not.toHaveBeenCalled();
   });
 
   it('opens or reuses the unique draft tab from an empty ChatSider', async (): Promise<void> => {
@@ -374,7 +381,8 @@ describe('ChatSider', (): void => {
 
     expect(routerPushMock).toHaveBeenCalledWith('/chat');
     expect(settingStore.chatSidebarActiveSessionId).toBeNull();
-    expect(bChatResetDraftMock).toHaveBeenCalledOnce();
+    expect(bChatResetDraftMock).toHaveBeenCalledWith({ focus: false });
+    expect(bChatFocusInputMock).not.toHaveBeenCalled();
   });
 
   it('preserves the side session when opening the page route fails', async (): Promise<void> => {
@@ -432,6 +440,7 @@ describe('ChatSider', (): void => {
 
     expect(routerPushMock).toHaveBeenCalledWith('/chat/session-a');
     expect(settingStore.chatSidebarActiveSessionId).toBe('session-b');
+    expect(useChatTabStore().records['chat:session-a']?.focusRequestId).toBe(1);
   });
 
   it('navigates to chat:new when it temporarily owns a history session', async (): Promise<void> => {

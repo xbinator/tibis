@@ -138,6 +138,18 @@ describe('chat tab runtime store', (): void => {
     expect(store.records['chat:session-a']).toEqual({ tabId: 'chat:session-a', sessionId: 'session-a', status: 'waiting' });
   });
 
+  it('increments explicit focus requests for an existing chat tab', (): void => {
+    const store = useChatTabStore();
+    store.ensureTab('chat:session-a', 'session-a');
+
+    store.requestFocus('chat:session-a');
+    store.requestFocus('chat:session-a');
+    store.requestFocus('chat:missing');
+
+    expect(store.records['chat:session-a']?.focusRequestId).toBe(2);
+    expect(store.records['chat:missing']).toBeUndefined();
+  });
+
   it('classifies only running and waiting as active runtime states', (): void => {
     expect(isActiveRuntimeStatus('running')).toBe(true);
     expect(isActiveRuntimeStatus('waiting')).toBe(true);

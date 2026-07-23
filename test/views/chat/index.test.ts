@@ -247,6 +247,31 @@ describe('chat page', (): void => {
     expect(focusInputMock).toHaveBeenCalledTimes(2);
   });
 
+  it('focuses the smart editor when the page mounts outside KeepAlive', async (): Promise<void> => {
+    routerMocks.route.path = '/chat/session-a';
+    routerMocks.route.fullPath = '/chat/session-a';
+
+    mountPage('session-a');
+    await nextTick();
+
+    expect(focusInputMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('focuses the smart editor when its active chat tab receives a focus request', async (): Promise<void> => {
+    routerMocks.route.path = '/chat/session-a';
+    routerMocks.route.fullPath = '/chat/session-a';
+    const wrapper = mountPage('session-a');
+    await nextTick();
+    focusInputMock.mockClear();
+
+    useChatTabStore().requestFocus('chat:session-a');
+    await nextTick();
+    await nextTick();
+
+    expect(focusInputMock).toHaveBeenCalledTimes(1);
+    wrapper.unmount();
+  });
+
   it('restores an existing runtime status when a background page is created', (): void => {
     routerMocks.route.path = '/welcome';
     routerMocks.route.fullPath = '/welcome';
