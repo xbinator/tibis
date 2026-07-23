@@ -157,23 +157,23 @@ describe('useRecentRecord', (): void => {
     expect(routerPushMock).not.toHaveBeenCalled();
   });
 
-  it('opens existing chat records through their url after session validation', async (): Promise<void> => {
+  it('opens chat records through their url without loading the session again', async (): Promise<void> => {
     const actions = useRecentRecord();
 
     await actions.openRecentRecord(createChatRecord());
 
-    expect(loadSessionByIdMock).toHaveBeenCalledWith('session-a');
+    expect(loadSessionByIdMock).not.toHaveBeenCalled();
     expect(routerPushMock).toHaveBeenCalledWith('/chat/session-a');
   });
 
-  it('removes stale chat records without navigating', async (): Promise<void> => {
+  it('keeps chat recent opening route-only even when the backing session is absent', async (): Promise<void> => {
     const actions = useRecentRecord();
     loadSessionByIdMock.mockResolvedValue(undefined);
 
     await actions.openRecentRecord(createChatRecord());
 
-    expect(removeRecentMock).toHaveBeenCalledWith('chat:session-a');
-    expect(routerPushMock).not.toHaveBeenCalled();
+    expect(removeRecentMock).not.toHaveBeenCalled();
+    expect(routerPushMock).toHaveBeenCalledWith('/chat/session-a');
   });
 
   it('opens WebView records through the webview opener', async (): Promise<void> => {

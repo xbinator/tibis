@@ -5,8 +5,10 @@
 import { useRoute, useRouter } from 'vue-router';
 import { isBlockingNavigationFailure } from '@/router/navigation';
 import { CHAT_DRAFT_TAB_ID, createChatPath, findChatTab } from '@/router/routes/helpers/chatRouteTab';
+import { createChatRecentId } from '@/shared/storage';
 import { useChatTabStore } from '@/stores/chat/tab';
 import { useSettingStore } from '@/stores/ui/setting';
+import { useRecentStore } from '@/stores/workspace/recent';
 import type { Tab } from '@/stores/workspace/tabs';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import { asyncTo } from '@/utils/asyncTo';
@@ -77,6 +79,7 @@ export function useChatRoute(options: UseChatRouteOptions): ChatRouteApi {
   const settingStore = useSettingStore();
   const tabsStore = useTabsStore();
   const runtimeStore = useChatTabStore();
+  const recentStore = useRecentStore();
 
   /**
    * 查找草稿或持久化会话路由目标。
@@ -129,6 +132,7 @@ export function useChatRoute(options: UseChatRouteOptions): ChatRouteApi {
    */
   async function handleDeletedSession(sessionId: string): Promise<void> {
     const target = resolveRoute(sessionId);
+    await asyncTo(recentStore.removeFile(createChatRecentId(sessionId)));
     options.syncDeletedSession(sessionId);
     if (!target) return;
 
@@ -137,6 +141,7 @@ export function useChatRoute(options: UseChatRouteOptions): ChatRouteApi {
       activeTabId: target.path === route.fullPath ? target.tabId : null,
       allowCloseLastTab: true
     });
+
     if (plan.requiresNavigation) {
       const [navigationError, navigationResult] = await asyncTo(router.push(plan.nextActivePath ?? '/welcome'));
       if (navigationError || isBlockingNavigationFailure(navigationResult)) return;

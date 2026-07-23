@@ -5,8 +5,7 @@
 
 import { useRouter, type Router } from 'vue-router';
 import { useNavigate } from '@/hooks/useNavigate';
-import { createRecentKey, isChatRecord, isDocumentRecord, type RecentRecord, type RecentRecordType, type StoredDocumentRecord } from '@/shared/storage';
-import { useChatSessionStore } from '@/stores/chat/session';
+import { createRecentKey, isDocumentRecord, type RecentRecord, type RecentRecordType, type StoredDocumentRecord } from '@/shared/storage';
 import { useRecentStore } from '@/stores/workspace/recent';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import { asyncTo } from '@/utils/asyncTo';
@@ -40,11 +39,6 @@ type RecentStore = ReturnType<typeof useRecentStore>;
  * 标签页存储实例。
  */
 type TabsStore = ReturnType<typeof useTabsStore>;
-
-/**
- * 聊天会话存储实例。
- */
-type ChatSessionStore = ReturnType<typeof useChatSessionStore>;
 
 /**
  * 文件型记录打开函数。
@@ -114,28 +108,17 @@ function createDocumentHandler(openDocument: OpenDocument, recentStore: RecentSt
 
 /**
  * 创建聊天最近记录处理器。
- * @param chatStore - 聊天会话存储
  * @param recentStore - 最近记录存储
  * @param router - Vue Router 实例
  * @returns 聊天最近记录处理器
  */
-function createChatHandler(chatStore: ChatSessionStore, recentStore: RecentStore, router: Router): RecentRecordHandler {
+function createChatHandler(recentStore: RecentStore, router: Router): RecentRecordHandler {
   return {
     /**
-     * 校验聊天会话存在后进入聊天页。
+     * 进入最近记录指向的聊天页。
      * @param record - 最近记录
      */
     async open(record: RecentRecord): Promise<void> {
-      if (!isChatRecord(record)) return;
-
-      const [loadError, session] = await asyncTo(chatStore.loadSessionById(record.id));
-      if (loadError) return;
-
-      if (!session) {
-        await asyncTo(recentStore.removeFile(createRecentKey(record)));
-        return;
-      }
-
       await pushRecentUrl(router, record.url);
     },
     /**
@@ -186,14 +169,13 @@ function createWebviewHandler(openWebview: OpenWebview, recentStore: RecentStore
 export function useRecentRecord(): RecentRecordActions {
   const router = useRouter();
   const { openDocument, openWebview } = useNavigate();
-  const chatStore = useChatSessionStore();
   const recentStore = useRecentStore();
   const tabsStore = useTabsStore();
 
   const handlers = {
     file: createDocumentHandler(openDocument, recentStore, tabsStore),
     widget: createDocumentHandler(openDocument, recentStore, tabsStore),
-    chat: createChatHandler(chatStore, recentStore, router),
+    chat: createChatHandler(recentStore, router),
     webview: createWebviewHandler(openWebview, recentStore, router)
   } satisfies Record<RecentRecordType, RecentRecordHandler>;
 

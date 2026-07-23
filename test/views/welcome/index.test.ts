@@ -180,7 +180,7 @@ describe('WelcomePage', (): void => {
     expect(routerPushMock).toHaveBeenCalledWith('/chat');
   });
 
-  it('opens a persisted chat session from recent records', async (): Promise<void> => {
+  it('opens a chat recent record from its route without reloading the session', async (): Promise<void> => {
     topRecentRecordsMock.value = [createChatRecord()];
     const wrapper = mountWelcomePage();
     const recentItem = wrapper.find('.recent-file-item');
@@ -189,18 +189,18 @@ describe('WelcomePage', (): void => {
 
     await recentItem.trigger('click');
 
-    expect(loadSessionByIdMock).toHaveBeenCalledWith('session-a');
+    expect(loadSessionByIdMock).not.toHaveBeenCalled();
     expect(routerPushMock).toHaveBeenCalledWith('/chat/session-a');
   });
 
-  it('removes stale chat recent records instead of opening missing sessions', async (): Promise<void> => {
+  it('keeps chat recent record opening route-only when the backing session is absent', async (): Promise<void> => {
     loadSessionByIdMock.mockResolvedValue(undefined);
     topRecentRecordsMock.value = [createChatRecord()];
     const wrapper = mountWelcomePage();
 
     await wrapper.find('.recent-file-item').trigger('click');
 
-    expect(removeRecentMock).toHaveBeenCalledWith('chat:session-a');
-    expect(routerPushMock).not.toHaveBeenCalled();
+    expect(removeRecentMock).not.toHaveBeenCalled();
+    expect(routerPushMock).toHaveBeenCalledWith('/chat/session-a');
   });
 });

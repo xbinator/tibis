@@ -14,6 +14,7 @@ import { useTabsStore } from '@/stores/workspace/tabs';
 const routerPushMock = vi.hoisted(() => vi.fn<(path: string) => Promise<unknown>>());
 const routeMock = vi.hoisted(() => ({ fullPath: '/welcome' }));
 const routeFailureMock = vi.hoisted(() => ({ type: 'aborted' }));
+const removeRecentMock = vi.hoisted(() => vi.fn<(_id: string) => Promise<void>>());
 
 vi.mock('vue-router', () => ({
   useRoute: (): typeof routeMock => routeMock,
@@ -22,6 +23,12 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/router/navigation', () => ({
   isBlockingNavigationFailure: (result: unknown): boolean => result === routeFailureMock
+}));
+
+vi.mock('@/stores/workspace/recent', () => ({
+  useRecentStore: () => ({
+    removeFile: removeRecentMock
+  })
 }));
 
 /**
@@ -64,6 +71,8 @@ describe('useChatRoute', (): void => {
     syncDeletedSessionMock.mockReset();
     disabledMock.mockReset();
     disabledMock.mockReturnValue(false);
+    removeRecentMock.mockReset();
+    removeRecentMock.mockResolvedValue(undefined);
     routeMock.fullPath = '/welcome';
   });
 
@@ -157,6 +166,13 @@ describe('useChatRoute', (): void => {
     expect(tabsStore.tabs.map((tab: Tab): string => tab.id)).toEqual(['welcome']);
     expect(useChatTabStore().records['chat:session-a']).toBeUndefined();
     expect(routerPushMock).toHaveBeenCalledWith('/welcome');
+  });
+
+  it('removes the matching chat recent record after deleting a session', async (): Promise<void> => {
+    await createRouteApi().handleDeletedSession('session-a');
+
+    expect(removeRecentMock).toHaveBeenCalledWith('chat:session-a');
+    expect(syncDeletedSessionMock).toHaveBeenCalledWith('session-a');
   });
 
   it('keeps the active deleted-session tab when fallback navigation is blocked', async (): Promise<void> => {

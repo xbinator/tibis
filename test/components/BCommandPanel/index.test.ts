@@ -352,7 +352,7 @@ describe('BCommandPanel', (): void => {
     expect(wrapper.find('.b-modal-stub').exists()).toBe(true);
   });
 
-  it('opens existing chat recent records from the panel', async (): Promise<void> => {
+  it('opens chat recent records from the panel without reloading the session', async (): Promise<void> => {
     recentStoreMock.recentRecords = [createChatRecord()];
     const wrapper = mountCommandPanel();
     await openPanel('recent');
@@ -360,11 +360,11 @@ describe('BCommandPanel', (): void => {
     await wrapper.find('.b-command-panel__item').trigger('click');
     await flushPromises();
 
-    expect(loadSessionByIdMock).toHaveBeenCalledWith('session-a');
+    expect(loadSessionByIdMock).not.toHaveBeenCalled();
     expect(routerPushMock).toHaveBeenCalledWith('/chat/session-a');
   });
 
-  it('removes stale chat recent records without navigating', async (): Promise<void> => {
+  it('keeps chat recent opening route-only when the backing session is absent', async (): Promise<void> => {
     recentStoreMock.recentRecords = [createChatRecord()];
     loadSessionByIdMock.mockResolvedValue(undefined);
     const wrapper = mountCommandPanel();
@@ -373,8 +373,8 @@ describe('BCommandPanel', (): void => {
     await wrapper.find('.b-command-panel__item').trigger('click');
     await flushPromises();
 
-    expect(recentStoreMock.removeFile).toHaveBeenCalledWith('chat:session-a');
-    expect(routerPushMock).not.toHaveBeenCalled();
+    expect(recentStoreMock.removeFile).not.toHaveBeenCalledWith('chat:session-a');
+    expect(routerPushMock).toHaveBeenCalledWith('/chat/session-a');
   });
 
   it('selects a model and restores focus callback', async (): Promise<void> => {
