@@ -2,6 +2,7 @@
  * @file tool-registry.test.ts
  * @description 工具定义单一 registry 测试。
  */
+import { readFileSync } from 'node:fs';
 import type { AIToolExecutor } from 'types/ai';
 import { describe, expect, it } from 'vitest';
 import * as runtimeTools from '@/ai/tools/catalog/runtimeTools';
@@ -38,6 +39,9 @@ import {
 import { openResourceToolRegistryEntry } from '../../../shared/ai/tools/OpenResourceTool/index.js';
 import { getSettingsToolRegistryEntry, updateSettingsToolRegistryEntry } from '../../../shared/ai/tools/SettingsTool/index.js';
 import { operateWebpageToolRegistryEntry, readCurrentWebpageToolRegistryEntry } from '../../../shared/ai/tools/WebviewTool/index.js';
+
+/** SettingsTool 源码，用于约束说明片段复用结构。 */
+const settingsToolSource = readFileSync(new URL('../../../shared/ai/tools/SettingsTool/index.ts', import.meta.url), 'utf8');
 
 /** runtimeTools 模块带工厂映射的测试视图。 */
 type RuntimeToolsWithFactoryMap = typeof runtimeTools & {
@@ -164,6 +168,40 @@ describe('toolRegistry', (): void => {
     expect(getToolNamesByExposure('conditional-writable')).toEqual(
       expect.arrayContaining(['add_mcp_server', 'update_mcp_server', 'remove_mcp_server', 'refresh_mcp_discovery', 'operate_webpage'])
     );
+  });
+
+  it('describes theme presets as complete color moods instead of a bland theme color', (): void => {
+    const getDescription = String(getSettingsToolRegistryEntry.definition.description);
+    const updateDescription = String(updateSettingsToolRegistryEntry.definition.description);
+    const valueDescription = String(updateSettingsToolRegistryEntry.definition.parameters.properties.value.description);
+    const settingsDescriptions = `${getDescription}\n${updateDescription}`;
+
+    expect(settingsDescriptions).not.toContain('主题色');
+    expect(settingsDescriptions).not.toContain('等');
+    expect(getDescription).toContain('主题预设');
+    expect(updateDescription).toContain('色彩氛围');
+    expect(valueDescription).toContain('整套界面色彩预设');
+    expect(valueDescription).toContain('default=暖米白/棕色');
+    expect(valueDescription).toContain('graphite=白/浅灰/黑灰');
+    expect(valueDescription).toContain('manga-ink=纸白/墨黑/高反差灰阶');
+    expect(valueDescription).toContain('dark=深色');
+    expect(valueDescription).toContain('light=浅色');
+    expect(valueDescription).toContain('system=跟随系统');
+    expect(valueDescription).toContain('sourceMode');
+    expect(valueDescription).toContain('true=源码模式');
+    expect(valueDescription).toContain('false=富文本模式');
+    expect(valueDescription).toContain('editorPageWidth');
+    expect(valueDescription).toContain('default=默认宽度');
+    expect(valueDescription).toContain('wide=宽屏');
+    expect(valueDescription).toContain('full=全宽');
+    expect(valueDescription).not.toContain('布尔设置');
+  });
+
+  it('composes settings descriptions from shared setting detail fragments', (): void => {
+    expect(settingsToolSource).toContain('SETTING_DETAIL_DESCRIPTIONS');
+    expect(settingsToolSource).toContain('SETTING_SUMMARY_DESCRIPTION');
+    expect(settingsToolSource).toContain('SETTING_VALUE_DESCRIPTION');
+    expect(settingsToolSource).toContain('SUPPORTED_SETTING_KEYS.map');
   });
 
   it('requires paths for direct file and directory reads', (): void => {
