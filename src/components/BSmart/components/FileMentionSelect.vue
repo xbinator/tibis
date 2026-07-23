@@ -8,7 +8,7 @@
     @update:active-index="handleMouseEnter"
   >
     <template #item="{ item }">
-      <BRecentIcon :file-name="item.name" class="file-mention-item__icon" :size="18" />
+      <BRecentIcon :file-name="item.name" :file-ext="item.ext" class="file-mention-item__icon" :size="18" />
       <span class="file-mention-item__name">{{ item.name }}</span>
       <span class="file-mention-item__path">{{ item.path }}</span>
     </template>

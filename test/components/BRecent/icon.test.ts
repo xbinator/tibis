@@ -147,6 +147,26 @@ describe('BRecentIcon', (): void => {
     expect(wrapper.find('.b-icon-stub').attributes('data-icon')).toBe('vscode-icons:file-type-json');
   });
 
+  it('resolves standalone file names with a separate extension inside the icon component', (): void => {
+    const wrapper = mountRecentRecordIcon({
+      fileName: 'package',
+      fileExt: 'json',
+      size: 14
+    });
+
+    expect(wrapper.find('.b-icon-stub').attributes('data-icon')).toBe('vscode-icons:file-type-npm');
+  });
+
+  it('keeps an existing standalone extension without appending it twice', (): void => {
+    const wrapper = mountRecentRecordIcon({
+      fileName: 'package.json',
+      fileExt: '.json',
+      size: 14
+    });
+
+    expect(wrapper.find('.b-icon-stub').attributes('data-icon')).toBe('vscode-icons:file-type-npm');
+  });
+
   it('uses explicit icons for non-record candidates', (): void => {
     const wrapper = mountRecentRecordIcon({
       icon: 'vscode-icons:file-type-geojson',

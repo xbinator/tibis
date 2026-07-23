@@ -17,12 +17,16 @@ const BRecentIconStub = defineComponent({
       type: String,
       default: ''
     },
+    fileExt: {
+      type: String,
+      default: ''
+    },
     size: {
       type: [Number, String],
       default: ''
     }
   },
-  template: '<i class="b-recent-icon-stub" :data-file-name="fileName" :data-size="size"></i>'
+  template: '<i class="b-recent-icon-stub" :data-file-name="fileName" :data-file-ext="fileExt" :data-size="size"></i>'
 });
 
 /**
@@ -33,7 +37,7 @@ const BRecentIconStub = defineComponent({
 function createFileMention(overrides: Partial<FileMentionOption> = {}): FileMentionOption {
   return {
     id: 'file-1',
-    name: 'package.json',
+    name: 'package',
     path: '/tmp/package.json',
     ext: 'json',
     ...overrides
@@ -60,10 +64,18 @@ function mountFileMentionSelect(files: FileMentionOption[]): VueWrapper {
 }
 
 describe('FileMentionSelect', (): void => {
-  it('passes the full file name to BRecentIcon', (): void => {
+  it('passes the raw file name and extension to BRecentIcon', (): void => {
     const wrapper = mountFileMentionSelect([createFileMention()]);
 
-    expect(wrapper.find('.b-recent-icon-stub').attributes('data-file-name')).toBe('package.json');
+    expect(wrapper.find('.b-recent-icon-stub').attributes('data-file-name')).toBe('package');
+    expect(wrapper.find('.b-recent-icon-stub').attributes('data-file-ext')).toBe('json');
     expect(wrapper.find('.b-recent-icon-stub').attributes('data-size')).toBe('18');
+  });
+
+  it('does not normalize existing full file names outside BRecentIcon', (): void => {
+    const wrapper = mountFileMentionSelect([createFileMention({ name: 'package.json', ext: 'json' })]);
+
+    expect(wrapper.find('.b-recent-icon-stub').attributes('data-file-name')).toBe('package.json');
+    expect(wrapper.find('.b-recent-icon-stub').attributes('data-file-ext')).toBe('json');
   });
 });

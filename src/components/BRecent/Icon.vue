@@ -34,6 +34,8 @@ interface Props {
   record?: RecentRecord;
   /** 独立文件名；用于路径候选等未形成最近记录的数据。 */
   fileName?: string;
+  /** 独立文件扩展名；当 fileName 未携带扩展名时用于图标推断。 */
+  fileExt?: string;
   /** 显式 Iconify 图标名。 */
   icon?: string;
   /** 显式 favicon URL。 */
@@ -47,6 +49,7 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   record: undefined,
   fileName: '',
+  fileExt: '',
   icon: '',
   favicon: '',
   fallbackIcon: DEFAULT_FALLBACK_ICON,
@@ -63,6 +66,32 @@ function resolveFavicon(): string {
   const favicon = props.favicon || (props.record?.type === 'webview' ? props.record.favicon : '');
 
   return favicon?.trim() ?? '';
+}
+
+/**
+ * 解析独立文件名的完整图标匹配名。
+ * @param fileName - 展示文件名
+ * @param fileExt - 文件扩展名
+ * @returns 可用于文件图标匹配的完整文件名
+ */
+function resolveStandaloneFileName(fileName: string, fileExt: string): string {
+  const normalizedName = fileName.trim();
+  const normalizedExt = fileExt.trim().replace(/^\./u, '');
+
+  if (!normalizedName) {
+    return normalizedExt ? `Untitled.${normalizedExt}` : '';
+  }
+
+  if (!normalizedExt) {
+    return normalizedName;
+  }
+
+  const suffix = `.${normalizedExt}`;
+  if (normalizedName.toLowerCase().endsWith(suffix.toLowerCase())) {
+    return normalizedName;
+  }
+
+  return `${normalizedName}${suffix}`;
 }
 
 const visibleFavicon = computed<string>(() => {
@@ -91,8 +120,9 @@ const resolvedIcon = computed<string>(() => {
     return resolveFileIcon(resolveFileTitle(props.record));
   }
 
-  if (props.fileName) {
-    return resolveFileIcon(props.fileName);
+  const standaloneFileName = resolveStandaloneFileName(props.fileName, props.fileExt);
+  if (standaloneFileName) {
+    return resolveFileIcon(standaloneFileName);
   }
 
   return props.fallbackIcon;

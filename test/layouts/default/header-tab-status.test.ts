@@ -94,4 +94,12 @@ describe('HeaderTab generic status', (): void => {
     expect(headerTabSource).not.toContain('@/stores/chat/');
     expect(headerTabSource).not.toContain('ChatTabRuntimeStatus');
   });
+
+  it('delegates icon prop resolution to the dedicated hook', (): void => {
+    expect(headerTabSource).toContain('useHeaderTabIcon');
+    expect(headerTabSource).toContain('v-bind="tabIconProps"');
+    expect(headerTabSource).not.toContain('resolveTabIconRecentRecord');
+    expect(headerTabSource).not.toContain('resolveTabIconFileName');
+    expect(headerTabSource).not.toContain('resolveTabRecentRecord');
+  });
 });

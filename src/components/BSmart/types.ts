@@ -109,7 +109,7 @@ export interface BSmartMethodOption {
 export interface FileMentionOption {
   /** 文件唯一标识 */
   id: string;
-  /** 文件名（含扩展名） */
+  /** 展示文件名；可能不含扩展名，图标解析需结合 ext。 */
   name: string;
   /** 文件路径，未保存文件为 null */
   path: string | null;

@@ -10,14 +10,7 @@
       <span v-if="statusVisual" :class="['header-tab__status', statusVisual.className]">
         <Icon v-if="statusVisual.icon" :icon="statusVisual.icon" width="13" height="13" />
       </span>
-      <BRecentIcon
-        v-else
-        class="header-tab__icon"
-        :record="resolveTabIconRecentRecord(tab)"
-        :file-name="resolveTabIconFileName(tab)"
-        :icon="resolveTabIcon(tab)"
-        :size="14"
-      />
+      <BRecentIcon v-else class="header-tab__icon" v-bind="tabIconProps" :size="14" />
       <span class="header-tab__title-text">{{ tab.title }}</span>
     </div>
 
@@ -30,17 +23,14 @@
 <script setup lang="ts">
 /**
  * @file HeaderTab.vue
- * @description 单标签页渲染逻辑：class 状态、图标优先级解析与通用状态指示。
+ * @description 单标签页渲染逻辑：class 状态、图标绑定与通用状态指示。
  */
-import { computed } from 'vue';
+import { computed, toRef } from 'vue';
 import { useRoute } from 'vue-router';
 import { Icon } from '@iconify/vue';
-import type { RecentRecord, WebviewRecord } from '@/shared/storage';
-import { createRecentKey } from '@/shared/storage';
-import { useRecentStore } from '@/stores/workspace/recent';
+import { useHeaderTabIcon } from '@/layouts/default/hooks/useHeaderTabIcon';
 import type { Tab, TabStatus } from '@/stores/workspace/tabs';
 import { useTabsStore } from '@/stores/workspace/tabs';
-import { WEB_RECORD_ICON } from '@/utils/file/icons';
 
 /**
  * 标签页运行状态的图标和样式配置。
@@ -84,7 +74,7 @@ const emit = defineEmits<{
 
 const route = useRoute();
 const tabsStore = useTabsStore();
-const recentStore = useRecentStore();
+const tabIconProps = useHeaderTabIcon(toRef(props, 'tab'));
 
 /** 标签页样式状态映射。 */
 const tabClass = computed<Record<string, boolean>>(() => ({
@@ -95,124 +85,6 @@ const tabClass = computed<Record<string, boolean>>(() => ({
 
 /** 运行状态对应的视觉配置。 */
 const statusVisual = computed<StatusVisual | undefined>(() => (props.status ? STATUS_VISUALS[props.status] : undefined));
-
-// --------------- 图标解析 ---------------
-
-/** 最近记录稳定键到记录的索引。 */
-const recentRecordsByKey = computed<Map<string, RecentRecord>>(
-  () => new Map((recentStore.recentRecords ?? []).map((record) => [createRecentKey(record), record]))
-);
-
-/** WebView URL 到记录的索引。 */
-const webviewRecordsByUrl = computed<Map<string, WebviewRecord>>(() => {
-  const entries = (recentStore.recentRecords ?? [])
-    .filter((record): record is WebviewRecord => record.type === 'webview')
-    .map((record) => [record.url, record] as const);
-  return new Map(entries);
-});
-
-/**
- * 判断标签页路径是否来自 WebView 路由。
- * @param path - 标签页路由路径
- * @returns 是否为 WebView 标签页
- */
-function isWebviewTabPath(path: string): boolean {
-  return path.startsWith('/webview/');
-}
-
-/**
- * 安全解码路由 query 字段。
- * @param value - query 字段值
- * @returns 解码后的字段值
- */
-function decodeRouteQueryValue(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
-
-/**
- * 从 WebView 标签页路径中解析原始 URL。
- * @param path - 标签页路由路径
- * @returns WebView URL，非 WebView 标签或缺失 URL 时返回空字符串
- */
-function resolveWebviewUrlFromTabPath(path: string): string {
-  if (!isWebviewTabPath(path)) return '';
-  const queryStartIndex = path.indexOf('?');
-  if (queryStartIndex === -1) return '';
-  const query = path.slice(queryStartIndex + 1);
-  const url = new URLSearchParams(query).get('url') ?? '';
-  return url ? decodeRouteQueryValue(url).trim() : '';
-}
-
-/**
- * 解析标签页对应的最近记录。
- * @param tab - 标签页
- * @returns 匹配的最近记录，未命中时返回 undefined
- */
-function resolveTabRecentRecord(tab: Tab): RecentRecord | undefined {
-  const recentKey = tab.recentKey?.trim();
-  const record = recentKey ? recentRecordsByKey.value.get(recentKey) : undefined;
-  if (record) return record;
-
-  const webviewUrl = resolveWebviewUrlFromTabPath(tab.path);
-  if (webviewUrl) return webviewRecordsByUrl.value.get(webviewUrl);
-
-  return undefined;
-}
-
-/**
- * 解析标签页配置的显式图标。
- * @param tab - 标签页
- * @returns Iconify 图标名，未配置时返回空字符串
- */
-function resolveConfiguredTabIcon(tab: Tab): string {
-  return tab.icon?.trim() ?? '';
-}
-
-/**
- * 解析图标组件可使用的最近记录；显式配置图标时不再传入记录。
- * @param tab - 标签页
- * @returns 匹配的最近记录，未命中或已有配置图标时返回 undefined
- */
-function resolveTabIconRecentRecord(tab: Tab): RecentRecord | undefined {
-  if (resolveConfiguredTabIcon(tab)) return undefined;
-  return resolveTabRecentRecord(tab);
-}
-
-/**
- * 解析标签页图标组件的文件名入参。
- * @param tab - 标签页
- * @returns 用于文件图标推断的文件名
- */
-function resolveTabIconFileName(tab: Tab): string {
-  if (resolveConfiguredTabIcon(tab)) return '';
-  if (resolveTabRecentRecord(tab) || isWebviewTabPath(tab.path)) return '';
-  return tab.title;
-}
-
-/**
- * 解析标签页图标组件的显式回退图标。
- * @param tab - 标签页
- * @returns Iconify 图标名，无需显式回退时返回空字符串
- */
-function resolveTabFallbackIcon(tab: Tab): string {
-  if (isWebviewTabPath(tab.path) && !resolveTabRecentRecord(tab)) return WEB_RECORD_ICON;
-  return '';
-}
-
-/**
- * 解析传给图标组件的显式图标，配置图标优先于默认回退图标。
- * @param tab - 标签页
- * @returns Iconify 图标名，未命中时返回空字符串
- */
-function resolveTabIcon(tab: Tab): string {
-  const configuredIcon = resolveConfiguredTabIcon(tab);
-  if (configuredIcon) return configuredIcon;
-  return resolveTabFallbackIcon(tab);
-}
 </script>
 
 <style lang="less" scoped>
