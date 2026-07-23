@@ -6,7 +6,7 @@
           <div class="action-icon">
             <Icon icon="lucide:message-circle" width="16" height="16" />
           </div>
-          <span class="action-label">开始聊天</span>
+          <span class="action-label">新对话</span>
         </div>
 
         <div class="action-card" @click="handleNewFile">
