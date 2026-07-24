@@ -178,13 +178,29 @@ function mountHeaderTabs(): ReturnType<typeof mount> {
 }
 
 /**
+ * 按标签 ID 读取渲染后的标签元素。
+ * @param wrapper - HeaderTabs 包装器
+ * @param tabId - 标签 ID
+ * @returns 标签根元素包装器
+ */
+function getTabElement(wrapper: ReturnType<typeof mountHeaderTabs>, tabId: string): ReturnType<ReturnType<typeof mountHeaderTabs>['get']> {
+  const tab = useTabsStore().tabs.find((item: Tab): boolean => item.id === tabId);
+  if (!tab) throw new Error(`Missing test tab: ${tabId}`);
+
+  const tabElement = wrapper.findAll('.header-tab').find((item): boolean => item.find('.header-tab__title-text').text() === tab.title);
+  if (!tabElement) throw new Error(`Missing rendered tab: ${tabId}`);
+
+  return tabElement;
+}
+
+/**
  * 打开指定标签的右键菜单。
  * @param wrapper - HeaderTabs 包装器
  * @param tabId - 标签 ID
  * @param position - 右键坐标
  */
 async function openMenuForTab(wrapper: ReturnType<typeof mountHeaderTabs>, tabId: string, position: { x: number; y: number } = { x: 220, y: 64 }): Promise<void> {
-  await wrapper.get(`[data-tab-id="${tabId}"]`).trigger('contextmenu', { clientX: position.x, clientY: position.y });
+  await getTabElement(wrapper, tabId).trigger('contextmenu', { clientX: position.x, clientY: position.y });
 }
 
 /**
@@ -193,7 +209,7 @@ async function openMenuForTab(wrapper: ReturnType<typeof mountHeaderTabs>, tabId
  * @param tabId - 标签 ID
  */
 async function clickCloseButton(wrapper: ReturnType<typeof mountHeaderTabs>, tabId: string): Promise<void> {
-  await wrapper.get(`[data-tab-id="${tabId}"] .header-tab__close`).trigger('click');
+  await getTabElement(wrapper, tabId).get('.header-tab__close').trigger('click');
 }
 
 /**

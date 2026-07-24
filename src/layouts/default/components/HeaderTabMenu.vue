@@ -3,16 +3,7 @@
   @description 顶部标签页单例右键菜单，负责打开状态、定位、菜单项生成和命令执行。
 -->
 <template>
-  <div
-    v-if="menuState.open"
-    :key="menuState.renderKey"
-    ref="menuRef"
-    class="header-tab-menu"
-    role="menu"
-    :style="menuStyle"
-    @contextmenu.prevent
-    @pointerdown.stop
-  >
+  <div v-if="menuState.open" ref="menuRef" class="header-tab-menu" role="menu" :style="menuStyle" @contextmenu.prevent @pointerdown.stop>
     <template v-for="item in menuItems" :key="item.key">
       <div v-if="item.type === 'divider'" class="header-tab-menu__divider" role="separator"></div>
       <button v-else type="button" class="header-tab-menu__item" :class="{ 'is-danger': item.danger }" :disabled="item.disabled" @click="handleItemClick(item)">
@@ -99,8 +90,6 @@ interface HeaderTabMenuState {
   tabId: string | null;
   /** 菜单浏览器坐标。 */
   position: HeaderTabMenuPosition;
-  /** 菜单渲染版本，用于重新右键时强制新 DOM 在新位置出现。 */
-  renderKey: number;
 }
 
 /**
@@ -154,8 +143,7 @@ const menuSize = ref<HeaderTabMenuSize>({ width: 0, height: 0 });
 const menuState = reactive<HeaderTabMenuState>({
   open: false,
   tabId: null,
-  position: { x: 0, y: 0 },
-  renderKey: 0
+  position: { x: 0, y: 0 }
 });
 
 /** 最近一次打开菜单请求 ID，避免快速连续右键时旧请求覆盖新请求。 */
@@ -298,10 +286,7 @@ async function syncMenuSize(): Promise<void> {
   const rect = menuRef.value?.getBoundingClientRect();
   if (!rect) return;
 
-  menuSize.value = {
-    width: rect.width,
-    height: rect.height
-  };
+  menuSize.value = { width: rect.width, height: rect.height };
 }
 
 /**
@@ -334,7 +319,6 @@ async function openForTab(tab: Tab, event: MouseEvent): Promise<void> {
 
   menuState.tabId = tab.id;
   menuState.position = position;
-  menuState.renderKey += 1;
   menuState.open = true;
 }
 
@@ -344,11 +328,7 @@ async function openForTab(tab: Tab, event: MouseEvent): Promise<void> {
  * @param tab - 关闭动作锚点标签
  */
 async function executeCloseAction(action: HeaderTabCloseCommand, tab: Tab): Promise<void> {
-  const plan = tabsStore.getClosePlan(action, {
-    anchorTabId: tab.id,
-    activeTabId: getActiveTabId(),
-    allowCloseLastTab: true
-  });
+  const plan = tabsStore.getClosePlan(action, { anchorTabId: tab.id, activeTabId: getActiveTabId(), allowCloseLastTab: true });
 
   const [closeError, closeAllowed] = await asyncTo(canClose(plan));
   if (closeError || !closeAllowed) return;
@@ -384,12 +364,7 @@ async function executeCopyAction(command: HeaderTabCopyCommand, tab: Tab): Promi
   const copyAction = getHeaderTabCopyAction(tab, recentStore.recentRecords ?? []);
   if (!copyAction || copyAction.command !== command) return;
 
-  await asyncTo(
-    clipboard(copyAction.content, {
-      successMessage: copyAction.successMessage,
-      trim: false
-    })
-  );
+  await asyncTo(clipboard(copyAction.content, { successMessage: copyAction.successMessage, trim: false }));
 }
 
 /**

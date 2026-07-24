@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 const headerTabsSource = readFileSync(new URL('../../../src/layouts/default/components/HeaderTabs.vue', import.meta.url), 'utf8');
 const headerTabSource = readFileSync(new URL('../../../src/layouts/default/components/HeaderTab.vue', import.meta.url), 'utf8');
+const headerTabMenuSource = readFileSync(new URL('../../../src/layouts/default/components/HeaderTabMenu.vue', import.meta.url), 'utf8');
 
 /**
  * 从指定源码中读取一个样式块内容。
@@ -51,6 +52,11 @@ describe('HeaderTabs drag region structure', (): void => {
     expect(headerTabsSource).toContain('HeaderTabMenu');
     expect(headerTabsSource).not.toContain('<BDropdown');
     expect(headerTabsSource).not.toContain('trigger="contextmenu"');
+  });
+
+  it('does not expose tab identity or menu render keys through DOM attributes', (): void => {
+    expect(headerTabSource).not.toContain('data-tab-id');
+    expect(headerTabMenuSource).not.toContain(':key="menuState.renderKey"');
   });
 
   it('delegates right-click menu ownership to HeaderTabMenu', (): void => {

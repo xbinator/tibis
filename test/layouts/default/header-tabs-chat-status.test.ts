@@ -101,6 +101,19 @@ function mountTabs(): ReturnType<typeof mount> {
   });
 }
 
+/**
+ * 按标签 ID 读取渲染后的标签元素。
+ * @param wrapper - HeaderTabs 包装器
+ * @param tabId - 标签 ID
+ * @returns 标签根元素包装器
+ */
+function getTabElement(wrapper: ReturnType<typeof mountTabs>, tabId: string): ReturnType<ReturnType<typeof mountTabs>['get']> {
+  const tabElement = wrapper.findAll('.header-tab').find((item): boolean => item.find('.header-tab__title-text').text() === tabId);
+  if (!tabElement) throw new Error(`Missing rendered tab: ${tabId}`);
+
+  return tabElement;
+}
+
 describe('HeaderTabs chat status', (): void => {
   beforeEach((): void => {
     localStorage.clear();
@@ -125,16 +138,16 @@ describe('HeaderTabs chat status', (): void => {
 
     const wrapper = mountTabs();
 
-    const runningStatus = wrapper.find('[data-tab-id="chat:running"] .header-tab__status');
+    const runningStatus = getTabElement(wrapper, 'chat:running').find('.header-tab__status');
     expect(runningStatus.find('[data-icon]').attributes('data-icon')).toBe('lucide:loader-circle');
     expect(runningStatus.classes()).toContain('is-spinning');
-    const waitingStatus = wrapper.find('[data-tab-id="chat:waiting"] .header-tab__status');
+    const waitingStatus = getTabElement(wrapper, 'chat:waiting').find('.header-tab__status');
     expect(waitingStatus.find('[data-icon]').attributes('data-icon')).toBe('lucide:circle-alert');
     expect(waitingStatus.classes()).toContain('header-tab__status--attention');
     expect(waitingStatus.classes()).not.toContain('header-tab__status--waiting');
-    expect(wrapper.find('[data-tab-id="chat:error"] .header-tab__status [data-icon]').attributes('data-icon')).toBe('lucide:circle-x');
-    expect(wrapper.find('[data-tab-id="chat:completed"] .header-tab__status').exists()).toBe(true);
-    expect(wrapper.find('[data-tab-id="welcome"] .header-tab__status').exists()).toBe(false);
+    expect(getTabElement(wrapper, 'chat:error').find('.header-tab__status [data-icon]').attributes('data-icon')).toBe('lucide:circle-x');
+    expect(getTabElement(wrapper, 'chat:completed').find('.header-tab__status').exists()).toBe(true);
+    expect(getTabElement(wrapper, 'welcome').find('.header-tab__status').exists()).toBe(false);
   });
 
   it('updates a persisted chat title from the global title event', async (): Promise<void> => {
@@ -159,7 +172,7 @@ describe('HeaderTabs chat status', (): void => {
     runtimeStore.setStatus('chat:session-a', 'running');
     const wrapper = mountTabs();
 
-    await wrapper.find('[data-tab-id="chat:session-a"] .header-tab__close').trigger('click');
+    await getTabElement(wrapper, 'chat:session-a').find('.header-tab__close').trigger('click');
     await flushPromises();
 
     expect(modalConfirmMock).toHaveBeenCalledTimes(1);

@@ -171,6 +171,19 @@ function mountHeaderTabs(): ReturnType<typeof mount> {
   });
 }
 
+/**
+ * 按标题读取渲染后的标签元素。
+ * @param wrapper - HeaderTabs 包装器
+ * @param title - 标签标题
+ * @returns 标签根元素包装器
+ */
+function getTabByTitle(wrapper: ReturnType<typeof mountHeaderTabs>, title: string): ReturnType<ReturnType<typeof mountHeaderTabs>['get']> {
+  const tabElement = wrapper.findAll('.header-tab').find((item): boolean => item.find('.header-tab__title-text').text() === title);
+  if (!tabElement) throw new Error(`Missing rendered tab: ${title}`);
+
+  return tabElement;
+}
+
 describe('HeaderTabs icon rendering', (): void => {
   beforeEach((): void => {
     localStorage.clear();
@@ -236,7 +249,7 @@ describe('HeaderTabs icon rendering', (): void => {
 
     const wrapper = mountHeaderTabs();
     wrapper.findComponent(BDraggableStub).vm.$emit('drag-end');
-    await wrapper.find('[data-tab-id="files"]').trigger('click');
+    await getTabByTitle(wrapper, '文件').trigger('click');
 
     expect(routerPushMock).not.toHaveBeenCalled();
   });
