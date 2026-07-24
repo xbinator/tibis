@@ -53,6 +53,15 @@ describe('HeaderTabs drag region structure', (): void => {
     expect(headerTabsSource).not.toContain('trigger="contextmenu"');
   });
 
+  it('delegates right-click menu ownership to HeaderTabMenu', (): void => {
+    expect(headerTabsSource).toContain('ref="tabMenuRef"');
+    expect(headerTabsSource).not.toContain('tabMenuItems');
+    expect(headerTabsSource).not.toContain('tabMenuState');
+    expect(headerTabsSource).not.toContain('HeaderTabMenuCommand');
+    expect(headerTabsSource).not.toContain('getHeaderTabCopyAction');
+    expect(headerTabsSource).not.toContain('useClipboard');
+  });
+
   it('does not access the chat runtime store', (): void => {
     expect(headerTabsSource).not.toContain('useChatTabStore');
     expect(headerTabsSource).not.toContain('ChatTabRuntimeStatus');

@@ -1,10 +1,19 @@
 <!--
   @file HeaderTabMenu.vue
-  @description 顶部标签页单例右键菜单，负责定位、展示和选择菜单命令。
+  @description 顶部标签页单例右键菜单，负责打开状态、定位、菜单项生成和命令执行。
 -->
 <template>
-  <div v-if="open" ref="menuRef" class="header-tab-menu" role="menu" :style="menuStyle" @contextmenu.prevent @pointerdown.stop>
-    <template v-for="item in items" :key="item.key">
+  <div
+    v-if="menuState.open"
+    :key="menuState.renderKey"
+    ref="menuRef"
+    class="header-tab-menu"
+    role="menu"
+    :style="menuStyle"
+    @contextmenu.prevent
+    @pointerdown.stop
+  >
+    <template v-for="item in menuItems" :key="item.key">
       <div v-if="item.type === 'divider'" class="header-tab-menu__divider" role="separator"></div>
       <button v-else type="button" class="header-tab-menu__item" :class="{ 'is-danger': item.danger }" :disabled="item.disabled" @click="handleItemClick(item)">
         <span class="header-tab-menu__label">{{ item.label }}</span>
@@ -16,22 +25,32 @@
 <script setup lang="ts">
 /**
  * @file HeaderTabMenu.vue
- * @description 顶部标签右键菜单交互逻辑，单实例按浏览器坐标定位。
+ * @description 顶部标签右键菜单交互逻辑，单实例按浏览器坐标定位并执行标签菜单命令。
  */
 import type { CSSProperties } from 'vue';
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { useClipboard } from '@/hooks/useClipboard';
+import { useTabCloseGuard } from '@/layouts/default/hooks/useTabCloseGuard';
+import type { HeaderTabCopyCommand, HeaderTabMenuCommand } from '@/layouts/default/utils/headerTabMenu';
+import { getHeaderTabCopyAction } from '@/layouts/default/utils/headerTabMenu';
+import { isBlockingNavigationFailure } from '@/router/navigation';
+import { useRecentStore } from '@/stores/workspace/recent';
+import { useTabsStore } from '@/stores/workspace/tabs';
+import type { Tab, TabCloseAction } from '@/stores/workspace/tabs';
+import { asyncTo } from '@/utils/asyncTo';
 
 /** 菜单与视口边缘之间保留的最小距离。 */
 const HEADER_TAB_MENU_VIEWPORT_PADDING = 8;
 
 /**
- * HeaderTabMenu 菜单项。
+ * 顶部标签菜单项。
  */
 interface HeaderTabMenuItem {
   /** 菜单项类型。 */
   type?: 'item';
   /** 菜单命令。 */
-  key: string;
+  key: HeaderTabMenuCommand;
   /** 展示文案。 */
   label: string;
   /** 是否禁用当前项。 */
@@ -41,7 +60,7 @@ interface HeaderTabMenuItem {
 }
 
 /**
- * HeaderTabMenu 分割线。
+ * 顶部标签菜单分割线。
  */
 interface HeaderTabMenuDivider {
   /** 菜单项类型。 */
@@ -51,18 +70,37 @@ interface HeaderTabMenuDivider {
 }
 
 /**
- * HeaderTabMenu 条目。
+ * 顶部标签菜单条目。
  */
 type HeaderTabMenuEntry = HeaderTabMenuItem | HeaderTabMenuDivider;
 
 /**
- * HeaderTabMenu 浏览器坐标。
+ * 顶部标签菜单支持的关闭动作。
+ */
+type HeaderTabCloseCommand = Extract<TabCloseAction, HeaderTabMenuCommand>;
+
+/**
+ * 顶部标签菜单浏览器坐标。
  */
 interface HeaderTabMenuPosition {
   /** 横向坐标。 */
   x: number;
   /** 纵向坐标。 */
   y: number;
+}
+
+/**
+ * 顶部标签菜单状态。
+ */
+interface HeaderTabMenuState {
+  /** 是否打开菜单。 */
+  open: boolean;
+  /** 当前右键命中的标签 ID。 */
+  tabId: string | null;
+  /** 菜单浏览器坐标。 */
+  position: HeaderTabMenuPosition;
+  /** 菜单渲染版本，用于重新右键时强制新 DOM 在新位置出现。 */
+  renderKey: number;
 }
 
 /**
@@ -76,27 +114,131 @@ interface HeaderTabMenuSize {
 }
 
 /**
- * HeaderTabMenu 入参。
+ * 标签关闭菜单配置。
  */
-interface Props {
-  /** 是否打开菜单。 */
-  open: boolean;
-  /** 菜单浏览器坐标。 */
-  position: HeaderTabMenuPosition;
-  /** 菜单条目。 */
-  items: HeaderTabMenuEntry[];
+interface CloseMenuConfig {
+  /** 关闭动作。 */
+  action: HeaderTabCloseCommand;
+  /** 展示文案。 */
+  label: string;
+  /** 是否使用危险态样式。 */
+  danger?: boolean;
 }
 
-const props = defineProps<Props>();
-const emit = defineEmits<{
-  select: [key: string];
-  close: [];
-}>();
+/** 标签关闭菜单的固定顺序。 */
+const CLOSE_MENU_CONFIGS: CloseMenuConfig[] = [
+  { action: 'close', label: '关闭' },
+  { action: 'closeOthers', label: '关闭其他' },
+  { action: 'closeRight', label: '关闭右侧' },
+  { action: 'closeAll', label: '关闭全部', danger: true }
+];
+
+/** 顶部标签菜单支持的关闭动作集合。 */
+const HEADER_TAB_CLOSE_COMMANDS: readonly HeaderTabCloseCommand[] = ['close', 'closeOthers', 'closeRight', 'closeAll'];
+
+/** 顶部标签菜单支持的复制动作集合。 */
+const HEADER_TAB_COPY_COMMANDS: readonly HeaderTabCopyCommand[] = ['copyPath', 'copyAddress'];
+
+const tabsStore = useTabsStore();
+const recentStore = useRecentStore();
+const route = useRoute();
+const router = useRouter();
+const { clipboard } = useClipboard();
+const { canClose, cleanupClosedTabs, cancelClose } = useTabCloseGuard();
 
 /** 菜单根节点。 */
 const menuRef = ref<HTMLElement | null>(null);
 /** 菜单当前渲染尺寸。 */
 const menuSize = ref<HeaderTabMenuSize>({ width: 0, height: 0 });
+/** 顶部标签右键菜单状态。 */
+const menuState = reactive<HeaderTabMenuState>({
+  open: false,
+  tabId: null,
+  position: { x: 0, y: 0 },
+  renderKey: 0
+});
+
+/** 最近一次打开菜单请求 ID，避免快速连续右键时旧请求覆盖新请求。 */
+let menuOpenRequestId = 0;
+
+/** 当前右键菜单绑定的标签。 */
+const activeMenuTab = computed<Tab | null>(() => tabsStore.tabs.find((tab: Tab): boolean => tab.id === menuState.tabId) ?? null);
+
+/**
+ * 判断命令是否为关闭动作。
+ * @param command - 菜单命令
+ * @returns 是否为关闭动作
+ */
+function isCloseCommand(command: HeaderTabMenuCommand): command is HeaderTabCloseCommand {
+  return HEADER_TAB_CLOSE_COMMANDS.includes(command as HeaderTabCloseCommand);
+}
+
+/**
+ * 判断命令是否为复制动作。
+ * @param command - 菜单命令
+ * @returns 是否为复制动作
+ */
+function isCopyCommand(command: HeaderTabMenuCommand): command is HeaderTabCopyCommand {
+  return HEADER_TAB_COPY_COMMANDS.includes(command as HeaderTabCopyCommand);
+}
+
+/**
+ * 获取当前激活标签 ID。
+ * @returns 当前激活标签 ID，未命中时返回 null
+ */
+function getActiveTabId(): string | null {
+  return tabsStore.tabs.find((tab: Tab): boolean => tab.path === route.fullPath)?.id ?? null;
+}
+
+/**
+ * 构建单个关闭菜单项。
+ * @param tab - 菜单目标标签
+ * @param config - 关闭菜单配置
+ * @returns 关闭菜单项
+ */
+function createCloseItem(tab: Tab, config: CloseMenuConfig): HeaderTabMenuItem {
+  const plan = tabsStore.getClosePlan(config.action, {
+    anchorTabId: tab.id,
+    activeTabId: getActiveTabId(),
+    allowCloseLastTab: true
+  });
+
+  return {
+    key: config.action,
+    label: config.label,
+    disabled: plan.disabled,
+    ...(config.danger ? { danger: true } : {})
+  };
+}
+
+/**
+ * 构建资源复制菜单项。
+ * @param tab - 菜单目标标签
+ * @returns 资源复制菜单项；当前标签没有复制能力时返回 null
+ */
+function createCopyItem(tab: Tab): HeaderTabMenuItem | null {
+  const copyAction = getHeaderTabCopyAction(tab, recentStore.recentRecords ?? []);
+  if (!copyAction) return null;
+
+  return {
+    key: copyAction.command,
+    label: copyAction.command === 'copyPath' ? '复制路径' : '复制地址'
+  };
+}
+
+/** 当前右键菜单条目。 */
+const menuItems = computed<HeaderTabMenuEntry[]>(() => {
+  const tab = activeMenuTab.value;
+  if (!tab) return [];
+
+  const items: HeaderTabMenuEntry[] = CLOSE_MENU_CONFIGS.map((config: CloseMenuConfig): HeaderTabMenuItem => createCloseItem(tab, config));
+  const copyItem = createCopyItem(tab);
+  if (copyItem) {
+    items.push({ type: 'divider', key: 'resource-divider' }, copyItem);
+  }
+
+  return items;
+});
 
 /**
  * 读取当前视口尺寸。
@@ -120,7 +262,7 @@ function getViewportSize(): HeaderTabMenuSize {
  * @param viewportSize - 视口在该轴上的尺寸
  * @returns 修正后的坐标
  */
-function clampMenuAxisPosition(position: number, size: number, viewportSize: number): number {
+function clampAxisPosition(position: number, size: number, viewportSize: number): number {
   const minPosition = HEADER_TAB_MENU_VIEWPORT_PADDING;
   const maxPosition = Math.max(minPosition, viewportSize - size - HEADER_TAB_MENU_VIEWPORT_PADDING);
 
@@ -129,20 +271,30 @@ function clampMenuAxisPosition(position: number, size: number, viewportSize: num
 
 /** 菜单定位样式。 */
 const menuStyle = computed<CSSProperties>(() => ({
-  left: `${clampMenuAxisPosition(props.position.x, menuSize.value.width, getViewportSize().width)}px`,
-  top: `${clampMenuAxisPosition(props.position.y, menuSize.value.height, getViewportSize().height)}px`
+  left: `${clampAxisPosition(menuState.position.x, menuSize.value.width, getViewportSize().width)}px`,
+  top: `${clampAxisPosition(menuState.position.y, menuSize.value.height, getViewportSize().height)}px`
 }));
+
+/**
+ * 关闭顶部标签右键菜单。
+ */
+function closeMenu(): void {
+  menuState.open = false;
+  menuState.tabId = null;
+}
 
 /**
  * 同步菜单渲染尺寸，用于边界定位。
  */
 async function syncMenuSize(): Promise<void> {
-  if (!props.open) {
+  if (!menuState.open) {
     menuSize.value = { width: 0, height: 0 };
     return;
   }
 
-  await nextTick();
+  const [tickError] = await asyncTo(nextTick());
+  if (tickError) return;
+
   const rect = menuRef.value?.getBoundingClientRect();
   if (!rect) return;
 
@@ -155,20 +307,118 @@ async function syncMenuSize(): Promise<void> {
 /**
  * 安全调度菜单尺寸同步。
  */
-function scheduleMenuSizeSync(): void {
-  syncMenuSize().catch((error: unknown): void => {
-    console.warn('HeaderTabMenu size sync failed', error);
+function scheduleSizeSync(): void {
+  asyncTo(syncMenuSize()).then(([error]): void => {
+    if (error) {
+      console.warn('HeaderTabMenu size sync failed', error);
+    }
   });
+}
+
+/**
+ * 打开指定标签的右键菜单。
+ * @param tab - 右键命中的标签
+ * @param event - 鼠标右键事件
+ */
+async function openForTab(tab: Tab, event: MouseEvent): Promise<void> {
+  event.preventDefault();
+  const requestId = ++menuOpenRequestId;
+  const position = { x: event.clientX, y: event.clientY };
+
+  // 已打开时先提交关闭状态，再以新 key 在新位置重新挂载，避免坐标变化产生平移动画。
+  if (menuState.open) {
+    closeMenu();
+    const [tickError] = await asyncTo(nextTick());
+    if (tickError || requestId !== menuOpenRequestId) return;
+  }
+
+  menuState.tabId = tab.id;
+  menuState.position = position;
+  menuState.renderKey += 1;
+  menuState.open = true;
+}
+
+/**
+ * 执行标签关闭动作。
+ * @param action - 标签关闭动作
+ * @param tab - 关闭动作锚点标签
+ */
+async function executeCloseAction(action: HeaderTabCloseCommand, tab: Tab): Promise<void> {
+  const plan = tabsStore.getClosePlan(action, {
+    anchorTabId: tab.id,
+    activeTabId: getActiveTabId(),
+    allowCloseLastTab: true
+  });
+
+  const [closeError, closeAllowed] = await asyncTo(canClose(plan));
+  if (closeError || !closeAllowed) return;
+
+  // 活动标签先完成回退导航，避免导航失败后当前路由指向已被移除的页面。
+  if (plan.requiresNavigation) {
+    const [navigationError, navigationResult] = await asyncTo(router.push(plan.nextActivePath ?? '/welcome'));
+    if (navigationError || isBlockingNavigationFailure(navigationResult)) {
+      cancelClose(plan.targetTabIds);
+      return;
+    }
+  }
+
+  tabsStore.applyClosePlan(plan);
+  cleanupClosedTabs(plan.targetTabIds);
+}
+
+/**
+ * 顶部关闭按钮复用菜单关闭动作。
+ * @param tab - 待关闭的标签页
+ */
+async function closeTab(tab: Tab): Promise<void> {
+  closeMenu();
+  await executeCloseAction('close', tab);
+}
+
+/**
+ * 执行资源复制动作。
+ * @param command - 资源复制命令
+ * @param tab - 菜单目标标签
+ */
+async function executeCopyAction(command: HeaderTabCopyCommand, tab: Tab): Promise<void> {
+  const copyAction = getHeaderTabCopyAction(tab, recentStore.recentRecords ?? []);
+  if (!copyAction || copyAction.command !== command) return;
+
+  await asyncTo(
+    clipboard(copyAction.content, {
+      successMessage: copyAction.successMessage,
+      trim: false
+    })
+  );
+}
+
+/**
+ * 处理右键菜单命令选择。
+ * @param command - 菜单命令
+ */
+async function handleMenuSelect(command: HeaderTabMenuCommand): Promise<void> {
+  const tab = activeMenuTab.value;
+  closeMenu();
+  if (!tab) return;
+
+  if (isCloseCommand(command)) {
+    await executeCloseAction(command, tab);
+    return;
+  }
+
+  if (isCopyCommand(command)) {
+    await executeCopyAction(command, tab);
+  }
 }
 
 /**
  * 处理菜单项点击。
  * @param item - 菜单项
  */
-function handleItemClick(item: HeaderTabMenuItem): void {
+async function handleItemClick(item: HeaderTabMenuItem): Promise<void> {
   if (item.disabled) return;
 
-  emit('select', item.key);
+  await handleMenuSelect(item.key);
 }
 
 /**
@@ -176,7 +426,7 @@ function handleItemClick(item: HeaderTabMenuItem): void {
  * @param event - 指针事件
  * @returns 是否为外部事件
  */
-function isOutsidePointerEvent(event: PointerEvent): boolean {
+function isOutsidePointer(event: PointerEvent): boolean {
   const { target } = event;
 
   return target instanceof Node && menuRef.value !== null && !menuRef.value.contains(target);
@@ -186,9 +436,9 @@ function isOutsidePointerEvent(event: PointerEvent): boolean {
  * 处理外部指针按下。
  * @param event - 指针事件
  */
-function handleDocumentPointerDown(event: PointerEvent): void {
-  if (isOutsidePointerEvent(event)) {
-    emit('close');
+function handlePointerDown(event: PointerEvent): void {
+  if (isOutsidePointer(event)) {
+    closeMenu();
   }
 }
 
@@ -198,7 +448,7 @@ function handleDocumentPointerDown(event: PointerEvent): void {
  */
 function handleDocumentKeydown(event: KeyboardEvent): void {
   if (event.key === 'Escape') {
-    emit('close');
+    closeMenu();
   }
 }
 
@@ -206,7 +456,7 @@ function handleDocumentKeydown(event: KeyboardEvent): void {
  * 处理窗口尺寸变化。
  */
 function handleWindowResize(): void {
-  scheduleMenuSizeSync();
+  scheduleSizeSync();
 }
 
 /**
@@ -215,28 +465,45 @@ function handleWindowResize(): void {
  */
 function syncDocumentListeners(open: boolean): void {
   if (open) {
-    document.addEventListener('pointerdown', handleDocumentPointerDown, true);
+    document.addEventListener('pointerdown', handlePointerDown, true);
     document.addEventListener('keydown', handleDocumentKeydown, true);
     window.addEventListener('resize', handleWindowResize);
     return;
   }
 
-  document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
+  document.removeEventListener('pointerdown', handlePointerDown, true);
   document.removeEventListener('keydown', handleDocumentKeydown, true);
   window.removeEventListener('resize', handleWindowResize);
 }
 
-watch(() => props.open, syncDocumentListeners, { immediate: true });
+watch(() => menuState.open, syncDocumentListeners, { immediate: true });
 watch(
-  () => [props.open, props.position.x, props.position.y, props.items.length],
+  () => [menuState.open, menuState.position.x, menuState.position.y, menuItems.value.length],
   (): void => {
-    scheduleMenuSizeSync();
+    scheduleSizeSync();
   },
   { immediate: true, flush: 'post' }
 );
 
+/**
+ * 菜单目标标签被移除后自动关闭菜单。
+ */
+watch(
+  () => activeMenuTab.value,
+  (tab: Tab | null): void => {
+    if (menuState.open && !tab) {
+      closeMenu();
+    }
+  }
+);
+
 onBeforeUnmount((): void => {
   syncDocumentListeners(false);
+});
+
+defineExpose({
+  openForTab,
+  closeTab
 });
 </script>
 
