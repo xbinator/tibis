@@ -110,18 +110,14 @@ describe('SessionHistory busy deletion', (): void => {
     expect(wrapper.emitted('load-more')).toEqual([[]]);
   });
 
-  it('disables deletion while the session is busy', async (): Promise<void> => {
+  it('hides deletion actions while the session is busy', async (): Promise<void> => {
     const runtimeStore = useChatTabStore();
     runtimeStore.ensureTab('chat:session-a', 'session-a');
     runtimeStore.setStatus('chat:session-a', 'running');
     const wrapper = mountHistory();
     await flushPromises();
 
-    const deleteButton = wrapper.find('.session-history__actions button');
-    expect(deleteButton.attributes('disabled')).toBeDefined();
-    await deleteButton.trigger('click');
-    await flushPromises();
-
+    expect(wrapper.find('.session-history__actions').exists()).toBe(false);
     expect(chatStoreMock.deleteSession).not.toHaveBeenCalled();
   });
 
@@ -143,29 +139,24 @@ describe('SessionHistory busy deletion', (): void => {
     expect(wrapper.emitted('delete-session')).toEqual([['session-a']]);
   });
 
-  it('treats waiting status as busy', async (): Promise<void> => {
+  it('hides deletion actions while the session is waiting', async (): Promise<void> => {
     const runtimeStore = useChatTabStore();
     runtimeStore.ensureTab('chat:session-a', 'session-a');
     runtimeStore.setStatus('chat:session-a', 'waiting');
     const wrapper = mountHistory();
     await flushPromises();
 
-    const deleteButton = wrapper.find('.session-history__actions button');
-    expect(deleteButton.attributes('disabled')).toBeDefined();
+    expect(wrapper.find('.session-history__actions').exists()).toBe(false);
   });
 
-  it('disables deletion while a session tab identity is being promoted', async (): Promise<void> => {
+  it('hides deletion actions while a session tab identity is being promoted', async (): Promise<void> => {
     const runtimeStore = useChatTabStore();
     runtimeStore.ensureTab('chat:session-a', 'session-a');
     runtimeStore.markPromoting(['chat:session-a']);
     const wrapper = mountHistory();
     await flushPromises();
 
-    const deleteButton = wrapper.find('.session-history__actions button');
-    expect(deleteButton.attributes('disabled')).toBeDefined();
-    await deleteButton.trigger('click');
-    await flushPromises();
-
+    expect(wrapper.find('.session-history__actions').exists()).toBe(false);
     expect(chatStoreMock.deleteSession).not.toHaveBeenCalled();
   });
 

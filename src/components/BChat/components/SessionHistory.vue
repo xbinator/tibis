@@ -26,7 +26,7 @@
                 <span class="session-history__content">
                   <span class="session-history__item-title">{{ session.title }}</span>
                 </span>
-                <span class="session-history__actions">
+                <span v-if="!activeRuntimeIds.has(session.id)" class="session-history__actions">
                   <BButton type="text" square danger size="small" :disabled="activeRuntimeIds.has(session.id)" @click.stop="handleDeleteSession(session.id)">
                     <BIcon icon="lucide:trash-2" :size="14" />
                   </BButton>
