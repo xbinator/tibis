@@ -18,7 +18,7 @@ import { useTabsStore } from '@/stores/workspace/tabs';
 const routeMock = vi.hoisted(() => ({ fullPath: '/welcome' }));
 const routerPushMock = vi.hoisted(() => vi.fn<(path: string) => Promise<unknown>>());
 const routeFailureMock = vi.hoisted(() => ({ type: 'aborted' }));
-const modalConfirmMock = vi.hoisted(() => vi.fn<() => Promise<[boolean, boolean]>>());
+const modalConfirmMock = vi.hoisted(() => vi.fn<(_title: string, _content: string) => Promise<[boolean, boolean]>>());
 
 /** matchMedia mock：jsdom 缺少该 API，返回减少动效偏好使关闭事件立即发出。 */
 const matchMediaMock = vi.fn((): { matches: boolean } => ({ matches: true }));
@@ -76,6 +76,16 @@ const BRecentIconStub = defineComponent({
 });
 
 /**
+ * 可手动结算的确认弹窗 Promise。
+ */
+interface DeferredConfirm {
+  /** 传给确认弹窗 mock 的 Promise。 */
+  promise: Promise<[boolean, boolean]>;
+  /** 结算确认弹窗结果。 */
+  resolve: (result: [boolean, boolean]) => void;
+}
+
+/**
  * 创建测试标签。
  * @param id - 标签 ID
  * @param path - 标签路径
@@ -98,6 +108,23 @@ function mountTabs(): ReturnType<typeof mount> {
 }
 
 /**
+ * 创建可控确认弹窗结果。
+ * @returns 可手动结算的确认弹窗 Promise
+ */
+function createDeferredConfirm(): DeferredConfirm {
+  let resolveConfirm: DeferredConfirm['resolve'] | undefined;
+  const promise = new Promise<[boolean, boolean]>((resolve: DeferredConfirm['resolve']): void => {
+    resolveConfirm = resolve;
+  });
+
+  if (!resolveConfirm) {
+    throw new Error('Deferred confirm resolver was not initialized');
+  }
+
+  return { promise, resolve: resolveConfirm };
+}
+
+/**
  * 按标签 ID 读取渲染后的标签元素。
  * @param wrapper - HeaderTabs 包装器
  * @param tabId - 标签 ID
@@ -108,6 +135,14 @@ function getTabElement(wrapper: ReturnType<typeof mountTabs>, tabId: string): Re
   if (!tabElement) throw new Error(`Missing rendered tab: ${tabId}`);
 
   return tabElement;
+}
+
+/**
+ * 在标签根节点派发宽度过渡结束事件。
+ * @param element - 标签根节点
+ */
+function finishCloseTransition(element: Element): void {
+  element.dispatchEvent(new TransitionEvent('transitionend', { propertyName: 'width', bubbles: true }));
 }
 
 describe('HeaderTabs chat status', (): void => {
@@ -205,6 +240,35 @@ describe('HeaderTabs chat status', (): void => {
     await flushPromises();
 
     expect(modalConfirmMock).toHaveBeenCalledTimes(1);
+    expect(tabsStore.tabs).toEqual([]);
+  });
+
+  it('asks for dirty confirmation before starting the close animation', async (): Promise<void> => {
+    matchMediaMock.mockReturnValue({ matches: false });
+    const confirm = createDeferredConfirm();
+    modalConfirmMock.mockReturnValueOnce(confirm.promise);
+    const tabsStore = useTabsStore();
+    tabsStore.tabs = [createTab('editor-a', '/editor/a')];
+    tabsStore.dirtyById['editor-a'] = true;
+    const wrapper = mountTabs();
+    const tabElement = getTabElement(wrapper, 'editor-a');
+    Object.defineProperty(tabElement.element, 'offsetWidth', { configurable: true, value: 120 });
+
+    await tabElement.find('.header-tab__close').trigger('click');
+    await flushPromises();
+
+    expect(modalConfirmMock).toHaveBeenCalledTimes(1);
+    expect(tabElement.classes()).not.toContain('is-closing');
+
+    confirm.resolve([false, true]);
+    await flushPromises();
+
+    expect(tabElement.classes()).toContain('is-closing');
+    expect(tabsStore.tabs).toHaveLength(1);
+
+    finishCloseTransition(tabElement.element as Element);
+    await flushPromises();
+
     expect(tabsStore.tabs).toEqual([]);
   });
 

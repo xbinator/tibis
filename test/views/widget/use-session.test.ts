@@ -152,6 +152,73 @@ function createStoredWidget(content: string): StoredWidget {
 }
 
 /**
+ * 创建 weather 位置文本回归测试数据。
+ * @param textHeight - 文本元素模型高度。
+ * @returns Widget 数据。
+ */
+function createWeatherTextData(textHeight: number): WidgetData {
+  const data = createDefaultWidgetData('weather');
+  data.elements = [
+    {
+      id: 'weather-location',
+      name: 'text',
+      label: '文本',
+      icon: 'lucide:type',
+      title: '地点',
+      position: { x: 20, y: 18 },
+      size: { width: 220, height: textHeight },
+      rotation: 0,
+      style: {
+        color: '#13293d',
+        fontSize: 16,
+        fontWeight: 700,
+        lineHeight: 1.3
+      },
+      loop: {
+        enabled: false,
+        source: {
+          type: 'literal',
+          value: ''
+        },
+        autoColumns: false,
+        columns: 1,
+        columnGap: 12,
+        rowGap: 12,
+        itemName: '',
+        indexName: ''
+      },
+      metadata: {
+        content: '{{ locationLine }}',
+        maxLines: 1
+      }
+    }
+  ];
+
+  return data;
+}
+
+/**
+ * 序列化 Widget 测试数据。
+ * @param data - Widget 数据。
+ * @param endWithNewline - 是否以换行结束。
+ * @returns Widget JSON 字符串。
+ */
+function stringifyWidgetData(data: WidgetData, endWithNewline: boolean): string {
+  const content = JSON.stringify(data, null, 2);
+  return endWithNewline ? `${content}\n` : content;
+}
+
+/**
+ * 创建 weather 位置文本回归测试内容。
+ * @param textHeight - 文本元素模型高度。
+ * @param endWithNewline - 是否以换行结束。
+ * @returns Widget JSON 字符串。
+ */
+function createWeatherTextContent(textHeight: number, endWithNewline: boolean): string {
+  return stringifyWidgetData(createWeatherTextData(textHeight), endWithNewline);
+}
+
+/**
  * 挂载 Widget 会话宿主。
  * @returns 测试包装器
  */
@@ -212,6 +279,74 @@ describe('Widget useSession adapter', (): void => {
     expect(candidates.disk?.fileState).toEqual(expect.objectContaining({ path: '/old/widget.json', content: diskContent }));
   });
 
+  it('drops a widget draft that only differs by canonical rendering normalization', async (): Promise<void> => {
+    const diskContent = createWeatherTextContent(24, true);
+    const draftContent = createWeatherTextContent(24.8, false);
+    getFileByIdMock.mockResolvedValue({
+      ...createStoredWidget(draftContent),
+      savedContent: diskContent
+    });
+    readFileMock.mockResolvedValue({ name: 'widget', ext: 'json', content: diskContent });
+    mountSession();
+    await flushPromises();
+    const { options } = controllerHarness;
+    expect(options).not.toBeNull();
+    if (!options) return;
+
+    const candidates = await options.events.onLoad({ fileId: 'widget-weather', sessionVersion: 1 });
+
+    expect(candidates.draft).toBeNull();
+    expect(candidates.disk?.fileState.content).toBe(diskContent);
+  });
+
+  it('treats widget render-normalized content as saved content', async (): Promise<void> => {
+    const diskContent = createWeatherTextContent(24, true);
+    const normalizedContent = createWeatherTextContent(24.8, true);
+    mountSession();
+    await flushPromises();
+    const { options } = controllerHarness;
+    expect(options).not.toBeNull();
+    if (!options) return;
+
+    const isSavedContent = options.events.onIsContentSaved?.({
+      fileState: {
+        id: 'widget-weather',
+        name: 'widget',
+        ext: 'json',
+        path: '/installed/weather/widget.json',
+        content: normalizedContent
+      },
+      content: normalizedContent,
+      savedContent: diskContent
+    });
+
+    expect(isSavedContent).toBe(true);
+  });
+
+  it('drops a stale empty visual draft when disk still matches the saved widget content', async (): Promise<void> => {
+    const diskData = createWeatherTextData(24);
+    diskData.name = '天气';
+    diskData.description = '查询天气';
+    diskData.metadata = { width: 360, height: 240 };
+    const diskContent = stringifyWidgetData(diskData, true);
+    const draftContent = stringifyWidgetData({ ...diskData, elements: [] }, true);
+    getFileByIdMock.mockResolvedValue({
+      ...createStoredWidget(draftContent),
+      savedContent: diskContent
+    });
+    readFileMock.mockResolvedValue({ name: 'widget', ext: 'json', content: diskContent });
+    mountSession();
+    await flushPromises();
+    const { options } = controllerHarness;
+    expect(options).not.toBeNull();
+    if (!options) return;
+
+    const candidates = await options.events.onLoad({ fileId: 'widget-weather', sessionVersion: 1 });
+
+    expect(candidates.draft).toBeNull();
+    expect(candidates.disk?.fileState.content).toBe(diskContent);
+  });
+
   it('loads installed widget path when recent record is missing', async (): Promise<void> => {
     const diskContent = JSON.stringify({ ...createDefaultWidgetData('weather'), name: '磁盘天气' }, null, 2);
     getFileByIdMock.mockResolvedValue(undefined);
@@ -259,7 +394,7 @@ describe('Widget useSession adapter', (): void => {
     const record = options.events.onBuildRecord({ ...snapshot, modifiedAt: 1 });
 
     expect(parsed.name).toBe('天气');
-    expect(serialized).toBe(content);
+    expect(serialized).toBe(`${content}\n`);
     expect(record.type).toBe('widget');
     const [invalidError] = options.events.onParse({ content: '{invalid', path: '/tmp/widget.json' });
     expect(invalidError).toBeInstanceOf(Error);

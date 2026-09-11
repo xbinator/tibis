@@ -11,16 +11,12 @@ import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import HeaderTab from '@/layouts/default/components/HeaderTab.vue';
 import type { Tab } from '@/stores/workspace/tabs';
-import { useTabsStore } from '@/stores/workspace/tabs';
 
 const headerTabSource = readFileSync('src/layouts/default/components/HeaderTab.vue', 'utf8');
 const headerTabsSource = readFileSync('src/layouts/default/components/HeaderTabs.vue', 'utf8');
 
 /** 关闭动画兜底超时时长（与组件常量保持一致）。 */
 const CLOSE_FALLBACK_TIMEOUT_MS = 400;
-
-/** 关闭被拦截后的检查延时（与组件常量保持一致）。 */
-const CLOSE_CANCEL_CHECK_DELAY_MS = 200;
 
 vi.mock('vue-router', () => ({
   useRoute: (): { fullPath: string } => ({ fullPath: '/welcome' })
@@ -49,6 +45,16 @@ const tab: Tab = {
   cacheKey: 'welcome',
   icon: 'lucide:house'
 };
+
+/**
+ * HeaderTab 发给父级的关闭请求控制器。
+ */
+interface HeaderTabCloseRequest {
+  /** 守卫通过后播放关闭离场动画。 */
+  runCloseAnimation: () => Promise<void>;
+  /** 守卫拒绝时取消本次关闭请求。 */
+  cancelCloseRequest: () => void;
+}
 
 /**
  * 挂载待关闭标签组件。
@@ -152,12 +158,29 @@ function getTabRoot(wrapper: ReturnType<typeof mount>): Omit<DOMWrapper<Element>
 }
 
 /**
- * 模拟 jsdom 缺失的布局宽度并点击关闭按钮。
+ * 读取最近一次关闭请求。
  * @param wrapper - 标签包装器
+ * @returns 关闭请求控制器
  */
-async function clickClose(wrapper: ReturnType<typeof mount>): Promise<void> {
+function getCloseRequest(wrapper: ReturnType<typeof mount>): HeaderTabCloseRequest {
+  const events = wrapper.emitted('close') as [HeaderTabCloseRequest][] | undefined;
+  const request = events?.[events.length - 1]?.[0];
+  if (!request) {
+    throw new Error('Missing close request');
+  }
+
+  return request;
+}
+
+/**
+ * 模拟 jsdom 缺失的布局宽度并点击关闭按钮发起关闭请求。
+ * @param wrapper - 标签包装器
+ * @returns 关闭请求控制器
+ */
+async function clickClose(wrapper: ReturnType<typeof mount>): Promise<HeaderTabCloseRequest> {
   Object.defineProperty(getTabRoot(wrapper).element, 'offsetWidth', { configurable: true, value: 120 });
   await wrapper.get('.header-tab__close').trigger('click');
+  return getCloseRequest(wrapper);
 }
 
 describe('HeaderTab close animation', (): void => {
@@ -173,61 +196,89 @@ describe('HeaderTab close animation', (): void => {
     vi.useRealTimers();
   });
 
-  it('locks the rendered width then collapses to zero before emitting close', async (): Promise<void> => {
+  it('emits a close request before starting the animation', async (): Promise<void> => {
     const wrapper = mountHeaderTab();
     const root = getTabRoot(wrapper);
-    Object.defineProperty(root.element, 'offsetWidth', { configurable: true, value: 120 });
-    const reflowSpy = vi.spyOn(root.element, 'getBoundingClientRect');
 
-    await wrapper.get('.header-tab__close').trigger('click');
+    const request = await clickClose(wrapper);
+
+    expect(wrapper.emitted('close')).toHaveLength(1);
+    expect(root.classes()).not.toContain('is-closing');
+    expect((root.element as HTMLElement).style.width).toBe('');
+    expect(typeof request.runCloseAnimation).toBe('function');
+    expect(typeof request.cancelCloseRequest).toBe('function');
+  });
+
+  it('locks the rendered width when the parent starts the close animation', async (): Promise<void> => {
+    const wrapper = mountHeaderTab();
+    const root = getTabRoot(wrapper);
+    const reflowSpy = vi.spyOn(root.element, 'getBoundingClientRect');
+    const request = await clickClose(wrapper);
+
+    const animation = request.runCloseAnimation();
+    await nextTick();
 
     expect(root.classes()).toContain('is-closing');
     expect((root.element as HTMLElement).style.width).toBe('0px');
     expect(reflowSpy).toHaveBeenCalled();
-    expect(wrapper.emitted('close')).toBeUndefined();
+
+    fireTransitionEnd(root.element);
+    await animation;
   });
 
-  it('emits close after the width transition ends', async (): Promise<void> => {
+  it('resolves the close animation after the width transition ends', async (): Promise<void> => {
     const wrapper = mountHeaderTab();
-    await clickClose(wrapper);
+    const request = await clickClose(wrapper);
+    let resolved = false;
 
+    const animation = request.runCloseAnimation().then((): void => {
+      resolved = true;
+    });
+
+    expect(resolved).toBe(false);
     fireTransitionEnd(getTabRoot(wrapper).element);
+    await animation;
 
-    expect(wrapper.emitted('close')).toHaveLength(1);
+    expect(resolved).toBe(true);
   });
 
-  it('emits close via fallback timeout when transitionend is lost', async (): Promise<void> => {
+  it('resolves the close animation via fallback timeout when transitionend is lost', async (): Promise<void> => {
     vi.useFakeTimers();
     const wrapper = mountHeaderTab();
-    await clickClose(wrapper);
+    const request = await clickClose(wrapper);
+    let resolved = false;
+
+    const animation = request.runCloseAnimation().then((): void => {
+      resolved = true;
+    });
 
     vi.advanceTimersByTime(CLOSE_FALLBACK_TIMEOUT_MS);
+    await animation;
 
-    expect(wrapper.emitted('close')).toHaveLength(1);
+    expect(resolved).toBe(true);
   });
 
-  it('ignores repeated close clicks while closing', async (): Promise<void> => {
+  it('ignores repeated close clicks while a close request is pending', async (): Promise<void> => {
     const wrapper = mountHeaderTab();
-    await clickClose(wrapper);
+    const request = await clickClose(wrapper);
     await wrapper.get('.header-tab__close').trigger('click');
 
-    fireTransitionEnd(getTabRoot(wrapper).element);
-
     expect(wrapper.emitted('close')).toHaveLength(1);
+
+    request.cancelCloseRequest();
+    await nextTick();
+    await wrapper.get('.header-tab__close').trigger('click');
+
+    expect(wrapper.emitted('close')).toHaveLength(2);
   });
 
-  it('restores the tab when the close guard keeps it in the store', async (): Promise<void> => {
-    vi.useFakeTimers();
-    const tabsStore = useTabsStore();
-    tabsStore.tabs.push(tab);
+  it('restores the tab if an in-flight close animation is cancelled', async (): Promise<void> => {
     const wrapper = mountHeaderTab();
-    await clickClose(wrapper);
+    const request = await clickClose(wrapper);
+    const animation = request.runCloseAnimation();
 
-    fireTransitionEnd(getTabRoot(wrapper).element);
-    expect(wrapper.emitted('close')).toHaveLength(1);
-    expect(getTabRoot(wrapper).classes()).toContain('is-closing');
-
-    vi.advanceTimersByTime(CLOSE_CANCEL_CHECK_DELAY_MS);
+    request.cancelCloseRequest();
+    await animation;
     await nextTick();
 
     const root = getTabRoot(wrapper);
@@ -235,29 +286,16 @@ describe('HeaderTab close animation', (): void => {
     expect((root.element as HTMLElement).style.width).toBe('');
   });
 
-  it('keeps the closing state when the tab has left the store', async (): Promise<void> => {
-    vi.useFakeTimers();
-    const wrapper = mountHeaderTab();
-    await clickClose(wrapper);
-
-    fireTransitionEnd(getTabRoot(wrapper).element);
-    vi.advanceTimersByTime(CLOSE_CANCEL_CHECK_DELAY_MS);
-
-    expect(getTabRoot(wrapper).classes()).toContain('is-closing');
-    expect((getTabRoot(wrapper).element as HTMLElement).style.width).toBe('0px');
-  });
-
-  it('closes immediately when the user prefers reduced motion', async (): Promise<void> => {
+  it('skips the close animation when the user prefers reduced motion', async (): Promise<void> => {
     matchMediaMock.mockReturnValue({ matches: true });
     const wrapper = mountHeaderTab();
-    const root = getTabRoot(wrapper);
-    Object.defineProperty(root.element, 'offsetWidth', { configurable: true, value: 120 });
 
-    await wrapper.get('.header-tab__close').trigger('click');
+    const request = await clickClose(wrapper);
+    await request.runCloseAnimation();
 
     expect(wrapper.emitted('close')).toHaveLength(1);
-    expect(root.classes()).not.toContain('is-closing');
-    expect((root.element as HTMLElement).style.width).toBe('');
+    expect(getTabRoot(wrapper).classes()).not.toContain('is-closing');
+    expect((getTabRoot(wrapper).element as HTMLElement).style.width).toBe('');
   });
 
   it('declares the closing collapse and margin collapse styles', (): void => {

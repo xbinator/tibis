@@ -69,7 +69,19 @@ export function useFileController<TData>(options: FileControllerOptions<TData>):
     return `${scope}:${runtime.pauseReasonSeed}`;
   }
 
-  const isSaved = computed<boolean>((): boolean => serializationError.value === null && fileState.value.content === savedContent.value);
+  /**
+   * 判断当前内容是否与保存基线等价。
+   * @returns 是否可视为已保存
+   */
+  function isSavedContent(): boolean {
+    if (fileState.value.content === savedContent.value) {
+      return true;
+    }
+
+    return events.onIsContentSaved?.({ fileState: { ...fileState.value }, content: fileState.value.content, savedContent: savedContent.value }) ?? false;
+  }
+
+  const isSaved = computed<boolean>((): boolean => serializationError.value === null && isSavedContent());
   const isMissing = computed<boolean>((): boolean => tabsStore.isMissing(fileId.value));
 
   /**

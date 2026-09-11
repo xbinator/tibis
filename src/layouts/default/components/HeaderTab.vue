@@ -59,9 +59,6 @@ const COMPACT_TAB_HORIZONTAL_PADDING = 10;
 /** 关闭离场动画兜底超时时长（ms），略大于 CSS 过渡时长，避免 transitionend 丢失卡住关闭流程。 */
 const CLOSE_FALLBACK_TIMEOUT_MS = 400;
 
-/** 关闭事件发出后检查关闭是否被拦截的延时（ms），覆盖同步返回的关闭守卫。 */
-const CLOSE_CANCEL_CHECK_DELAY_MS = 200;
-
 /**
  * 组件 Props 定义。
  */
@@ -74,6 +71,16 @@ interface Props {
   status?: TabStatus;
 }
 
+/**
+ * 标签关闭请求控制器，由父级在确认允许关闭后触发离场动画。
+ */
+interface HeaderTabCloseRequest {
+  /** 播放关闭离场动画，完成后才允许父级真正移除标签。 */
+  runCloseAnimation: () => Promise<void>;
+  /** 关闭请求被守卫拒绝时恢复可再次点击状态。 */
+  cancelCloseRequest: () => void;
+}
+
 const props = withDefaults(defineProps<Props>(), {
   dragging: false,
   status: undefined
@@ -81,7 +88,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   (e: 'click'): void;
-  (e: 'close'): void;
+  (e: 'close', request: HeaderTabCloseRequest): void;
   (e: 'contextmenu', event: MouseEvent): void;
 }>();
 
@@ -104,17 +111,23 @@ const isCloseFloating = ref(false);
 /** 是否正在播放关闭离场动画。 */
 const isClosing = ref(false);
 
+/** 是否已有关闭请求等待父级确认。 */
+const isClosePending = ref(false);
+
 /** 关闭动画兜底定时器 ID。 */
 let closeFallbackTimer: number | undefined;
-
-/** 关闭被拦截后的状态回滚定时器 ID。 */
-let closeCancelTimer: number | undefined;
 
 /** 关闭动画 transitionend 监听清理函数。 */
 let removeCloseListener: (() => void) | undefined;
 
 /** 监听标签尺寸变化，用于同步关闭按钮布局。 */
 let closeLayoutObserver: ResizeObserver | undefined;
+
+/** 关闭动画完成后的 Promise 解析函数。 */
+let closeAnimationResolver: (() => void) | undefined;
+
+/** 当前正在等待的关闭动画 Promise。 */
+let closeAnimationPromise: Promise<void> | undefined;
 
 /** 当前标签页是否为激活状态。 */
 const isActive = computed<boolean>(() => props.tab.path === route.fullPath);
@@ -211,26 +224,18 @@ function restoreFromClosing(): void {
 }
 
 /**
- * 清理离场动画监听并发出关闭事件，随后延迟检查关闭是否被守卫拦截。
+ * 清理离场动画监听并结算等待中的关闭动画。
  */
-function finishClose(): void {
+function finishCloseAnimation(): void {
   window.clearTimeout(closeFallbackTimer);
   closeFallbackTimer = undefined;
   removeCloseListener?.();
   removeCloseListener = undefined;
 
-  emit('close');
-
-  // 关闭守卫（未保存确认、并发保护）可能拒绝关闭，此时标签仍留在 store 中，需要恢复原状
-  closeCancelTimer = window.setTimeout((): void => {
-    if (!isClosing.value) {
-      return;
-    }
-
-    if (tabsStore.tabs.some((tab: Tab): boolean => tab.id === props.tab.id)) {
-      restoreFromClosing();
-    }
-  }, CLOSE_CANCEL_CHECK_DELAY_MS);
+  const resolveAnimation = closeAnimationResolver;
+  closeAnimationResolver = undefined;
+  closeAnimationPromise = undefined;
+  resolveAnimation?.();
 }
 
 /**
@@ -240,7 +245,7 @@ function finishClose(): void {
 function watchCloseTransition(root: HTMLElement): void {
   const handleTransitionEnd = (event: TransitionEvent): void => {
     if (event.target === root && event.propertyName === 'width') {
-      finishClose();
+      finishCloseAnimation();
     }
   };
 
@@ -248,24 +253,24 @@ function watchCloseTransition(root: HTMLElement): void {
   removeCloseListener = (): void => {
     root.removeEventListener('transitionend', handleTransitionEnd);
   };
-  closeFallbackTimer = window.setTimeout(finishClose, CLOSE_FALLBACK_TIMEOUT_MS);
+  closeFallbackTimer = window.setTimeout(finishCloseAnimation, CLOSE_FALLBACK_TIMEOUT_MS);
 }
 
 /**
- * 处理关闭按钮点击：先播放宽度收缩离场动画，动画结束后再发出关闭事件。
- * 右侧标签随 flex 布局自然从右往左滑动补位。
+ * 在父级确认允许关闭后播放宽度收缩离场动画。
+ * @returns 动画完成 Promise
  */
-function handleCloseClick(): void {
-  if (isClosing.value) {
-    return;
-  }
-
+function runCloseAnimation(): Promise<void> {
+  if (closeAnimationPromise) return closeAnimationPromise;
+  if (isClosing.value) return Promise.resolve();
   const root = rootRef.value;
   if (!root || prefersReducedMotion()) {
-    emit('close');
-    return;
+    return Promise.resolve();
   }
 
+  closeAnimationPromise = new Promise<void>((resolve: () => void): void => {
+    closeAnimationResolver = resolve;
+  });
   isClosing.value = true;
 
   // 锁定当前渲染宽度作为收缩过渡的起点
@@ -275,6 +280,30 @@ function handleCloseClick(): void {
   root.style.width = '0px';
 
   watchCloseTransition(root);
+  return closeAnimationPromise;
+}
+
+/**
+ * 取消等待确认的关闭请求，让用户可以再次点击关闭按钮。
+ */
+function cancelCloseRequest(): void {
+  isClosePending.value = false;
+  if (isClosing.value) {
+    finishCloseAnimation();
+    restoreFromClosing();
+  }
+}
+
+/**
+ * 处理关闭按钮点击：立即请求父级执行关闭确认，通过后再由父级触发动画。
+ */
+function handleCloseClick(): void {
+  if (isClosePending.value || isClosing.value) {
+    return;
+  }
+
+  isClosePending.value = true;
+  emit('close', { runCloseAnimation, cancelCloseRequest });
 }
 
 /**
@@ -368,12 +397,7 @@ onMounted((): void => {
  * 组件卸载时释放尺寸监听器与关闭动画定时器。
  */
 onUnmounted((): void => {
-  window.clearTimeout(closeFallbackTimer);
-  window.clearTimeout(closeCancelTimer);
-  closeFallbackTimer = undefined;
-  closeCancelTimer = undefined;
-  removeCloseListener?.();
-  removeCloseListener = undefined;
+  finishCloseAnimation();
   closeLayoutObserver?.disconnect();
   closeLayoutObserver = undefined;
 });

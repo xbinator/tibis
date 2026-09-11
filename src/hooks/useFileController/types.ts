@@ -116,6 +116,18 @@ export interface FileSerializeContext<TData> {
 }
 
 /**
+ * 判断当前内容是否等价于保存基线的上下文。
+ */
+export interface FileContentCompareContext {
+  /** 当前文件状态。 */
+  fileState: Readonly<FileState>;
+  /** 当前序列化内容。 */
+  content: string;
+  /** 最近一次磁盘同步的内容。 */
+  savedContent: string;
+}
+
+/**
  * 构建最近文件记录的上下文。
  */
 export interface FileRecordContext<TData> extends FileControllerSnapshot<TData> {
@@ -219,6 +231,8 @@ export interface FileControllerEvents<TData> {
   onParse: (context: FileParseContext) => FileParseResult<TData>;
   /** 将页面数据序列化为字符串。 */
   onSerialize: (context: FileSerializeContext<TData>) => string;
+  /** 判断当前序列化内容是否可视为已保存，默认使用字符串严格相等。 */
+  onIsContentSaved?: (context: FileContentCompareContext) => boolean;
   /** 构建最近文件记录。 */
   onBuildRecord: (context: FileRecordContext<TData>) => StoredDocumentRecord;
   /** 写入已有磁盘路径。 */

@@ -9,7 +9,7 @@ import type { ComponentPublicInstance, Ref } from 'vue';
 import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BWidget from '@/components/BWidget/index.vue';
-import type { WidgetData, WidgetPoint } from '@/components/BWidget/types';
+import type { WidgetData, WidgetPoint, WidgetSelectTarget } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { queryWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
@@ -206,6 +206,39 @@ function createDeepNestedWidgetDataFixture(): WidgetData {
       }
     ]
   };
+}
+
+/**
+ * 创建带天气绑定文本的测试 Widget 数据。
+ * @returns 天气文本 Widget 数据
+ */
+function createWeatherTextData(): WidgetData {
+  const data = createDefaultWidgetData();
+  data.elements = [
+    {
+      id: 'weather-location',
+      name: 'text',
+      label: '文本',
+      icon: 'lucide:type',
+      title: '地点',
+      position: { x: 20, y: 18 },
+      size: { width: 220, height: 24 },
+      rotation: 0,
+      style: {
+        color: '#13293d',
+        fontSize: 16,
+        fontWeight: 700,
+        lineHeight: 1.3
+      },
+      loop: createDefaultWidgetElementLoopConfig(),
+      metadata: {
+        content: '{{ locationLine }}',
+        maxLines: 1
+      }
+    }
+  ];
+
+  return data;
 }
 
 /**
@@ -838,6 +871,69 @@ describe('BWidget canvas component', (): void => {
     expect(selectedPayload).toEqual({});
     expect(toRaw(selectedPayload)).toBe(data.metadata);
     expect(wrapper.emitted('update:value')).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('does not emit model updates when mounting weather-like bound text', async (): Promise<void> => {
+    const wrapper = mount(BWidget, {
+      props: {
+        value: createWeatherTextData()
+      },
+      attachTo: document.body
+    });
+
+    await flushWidgetUpdates();
+
+    expect(wrapper.emitted('update:value')).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('does not emit model updates after weather-like data loads into an empty canvas', async (): Promise<void> => {
+    const dataItem = ref<WidgetData>(createDefaultWidgetData());
+    const selectedTarget = ref<WidgetSelectTarget>(dataItem.value.metadata);
+    const updates: WidgetData[] = [];
+    const Host = defineComponent({
+      name: 'BWidgetAsyncWeatherHost',
+      components: {
+        BWidget
+      },
+      setup(): {
+        dataItem: Ref<WidgetData>;
+        selectedTarget: Ref<WidgetSelectTarget>;
+        handleSelectUpdate: (target: WidgetSelectTarget) => void;
+        handleUpdate: (data: WidgetData) => void;
+      } {
+        /**
+         * 模拟页面层接收当前设置目标。
+         * @param target - BWidget 发出的设置目标
+         */
+        function handleSelectUpdate(target: WidgetSelectTarget): void {
+          selectedTarget.value = target;
+        }
+
+        /**
+         * 记录并模拟页面层 v-model 回写。
+         * @param data - BWidget 发出的最新 Widget 数据
+         */
+        function handleUpdate(data: WidgetData): void {
+          updates.push(data);
+          dataItem.value = data;
+        }
+
+        return { dataItem, selectedTarget, handleSelectUpdate, handleUpdate };
+      },
+      template: '<BWidget :select="selectedTarget" :value="dataItem" @update:select="handleSelectUpdate" @update:value="handleUpdate" />'
+    });
+    const wrapper = mount(Host, {
+      attachTo: document.body
+    });
+    await flushWidgetUpdates();
+
+    dataItem.value = createWeatherTextData();
+    await flushWidgetUpdates();
+    await flushWidgetUpdates();
+
+    expect(updates).toHaveLength(0);
     wrapper.unmount();
   });
 });

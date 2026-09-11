@@ -232,6 +232,33 @@ describe('useFileController', (): void => {
     scope.stop();
   });
 
+  it('allows file types to keep equivalent serialized content saved', async (): Promise<void> => {
+    const scope = effectScope();
+
+    await scope.run(async (): Promise<void> => {
+      const controller = useFileController({
+        fileId: ref('file-1'),
+        events: createEvents({
+          onCreate: ({ fileId }: FileCreateContext): FileControllerSnapshot<string> => ({
+            fileState: createFileState(fileId, 'saved'),
+            data: 'saved',
+            savedContent: 'saved'
+          }),
+          onIsContentSaved: ({ content, savedContent }: { content: string; savedContent: string }): boolean => content.trim() === savedContent.trim()
+        })
+      });
+      controller.data.value = 'saved\n';
+      await nextTick();
+
+      expect(controller.fileState.value.content).toBe('saved\n');
+      expect(controller.isSaved.value).toBe(true);
+      expect(clearDirtyMock).toHaveBeenCalledWith('file-1');
+      expect(setDirtyMock).not.toHaveBeenCalledWith('file-1');
+    });
+
+    scope.stop();
+  });
+
   it('flushes a recent draft but does not write disk when strategy is off', async (): Promise<void> => {
     const scope = effectScope();
     const onWriteFile = vi.fn().mockResolvedValue(undefined);

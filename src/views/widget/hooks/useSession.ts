@@ -8,13 +8,17 @@ import { useRoute, useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
 import { parseWidgetJson, readWidgetIdFromFilePath } from '@/ai/widget/parser';
 import type { WidgetData } from '@/components/BWidget/types';
+import { createWidgetBoardState, createWidgetDataSnapshot } from '@/components/BWidget/utils/boardTransforms';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { useClipboard } from '@/hooks/useClipboard';
 import { useFileController } from '@/hooks/useFileController';
 import type {
   FileConflictDecision,
+  FileContentCompareContext,
   FileControllerErrorContext,
   FileControllerSnapshot,
+  FileDiskCandidate,
+  FileDraftCandidate,
   FileLoadCandidates,
   FileLoadContext,
   FileParseContext,
@@ -180,6 +184,123 @@ function resolveWidgetTitle(fileState: FileState): string {
 }
 
 /**
+ * 将 Widget 页面数据序列化为稳定 JSON 文本。
+ * @param data - Widget 页面数据
+ * @returns 带结尾换行的 JSON 文本
+ */
+function serializeWidgetData(data: WidgetData): string {
+  return `${JSON.stringify(data, null, 2)}\n`;
+}
+
+/**
+ * 创建用于比较的 Widget 归一化数据。
+ * @param data - Widget 页面数据
+ * @returns 忽略可自动恢复尺寸差异后的 Widget 数据
+ */
+function normalizeComparableData(data: WidgetData): WidgetData {
+  const board = createWidgetBoardState(data);
+
+  return createWidgetDataSnapshot({ ...data, elements: board.elements }, { normalizeSize: false });
+}
+
+/**
+ * 读取 Widget 内容的归一化比较数据。
+ * @param content - 原始 Widget JSON 文本
+ * @param path - Widget 文件路径
+ * @returns 归一化数据，解析失败时返回 null
+ */
+function readComparableData(content: string, path: string): WidgetData | null {
+  const definition = parseWidgetJson(content, path);
+  if (definition.parseError) {
+    return null;
+  }
+
+  return normalizeComparableData(definition.data);
+}
+
+/**
+ * 读取 Widget 内容的归一化比较文本。
+ * @param content - 原始 Widget JSON 文本
+ * @param path - Widget 文件路径
+ * @returns 归一化文本，解析失败时返回 null
+ */
+function readComparableContent(content: string, path: string): string | null {
+  const data = readComparableData(content, path);
+  if (!data) {
+    return null;
+  }
+
+  return serializeWidgetData(data);
+}
+
+/**
+ * 判断两个 Widget JSON 内容是否为同一份可渲染配置。
+ * @param left - 左侧 Widget JSON 文本
+ * @param right - 右侧 Widget JSON 文本
+ * @param path - Widget 文件路径
+ * @returns 是否可视为等价内容
+ */
+function areWidgetContentsEqual(left: string, right: string, path: string): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  const leftContent = readComparableContent(left, path);
+  const rightContent = readComparableContent(right, path);
+
+  return leftContent !== null && rightContent !== null && leftContent === rightContent;
+}
+
+/**
+ * 创建不含图层元素的 Widget 配置副本。
+ * @param data - Widget 页面数据
+ * @returns 清空图层后的 Widget 数据
+ */
+function stripWidgetElements(data: WidgetData): WidgetData {
+  return { ...data, elements: [] };
+}
+
+/**
+ * 判断草稿是否为空图层异常快照。
+ * @param draft - 最近记录草稿候选
+ * @param disk - 磁盘内容候选
+ * @param path - Widget 文件路径
+ * @returns 是否应丢弃该草稿
+ */
+function isEmptyLayerDraft(draft: FileDraftCandidate, disk: FileDiskCandidate, path: string): boolean {
+  if (draft.savedContent === null || !areWidgetContentsEqual(draft.savedContent, disk.fileState.content, path)) {
+    return false;
+  }
+
+  const draftData = readComparableData(draft.fileState.content, path);
+  const diskData = readComparableData(disk.fileState.content, path);
+  if (!draftData || !diskData || draftData.elements.length > 0 || diskData.elements.length === 0) {
+    return false;
+  }
+
+  return serializeWidgetData(stripWidgetElements(draftData)) === serializeWidgetData(stripWidgetElements(diskData));
+}
+
+/**
+ * 过滤仅由格式化、自动尺寸归一化或历史空图层异常产生的 Widget 草稿。
+ * @param draft - 最近记录草稿候选
+ * @param disk - 磁盘内容候选
+ * @returns 需要保留的草稿候选
+ */
+function resolveWidgetDraft(draft: FileDraftCandidate | null, disk: FileDiskCandidate | null): FileDraftCandidate | null {
+  if (!draft || !disk) {
+    return draft;
+  }
+
+  const comparePath = draft.fileState.path ?? disk.fileState.path ?? 'widget.json';
+  if (areWidgetContentsEqual(draft.fileState.content, disk.fileState.content, comparePath)) {
+    return null;
+  }
+
+  return isEmptyLayerDraft(draft, disk, comparePath) ? null : draft;
+}
+
+/**
  * 创建 Widget 页面专用文件会话。
  * @returns Widget 文件会话
  */
@@ -257,9 +378,11 @@ export function useSession(): WidgetSessionReturn {
       return { draft, disk: null, error: new Error(`无法读取 Widget 文件：${diskError.message}`, { cause: diskError }) };
     }
 
+    const diskState = createDiskState(context.fileId, filePath, diskFile);
+
     return {
-      draft,
-      disk: { fileState: createDiskState(context.fileId, filePath, diskFile) },
+      draft: resolveWidgetDraft(draft, { fileState: diskState }),
+      disk: { fileState: diskState },
       error: null,
       missing: false
     };
@@ -284,7 +407,16 @@ export function useSession(): WidgetSessionReturn {
    * @returns 格式化 JSON 字符串
    */
   function onSerializeWidget(context: FileSerializeContext<WidgetData>): string {
-    return JSON.stringify(context.data ?? {}, null, 2);
+    return serializeWidgetData(context.data);
+  }
+
+  /**
+   * 判断 Widget 当前内容是否仍等价于保存基线。
+   * @param context - 内容比较上下文
+   * @returns 是否可视为已保存
+   */
+  function onCompareWidgetContent(context: FileContentCompareContext): boolean {
+    return areWidgetContentsEqual(context.content, context.savedContent, context.fileState.path ?? 'widget.json');
   }
 
   /**
@@ -385,6 +517,7 @@ export function useSession(): WidgetSessionReturn {
       onLoad: onLoadWidget,
       onParse: onParseWidget,
       onSerialize: onSerializeWidget,
+      onIsContentSaved: onCompareWidgetContent,
       onBuildRecord,
       onWriteFile: onWriteWidget,
       onSaveAs: onSaveAsWidget,

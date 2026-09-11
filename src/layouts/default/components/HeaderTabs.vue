@@ -19,7 +19,7 @@
         :dragging="dragging"
         :status="item.status"
         @click="handleClickTab(item.path)"
-        @close="handleCloseButton(item)"
+        @close="handleCloseButton(item, $event)"
         @contextmenu="handleTabContextMenu(item, $event)"
       />
     </template>
@@ -54,6 +54,16 @@ const recentStore = useRecentStore();
 const settingStore = useSettingStore();
 const route = useRoute();
 const router = useRouter();
+
+/**
+ * 单个标签页发出的关闭请求控制器。
+ */
+interface HeaderTabCloseRequest {
+  /** 守卫通过后播放关闭离场动画。 */
+  runCloseAnimation: () => Promise<void>;
+  /** 守卫拒绝或关闭中断时恢复关闭按钮请求状态。 */
+  cancelCloseRequest: () => void;
+}
 
 /** 拖拽结束后最近一次的时间戳，用于抑制拖后误点击 */
 const lastDragEndedAt = shallowRef(0);
@@ -147,9 +157,14 @@ async function handleClickTab(path: string): Promise<void> {
 /**
  * 顶部关闭按钮复用菜单组件的标签关闭能力。
  * @param tab - 待关闭的标签页
+ * @param request - 标签关闭请求控制器
  */
-async function handleCloseButton(tab: Tab): Promise<void> {
-  await tabMenuRef.value?.closeTab(tab);
+async function handleCloseButton(tab: Tab, request: HeaderTabCloseRequest): Promise<void> {
+  const closeTask = tabMenuRef.value?.closeTab(tab, { beforeApply: request.runCloseAnimation }) ?? Promise.resolve(false);
+  const [closeError, closed] = await asyncTo(closeTask);
+  if (closeError || !closed) {
+    request.cancelCloseRequest();
+  }
 }
 
 /**

@@ -71,6 +71,14 @@ type HeaderTabMenuEntry = HeaderTabMenuItem | HeaderTabMenuDivider;
 type HeaderTabCloseCommand = Extract<TabCloseAction, HeaderTabMenuCommand>;
 
 /**
+ * 关闭动作执行选项。
+ */
+interface HeaderTabCloseOptions {
+  /** 应用关闭计划前执行的异步步骤，例如顶部关闭按钮离场动画。 */
+  beforeApply?: () => Promise<void>;
+}
+
+/**
  * 顶部标签菜单浏览器坐标。
  */
 interface HeaderTabMenuPosition {
@@ -326,33 +334,46 @@ async function openForTab(tab: Tab, event: MouseEvent): Promise<void> {
  * 执行标签关闭动作。
  * @param action - 标签关闭动作
  * @param tab - 关闭动作锚点标签
+ * @param options - 关闭动作执行选项
+ * @returns 是否已经应用关闭计划
  */
-async function executeCloseAction(action: HeaderTabCloseCommand, tab: Tab): Promise<void> {
+async function executeCloseAction(action: HeaderTabCloseCommand, tab: Tab, options: HeaderTabCloseOptions = {}): Promise<boolean> {
   const plan = tabsStore.getClosePlan(action, { anchorTabId: tab.id, activeTabId: getActiveTabId(), allowCloseLastTab: true });
 
   const [closeError, closeAllowed] = await asyncTo(canClose(plan));
-  if (closeError || !closeAllowed) return;
+  if (closeError || !closeAllowed) return false;
 
   // 活动标签先完成回退导航，避免导航失败后当前路由指向已被移除的页面。
   if (plan.requiresNavigation) {
     const [navigationError, navigationResult] = await asyncTo(router.push(plan.nextActivePath ?? '/welcome'));
     if (navigationError || isBlockingNavigationFailure(navigationResult)) {
       cancelClose(plan.targetTabIds);
-      return;
+      return false;
+    }
+  }
+
+  if (options.beforeApply) {
+    const [beforeApplyError] = await asyncTo(options.beforeApply());
+    if (beforeApplyError) {
+      cancelClose(plan.targetTabIds);
+      return false;
     }
   }
 
   tabsStore.applyClosePlan(plan);
   cleanupClosedTabs(plan.targetTabIds);
+  return true;
 }
 
 /**
  * 顶部关闭按钮复用菜单关闭动作。
  * @param tab - 待关闭的标签页
+ * @param options - 关闭动作执行选项
+ * @returns 是否已经应用关闭计划
  */
-async function closeTab(tab: Tab): Promise<void> {
+async function closeTab(tab: Tab, options: HeaderTabCloseOptions = {}): Promise<boolean> {
   closeMenu();
-  await executeCloseAction('close', tab);
+  return executeCloseAction('close', tab, options);
 }
 
 /**
