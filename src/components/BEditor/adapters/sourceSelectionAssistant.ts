@@ -14,7 +14,9 @@ import type { Extension } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
 import { EditorSelection, StateEffect, StateField } from '@codemirror/state';
 import { Decoration, EditorView as EditorViewRef } from '@codemirror/view';
+import { message } from 'ant-design-vue';
 import { nanoid } from 'nanoid';
+import { insertSourceCodeComment, isSourceCodeSelection } from '../utils/codeBlockComments';
 import { restoreSourceEditorSelectionDraw, suppressSourceEditorSelectionDraw } from './sourceEditorDrawSelection';
 
 /**
@@ -294,6 +296,25 @@ export function createSourceSelectionAssistantAdapter(
     applyComment(range: SelectionAssistantRange, comment: string): void {
       const selectedText = view.state.sliceDoc(range.from, range.to);
       const id = nanoid();
+      const source = view.state.doc.toString();
+      const codeChange = insertSourceCodeComment(source, range.from, range.to, id, comment);
+
+      if (codeChange) {
+        // 代码块批注仅修改开始围栏的元数据，源码正文不混入行内批注语法。
+        view.dispatch({
+          changes: { from: codeChange.from, to: codeChange.to, insert: codeChange.insert },
+          selection: EditorSelection.cursor(codeChange.nextPosition),
+          scrollIntoView: true
+        });
+        view.focus();
+        return;
+      }
+
+      if (isSourceCodeSelection(source, range.from, range.to)) {
+        message.warning('当前代码选区无法在源码模式批注，请切换到富文本模式');
+        return;
+      }
+
       const wrapped = `[${selectedText}]{comment="${comment}" id="${id}"}`;
       const nextPosition = range.from + wrapped.length;
       view.dispatch({

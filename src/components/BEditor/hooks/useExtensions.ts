@@ -50,6 +50,7 @@ import { Search, type SearchScrollContext } from '../extensions/editorSearch';
 import { InlineCommentMark } from '../extensions/inlineCommentMark';
 import { RichInlineCompletion } from '../extensions/richInlineCompletion';
 import { parseFrontMatterData, parseFrontMatterYaml, serializeFrontMatterData, serializeFrontMatterYaml, type FrontMatterData } from '../hooks/useFrontMatter';
+import { createCommentedCode, parseCommentedCode, renderCommentedCode } from '../utils/codeBlockComments';
 import { getReferenceLinkRaw, INLINE_HTML_MARK_TAGS, INLINE_HTML_SUPPORTED_TAGS, isExplicitLinkToken } from '../utils/markdownInlineSemantics';
 import { registerRichCodeBlockLowlightAliases } from '../utils/richCodeBlockLowlight';
 
@@ -1184,15 +1185,17 @@ export function useExtensions(editorInstanceId: Ref<string>, options: UseExtensi
   });
 
   const CodeBlock = CodeBlockLowlight.extend({
+    marks: 'inlineComment',
     addAttributes() {
       return createSourceLineAttributes(this.parent?.() ?? {});
     },
     parseMarkdown: (token: MarkdownToken, helpers: MarkdownParseHelpers): MarkdownParseResult => {
-      const language = typeof token.lang === 'string' && token.lang ? token.lang : null;
-      const text = typeof token.text === 'string' ? token.text : '';
+      const rawText = typeof token.text === 'string' ? token.text : '';
+      const { language, comments, text } = parseCommentedCode(typeof token.lang === 'string' ? token.lang : null, rawText);
 
-      return helpers.createNode('codeBlock', { ...createSourceLineNodeAttrs(token), language }, text ? [helpers.createTextNode(text)] : []);
+      return helpers.createNode('codeBlock', { ...createSourceLineNodeAttrs(token), language }, createCommentedCode(text, comments));
     },
+    renderMarkdown: renderCommentedCode,
     addNodeView: () => VueNodeViewRenderer(CodeBlockView as unknown as Component<NodeViewProps>)
   }).configure({ lowlight, defaultLanguage: 'plaintext' });
 
@@ -1612,15 +1615,17 @@ export function createRichMarkdownSchemaExtensions(
 
   // CodeBlock（仅 schema + parseMarkdown，不含 VueNodeView——运行时由 createRichEditorRuntimeOnlyExtensions 补）
   const CodeBlock = CodeBlockLowlight.extend({
+    marks: 'inlineComment',
     addAttributes() {
       return createSourceLineAttributes(this.parent?.() ?? {});
     },
     parseMarkdown: (token: MarkdownToken, helpers: MarkdownParseHelpers): MarkdownParseResult => {
-      const language = typeof token.lang === 'string' && token.lang ? token.lang : null;
-      const text = typeof token.text === 'string' ? token.text : '';
+      const rawText = typeof token.text === 'string' ? token.text : '';
+      const { language, comments, text } = parseCommentedCode(typeof token.lang === 'string' ? token.lang : null, rawText);
 
-      return helpers.createNode('codeBlock', { ...createSourceLineNodeAttrs(token), language }, text ? [helpers.createTextNode(text)] : []);
-    }
+      return helpers.createNode('codeBlock', { ...createSourceLineNodeAttrs(token), language }, createCommentedCode(text, comments));
+    },
+    renderMarkdown: renderCommentedCode
   }).configure({ lowlight, defaultLanguage: 'plaintext' });
 
   const Heading = BaseHeading.extend({
@@ -1831,6 +1836,7 @@ export function createRichMarkdownSchemaExtensions(
     FrontMatter,
     HtmlComment,
     LinkDefinitionAsText,
+    InlineCommentMark,
     Heading,
     Paragraph,
     Code,
