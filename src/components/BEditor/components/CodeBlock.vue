@@ -1,5 +1,5 @@
 <template>
-  <NodeViewWrapper :class="[name, { 'is-collapsed': isCollapsed, 'is-word-wrap': isWordWrap }]">
+  <NodeViewWrapper :class="[name, { 'is-collapsed': isCollapsed, 'is-word-wrap': isWordWrap }]" :style="codeBlockStyle">
     <div :class="bem('header')" data-export-ignore contenteditable="false">
       <BSelect
         v-model:value="selectedLanguage"
@@ -53,12 +53,14 @@
 </template>
 
 <script setup lang="ts">
+import type { CSSProperties } from 'vue';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { NodeViewContent, NodeViewWrapper, nodeViewProps } from '@tiptap/vue-3';
 import { useDebounceFn } from '@vueuse/core';
 import { message } from 'ant-design-vue';
 import BSelect from '@/components/BSelect/index.vue';
 import { useClipboard } from '@/hooks/useClipboard';
+import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 import { createNamespace } from '@/utils/namespace';
 import { extractLooseMermaidHeadingRepair, getRenderableMermaidSource } from '../utils/mermaidMarkdown';
 import { createMermaidRenderId } from '../utils/mermaidRenderId';
@@ -191,6 +193,7 @@ async function initMermaid(): Promise<typeof import('mermaid').default> {
 const props = defineProps(nodeViewProps);
 
 const { clipboard, copyImage } = useClipboard();
+const editorPreferencesStore = useEditorPreferencesStore();
 
 // UI 状态
 const copyState = ref<CopyState>('复制');
@@ -238,6 +241,11 @@ const isPreviewVisible = computed(() => hasCode.value && activePreview.value ===
 const copyIconName = computed(() => COPY_ICON_MAP[copyState.value]);
 // 保持模板兼容（原来用 copyLabel 绑定 title/aria-label）
 const copyLabel = computed(() => copyState.value);
+
+/** 当前制表符的显示宽度，响应基础设置中的代码块缩进大小。 */
+const codeBlockStyle = computed<CSSProperties>(() => ({
+  tabSize: editorPreferencesStore.codeBlockIndentSize
+}));
 
 // ─── Mermaid 文档修复 ────────────────────────────────────────────────────────
 

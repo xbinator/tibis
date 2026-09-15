@@ -5,7 +5,9 @@ import type { Ref, ComputedRef } from 'vue';
 import { ref, watch, computed, onScopeDispose } from 'vue';
 import { useEditor, type Editor } from '@tiptap/vue-3';
 import { noop } from 'lodash-es';
+import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 import { normalizeEditorContent } from '../extensions/emptyContent';
+import { handleCodeBlockKey } from '../extensions/richCodeBlockEditing';
 import { handleRichSelectAllKeyboardEvent } from '../extensions/richSelectAll';
 import { getPersistedMarkdown } from '../utils/editorMarkdown';
 import { releaseRichParseEngine } from '../utils/richMarkdownParser';
@@ -40,6 +42,7 @@ interface UseRichEditorResult {
 }
 
 export function useRichEditor({ bodyContent, editable, editorInstanceId, onContentChange, onSearchMatchFocus }: UseRichEditorParams): UseRichEditorResult {
+  const editorPreferencesStore = useEditorPreferencesStore();
   const { editorExtensions, resetHeadingIndex, resetSourceLineTracker, assignHeadingIds, setHeadingIndex } = useExtensions(editorInstanceId, {
     onSearchMatchFocus
   });
@@ -119,22 +122,34 @@ export function useRichEditor({ bodyContent, editable, editorInstanceId, onConte
       handlePaste: onPaste,
       handleKeyDown: (_, event) => {
         const canEdit = effectiveEditable.value;
+        const instance = editorInstanceRef.value;
 
         const key = event.key.toLowerCase();
         const isTab = key === 'tab';
+        const isLineComment = key === '/' && (event.ctrlKey || event.metaKey) && !event.altKey;
         const isSelectAll = (event.ctrlKey || event.metaKey) && key === 'a' && !event.shiftKey && !event.altKey;
         const isUndo = (event.ctrlKey || event.metaKey) && key === 'z' && !event.shiftKey;
         const isRedo = (event.ctrlKey || event.metaKey) && (key === 'y' || (key === 'z' && event.shiftKey));
 
         if (isSelectAll) {
-          const instance = editorInstanceRef.value;
           if (!instance) return false;
           if (!canEdit) return true;
           if (handleRichSelectAllKeyboardEvent(instance, event)) return true;
         }
 
+        if ((isTab || isLineComment) && instance?.isActive('codeBlock')) {
+          if (!canEdit) {
+            event.preventDefault();
+            return true;
+          }
+
+          return handleCodeBlockKey(instance, event, {
+            indentStyle: editorPreferencesStore.codeBlockIndentStyle,
+            indentSize: editorPreferencesStore.codeBlockIndentSize
+          });
+        }
+
         if (isTab && !event.ctrlKey && !event.metaKey && !event.altKey) {
-          const instance = editorInstanceRef.value;
           if (!instance || !canEdit) return true;
           if (instance.isActive('table') || instance.isActive('listItem')) return false;
 
@@ -146,7 +161,7 @@ export function useRichEditor({ bodyContent, editable, editorInstanceId, onConte
             if (before === '  ') instance.commands.deleteRange({ from: from - 2, to: from });
             return true;
           }
-          instance.commands.insertContent(instance.isActive('codeBlock') ? '\t' : '  ');
+          instance.commands.insertContent('  ');
           return true;
         }
 

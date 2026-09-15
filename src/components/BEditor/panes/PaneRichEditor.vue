@@ -613,6 +613,11 @@ defineExpose({
       caret-color: var(--editor-caret);
       outline: none;
 
+      &::selection,
+      *::selection {
+        background: transparent;
+      }
+
       > *:first-child {
         margin-top: 0;
       }

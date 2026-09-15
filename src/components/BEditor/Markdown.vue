@@ -754,10 +754,6 @@ defineExpose({
   --native-selection-color: var(--selection-color);
   --native-selection-bg: var(--selection-bg);
   --comment-highlight-line: rgb(255 152 0 / 70%);
-
-  ::selection {
-    background: transparent;
-  }
 }
 
 .b-markdown-main {

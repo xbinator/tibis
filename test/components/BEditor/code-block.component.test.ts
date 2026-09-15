@@ -5,9 +5,11 @@
  */
 /* eslint-disable vue/one-component-per-file -- 测试文件内定义轻量组件替身。 */
 import { defineComponent, nextTick } from 'vue';
+import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CodeBlock from '@/components/BEditor/components/CodeBlock.vue';
+import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 
 const copyTextMock = vi.hoisted(() => vi.fn());
 const copyImageMock = vi.hoisted(() => vi.fn().mockResolvedValue(true));
@@ -207,6 +209,8 @@ function mountCodeBlock(node: TestCodeBlockNode, options: CodeBlockMountOptions 
 
 describe('CodeBlock', (): void => {
   beforeEach((): void => {
+    localStorage.clear();
+    setActivePinia(createPinia());
     vi.clearAllMocks();
     copyTextMock.mockResolvedValue(true);
     copyImageMock.mockResolvedValue(true);
@@ -347,5 +351,18 @@ describe('CodeBlock', (): void => {
     wrapper.unmount();
 
     expect(debouncedCancelMock).toHaveBeenCalledOnce();
+  });
+
+  it('reacts to the configured tab display width', async (): Promise<void> => {
+    const editorStore = useEditorPreferencesStore();
+    editorStore.setIndentSize(6);
+    const { wrapper } = mountCodeBlock(createCodeBlockNode('typescript', '\tconst value = 1;'));
+
+    expect(wrapper.attributes('style')).toContain('tab-size: 6');
+
+    editorStore.setIndentSize(3);
+    await nextTick();
+
+    expect(wrapper.attributes('style')).toContain('tab-size: 3');
   });
 });

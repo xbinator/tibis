@@ -10,6 +10,7 @@ import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SelectOption } from '@/components/BSelect/types';
 import { useChatPermissionStore } from '@/stores/chat/permission';
+import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 import BasicSettingsPage from '@/views/settings/basic/index.vue';
 
 vi.mock('@/theme', () => ({
@@ -131,7 +132,8 @@ const BInputNumberStub = defineComponent({
   props: {
     value: { type: [String, Number], default: '' }
   },
-  template: '<input class="b-input-number-stub" :value="value" />'
+  emits: ['update:value'],
+  template: '<input class="b-input-number-stub" :data-value="String(value)" :value="value" @input="$emit(\'update:value\', Number($event.target.value))" />'
 });
 
 /**
@@ -215,6 +217,22 @@ describe('BasicSettingsPage tool permissions', (): void => {
     expect(wrapper.text()).toContain('字体设置');
     expect(wrapper.text()).toContain('样式');
     expect(wrapper.text()).toContain('默认');
+  });
+
+  it('updates code block indentation preferences from the editor settings', async (): Promise<void> => {
+    const editorStore = useEditorPreferencesStore();
+    const wrapper = mountBasicSettingsPage();
+
+    expect(wrapper.text()).toContain('代码块缩进');
+    expect(wrapper.text()).toContain('缩进大小');
+
+    const indentSelect = wrapper.find<HTMLSelectElement>('.b-select-stub[data-value="spaces"] select');
+    await indentSelect.setValue('tabs');
+    expect(editorStore.codeBlockIndentStyle).toBe('tabs');
+
+    const indentSizeInput = wrapper.find<HTMLInputElement>('.b-input-number-stub[data-value="2"]');
+    await indentSizeInput.setValue('6');
+    expect(editorStore.codeBlockIndentSize).toBe(6);
   });
 
   it('renders the custom theme entry in the theme preset dropdown footer', (): void => {

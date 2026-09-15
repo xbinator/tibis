@@ -15,6 +15,14 @@ function readPaneRichEditorSource(): string {
 }
 
 /**
+ * 读取 Markdown 编辑器布局源码。
+ * @returns Markdown 编辑器布局文件内容
+ */
+function readMarkdownLayoutSource(): string {
+  return readFileSync(resolve(process.cwd(), 'src/components/BEditor/Markdown.vue'), 'utf8');
+}
+
+/**
  * 从源码中提取指定 CSS 规则内容。
  * @param source - Vue 组件源码
  * @param selector - CSS 选择器
@@ -27,6 +35,14 @@ function extractStyleRuleBody(source: string, selector: string): string {
 }
 
 describe('BEditor rich selection styles', (): void => {
+  it('does not hide native selections across floating input panels', (): void => {
+    const layoutSource = readMarkdownLayoutSource();
+    const richEditorSource = readPaneRichEditorSource();
+
+    expect(layoutSource).not.toContain('  ::selection {\n    background: transparent;\n  }');
+    expect(richEditorSource).toContain('&::selection,\n      *::selection {\n        background: transparent;\n      }');
+  });
+
   it('keeps fallback inline selection highlight free of shadow-based overlap risk', (): void => {
     const source = readPaneRichEditorSource();
     const selectionRuleBody = extractStyleRuleBody(source, '.ai-selection-highlight');

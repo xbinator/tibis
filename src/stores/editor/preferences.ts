@@ -1,6 +1,6 @@
 /**
  * @file editorPreferences.ts
- * @description 编辑器偏好 Store，负责管理视图模式、大纲显示、页宽和保存策略。
+ * @description 编辑器偏好 Store，负责管理视图模式、大纲显示、页宽、保存策略与代码块缩进。
  */
 import { defineStore } from 'pinia';
 import { native } from '@/shared/platform';
@@ -26,6 +26,20 @@ export type EditorSaveStrategy = 'off' | 'onBlur' | 'onChange';
  */
 export type MonacoWordWrap = 'on' | 'off';
 
+/**
+ * 富文本代码块缩进方式。
+ */
+export type CodeBlockIndentStyle = 'spaces' | 'tabs';
+
+/** 代码块缩进大小下限。 */
+export const CODE_BLOCK_INDENT_SIZE_MIN = 1;
+
+/** 代码块缩进大小上限。 */
+export const CODE_BLOCK_INDENT_SIZE_MAX = 8;
+
+/** 默认代码块缩进大小。 */
+export const CODE_BLOCK_INDENT_SIZE_DEFAULT = 2;
+
 const EDITOR_PREFERENCES_STORAGE_KEY = 'editor_preferences';
 const LEGACY_SETTINGS_STORAGE_KEY = 'app_settings';
 
@@ -43,6 +57,10 @@ interface PersistedEditorPreferences {
   showOutline: boolean;
   /** Monaco 自动换行模式 */
   monacoWordWrap: MonacoWordWrap;
+  /** 富文本代码块缩进方式 */
+  codeBlockIndentStyle: CodeBlockIndentStyle;
+  /** 富文本代码块缩进大小 */
+  codeBlockIndentSize: number;
 }
 
 /**
@@ -60,7 +78,9 @@ const DEFAULT_EDITOR_PREFERENCES: PersistedEditorPreferences = {
   pageWidth: 'default',
   saveStrategy: 'off',
   showOutline: false,
-  monacoWordWrap: 'off'
+  monacoWordWrap: 'off',
+  codeBlockIndentStyle: 'spaces',
+  codeBlockIndentSize: CODE_BLOCK_INDENT_SIZE_DEFAULT
 };
 
 /**
@@ -100,6 +120,26 @@ function isMonacoWordWrap(value: unknown): value is MonacoWordWrap {
 }
 
 /**
+ * 判断给定值是否为合法的代码块缩进方式。
+ * @param value - 待判断的值
+ * @returns 是否为合法缩进方式
+ */
+function isIndentStyle(value: unknown): value is CodeBlockIndentStyle {
+  return value === 'spaces' || value === 'tabs';
+}
+
+/**
+ * 将未知输入归一化为合法的代码块缩进大小。
+ * @param value - 待归一化的值
+ * @returns 合法缩进大小
+ */
+function normalizeIndentSize(value: unknown): number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= CODE_BLOCK_INDENT_SIZE_MIN && value <= CODE_BLOCK_INDENT_SIZE_MAX
+    ? value
+    : CODE_BLOCK_INDENT_SIZE_DEFAULT;
+}
+
+/**
  * 将未知输入归一化为合法的编辑器偏好对象。
  * @param value - 读取到的原始持久化值
  * @returns 归一化后的编辑器偏好
@@ -112,7 +152,9 @@ function normalizeEditorPreferences(value: unknown): PersistedEditorPreferences 
     pageWidth: isEditorPageWidth(source.pageWidth) ? source.pageWidth : DEFAULT_EDITOR_PREFERENCES.pageWidth,
     saveStrategy: isEditorSaveStrategy(source.saveStrategy) ? source.saveStrategy : DEFAULT_EDITOR_PREFERENCES.saveStrategy,
     showOutline: typeof source.showOutline === 'boolean' ? source.showOutline : DEFAULT_EDITOR_PREFERENCES.showOutline,
-    monacoWordWrap: isMonacoWordWrap(source.monacoWordWrap) ? source.monacoWordWrap : DEFAULT_EDITOR_PREFERENCES.monacoWordWrap
+    monacoWordWrap: isMonacoWordWrap(source.monacoWordWrap) ? source.monacoWordWrap : DEFAULT_EDITOR_PREFERENCES.monacoWordWrap,
+    codeBlockIndentStyle: isIndentStyle(source.codeBlockIndentStyle) ? source.codeBlockIndentStyle : DEFAULT_EDITOR_PREFERENCES.codeBlockIndentStyle,
+    codeBlockIndentSize: normalizeIndentSize(source.codeBlockIndentSize)
   };
 }
 
@@ -183,7 +225,9 @@ export const useEditorPreferencesStore = defineStore('editorPreferences', {
         pageWidth: this.pageWidth,
         saveStrategy: this.saveStrategy,
         showOutline: this.showOutline,
-        monacoWordWrap: this.monacoWordWrap
+        monacoWordWrap: this.monacoWordWrap,
+        codeBlockIndentStyle: this.codeBlockIndentStyle,
+        codeBlockIndentSize: this.codeBlockIndentSize
       });
     },
 
@@ -228,6 +272,24 @@ export const useEditorPreferencesStore = defineStore('editorPreferences', {
      */
     setMonacoWordWrap(mode: MonacoWordWrap): void {
       this.monacoWordWrap = mode;
+      this.savePreferences();
+    },
+
+    /**
+     * 设置富文本代码块缩进方式。
+     * @param style - 目标缩进方式
+     */
+    setIndentStyle(style: CodeBlockIndentStyle): void {
+      this.codeBlockIndentStyle = style;
+      this.savePreferences();
+    },
+
+    /**
+     * 设置富文本代码块缩进大小。
+     * @param size - 目标缩进大小
+     */
+    setIndentSize(size: number): void {
+      this.codeBlockIndentSize = normalizeIndentSize(size);
       this.savePreferences();
     }
   }

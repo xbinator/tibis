@@ -47,6 +47,22 @@
       <SettingsItem label="页面宽度">
         <BSelect :value="editorStore.pageWidth" :options="pageWidthOptions" :width="280" @change="handlePageWidthChange" />
       </SettingsItem>
+
+      <SettingsItem label="代码块缩进">
+        <BSelect :value="editorStore.codeBlockIndentStyle" :options="indentStyleOptions" :width="280" @change="handleIndentStyleChange" />
+      </SettingsItem>
+
+      <SettingsItem label="缩进大小" :control-width="280">
+        <BInputNumber
+          :value="editorStore.codeBlockIndentSize"
+          :min="CODE_BLOCK_INDENT_SIZE_MIN"
+          :max="CODE_BLOCK_INDENT_SIZE_MAX"
+          :step="1"
+          :precision="0"
+          :default-value="CODE_BLOCK_INDENT_SIZE_DEFAULT"
+          @update:value="handleIndentSizeChange"
+        />
+      </SettingsItem>
     </SettingsSection>
 
     <SettingsSection title="AI 工具权限">
@@ -66,8 +82,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import type { SelectOption } from '@/components/BSelect/types';
-import type { EditorViewMode, EditorPageWidth, EditorSaveStrategy } from '@/stores/editor/preferences';
-import { useEditorPreferencesStore } from '@/stores/editor/preferences';
+import type { CodeBlockIndentStyle, EditorViewMode, EditorPageWidth, EditorSaveStrategy } from '@/stores/editor/preferences';
+import { CODE_BLOCK_INDENT_SIZE_DEFAULT, CODE_BLOCK_INDENT_SIZE_MAX, CODE_BLOCK_INDENT_SIZE_MIN, useEditorPreferencesStore } from '@/stores/editor/preferences';
 import type { DefaultFontStyle, ThemeMode } from '@/stores/ui/setting';
 import { ROOT_FONT_SIZE_DEFAULT, ROOT_FONT_SIZE_MAX, ROOT_FONT_SIZE_MIN, useSettingStore } from '@/stores/ui/setting';
 import { getPresetList } from '@/theme';
@@ -125,6 +141,14 @@ const pageWidthOptions: SelectOption[] = [
 ];
 
 /**
+ * 富文本代码块缩进方式选项。
+ */
+const indentStyleOptions: SelectOption[] = [
+  { value: 'spaces', label: '空格' },
+  { value: 'tabs', label: '制表符' }
+];
+
+/**
  * 保存策略选项。
  */
 const saveStrategyOptions: SelectOption[] = [
@@ -179,6 +203,22 @@ function handleViewModeChange(value: string | number): void {
  */
 function handlePageWidthChange(value: string | number): void {
   editorStore.setPageWidth(value as EditorPageWidth);
+}
+
+/**
+ * 处理代码块缩进方式变更。
+ * @param value - 新的缩进方式
+ */
+function handleIndentStyleChange(value: string | number): void {
+  editorStore.setIndentStyle(value as CodeBlockIndentStyle);
+}
+
+/**
+ * 处理代码块缩进大小变更。
+ * @param value - 新的缩进大小
+ */
+function handleIndentSizeChange(value: string | number): void {
+  editorStore.setIndentSize(Number(value));
 }
 
 /**

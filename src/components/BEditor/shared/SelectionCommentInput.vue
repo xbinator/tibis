@@ -19,6 +19,7 @@ import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { useEventListener, useResizeObserver } from '@vueuse/core';
 import { vFocus } from '@/directives/focus';
 import { createNamespace } from '@/utils/namespace';
+import { isImeConfirm } from '../utils/selectionInputKeyboard';
 
 const [name] = createNamespace('', 'b-markdown-selcomment');
 
@@ -205,6 +206,8 @@ function closePanel(): void {
  * @param event - 键盘事件
  */
 function onKeydown(event: KeyboardEvent): void {
+  if (isImeConfirm(event)) return;
+
   if (event.key === 'Escape') {
     event.preventDefault();
     closePanel();

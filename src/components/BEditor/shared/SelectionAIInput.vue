@@ -47,6 +47,7 @@ import type { AvailableServiceModelConfig } from '@/stores/ai/serviceModel';
 import { useServiceModelStore } from '@/stores/ai/serviceModel';
 import { createNamespace } from '@/utils/namespace';
 import { buildSelectionAIPrompt } from '../utils/selectionAIPrompt';
+import { isImeConfirm } from '../utils/selectionInputKeyboard';
 
 const [name, bem] = createNamespace('', 'b-markdown-selai');
 
@@ -412,7 +413,14 @@ function applyGeneratedContent(): void {
 
 // ---- Events ----
 
+/**
+ * 处理输入框键盘事件，并忽略输入法候选确认产生的 Enter。
+ * @param event - 原生键盘事件
+ * @returns void
+ */
 function onKeydown(event: KeyboardEvent): void {
+  if (isImeConfirm(event)) return;
+
   if (event.key === 'Enter') {
     event.preventDefault();
     sendInstruction();
