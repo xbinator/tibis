@@ -1,10 +1,13 @@
 /**
  * @file electron-builder.test.ts
- * @description 验证 Windows 安装向导和便携版的 electron-builder 配置。
+ * @description 验证 Linux 原生依赖、图标以及 Windows 安装器的 electron-builder 配置。
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { load } from 'js-yaml';
 import { describe, expect, it } from 'vitest';
+
+/** Linux 桌面图标需要提供的标准像素尺寸。 */
+const LINUX_ICON_SIZES: readonly number[] = [16, 32, 48, 64, 128, 256, 512];
 
 /**
  * NSIS 安装器配置。
@@ -49,9 +52,31 @@ interface WindowsInstallerConfig {
 }
 
 /**
+ * Linux 构建配置。
+ */
+interface LinuxInstallerConfig {
+  /** Linux 安装包使用的图标文件或目录。 */
+  icon?: string;
+}
+
+/**
+ * PNG 图片尺寸。
+ */
+interface PngDimensions {
+  /** 图片宽度。 */
+  width: number;
+  /** 图片高度。 */
+  height: number;
+}
+
+/**
  * 测试所需的 electron-builder 配置结构。
  */
 interface ElectronBuilderConfig {
+  /** 需要从 app.asar 解包到真实文件系统的路径规则。 */
+  asarUnpack?: string[];
+  /** Linux 构建配置。 */
+  linux?: LinuxInstallerConfig;
   /** NSIS 安装器配置。 */
   nsis?: NsisInstallerConfig;
   /** 便携版配置。 */
@@ -68,6 +93,45 @@ function readElectronBuilderConfig(): ElectronBuilderConfig {
   const source = readFileSync(new URL('../../electron-builder.yml', import.meta.url), 'utf8');
   return load(source) as ElectronBuilderConfig;
 }
+
+/**
+ * 从 PNG IHDR 数据块读取图片尺寸。
+ * @param fileUrl - PNG 文件 URL
+ * @returns PNG 图片宽高
+ */
+function readPngDimensions(fileUrl: URL): PngDimensions {
+  const pngBuffer = readFileSync(fileUrl);
+
+  return {
+    width: pngBuffer.readUInt32BE(16),
+    height: pngBuffer.readUInt32BE(20)
+  };
+}
+
+describe('electron-builder Linux package config', (): void => {
+  it('unpacks the complete sharp runtime including libvips', (): void => {
+    const config = readElectronBuilderConfig();
+
+    expect(config.asarUnpack).toEqual(expect.arrayContaining(['node_modules/sharp/**/*', 'node_modules/@img/sharp-*/**/*']));
+  });
+
+  it('installs square PNG icons at standard hicolor sizes', (): void => {
+    const config = readElectronBuilderConfig();
+
+    expect(config.linux?.icon).toBe('resources/icons/linux');
+
+    for (const iconSize of LINUX_ICON_SIZES) {
+      const iconUrl = new URL(`../../resources/icons/linux/${iconSize}x${iconSize}.png`, import.meta.url);
+      const iconExists = existsSync(iconUrl);
+
+      expect(iconExists, `missing ${iconSize}x${iconSize} Linux icon`).toBe(true);
+
+      if (iconExists) {
+        expect(readPngDimensions(iconUrl)).toEqual({ width: iconSize, height: iconSize });
+      }
+    }
+  });
+});
 
 describe('electron-builder Windows installer config', (): void => {
   it('uses an assisted installer with configurable scope and directory', (): void => {
